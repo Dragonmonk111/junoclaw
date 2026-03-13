@@ -46,7 +46,7 @@ A machine running *here* gets work verified *there* and causes consequences *eve
 
 ---
 
-## The Face of the Organisation(Locally run Agentic DAO)
+## The Face of the Organisation (Locally run Agentic DAO)
 
 The face of this organisation is not a person. It is a **complex humanoid** — an AI agent that is a trusted extension of your intent, connected to you through verifiable smart contracts.
 
@@ -76,21 +76,19 @@ A machine in a datacenter fetches real-world data — weather, GPS coordinates, 
 
 **The digital work IS the real work.** A processor in one location verifies a condition in another location and triggers a consequence in a third. The machine that ran the computation may be on a different continent than the people it affects. The proof doesn't care about geography. It cares about physics.
 
-The JunoClaw contracts are WAVS-ready today. `VerificationConfig` supports witness attestation, WAVS TEE, or both. `WavsPush` proposals compose verified sub-messages to the task-ledger and obligation tracker. `AttachAttestation` anchors WAVS hashes to recorded obligations. `SubmitRandomness` handles WAVS-attested drand for provably fair selection. The operator layer — the actual TEE enclaves running live computations — is the next integration milestone.
+The JunoClaw contracts are WAVS-ready today. VerificationConfig supports witness attestation, WAVS TEE, or both. WavsPush proposals compose verified sub-messages to the task-ledger and obligation tracker. AttachAttestation anchors WAVS hashes to recorded obligations. SubmitRandomness handles WAVS-attested drand for provably fair selection. The operator layer — the actual TEE enclaves running live computations — is the next integration milestone.
 
 When operators come online, the end-to-end flow:
 
-```
-Human prompt: "Verify whether conditions in region X crossed the threshold"
-  → Agent creates a WavsPush proposal
-  → DAO governance approves execution
-  → WAVS TEE fetches real-world data inside a secure enclave
-  → TEE output: "Condition verified. Attestation hash: 0xabc..."
-  → Attestation received on-chain → forwarded to agent-company contract
-  → Proposal resolves automatically based on verified data
-  → Obligation ledger records what is owed to whom
-  → Tokens move wallet-to-wallet, signed by each party directly
-```
+    Human prompt: "Verify whether conditions in region X crossed the threshold"
+      → Agent creates a WavsPush proposal
+      → DAO governance approves execution
+      → WAVS TEE fetches real-world data inside a secure enclave
+      → TEE output: "Condition verified. Attestation hash: 0xabc..."
+      → Attestation received on-chain → forwarded to agent-company contract
+      → Proposal resolves automatically based on verified data
+      → Obligation ledger records what is owed to whom
+      → Tokens move wallet-to-wallet, signed by each party directly
 
 No person decided the outcome. No person could falsify the data. No person held anyone else's tokens at any point.
 
@@ -113,14 +111,15 @@ This separation is deliberate. The obligation ledger tracks truth. The tokens mo
 
 ## What Is Live Today
 
-Four CosmWasm contracts deployed to Juno testnet (uni-7), Friday,March 13, 2026:
+Four CosmWasm contracts deployed to Juno testnet (uni-7), Friday, March 13, 2026:
 
-| Contract | Code ID | Function |
-|----------|---------|----------|
-| `agent-registry` | 54 | On-chain agent identity — every agent registered, tied to a Juno wallet |
-| `task-ledger` | 55 | Immutable audit trail — every task logged with input, tier, result hash, cost |
-| `escrow` | 56 | Non-custodial obligation ledger — records tracked, tokens never held |
-| `agent-company` | 57 | DAO governance — proposals, adaptive deadlines, sortition, WAVS push, distribution |
+**agent-registry** — code 54 — On-chain agent identity. Every agent registered, tied to a Juno wallet.
+
+**task-ledger** — code 55 — Immutable audit trail. Every task logged with input, tier, result hash, cost.
+
+**escrow** — code 56 — Non-custodial obligation ledger. Records tracked, tokens never held.
+
+**agent-company** — code 57 — DAO governance. Proposals, adaptive deadlines, sortition, WAVS push, distribution.
 
 **28 contract tests pass.** Governance flows, adaptive deadline reduction, WAVS randomness submission and rejection, Fisher-Yates sortition via NOIS/drand, payment distribution, unauthorised access rejection.
 
@@ -130,7 +129,7 @@ The Rust daemon runs locally: Axum HTTP + WebSocket, Ollama LLM streaming, agent
 
 ## Three Organisations That Become Possible
 
-Rather than listing all ten templates, consider them as stories.. Here are three of them - 
+Rather than listing all ten templates, consider them as stories. Here are three of them —
 
 **Verifiable protection against weather events.**
 Twenty participants form a Crop Protection DAO. Each contributes a fixed amount per season. The DAO's agent monitors publicly available weather data. When conditions cross a defined threshold, the WAVS TEE independently verifies the data inside a sealed enclave — no human judgement involved. The governance logic resolves the proposal automatically. The obligation ledger records each participant's share. Tokens move directly from wallet to wallet. The entire coordination costs a few tokens of gas per season.
@@ -160,61 +159,55 @@ $JClaw answers this differently. It has no monetary value. There is no liquidity
 The genesis begins with one wallet — the one that deployed the contracts and proved the system works on testnet. This wallet holds the root credential. From it, a carefully designed handover protocol distributes governance to the community.
 
 **Phase 1 — Genesis Mint.**
-The genesis wallet calls `MintGenesis` on the $JClaw contract. This creates the root credential: depth 0, with a special allowance of 13 buds.
+The genesis wallet calls MintGenesis on the $JClaw contract. This creates the root credential: depth 0, with a special allowance of 13 buds.
 
-```rust
-TokenRecord {
-    holder:          genesis_wallet,
-    parent:          None,
-    tree_root:       genesis_wallet,
-    depth:           0,
-    remaining_buds:  13,    // root gets 13; everyone else gets 1
-    revoked:         false,
-    issued_at:       block_height,
-}
-```
+    TokenRecord {
+        holder:          genesis_wallet,
+        parent:          None,
+        tree_root:       genesis_wallet,
+        depth:           0,
+        remaining_buds:  13,    // root gets 13; everyone else gets 1
+        revoked:         false,
+        issued_at:       block_height,
+    }
 
 **Phase 2 — Transparent Nomination.**
-The root submits `NominateRecipients { recipients: [addr1 .. addr13] }` in a single transaction. This creates 13 `PendingBud` records, publicly visible and queryable on-chain. The community can see who was nominated before anything is accepted. Transparency is enforced at the protocol level.
+The root submits NominateRecipients { recipients: [addr1 .. addr13] } in a single transaction. This creates 13 PendingBud records, publicly visible and queryable on-chain. The community can see who was nominated before anything is accepted. Transparency is enforced at the protocol level.
 
 **Phase 3 — Distribution.**
-The root calls `DistributeBud { recipient }` for each of the 13 addresses. Each call decrements the root's remaining buds and creates a `PendingCredential`. Each transaction emits a `wasm-bud_offered` event — publicly indexed.
+The root calls DistributeBud { recipient } for each of the 13 addresses. Each call decrements the root's remaining buds and creates a PendingCredential. Each transaction emits a wasm-bud_offered event — publicly indexed.
 
 **Phase 4 — Acceptance Window.**
-Each nominated recipient has a defined window (~100,000 blocks, roughly one week) to call `AcceptBud` from their own wallet. On acceptance:
-- The pending credential becomes an active `TokenRecord` at depth 1
+Each nominated recipient has a defined window (~100,000 blocks, roughly one week) to call AcceptBud from their own wallet. On acceptance:
+- The pending credential becomes an active TokenRecord at depth 1
 - The recipient gains governance voting rights immediately
 - The recipient receives their own single bud — one, forever
 
 If a nominee doesn't accept within the window, the pending credential expires and the bud returns to the root for reallocation. Nobody can be forced into the tree.
 
 **Phase 5 — Handover Complete.**
-Once all 13 buds are distributed and accepted, the root's `remaining_buds` reaches zero. From this moment forward, the root holds one credential — equal in voting weight to every other holder in the tree. The root has no special powers. The genesis ceremony is complete.
+Once all 13 buds are distributed and accepted, the root's remaining_buds reaches zero. From this moment forward, the root holds one credential — equal in voting weight to every other holder in the tree. The root has no special powers. The genesis ceremony is complete.
 
-```
-                      [Genesis Root]    ← 1 credential, 0 remaining buds
-                            |
-    ┌──┬──┬──┬──┬──┬──┬──┬─┼─┬──┬──┬──┬──┐
-    D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11 D12 D13    ← 13 credentials, 1 bud each
-```
+                          [Genesis Root]    — 1 credential, 0 remaining buds
+                                |
+        ┌──┬──┬──┬──┬──┬──┬──┬─┼─┬──┬──┬──┬──┐
+        D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11 D12 D13    — 13 credentials, 1 bud each
 
 ### Linear Budding — The Tree Grows
 
-Each of the 13 first-generation holders has exactly one bud. When they find someone whose judgement they trust — a developer, a validator, a contributor — they call `Bud { recipient }`. The same acceptance flow applies. The new holder receives a credential at depth 2 with their own single bud.
+Each of the 13 first-generation holders has exactly one bud. When they find someone whose judgement they trust — a developer, a validator, a contributor — they call Bud { recipient }. The same acceptance flow applies. The new holder receives a credential at depth 2 with their own single bud.
 
-```
-    D4 (depth 1)
-    |
-    D4a (depth 2)    ← D4 vouched for this person; D4 can never bud again
-    |
-    D4a1 (depth 3)   ← D4a vouched for this person; D4a can never bud again
-```
+        D4 (depth 1)
+        |
+        D4a (depth 2)    — D4 vouched for this person; D4 can never bud again
+        |
+        D4a1 (depth 3)   — D4a vouched for this person; D4a can never bud again
 
 The tree grows one link at a time. Each link is a human saying: *I trust this person enough to give them a permanent voice.* The cost is irreversible — you only get one bud, and once given, it's gone.
 
 ### Pruning — The Tree Heals
 
-If a branch goes wrong — a holder acts against the community, or passes their bud to someone who does — any credential holder can propose `BreakChannel { node }`. A standard governance vote follows. If passed:
+If a branch goes wrong — a holder acts against the community, or passes their bud to someone who does — any credential holder can propose BreakChannel { node }. A standard governance vote follows. If passed:
 
 - The targeted node's credential is revoked
 - All descendants are recursively revoked
@@ -233,7 +226,7 @@ The genesis root can be pruned by supermajority governance proposal (75%+ of act
 - DAO template additions, removals, and edits (visible in the wizard as governance action boxes)
 - Verification requirements — when WAVS attestation is mandatory
 - WAVS push operations affecting shared infrastructure
-- `BreakChannel` proposals to prune trust branches
+- BreakChannel proposals to prune trust branches
 - Development roadmap priorities
 
 ### What $JClaw Does NOT Do
@@ -247,14 +240,12 @@ The genesis root can be pruned by supermajority governance proposal (75%+ of act
 
 The entire tree is queryable:
 
-```
-QueryTree {}           → full tree: all holders, depths, bud status
-QueryBranch { node }   → a node and all its descendants
-QueryDepth { addr }    → hops from genesis
-QueryParent { addr }   → who vouched for this holder
-QueryPending {}        → buds awaiting acceptance
-QueryRevoked {}        → pruned branches
-```
+    QueryTree {}           → full tree: all holders, depths, bud status
+    QueryBranch { node }   → a node and all its descendants
+    QueryDepth { addr }    → hops from genesis
+    QueryParent { addr }   → who vouched for this holder
+    QueryPending {}        → buds awaiting acceptance
+    QueryRevoked {}        → pruned branches
 
 Every governance token asks: *how much did you put in?*
 
@@ -276,21 +267,21 @@ This is a Cosmos-native system. Not ported. Not wrapped. Built for IBC from the 
 
 JunoClaw is open source. Contracts, daemon, frontend, plugins — all of it.
 
-**GitHub**: [https://github.com/Dragonmonk111/junoclaw](https://github.com/Dragonmonk111/junoclaw)
+**GitHub**: https://github.com/Dragonmonk111/junoclaw
 
 **Testnet contracts on uni-7:**
-- `agent-registry` — code 54
-- `task-ledger` — code 55
-- `escrow` — code 56
-- `agent-company` — code 57
+- agent-registry — code 54
+- task-ledger — code 55
+- escrow — code 56
+- agent-company — code 57
 
 **Verify on-chain** (Polkachu REST API — Mintscan does not currently index Juno testnet):
-- `agent-registry`: [`juno1qulyspwzjzsz7rq65v6ptzt278f9ta9uh0upxu6xa08gf4v5gzaqm676j7`](https://juno-testnet-api.polkachu.com/cosmwasm/wasm/v1/contract/juno1qulyspwzjzsz7rq65v6ptzt278f9ta9uh0upxu6xa08gf4v5gzaqm676j7)
-- `task-ledger`: [`juno1agw6f05wxx5rm8d3etq7cejcm5g8e224s00dvykylaja7jlx3ljq6f0u46`](https://juno-testnet-api.polkachu.com/cosmwasm/wasm/v1/contract/juno1agw6f05wxx5rm8d3etq7cejcm5g8e224s00dvykylaja7jlx3ljq6f0u46)
-- `escrow`: [`juno1dh43lswg5ekv7q2p44s6hgays47k5mz67742vdwpd025p8q05kgs0azwrv`](https://juno-testnet-api.polkachu.com/cosmwasm/wasm/v1/contract/juno1dh43lswg5ekv7q2p44s6hgays47k5mz67742vdwpd025p8q05kgs0azwrv)
-- `agent-company`: [`juno12xayvf6uz0juj4rrm9p62626fjc2r289qz2kyzp9jpxd7d93fggsy7ja06`](https://juno-testnet-api.polkachu.com/cosmwasm/wasm/v1/contract/juno12xayvf6uz0juj4rrm9p62626fjc2r289qz2kyzp9jpxd7d93fggsy7ja06)
+- agent-registry: juno1qulyspwzjzsz7rq65v6ptzt278f9ta9uh0upxu6xa08gf4v5gzaqm676j7
+- task-ledger: juno1agw6f05wxx5rm8d3etq7cejcm5g8e224s00dvykylaja7jlx3ljq6f0u46
+- escrow: juno1dh43lswg5ekv7q2p44s6hgays47k5mz67742vdwpd025p8q05kgs0azwrv
+- agent-company: juno12xayvf6uz0juj4rrm9p62626fjc2r289qz2kyzp9jpxd7d93fggsy7ja06
 
-The frontend is standard Vite + Tailwind + Zustand. Clone it, run `npm install && npm run dev`, and the wizard runs in sixty seconds. The Rust daemon is a standard Axum server. The contracts are standard CosmWasm. Nothing exotic in the stack. Cosmos developers can query the contracts today. Web2 developers can run the frontend today.
+The frontend is standard Vite + Tailwind + Zustand. Clone it, run npm install && npm run dev, and the wizard runs in sixty seconds. The Rust daemon is a standard Axum server. The contracts are standard CosmWasm. Nothing exotic in the stack. Cosmos developers can query the contracts today. Web2 developers can run the frontend today.
 
 ---
 

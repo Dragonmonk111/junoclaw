@@ -2,128 +2,79 @@
 
 ---
 
-**TWEET 1 (Hook)**
+**1/**
 
 Trust without trustees.
 
-4 smart contracts went live on @JunoNetwork testnet today.
+Four smart contracts went live on @JunoNetwork testnet today.
 
-DAO governance. AI agents. Decentralised GPU compute. WAVS TEE verification. Non-custodial obligation ledger.
+Not a new idea. A new wiring. Five things that already existed — DAO governance, AI agents, decentralised compute, TEE verification, immutable ledgers — connected for the first time on one chain.
 
-Five existing things, newly wired together. Here's what they do. 
-
----
-
-**TWEET 2 (The Architecture)**
-
-Five layers, zero intermediaries:
-
-→ DAO governance on Juno — the decision layer
-→ AI agents (local / Akash GPU) — the execution layer
-→ GPU compute — the energy layer
-→ WAVS TEE — the truth layer
-→ Non-custodial ledger — the record layer
-
-The contract tracks obligations. It never holds your tokens.
+This is JunoClaw. 🧵
 
 ---
 
-**TWEET 3 (What's Deployed)**
+**2/**
 
-Live on uni-7 today:
+The face of the organisation is not a person. It's an agentic DAO — AI that acts on your intent, verified by hardware no one can tamper with.
 
-agent-registry (code 54) — on-chain agent identity
-task-ledger (code 55) — immutable audit trail
-escrow (code 56) — obligation ledger, tokens never held
-agent-company (code 57) — governance + sortition + WAVS push
+Your prompt becomes a work order. The system decomposes it into on-chain actions. Each one logged. Each one provable. Agents delegate to sub-agents. The whole thing runs without an office.
 
-28 tests passing. NOIS/drand randomness. Adaptive deadlines.
+Proof of Work — not hashing. Working.
 
 ---
 
-**TWEET 4 (The Agent)**
+**3/**
 
-The face of the organisation is an agentic DAO,not a person — a trusted extension of your intent, connected via verifiable smart contracts.
+A sealed enclave fetches real-world data. Weather. GPS. Sensor readings. It produces a cryptographic proof that not even the machine's operator could falsify.
 
-Your prompt is a work order. The system converts it into on-chain actions, each logged, each verifiable.
-
-Proof of Work. Not hashing — working.
-
----
-
-**TWEET 5 (Digital Work, Real World)**
-
-A machine runs in a sealed enclave. It fetches real-world data. It produces a proof that no one — not even its operator — could falsify.
-
-That proof travels on-chain. A smart contract acts on it. Obligations resolve. Tokens move wallet-to-wallet.
+That proof travels on-chain. A smart contract acts on it. Obligations resolve. Tokens move wallet-to-wallet. No intermediary decided. No intermediary could have lied.
 
 The digital work reaches the physical world.
 
 ---
 
-**TWEET 6 ($JClaw — The Trust Tree)**
+**4/**
 
-$JClaw is not a token. It's a soulbound trust-tree credential.
+What's live today on uni-7:
 
-→ Non-transferable, non-tradeable, permanently
-→ Genesis root → 13 buds to trusted Juno devs
-→ Each holder buds once to someone they trust
-→ Rogue branches pruned via BreakChannel
+agent-registry · task-ledger · escrow · agent-company
 
-Every governance token asks: how much did you put in?
-$JClaw asks: who trusts you?
+28 tests passing. Adaptive deadlines. NOIS/drand sortition. WAVS-ready verification. Non-custodial obligation tracking — the contract records what's owed. It never touches your tokens.
+
+10 DAO templates: crop protection, credential verification, community vote, mutual aid, farm-to-table market, citizens' assembly, skill circles, outcome markets, health worker DAOs, community funds.
 
 ---
 
-**TWEET 7 (The Handover Protocol)**
+**5/**
 
-The handover is on-chain and transparent:
+Governance needs an answer to: who decides?
 
-1. Genesis mint → root gets 13 buds
-2. NominateRecipients → publicly visible before acceptance
-3. Each recipient calls AcceptBud from their own wallet
-4. Unaccepted buds expire and return to root
-5. Once all 13 accepted → root has equal power to everyone else
+$JClaw is not a token. It's a soulbound trust-tree credential. Non-transferable. Non-tradeable. You get one by being trusted by someone who already holds one. Genesis root → 13 buds → each holder buds once → the tree grows one link at a time.
 
-Nobody is above the tree.
+Rogue branches get pruned. The root can be pruned too — nobody is above the tree.
+
+Every governance token asks how much you put in. $JClaw asks who trusts you.
 
 ---
 
-**TWEET 8 (The 10 Templates)**
-
-10 pre-configured agentic DAOs, each legal-audited:
-
-🌾 Crop Protection — weather-triggered, TEE-verified
-📜 Credential Verifier — qualifications proved without exposing records
-🗳️ Community Vote — private ballots, on-chain results
-❤️ Mutual Aid — need assessed privately via TEE
-🛒 Farm-to-Table — agents trade, TEE verifies delivery
-🔀 Citizens' Assembly — drand lottery, provably fair
-🤝 Skill Circle — P2P work exchange, verified delivery
-📈 Outcome Market — futarchy via verified real-world data
-🏥 Health Worker DAO — verified visits, zero patient data exposed
-🏦 Community Fund — pass-through treasury, no custody
-
-Governance. Commerce. Verification. Coordination.
-
----
-
-**TWEET 9 (Cosmos Native)**
+**6/**
 
 Built on @JunoNetwork. For the Cosmos.
 
-IBC messages to any connected chain. Akash compute is Cosmos-native. NOIS randomness over IBC. Not ported. Not wrapped. Built for the interchain from the ground up.
+IBC to any connected chain. Akash GPU compute. NOIS randomness. WAVS verification — co-founded by the creator of CosmWasm and a co-founder of Juno.
+
+Not ported. Not wrapped. Cosmos-native from the ground up.
 
 ---
 
-**TWEET 10 (CTA)**
+**7/**
 
-The code is open source. Contracts are on testnet. The iteration continues.
+Open source. Testnet live. Iteration continues.
 
 Next: WAVS operators, Akash integration, $JClaw contract, the 13 genesis buds, mainnet.
 
-Full story: [Medium link]
-Code: [GitHub link]
-Contracts: [Explorer]
+Full story: https://medium.com/@tj.yamlajatt/trust-without-trustees-72174b7659a2
+Code: https://github.com/Dragonmonk111/junoclaw
 
 Built on Juno. Open to everyone.
