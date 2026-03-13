@@ -1,0 +1,19 @@
+[package]
+name = "junoclaw-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "JunoClaw agent execution runtime"
+
+[dependencies]
+junoclaw-core = { path = "../junoclaw-core" }
+plugin-llm = { path = "../../plugins/plugin-llm" }
+plugin-shell = { path = "../../plugins/plugin-shell" }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }

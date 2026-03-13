@@ -1,0 +1,23 @@
+[package]
+name = "junoclaw-daemon"
+version = "0.1.0"
+edition = "2021"
+description = "JunoClaw HTTP + WebSocket daemon server"
+
+[dependencies]
+junoclaw-core = { path = "../junoclaw-core" }
+junoclaw-runtime = { path = "../junoclaw-runtime" }
+plugin-llm = { path = "../../plugins/plugin-llm" }
+plugin-compute-local = { path = "../../plugins/plugin-compute-local" }
+plugin-storage-local = { path = "../../plugins/plugin-storage-local" }
+plugin-shell = { path = "../../plugins/plugin-shell" }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+futures = { workspace = true }

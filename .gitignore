@@ -1,0 +1,26 @@
+# Build artifacts
+target/
+*.wasm
+
+# Dependencies
+node_modules/
+
+# Environment / secrets
+.env
+deployed.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+**/*.rs.bk
+
+# Frontend build
+frontend/dist/

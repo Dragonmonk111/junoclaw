@@ -1,0 +1,176 @@
+use cosmwasm_schema::{cw_serde, QueryResponses};
+use cosmwasm_std::Uint128;
+#[allow(unused_imports)]
+use crate::state::{
+    Config, Member, NoisCallback, PaymentRecord, PendingSortition, Proposal, ProposalKind,
+    SortitionRound, VerificationConfig, VoteOption, WeightProposal,
+};
+use junoclaw_common::ExecutionTier;
+
+#[cw_serde]
+pub struct MemberInput {
+    pub addr: String,
+    pub weight: u64,
+    pub role: crate::state::MemberRole,
+}
+
+/// Input representation of ProposalKind using raw strings (not validated Addrs)
+#[cw_serde]
+pub enum ProposalKindMsg {
+    WeightChange { members: Vec<MemberInput> },
+    WavsPush {
+        task_description: String,
+        execution_tier: ExecutionTier,
+        escrow_amount: Uint128,
+    },
+    ConfigChange {
+        new_admin: Option<String>,
+        new_governance: Option<String>,
+    },
+    FreeText {
+        title: String,
+        description: String,
+    },
+    OutcomeCreate {
+        question: String,
+        resolution_criteria: String,
+        deadline_block: u64,
+    },
+    OutcomeResolve {
+        market_id: u64,
+        outcome: bool,
+        attestation_hash: String,
+    },
+    SortitionRequest {
+        count: u32,
+        purpose: String,
+    },
+}
+
+#[cw_serde]
+pub struct InstantiateMsg {
+    /// Human-readable company name
+    pub name: String,
+    /// Defaults to sender if None
+    pub admin: Option<String>,
+    /// Optional DAODAO dao-core address; if set, weight proposals require governance approval
+    pub governance: Option<String>,
+    pub escrow_contract: String,
+    pub agent_registry: String,
+    /// Optional task-ledger address for WavsPush proposals
+    pub task_ledger: Option<String>,
+    /// Optional NOIS proxy address for on-chain randomness
+    pub nois_proxy: Option<String>,
+    /// Initial member roster. Weights must sum to 10,000.
+    pub members: Vec<MemberInput>,
+    /// Blocks to wait before a proposed weight change can be executed (timelock)
+    pub proposal_timelock_blocks: u64,
+    /// Native token denom. Defaults to "ujunox".
+    pub denom: Option<String>,
+    // ── Governance parameters (all optional with defaults) ──
+    /// Voting period in blocks (default 100)
+    pub voting_period_blocks: Option<u64>,
+    /// Quorum percentage of total_weight (default 51)
+    pub quorum_percent: Option<u64>,
+    /// Adaptive threshold: blocks within which all-vote triggers reduction (default 10)
+    pub adaptive_threshold_blocks: Option<u64>,
+    /// Adaptive minimum: floor blocks for reduced deadline (default 13)
+    pub adaptive_min_blocks: Option<u64>,
+    /// DAO-wide verification config (defaults to V2+V3)
+    pub verification: Option<VerificationConfig>,
+}
+
+#[cw_serde]
+pub enum ExecuteMsg {
+    /// Distribute ujuno sent with this message equally-weighted across members.
+    DistributePayment { task_id: u64 },
+
+    // ── New general governance ──
+
+    /// Create a new proposal. Any DAO member can propose.
+    CreateProposal { kind: ProposalKindMsg },
+
+    /// Cast a vote on an open proposal. Any DAO member, one vote per member.
+    CastVote { proposal_id: u64, vote: VoteOption },
+
+    /// Execute a passed proposal after the voting deadline.
+    ExecuteProposal { proposal_id: u64 },
+
+    /// Mark an expired proposal (deadline passed without quorum).
+    ExpireProposal { proposal_id: u64 },
+
+    // ── Legacy (kept for backward compat / migration) ──
+
+    /// Propose a new member weight schedule. Opens a timelock window.
+    ProposeWeightChange { members: Vec<MemberInput> },
+
+    /// Execute the pending legacy proposal after the timelock has elapsed.
+    ExecuteWeightProposal {},
+
+    /// Cancel the pending legacy proposal before it executes.
+    CancelWeightProposal {},
+
+    /// Direct weight update — only callable if governance is None.
+    UpdateMembers { members: Vec<MemberInput> },
+
+    /// Transfer admin to a new address (or governance contract).
+    TransferAdmin { new_admin: String },
+
+    // ── Randomness ──
+
+    /// NOIS proxy callback delivering randomness for a pending sortition
+    NoisReceive { callback: NoisCallback },
+
+    /// WAVS operator submits drand randomness for a pending sortition job
+    SubmitRandomness {
+        job_id: String,
+        randomness_hex: String,
+        attestation_hash: String,
+    },
+}
+
+#[cw_serde]
+#[derive(QueryResponses)]
+pub enum QueryMsg {
+    #[returns(Config)]
+    GetConfig {},
+
+    #[returns(Vec<Member>)]
+    GetMembers {},
+
+    // ── New proposal queries ──
+
+    #[returns(Proposal)]
+    GetProposal { proposal_id: u64 },
+
+    #[returns(Vec<Proposal>)]
+    ListProposals { start_after: Option<u64>, limit: Option<u32> },
+
+    // ── Legacy ──
+
+    #[returns(Option<WeightProposal>)]
+    GetPendingProposal {},
+
+    #[returns(PaymentRecord)]
+    GetPaymentRecord { task_id: u64 },
+
+    #[returns(Vec<PaymentRecord>)]
+    GetPaymentHistory { start_after: Option<u64>, limit: Option<u32> },
+
+    #[returns(cosmwasm_std::Uint128)]
+    GetMemberEarnings { addr: String },
+
+    // ── Sortition ──
+
+    #[returns(SortitionRound)]
+    GetSortitionRound { round_id: u64 },
+
+    #[returns(Vec<SortitionRound>)]
+    ListSortitionRounds { start_after: Option<u64>, limit: Option<u32> },
+
+    #[returns(Option<PendingSortition>)]
+    GetPendingSortition { job_id: String },
+}
+
+#[cw_serde]
+pub struct MigrateMsg {}

@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg:           #06060f;
+    --color-surface:      #0a0a18;
+    --color-surface-2:    #0f0f20;
+    --color-border:       rgba(255,107,74,0.12);
+    --color-border-sub:   rgba(255,255,255,0.06);
+    --color-text:         #f0eff8;
+    --color-text-muted:   #6b6a8a;
+    --color-accent:       #ff6b4a;
+    --color-accent-glow:  rgba(255,107,74,0.25);
+    --color-teal:         #00d4aa;
+    --color-teal-glow:    rgba(0,212,170,0.20);
+  }
+
+  html, body, #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,107,74,0.2) transparent;
+  }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255,107,74,0.25);
+    border-radius: 2px;
+  }
+}
+
+@layer utilities {
+  .glow-border-juno {
+    border: 1px solid rgba(255,107,74,0.2);
+    box-shadow: 0 0 0 1px rgba(255,107,74,0.05) inset;
+  }
+  .glow-border-teal {
+    border: 1px solid rgba(0,212,170,0.2);
+  }
+  .text-gradient-juno {
+    background: linear-gradient(135deg, #ff6b4a, #ffaa80);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .bg-noise {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+  .cursor-blink {
+    animation: blink 1s step-end infinite;
+  }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}

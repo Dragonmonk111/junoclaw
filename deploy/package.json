@@ -1,0 +1,16 @@
+{
+  "name": "junoclaw-deploy",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "JunoClaw contract deployment script for Juno testnet",
+  "scripts": {
+    "deploy": "node deploy.mjs",
+    "query": "node query.mjs"
+  },
+  "dependencies": {
+    "@cosmjs/cosmwasm-stargate": "^0.32.4",
+    "@cosmjs/proto-signing": "^0.32.4",
+    "@cosmjs/stargate": "^0.32.4",
+    "dotenv": "^16.4.5"
+  }
+}

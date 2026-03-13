@@ -1,0 +1,20 @@
+[package]
+name = "junoclaw-cli"
+version = "0.1.0"
+edition = "2021"
+description = "JunoClaw CLI tool"
+
+[[bin]]
+name = "junoclaw"
+path = "src/main.rs"
+
+[dependencies]
+junoclaw-core = { path = "../junoclaw-core" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+dirs = { workspace = true }

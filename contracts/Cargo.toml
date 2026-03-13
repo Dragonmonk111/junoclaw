@@ -1,0 +1,34 @@
+[workspace]
+members = [
+    "junoclaw-common",
+    "agent-registry",
+    "task-ledger",
+    "escrow",
+    "agent-company",
+]
+resolver = "2"
+
+[workspace.dependencies]
+cosmwasm-std = "2.2"
+cosmwasm-schema = "2.2"
+cw-storage-plus = "2.0"
+cw2 = "2.0"
+schemars = "0.8"
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+thiserror = "2.0"
+cw-multi-test = "2.3"
+anyhow = "1.0"
+sha2 = "0.10"
+junoclaw-common = { path = "junoclaw-common" }
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 1
+panic = 'abort'
+incremental = false
+overflow-checks = true
+

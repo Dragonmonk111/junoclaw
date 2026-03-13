@@ -1,0 +1,15 @@
+[package]
+name = "plugin-compute-akash"
+version = "0.1.0"
+edition = "2021"
+description = "JunoClaw Akash Network GPU compute plugin"
+
+[dependencies]
+junoclaw-core = { path = "../../crates/junoclaw-core" }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }

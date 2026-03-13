@@ -1,0 +1,63 @@
+# JunoClaw Configuration
+# Copy to ~/.junoclaw/config.toml and customize
+
+[daemon]
+host = "127.0.0.1"
+port = 7777
+log_level = "info"
+
+[llm]
+default_provider = "ollama"
+fallback_chain = ["ollama"]
+monthly_budget_usd = 50.0
+per_task_budget_usd = 2.0
+rate_limit_rpm = 60
+
+[llm.providers.ollama]
+endpoint = "http://localhost:11434"
+default_model = "llama3.1:8b"
+
+# Uncomment to enable cloud LLM providers:
+# [llm.providers.anthropic]
+# api_key_env = "ANTHROPIC_API_KEY"
+# default_model = "claude-sonnet-4-20250514"
+
+# [llm.providers.openai]
+# api_key_env = "OPENAI_API_KEY"
+# default_model = "gpt-4o"
+
+[compute.local]
+enabled = true
+max_concurrent_tasks = 4
+
+# Uncomment to enable Akash GPU compute:
+# [compute.akash]
+# enabled = true
+# wallet_mnemonic_env = "AKASH_MNEMONIC"
+# default_gpu = "nvidia-h100"
+# max_hourly_rate_uakt = 1500000
+# auto_close_timeout_minutes = 60
+# docker_image = "ghcr.io/junoclaw/agent-runtime:latest"
+# payment_token = "juno"
+# max_slippage_percent = 0.5
+
+[storage]
+max_session_history = 100
+
+[chain]
+enabled = false
+chain_id = "juno-1"
+rpc_endpoint = "https://rpc-juno.itastakers.com:443"
+grpc_endpoint = "https://grpc-juno.itastakers.com:443"
+gas_prices = "0.075ujuno"
+
+# Set after deploying contracts:
+# [chain.contracts]
+# agent_registry = "juno1..."
+# task_ledger = "juno1..."
+# escrow = "juno1..."
+
+[wavs]
+enabled = false
+# endpoint = "https://..."
+use_tee = false
