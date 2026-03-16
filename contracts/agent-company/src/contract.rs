@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    entry_point, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo,
+    entry_point, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, Event, MessageInfo,
     Order, Response, StdResult, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
@@ -10,10 +10,10 @@ use crate::msg::{
     ExecuteMsg, InstantiateMsg, MemberInput, MigrateMsg, ProposalKindMsg, QueryMsg,
 };
 use crate::state::{
-    Config, Member, NoisCallback, PaymentRecord, PendingSortition, Proposal, ProposalKind,
-    ProposalStatus, SortitionRound, Vote, VoteOption, WeightProposal,
-    CONFIG, MEMBER_EARNINGS, PAYMENT_HISTORY, PENDING_SORTITION, PROPOSAL, PROPOSALS,
-    PROPOSAL_SEQ, SORTITION_ROUNDS, SORTITION_SEQ,
+    Attestation, Config, Member, NoisCallback, PaymentRecord, PendingSortition, Proposal,
+    ProposalKind, ProposalStatus, SortitionRound, Vote, VoteOption, WeightProposal,
+    ATTESTATIONS, CONFIG, MEMBER_EARNINGS, PAYMENT_HISTORY, PENDING_SORTITION, PROPOSAL,
+    PROPOSALS, PROPOSAL_SEQ, SORTITION_ROUNDS, SORTITION_SEQ,
 };
 use sha2::{Sha256, Digest};
 
@@ -132,6 +132,9 @@ pub fn execute(
             execute_nois_receive(deps, env, info, callback),
         ExecuteMsg::SubmitRandomness { job_id, randomness_hex, attestation_hash } =>
             execute_submit_randomness(deps, env, info, job_id, randomness_hex, attestation_hash),
+        // ── WAVS Attestations ──
+        ExecuteMsg::SubmitAttestation { proposal_id, task_type, data_hash, attestation_hash } =>
+            execute_submit_attestation(deps, env, info, proposal_id, task_type, data_hash, attestation_hash),
     }
 }
 
@@ -463,6 +466,15 @@ fn execute_execute_proposal(
             response = response
                 .add_attribute("kind", "wavs_push")
                 .add_attribute("task_description", task_description);
+
+            // Emit dedicated WAVS trigger event for off-chain verification
+            let wavs_event = Event::new("wavs_push")
+                .add_attribute("task_id", proposal_id.to_string())
+                .add_attribute("task_description", task_description)
+                .add_attribute("execution_tier", format!("{:?}", execution_tier))
+                .add_attribute("escrow_amount", escrow_amount.to_string())
+                .add_attribute("contract_address", env.contract.address.to_string());
+            response = response.add_event(wavs_event);
         }
         ProposalKind::ConfigChange { new_admin, new_governance } => {
             if let Some(admin_str) = new_admin {
@@ -480,12 +492,21 @@ fn execute_execute_proposal(
                 .add_attribute("kind", "free_text")
                 .add_attribute("title", title);
         }
-        ProposalKind::OutcomeCreate { question, deadline_block, .. } => {
+        ProposalKind::OutcomeCreate { question, resolution_criteria, deadline_block } => {
             // Outcome market creation is recorded on-chain via proposal execution
             response = response
                 .add_attribute("kind", "outcome_create")
                 .add_attribute("question", question)
                 .add_attribute("deadline_block", deadline_block.to_string());
+
+            // Emit dedicated WAVS trigger event for outcome verification
+            let outcome_event = Event::new("outcome_create")
+                .add_attribute("market_id", proposal_id.to_string())
+                .add_attribute("question", question)
+                .add_attribute("resolution_criteria", resolution_criteria)
+                .add_attribute("deadline_block", deadline_block.to_string())
+                .add_attribute("contract_address", env.contract.address.to_string());
+            response = response.add_event(outcome_event);
         }
         ProposalKind::OutcomeResolve { market_id, outcome, attestation_hash } => {
             // Outcome market resolution requires WAVS attestation — recorded on-chain
@@ -537,6 +558,17 @@ fn execute_execute_proposal(
                 .add_attribute("count", count.to_string())
                 .add_attribute("purpose", purpose)
                 .add_attribute("awaiting_randomness", if cfg.nois_proxy.is_some() { "nois" } else { "wavs_drand" });
+
+            // Emit dedicated WAVS trigger event for drand randomness fetch
+            // Only emit when NOIS proxy is not configured (WAVS handles randomness)
+            if cfg.nois_proxy.is_none() {
+                let sortition_event = Event::new("sortition_request")
+                    .add_attribute("job_id", &job_id)
+                    .add_attribute("count", count.to_string())
+                    .add_attribute("purpose", purpose)
+                    .add_attribute("contract_address", env.contract.address.to_string());
+                response = response.add_event(sortition_event);
+            }
         }
     }
 
@@ -700,6 +732,65 @@ fn execute_submit_randomness(
     let mut response = resolve_sortition(deps, &env, &job_id, &randomness_hex, &format!("wavs_drand:{}", job_id))?;
     response = response.add_attribute("attestation_hash", attestation_hash);
     Ok(response)
+}
+
+fn execute_submit_attestation(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    proposal_id: u64,
+    task_type: String,
+    data_hash: String,
+    attestation_hash: String,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    // Authorized submitters: admin, governance, or task_ledger (WAVS bridge)
+    let is_admin = info.sender == cfg.admin;
+    let is_governance = cfg.governance.as_ref().map(|g| *g == info.sender).unwrap_or(false);
+    let is_wavs_bridge = cfg.task_ledger.as_ref().map(|tl| *tl == info.sender).unwrap_or(false);
+    if !is_admin && !is_governance && !is_wavs_bridge {
+        return Err(ContractError::UnauthorizedRandomness {});
+    }
+
+    // Verify the proposal exists and was executed (i.e. the trigger was emitted)
+    let proposal = PROPOSALS.load(deps.storage, proposal_id)
+        .map_err(|_| ContractError::ProposalNotFound { id: proposal_id })?;
+    if !proposal.executed {
+        return Err(ContractError::ProposalNotPassed { id: proposal_id });
+    }
+
+    // Only WavsPush and OutcomeCreate proposals accept attestations
+    match &proposal.kind {
+        ProposalKind::WavsPush { .. } | ProposalKind::OutcomeCreate { .. } => {}
+        _ => return Err(ContractError::Std(cosmwasm_std::StdError::generic_err(
+            format!("proposal {} is not a verifiable task type", proposal_id),
+        ))),
+    }
+
+    // Prevent duplicate attestations
+    if ATTESTATIONS.has(deps.storage, proposal_id) {
+        return Err(ContractError::Std(cosmwasm_std::StdError::generic_err(
+            format!("attestation already submitted for proposal {}", proposal_id),
+        )));
+    }
+
+    let attestation = Attestation {
+        proposal_id,
+        task_type: task_type.clone(),
+        data_hash: data_hash.clone(),
+        attestation_hash: attestation_hash.clone(),
+        submitted_at_block: env.block.height,
+        submitter: info.sender,
+    };
+    ATTESTATIONS.save(deps.storage, proposal_id, &attestation)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "submit_attestation")
+        .add_attribute("proposal_id", proposal_id.to_string())
+        .add_attribute("task_type", task_type)
+        .add_attribute("data_hash", data_hash)
+        .add_attribute("attestation_hash", attestation_hash))
 }
 
 // ──────────────────────────────────────────────
@@ -886,6 +977,20 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         }
         QueryMsg::GetPendingSortition { job_id } => {
             to_json_binary(&PENDING_SORTITION.may_load(deps.storage, &job_id)?)
+        }
+        // ── Attestations ──
+        QueryMsg::GetAttestation { proposal_id } => {
+            to_json_binary(&ATTESTATIONS.may_load(deps.storage, proposal_id)?)
+        }
+        QueryMsg::ListAttestations { start_after, limit } => {
+            let limit = limit.unwrap_or(30).min(100) as usize;
+            let start = start_after.map(Bound::exclusive);
+            let attestations: Vec<Attestation> = ATTESTATIONS
+                .range(deps.storage, start, None, Order::Ascending)
+                .take(limit)
+                .filter_map(|r| r.ok().map(|(_, a)| a))
+                .collect();
+            to_json_binary(&attestations)
         }
     }
 }

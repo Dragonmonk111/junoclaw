@@ -262,3 +262,26 @@ pub const SORTITION_SEQ: Item<u64> = Item::new("sortition_seq");
 pub const SORTITION_ROUNDS: Map<u64, SortitionRound> = Map::new("sortition_rounds");
 /// Pending sortition requests awaiting randomness: job_id → PendingSortition
 pub const PENDING_SORTITION: Map<&str, PendingSortition> = Map::new("pending_sortition");
+
+// ──────────────────────────────────────────────
+// WAVS Attestations
+// ──────────────────────────────────────────────
+
+#[cw_serde]
+pub struct Attestation {
+    /// Proposal that triggered the off-chain verification
+    pub proposal_id: u64,
+    /// Type of verification performed (e.g. "data_verify", "outcome_verify")
+    pub task_type: String,
+    /// SHA-256 hash of the verified data
+    pub data_hash: String,
+    /// Attestation hash from the WAVS component (component_id || task_type || data_hash)
+    pub attestation_hash: String,
+    /// Block height when attestation was submitted
+    pub submitted_at_block: u64,
+    /// Address that submitted the attestation (bridge/operator)
+    pub submitter: Addr,
+}
+
+/// Attestations keyed by proposal_id
+pub const ATTESTATIONS: Map<u64, Attestation> = Map::new("attestations");

@@ -2,8 +2,8 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Uint128;
 #[allow(unused_imports)]
 use crate::state::{
-    Config, Member, NoisCallback, PaymentRecord, PendingSortition, Proposal, ProposalKind,
-    SortitionRound, VerificationConfig, VoteOption, WeightProposal,
+    Attestation, Config, Member, NoisCallback, PaymentRecord, PendingSortition, Proposal,
+    ProposalKind, SortitionRound, VerificationConfig, VoteOption, WeightProposal,
 };
 use junoclaw_common::ExecutionTier;
 
@@ -127,6 +127,16 @@ pub enum ExecuteMsg {
         randomness_hex: String,
         attestation_hash: String,
     },
+
+    // ── WAVS Attestations ──
+
+    /// WAVS bridge submits a verification attestation for a WavsPush or OutcomeCreate proposal
+    SubmitAttestation {
+        proposal_id: u64,
+        task_type: String,
+        data_hash: String,
+        attestation_hash: String,
+    },
 }
 
 #[cw_serde]
@@ -170,6 +180,14 @@ pub enum QueryMsg {
 
     #[returns(Option<PendingSortition>)]
     GetPendingSortition { job_id: String },
+
+    // ── Attestations ──
+
+    #[returns(Option<Attestation>)]
+    GetAttestation { proposal_id: u64 },
+
+    #[returns(Vec<Attestation>)]
+    ListAttestations { start_after: Option<u64>, limit: Option<u32> },
 }
 
 #[cw_serde]

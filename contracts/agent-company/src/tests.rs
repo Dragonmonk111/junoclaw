@@ -1149,3 +1149,177 @@ fn test_sortition_invalid_randomness_rejected() {
     let contract_err = err.downcast::<ContractError>().unwrap();
     assert!(matches!(contract_err, ContractError::InvalidRandomness { .. }));
 }
+
+// ── WAVS Attestation Tests ──
+
+#[test]
+fn test_submit_attestation_for_outcome_create() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+
+    // Create OutcomeCreate proposal (no cross-contract calls)
+    app.execute_contract(
+        alice.clone(), contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::OutcomeCreate {
+                question: "Will BTC exceed 100k?".to_string(),
+                resolution_criteria: "CoinGecko spot price at block deadline".to_string(),
+                deadline_block: 999999,
+            },
+        },
+        &[],
+    ).unwrap();
+
+    // Vote yes (alice=6000 > 51% of 10000)
+    app.execute_contract(
+        alice.clone(), contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+        &[],
+    ).unwrap();
+
+    // Advance past voting deadline and execute
+    app.update_block(|b| b.height += 200);
+    app.execute_contract(
+        admin.clone(), contract.clone(),
+        &ExecuteMsg::ExecuteProposal { proposal_id: 1 },
+        &[],
+    ).unwrap();
+
+    // Submit attestation from admin (authorized)
+    app.execute_contract(
+        admin.clone(), contract.clone(),
+        &ExecuteMsg::SubmitAttestation {
+            proposal_id: 1,
+            task_type: "outcome_verify".to_string(),
+            data_hash: "abc123def456".to_string(),
+            attestation_hash: "wavs_att_hash_001".to_string(),
+        },
+        &[],
+    ).unwrap();
+
+    // Query attestation
+    let att: Option<crate::state::Attestation> = app.wrap().query_wasm_smart(
+        contract.clone(),
+        &QueryMsg::GetAttestation { proposal_id: 1 },
+    ).unwrap();
+    let att = att.unwrap();
+    assert_eq!(att.proposal_id, 1);
+    assert_eq!(att.task_type, "outcome_verify");
+    assert_eq!(att.data_hash, "abc123def456");
+    assert_eq!(att.attestation_hash, "wavs_att_hash_001");
+    assert_eq!(att.submitter, admin);
+}
+
+#[test]
+fn test_submit_attestation_unauthorized_rejected() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let stranger = mk(&app, "stranger");
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+
+    // Create, vote, execute OutcomeCreate
+    app.execute_contract(
+        alice.clone(), contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::OutcomeCreate {
+                question: "Test question".to_string(),
+                resolution_criteria: "Test criteria".to_string(),
+                deadline_block: 999999,
+            },
+        },
+        &[],
+    ).unwrap();
+    app.execute_contract(
+        alice.clone(), contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+        &[],
+    ).unwrap();
+    app.update_block(|b| b.height += 200);
+    app.execute_contract(
+        admin.clone(), contract.clone(),
+        &ExecuteMsg::ExecuteProposal { proposal_id: 1 },
+        &[],
+    ).unwrap();
+
+    // Stranger tries to submit attestation — should fail
+    let err = app.execute_contract(
+        stranger.clone(), contract.clone(),
+        &ExecuteMsg::SubmitAttestation {
+            proposal_id: 1,
+            task_type: "outcome_verify".to_string(),
+            data_hash: "fake".to_string(),
+            attestation_hash: "fake".to_string(),
+        },
+        &[],
+    ).unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::UnauthorizedRandomness {}));
+}
+
+#[test]
+fn test_submit_attestation_duplicate_rejected() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+
+    // Create, vote, execute OutcomeCreate
+    app.execute_contract(
+        alice.clone(), contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::OutcomeCreate {
+                question: "Test question".to_string(),
+                resolution_criteria: "Test criteria".to_string(),
+                deadline_block: 999999,
+            },
+        },
+        &[],
+    ).unwrap();
+    app.execute_contract(
+        alice.clone(), contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+        &[],
+    ).unwrap();
+    app.update_block(|b| b.height += 200);
+    app.execute_contract(
+        admin.clone(), contract.clone(),
+        &ExecuteMsg::ExecuteProposal { proposal_id: 1 },
+        &[],
+    ).unwrap();
+
+    // First attestation — succeeds
+    app.execute_contract(
+        admin.clone(), contract.clone(),
+        &ExecuteMsg::SubmitAttestation {
+            proposal_id: 1,
+            task_type: "outcome_verify".to_string(),
+            data_hash: "hash1".to_string(),
+            attestation_hash: "att1".to_string(),
+        },
+        &[],
+    ).unwrap();
+
+    // Second attestation — should fail (duplicate)
+    let err = app.execute_contract(
+        admin.clone(), contract.clone(),
+        &ExecuteMsg::SubmitAttestation {
+            proposal_id: 1,
+            task_type: "outcome_verify".to_string(),
+            data_hash: "hash2".to_string(),
+            attestation_hash: "att2".to_string(),
+        },
+        &[],
+    ).unwrap_err();
+    // Should be a StdError::GenericErr for duplicate
+    let err_str = format!("{:?}", err);
+    assert!(err_str.contains("attestation already submitted"), "unexpected error: {}", err_str);
+}

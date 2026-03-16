@@ -22,5 +22,11 @@ Thumbs.db
 # Rust
 **/*.rs.bk
 
+# Lock files (component lib)
+wavs/Cargo-component.lock
+
+# Package lock (reproducible via npm install)
+package-lock.json
+
 # Frontend build
 frontend/dist/

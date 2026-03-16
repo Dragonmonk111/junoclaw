@@ -1,0 +1,124 @@
+{
+  "name": "junoclaw-verifier",
+  "description": "JunoClaw off-chain verification service for agentic DAOs on Juno Network",
+  "version": "0.1.0",
+  "workflows": {
+    "wavs-push-verify": {
+      "trigger": {
+        "cosmos_contract_event": {
+          "address": {
+            "Cosmos": {
+              "bech32_addr": "juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6",
+              "prefix_len": 4
+            }
+          },
+          "chain_name": "juno_testnet",
+          "event_type": "wasm-wavs_push"
+        }
+      },
+      "component": {
+        "source": {
+          "Registry": {
+            "registry": {
+              "domain": "wa.dev",
+              "package": "junoclaw:verifier",
+              "version": "0.1.0"
+            }
+          }
+        },
+        "permissions": {
+          "allowed_http_hosts": "all",
+          "file_system": false
+        },
+        "fuel_limit": null,
+        "time_limit_seconds": 60,
+        "config": {},
+        "env_keys": []
+      },
+      "submit": {
+        "cosmos": {
+          "chain_name": "juno_testnet",
+          "contract_address": "juno1agw6f05wxx5rm8d3etq7cejcm5g8e224s00dvykylaja7jlx3ljq6f0u46"
+        }
+      }
+    },
+    "sortition-randomness": {
+      "trigger": {
+        "cosmos_contract_event": {
+          "address": {
+            "Cosmos": {
+              "bech32_addr": "juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6",
+              "prefix_len": 4
+            }
+          },
+          "chain_name": "juno_testnet",
+          "event_type": "wasm-sortition_request"
+        }
+      },
+      "component": {
+        "source": {
+          "Registry": {
+            "registry": {
+              "domain": "wa.dev",
+              "package": "junoclaw:verifier",
+              "version": "0.1.0"
+            }
+          }
+        },
+        "permissions": {
+          "allowed_http_hosts": "all",
+          "file_system": false
+        },
+        "fuel_limit": null,
+        "time_limit_seconds": 30,
+        "config": {},
+        "env_keys": []
+      },
+      "submit": {
+        "cosmos": {
+          "chain_name": "juno_testnet",
+          "contract_address": "juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6"
+        }
+      }
+    },
+    "outcome-verify": {
+      "trigger": {
+        "cosmos_contract_event": {
+          "address": {
+            "Cosmos": {
+              "bech32_addr": "juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6",
+              "prefix_len": 4
+            }
+          },
+          "chain_name": "juno_testnet",
+          "event_type": "wasm-outcome_create"
+        }
+      },
+      "component": {
+        "source": {
+          "Registry": {
+            "registry": {
+              "domain": "wa.dev",
+              "package": "junoclaw:verifier",
+              "version": "0.1.0"
+            }
+          }
+        },
+        "permissions": {
+          "allowed_http_hosts": "all",
+          "file_system": false
+        },
+        "fuel_limit": null,
+        "time_limit_seconds": 60,
+        "config": {},
+        "env_keys": []
+      },
+      "submit": {
+        "cosmos": {
+          "chain_name": "juno_testnet",
+          "contract_address": "juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6"
+        }
+      }
+    }
+  }
+}

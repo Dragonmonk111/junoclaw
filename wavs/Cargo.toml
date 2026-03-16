@@ -1,0 +1,39 @@
+[package]
+name = "junoclaw-wavs-component"
+version = "0.1.0"
+edition = "2021"
+description = "JunoClaw WAVS WASI component — off-chain verification for agentic DAOs"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# WAVS runtime bindings + utilities
+wit-bindgen-rt = { version = "0.40", features = ["bitflags"] }
+wavs-wasi-utils = "1.0.0"
+wstd = "0.6"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+
+# Hashing for attestation
+sha2 = "0.10"
+hex = "0.4"
+
+# HTTP for data fetching (via WASI)
+# Network requests use wstd::http in WASI components
+
+[package.metadata.component]
+package = "junoclaw:verifier"
+target = "wavs:operator/wavs-world@=2.1.0"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

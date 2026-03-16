@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JunoClaw — Content Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      min-height: 100vh;
+    }
+    .header {
+      background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+      border-bottom: 1px solid #30363d;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header h1 {
+      font-size: 20px;
+      color: #58a6ff;
+      font-weight: 600;
+    }
+    .header .badge {
+      background: #238636;
+      color: #fff;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+    .tabs {
+      display: flex;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 0 24px;
+      gap: 0;
+    }
+    .tab {
+      padding: 12px 20px;
+      cursor: pointer;
+      color: #8b949e;
+      font-size: 14px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      user-select: none;
+    }
+    .tab:hover { color: #c9d1d9; }
+    .tab.active {
+      color: #58a6ff;
+      border-bottom-color: #58a6ff;
+    }
+    .tab .emoji { margin-right: 6px; }
+    .toolbar {
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 10px 24px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .toolbar button {
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .toolbar button:hover { background: #30363d; border-color: #58a6ff; }
+    .toolbar button.copied { background: #238636; border-color: #238636; color: #fff; }
+    .toolbar .status {
+      margin-left: auto;
+      font-size: 12px;
+      color: #8b949e;
+    }
+    .content-area {
+      display: flex;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+      gap: 24px;
+      min-height: calc(100vh - 160px);
+    }
+    .rendered {
+      flex: 1;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 32px;
+      overflow-y: auto;
+      max-height: calc(100vh - 200px);
+    }
+    .rendered h1 { font-size: 28px; color: #fff; margin-bottom: 16px; border-bottom: 1px solid #30363d; padding-bottom: 12px; }
+    .rendered h2 { font-size: 22px; color: #58a6ff; margin-top: 28px; margin-bottom: 12px; }
+    .rendered h3 { font-size: 17px; color: #79c0ff; margin-top: 20px; margin-bottom: 8px; }
+    .rendered p { line-height: 1.7; margin-bottom: 14px; }
+    .rendered ul, .rendered ol { padding-left: 24px; margin-bottom: 14px; }
+    .rendered li { margin-bottom: 6px; line-height: 1.6; }
+    .rendered strong { color: #fff; }
+    .rendered em { color: #d2a8ff; }
+    .rendered code {
+      background: #0d1117;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #79c0ff;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+    }
+    .rendered pre {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      margin-bottom: 16px;
+    }
+    .rendered pre code { background: none; padding: 0; color: #c9d1d9; }
+    .rendered blockquote {
+      border-left: 3px solid #58a6ff;
+      padding: 12px 20px;
+      margin: 16px 0;
+      background: rgba(88, 166, 255, 0.05);
+      border-radius: 0 6px 6px 0;
+    }
+    .rendered blockquote em { color: #d2a8ff; font-size: 15px; }
+    .rendered hr { border: none; border-top: 1px solid #30363d; margin: 24px 0; }
+    .rendered a { color: #58a6ff; text-decoration: none; }
+    .rendered a:hover { text-decoration: underline; }
+    .rendered del { color: #8b949e; }
+    .notes-panel {
+      width: 320px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 200px);
+    }
+    .notes-panel h3 {
+      color: #58a6ff;
+      font-size: 14px;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .notes-panel textarea {
+      flex: 1;
+      background: #0d1117;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 13px;
+      font-family: inherit;
+      resize: none;
+      line-height: 1.6;
+    }
+    .notes-panel textarea::placeholder { color: #484f58; }
+    .notes-panel textarea:focus { outline: none; border-color: #58a6ff; }
+    .notes-panel .note-actions {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+    }
+    .notes-panel .note-actions button {
+      flex: 1;
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      padding: 6px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .notes-panel .note-actions button:hover { background: #30363d; }
+    .tweet-card {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 12px;
+    }
+    .tweet-card .tweet-header {
+      font-size: 12px;
+      color: #58a6ff;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .tweet-card .tweet-body {
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .tweet-card .tweet-footer {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .tweet-card .char-count {
+      font-size: 11px;
+      color: #8b949e;
+    }
+    .tweet-card .char-count.over { color: #f85149; font-weight: 600; }
+    .tweet-card .copy-tweet {
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .tweet-card .copy-tweet:hover { background: #30363d; }
+    @media (max-width: 900px) {
+      .content-area { flex-direction: column; }
+      .notes-panel { width: 100%; max-height: 300px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>JunoClaw Content Viewer</h1>
+  <span class="badge">WAVS E2E COMPLETE</span>
+</div>
+
+<div class="tabs" id="tabs">
+  <div class="tab active" data-tab="article"><span class="emoji">�</span>New Article</div>
+  <div class="tab" data-tab="brief"><span class="emoji">📎</span>Original Update Note</div>
+  <div class="tab" data-tab="tweets"><span class="emoji">🐦</span>X Thread Reply</div>
+  <div class="tab" data-tab="midjourney"><span class="emoji">🎨</span>Midjourney Prompt</div>
+</div>
+
+<div class="toolbar">
+  <button id="copyAll">📋 Copy All</button>
+  <button id="copySection">📄 Copy Visible Section</button>
+  <button id="toggleRaw">{ } Raw Markdown</button>
+  <span class="status" id="statusMsg"></span>
+</div>
+
+<div class="content-area">
+  <div class="rendered" id="rendered"></div>
+  <div class="notes-panel">
+    <h3>Discussion Notes</h3>
+    <textarea id="notes" placeholder="Type your notes, edits, or questions here...&#10;&#10;e.g. 'Change tweet 10 wording'&#10;'Add more emphasis on TEE'&#10;'Midjourney: try warmer tones'"></textarea>
+    <div class="note-actions">
+      <button id="clearNotes">Clear</button>
+      <button id="saveNotes">Save to File</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CONTENT = {};
+
+// Inline the markdown content
+CONTENT.article    = `ARTICLE_PLACEHOLDER`;
+CONTENT.brief      = `BRIEF_PLACEHOLDER`;
+CONTENT.tweets     = `TWEETS_PLACEHOLDER`;
+CONTENT.midjourney = `MIDJOURNEY_PLACEHOLDER`;
+
+let currentTab = 'article';
+let rawMode = false;
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentTab = tab.dataset.tab;
+    render();
+  });
+});
+
+function render() {
+  const el = document.getElementById('rendered');
+  const content = CONTENT[currentTab] || 'No content loaded.';
+
+  if (currentTab === 'tweets' && !rawMode) {
+    el.innerHTML = renderTweets(content);
+    attachTweetCopyHandlers();
+  } else if (rawMode) {
+    el.innerHTML = `<pre><code>${escapeHtml(content)}</code></pre>`;
+  } else {
+    el.innerHTML = marked.parse(content);
+  }
+}
+
+function renderTweets(md) {
+  const sections = md.split('---').filter(s => s.trim());
+  let html = '<h2 style="color:#58a6ff;margin-bottom:20px">X Thread Reply — Tweets 8-12</h2>';
+
+  for (const section of sections) {
+    const match = section.match(/\*\*(\d+\/)\*\*\s*\(~(\d+)\s*chars\)\s*([\s\S]*)/);
+    if (match) {
+      const [, num, charEst, body] = match;
+      const text = body.trim();
+      const charCount = text.length;
+      const isOver = charCount > 280;
+
+      html += `
+        <div class="tweet-card">
+          <div class="tweet-header">Tweet ${num}</div>
+          <div class="tweet-body">${escapeHtml(text)}</div>
+          <div class="tweet-footer">
+            <span class="char-count ${isOver ? 'over' : ''}">${charCount}/280</span>
+            <button class="copy-tweet" data-text="${escapeAttr(text)}">Copy</button>
+          </div>
+        </div>
+      `;
+    }
+  }
+  return html;
+}
+
+function attachTweetCopyHandlers() {
+  document.querySelectorAll('.copy-tweet').forEach(btn => {
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(btn.dataset.text);
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    });
+  });
+}
+
+// Copy all
+document.getElementById('copyAll').addEventListener('click', () => {
+  navigator.clipboard.writeText(CONTENT[currentTab]);
+  flash('copyAll', 'Copied all!');
+});
+
+// Copy visible
+document.getElementById('copySection').addEventListener('click', () => {
+  const text = document.getElementById('rendered').innerText;
+  navigator.clipboard.writeText(text);
+  flash('copySection', 'Copied!');
+});
+
+// Toggle raw
+document.getElementById('toggleRaw').addEventListener('click', () => {
+  rawMode = !rawMode;
+  document.getElementById('toggleRaw').textContent = rawMode ? '✨ Rendered' : '{ } Raw Markdown';
+  render();
+});
+
+// Notes
+document.getElementById('clearNotes').addEventListener('click', () => {
+  document.getElementById('notes').value = '';
+});
+
+document.getElementById('saveNotes').addEventListener('click', () => {
+  const notes = document.getElementById('notes').value;
+  const blob = new Blob([notes], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `junoclaw-notes-${currentTab}.txt`;
+  a.click();
+  flash('saveNotes', 'Saved!');
+});
+
+// Auto-save notes to localStorage
+const notesEl = document.getElementById('notes');
+const savedNotes = JSON.parse(localStorage.getItem('jc-notes') || '{}');
+notesEl.value = savedNotes[currentTab] || '';
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    savedNotes[currentTab] = notesEl.value;
+    localStorage.setItem('jc-notes', JSON.stringify(savedNotes));
+    setTimeout(() => {
+      notesEl.value = savedNotes[tab.dataset.tab] || '';
+    }, 50);
+  });
+});
+notesEl.addEventListener('input', () => {
+  savedNotes[currentTab] = notesEl.value;
+  localStorage.setItem('jc-notes', JSON.stringify(savedNotes));
+});
+
+function flash(id, msg) {
+  const btn = document.getElementById(id) || document.querySelector(`#${id}`);
+  if (!btn) return;
+  const orig = btn.textContent;
+  btn.textContent = msg;
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+}
+
+function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escapeAttr(s) { return s.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// Initial render
+render();
+</script>
+</body>
+</html>

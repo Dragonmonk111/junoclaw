@@ -1,0 +1,23 @@
+{
+  "name": "junoclaw-wavs-bridge",
+  "version": "0.1.0",
+  "description": "WAVS bridge daemon — relays off-chain verification results to agent-company contract on Juno",
+  "type": "module",
+  "scripts": {
+    "bridge": "tsx src/bridge.ts",
+    "submit-attestation": "tsx src/submit-attestation.ts",
+    "submit-randomness": "tsx src/submit-randomness.ts",
+    "local-operator": "tsx src/local-operator.ts"
+  },
+  "dependencies": {
+    "@cosmjs/cosmwasm-stargate": "^0.32.4",
+    "@cosmjs/proto-signing": "^0.32.4",
+    "@cosmjs/stargate": "^0.32.4",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0"
+  }
+}

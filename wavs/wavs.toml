@@ -1,0 +1,24 @@
+# JunoClaw WAVS Configuration
+# This configures the WAVS runtime to connect to Juno testnet (uni-7)
+# and run the JunoClaw verifier component.
+
+[default]
+# Service manifest location
+service_manifest = "./service.json"
+
+# == Cosmos chains ==
+
+[default.chains.cosmos.juno_testnet]
+chain_id = "uni-7"
+bech32_prefix = "juno"
+rpc_endpoint = "https://juno-testnet-rpc.polkachu.com"
+grpc_endpoint = "https://juno-testnet-grpc.polkachu.com:443"
+gas_price = 0.075
+gas_denom = "ujunox"
+
+# == Component registry ==
+# wa.dev is the Layer.xyz public WAVS component registry.
+# Publish with: wavs component push --registry wa.dev
+
+[default.registry]
+domain = "wa.dev"
