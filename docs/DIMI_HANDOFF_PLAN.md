@@ -111,18 +111,45 @@ Original mnemonic destroyed. All ops go through multisig governance.
 
 ---
 
-## Onboarding Steps
+## Chain of Custody
 
-1. **Collect address**: Ask Dimi for his `juno1...` wallet address
-2. **WeightChange proposal**: Submit DAO proposal to add Dimi with governance weight
-3. **DAO votes**: Existing members (initially just root) approve
-4. **Execute**: Proposal passes → Dimi is now a voting member
-5. **TokenRecord**: Once jclaw-token contract is live, mint his soulbound bud:
-   - `holder`: Dimi's juno1... address
-   - `parent`: DragonMonk's address (root)
-   - `depth`: 1
-   - `budded`: false (he hasn't passed his bud yet)
-   - `revoked`: false
+The bud secret package is passed **one-to-one**, not broadcast from genesis:
+
+```
+Genesis → seals bud #1's package (Dimi)
+Bud #1  → seals bud #2's package
+Bud #2  → seals bud #3's package
+  ...
+Bud #12 → seals bud #13's package
+```
+
+Each bud holder is responsible for:
+1. Finding the next trusted person
+2. Collecting their juno1... address
+3. Filling the secrets template
+4. Sealing it with `bud-seal`
+5. Transmitting the .sealed file
+6. Submitting the WeightChange proposal to the DAO
+
+Genesis only seals bud #1. After that, the chain propagates itself.
+
+## Onboarding Steps (per bud)
+
+1. **Find next bud**: Current holder identifies a trusted person
+2. **Collect address**: Ask them for their `juno1...` wallet address
+3. **Fill template**: Copy `secrets-template.toml` → `<name>-secrets.toml`, fill placeholders
+4. **Seal**: `bud-seal seal --to <name>.pub --file <name>-secrets.toml`
+5. **Transmit**: Send the `.sealed` file via DM or encrypted channel
+6. **Delete plaintext**: Remove the filled `.toml` — only `.sealed` should exist
+7. **WeightChange proposal**: Submit DAO proposal to add new member with governance weight
+8. **DAO votes**: Existing members approve (7-of-13 quorum once all seated)
+9. **Execute**: Proposal passes → new member is a voting bud
+10. **TokenRecord**: Once jclaw-token contract is live, mint their soulbound bud:
+    - `holder`: their juno1... address
+    - `parent`: sender's address
+    - `depth`: 1
+    - `budded`: false (they haven't passed their bud yet)
+    - `revoked`: false
 
 ---
 
