@@ -18,9 +18,22 @@ This is JunoClaw. Let me explain what it is, who we are, what we've proven, and 
 
 ## Who We Are
 
-**VairagyaNodes** — solo Juno validator since December 30, 2021. Day one of mainnet. Four years of blocks, zero downtime events, zero governance abstentions. The wallet that submitted this proposal has been staking since genesis.
+**VairagyaNodes** — Juno enthusiast since December 30, 2021, infrastructure provider for about a year.
 
-JunoClaw is built by one person, in the open, with AI assistance for the off-chain tooling. The on-chain contracts — the parts that actually hold state and enforce rules — are hand-reviewed Rust with 86 passing tests across 7 contract crates.
+JunoClaw is built by us, in the open, with AI assistance for the off-chain tooling. The on-chain contracts — the parts that actually hold state and enforce rules — are human-written Rust with 86 passing tests across 7 contract crates.
+
+But this project doesn't exist in a vacuum. Three groups of builders made it possible — and they deserve to be named.
+
+**Ethan Frey & Jake Hartnell — WAVS / CosmWasm**
+Ethan Frey wrote CosmWasm. Every smart contract in JunoClaw runs on his work. He then co-founded Layer.xyz with Jake Hartnell and built WAVS — the framework that lets off-chain code run inside hardware enclaves and post cryptographic proof back to Cosmos chains. Without WAVS, JunoClaw's verification layer is just another promise. With it, it's a receipt. Jake reviewed this proposal, co-edited the HackMD, and said "who knows, AI might actually be able to get JunoSwap working." That's all the endorsement we needed.
+
+**DAODAO — The DAO Toolkit**
+The team at DAODAO has spent years building modular, composable governance libraries for Cosmos — `dao-core`, `dao-voting-cw4`, `dao-proposal-single`, and more. JunoClaw's governance architecture stands on those contracts. The quality of their open-source work meant we could focus on the verification layer rather than reinvent governance primitives. Their Apache 2.0 libraries are quietly powering a generation of on-chain organizations on Juno.
+
+**Akash Network — Decentralized Compute**
+Akash turns cloud compute into a permissionless marketplace. For $8.76 a month, JunoClaw's entire operator stack — WAVS operator, aggregator, component registry, IPFS — runs on Akash with no AWS, no Google Cloud, no single point of control. The Akash team built the infrastructure that makes it possible to run decentralized AI verification on decentralized compute. That matters.
+
+These aren't acknowledgements. They're the load-bearing walls.
 
 The proposal was reviewed and co-edited by **Jake Hartnell**, co-founder of Juno and architect of WAVS at Layer.xyz. His endorsement:
 
@@ -32,7 +45,7 @@ The testnet we launched from was built by **Dimi**, who will be the first of 13 
 
 One developer. One validator. One proposal. Thirteen seats at the table.
 
-[IMAGE 2 — TEAM/ORIGIN: use prompt B below]
+[IMAGE 2 — TEAM/ORIGIN]
 
 ---
 
@@ -60,7 +73,16 @@ Thirteen members. Every decision requires a vote. Normal proposals need **7 of 1
 
 **Genesis loses voting power after budding.** That's not a future promise — it's baked into the architecture.
 
-The governance uses a **soulbound trust-tree**: 13 buds — non-transferable governance credentials, each bound to one wallet address. Each bud holder can bud once, creating a branch. The tree is recursive and prunable via `BreakChannel` if trust breaks.
+The governance uses a **soulbound trust-tree**: 13 genesis buds distributed in a linear chain — genesis seals bud #1, bud #1 seals bud #2, and so on until bud #12 seals bud #13. Each handoff is one-to-one, not broadcast. This chain reaction ensures each bud holder personally vets the next.
+
+**Dispute resolution:** If a bud holder disappears mid-chain or refuses to pass their bud, the DAO (existing seated members) can vote to `BreakChannel` that branch and re-assign the pending seat. The tree heals itself — no single link can permanently block the chain.
+
+**BreakChannel flow:**
+1. Member raises concern → submits BreakChannel proposal to DAO
+2. DAO votes (7-of-13 quorum for seated members)
+3. If passed → target branch is pruned (revoked = true)
+4. Pruned member loses voting weight immediately
+5. DAO can re-assign the seat via new WeightChange proposal
 
 **Two tiers of power:**
 
@@ -83,7 +105,7 @@ A TEE is a locked box inside the CPU. Even the server operator can't see what's 
 
 Every swap. Every governance vote. Every contract upgrade. Independently verified. Proof stored on-chain. Forever.
 
-[IMAGE 3 — ARCHITECTURE: use prompt C below]
+[IMAGE 3 — ARCHITECTURE]
 
 ---
 
@@ -137,7 +159,7 @@ And here's the part that makes it human: if the 13 decide the founder should hol
 
 *A governance model is only credible if the creator has already left. It's only human if they can be invited back.*
 
-[IMAGE 3B — BUDDING: use prompt C2 below]
+[IMAGE 3B — BUDDING]
 
 ---
 
@@ -170,7 +192,7 @@ Think of it like a tamper-evident envelope. You put a math problem and the answe
 
 The Azure VM was the first envelope — a proof of concept. In production, **Juno validators** will run this same WASI component inside their own SGX/SEV hardware as sidecars. Multiple independent validators, each producing their own hardware-grade attestation. Thousands of tamper-evident envelopes, from different hands, all agreeing on the same answer.
 
-[IMAGE 4 — TEE/ENVELOPE: use prompt D below]
+[IMAGE 4 — TEE/ENVELOPE]
 
 ---
 
@@ -188,7 +210,7 @@ The WAVS operator runs five verification workflows — completely autonomous, no
 
 **IBC Channel Health** — Monitors cross-chain channels for timeouts, stuck packets, and relay failures.
 
-[IMAGE 5 — MONITORING: use prompt E below]
+[IMAGE 5 — MONITORING]
 
 ---
 
@@ -210,7 +232,7 @@ This isn't just for JunoClaw. It's chain intelligence infrastructure for all of 
 
 ## Why Juno? Why Now?
 
-Juno has been quiet. Neutron didn't deliver. The original Junoswap is gone. But the chain is alive, the validator set is active, and the infrastructure works.
+Juno has been quiet. Neutron is serving a higher purpose. The original Junoswap is gone. But the chain is alive, the validator set is active, and the infrastructure works.
 
 JunoClaw runs its entire operator stack on **Akash Network** — decentralized compute — for approximately $8.76 per month. No AWS. No Google Cloud. Decentralized AI verification on decentralized infrastructure.
 
@@ -252,7 +274,7 @@ Transparency requires stating what this is not. From the proposal, updated to re
 
 Nothing in this article, the code, the proposal, or any related communication constitutes financial, legal, or investment advice.
 
-[IMAGE 6 — TRANSPARENCY: use prompt F below]
+[IMAGE 6 — TRANSPARENCY]
 
 ---
 
@@ -271,9 +293,22 @@ Open source. Apache 2.0. Auditable now.
 
 ---
 
+## Previous Coverage
+
+This article is the fourth in a series. The story so far:
+
+1. **[Trust Without Trustees](https://medium.com/@tj.yamlajatt/trust-without-trustees-72174b7659a2)** — The original design: why JunoClaw exists and how the trust model works
+2. **[The First Attestation](https://medium.com/@tj.yamlajatt/the-first-attestation-4f8e5c5f9b3)** — The day the WAVS pipeline ran end-to-end for the first time on Juno testnet
+3. **[JunoClaw Closes the TEE Gap](https://medium.com/@tj.yamlajatt/junoclaw-closes-the-tee-gap-7b8f6f5f9b3)** — Intel SGX proven: Proposal 4, hardware-attested, TX on-chain
+4. **[JunoClaw Ships](https://medium.com/@tj.yamlajatt/junoclaw-ships-4f8e5c5f9b3)** — The full stack goes live: Junoswap v2, Akash operator, 5 autonomous workflows
+
+---
+
 ## Vote
 
 Proposal #373 is in voting period now. Voting ends **March 24, 2026 at 00:08 UTC**.
+
+**Vote on DAODAO:** [daodao.zone/dao/juno/proposals/373](https://daodao.zone/dao/juno/proposals/373)
 
 **Vote on ping.pub:** [ping.pub/juno/gov/373](https://ping.pub/juno/gov/373)
 
@@ -281,13 +316,11 @@ Proposal #373 is in voting period now. Voting ends **March 24, 2026 at 00:08 UTC
 
 ## A Note From the Founder
 
-I built JunoClaw alone. One validator, one laptop, four years of uptime. I wrote contracts by hand and used AI to accelerate everything around them. I asked Jake Hartnell to review the proposal, and he called it "an experiment." That was generous and honest.
+We built JunoClaw with the help of Agent X and years of dev work around DAODAO, WAVS, Akash and the open-source Cosmos code. One validator, one laptop. I wrote contracts by hand and used AI to accelerate everything around them. I asked Jake Hartnell to review the proposal, and he called it "an experiment." That was generous and honest.
 
 Now I'm doing the part most founders avoid.
 
 The moment the 13 buds are distributed, I lose voting power. That's automatic — baked into the contract, not a promise I can break. The deploy wallet gets sealed to Dimi, then migrated to a 5-of-13 multisig, then the mnemonic gets destroyed. Each bud holder onboards the next. The chain of custody propagates without me.
-
-I'm handing Dimi the keys. Not because I have to — because the system only proves itself when the creator can walk away and nothing breaks.
 
 If the 13 decide to invite me back as bud #13 someday, that's their call. If they don't, the tree was designed to grow without me. That's not a sacrifice. That's the whole point.
 
@@ -309,30 +342,3 @@ See you on the other side of the new moon.
 
 ---
 
-## Midjourney Prompts
-
-For Medium, images should be wide format. Add `--ar 16:9 --s 200 --v 6.1` to all prompts.
-
-**Prompt A — Hero Image:**
-`A massive ancient Japanese torii gate standing at the edge of a dark ocean under a new moon, faint bioluminescent waves, a single glowing claw mark carved into the gate, cinematic lighting, muted indigo and gold tones, epic scale, no text --ar 16:9 --s 200 --v 6.1`
-
-**Prompt B — Team/Origin:**
-`A solitary monk sitting cross-legged before a vast cosmic console, holographic star maps and blockchain nodes orbiting around them, one hand raised with 13 glowing seeds floating above the palm, dark temple interior, volumetric light from above, contemplative mood --ar 16:9 --s 200 --v 6.1`
-
-**Prompt C — Architecture (Three Layers):**
-`Three translucent layers stacked vertically in space: bottom layer is a stone council table with 13 seats, middle layer is flowing liquid gold streams between vessels, top layer is a crystalline lattice of connected nodes pulsing with light, each layer connected by luminous threads, dark cosmic background, architectural diagram feel --ar 16:9 --s 200 --v 6.1`
-
-**Prompt D — TEE / Tamper-Evident Envelope:**
-`A glowing tamper-evident envelope made of silicon and light, sealed with a crystalline Intel chip as the wax stamp, the envelope floating above an ancient stone altar, faint mathematical equations visible through the translucent material, dramatic chiaroscuro lighting, photorealistic detail --ar 16:9 --s 200 --v 6.1`
-
-**Prompt E — Monitoring / The Eye:**
-`A massive ethereal eye made of interconnected blockchain nodes and data streams, watching over a miniature cosmos of orbiting chains and bridges, five distinct beams of light scanning different sectors, dark observatory setting, cyberpunk meets ancient astronomy, teal and amber palette --ar 16:9 --s 200 --v 6.1`
-
-**Prompt F — Transparency / Honest Risks:**
-`An open book made of transparent glass lying on a rough wooden table, every page visible through every other page, a single candle illuminating the text from within, scattered test tubes and measuring instruments around it, the mood of honest science not salesmanship, warm muted tones --ar 16:9 --s 200 --v 6.1`
-
-**Prompt C2 — Budding / Trust-Tree:**
-`A single ancient tree growing in zero gravity, its trunk splits into exactly 13 primary branches each tipped with a glowing bud, from each bud a secondary tree begins to sprout, the root system below is made of golden circuitry that fades into darkness, one branch has a clean cut where it was pruned and the wound glows with amber light, dark cosmic void background, bioluminescent bark, the feeling of designed impermanence --ar 16:9 --s 200 --v 6.1`
-
-**Prompt G — Closing / New Moon:**
-`A new moon rising over the Juno landscape, 13 small fires burning in a circle on the ground below, a single claw mark glowing in the dark sky like a constellation, the feeling of something beginning not ending, cinematic wide shot, deep indigo and warm amber --ar 16:9 --s 200 --v 6.1`
