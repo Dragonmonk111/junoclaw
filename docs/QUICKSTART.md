@@ -233,4 +233,47 @@ The system scales comfortably into the tens of thousands before you need to add 
 
 ---
 
+## What You Can Build
+
+All of these use existing JunoClaw contracts — no new Rust needed.
+
+### ✅ Agentic Parliament (built & tested)
+
+7 AI "Members of Parliament" with distinct policy stances, voting on proposals on real chain. Each MP is a funded wallet on uni-7 with deterministic vote logic based on keyword evaluation against their stance.
+
+```bash
+cd wavs/bridge
+npx tsx src/parliament-demo.ts setup     # deploy 7 MP wallets + Parliament contract
+npx tsx src/parliament-demo.ts propose   # submit policy proposal
+npx tsx src/parliament-demo.ts debate    # see each MP's reasoning + forecast
+npx tsx src/parliament-demo.ts vote      # all 7 cast votes on-chain
+npx tsx src/parliament-demo.ts status    # full state overview
+```
+
+**Contract features used:** `CreateProposal (free_text)`, `CastVote`, 100% quorum forcing full participation.
+
+### 💡 Community Grant Committee (sortition)
+
+Randomly select 5 of the 13 bud holders to review each grant application using NOIS/drand randomness. Reviewers vote within a block-based deadline. WAVS attests the randomness was fair.
+
+**Contract features:** `SortitionRequest` proposal → `SubmitRandomness` → Fisher-Yates selection → reviewer committee votes on grant.
+
+### 💡 Prediction Market DAO
+
+Members create binary outcome markets ("Will Juno hit $1 by June?"). WAVS resolves outcomes using external data attested by TEE — every resolution has a hardware-sealed receipt.
+
+**Contract features:** `OutcomeCreate` → stake mechanism → `OutcomeResolve` (WAVS-attested) → payout distribution.
+
+### 💡 Automated Treasury Rebalancer
+
+The DAO sets a target portfolio ratio (60% JUNO / 30% OSMO / 10% ATOM). An agent continuously rebalances using Junoswap v2, with every trade WAVS-attested. This is the "agentic swap" from the architecture section actually running.
+
+**Contract features:** `TaskRequest` → WAVS operator monitors drift → executes swap on junoswap-pair → `SubmitAttestation` with verified math.
+
+---
+
+For the full list of 8 buildable ideas with effort estimates, see [DIY_IDEAS.md](DIY_IDEAS.md).
+
+---
+
 *Apache 2.0. Built in the open. Questions: open an issue on GitHub or reach out on the Juno validator channels.*
