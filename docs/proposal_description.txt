@@ -1,0 +1,120 @@
+JunoClaw is an open-source agentic AI platform built natively on Juno Network. This signaling proposal asks the community to recognize JunoClaw as Juno ecosystem infrastructure and endorse the deployment of its contracts on mainnet as an experiment.
+
+"Who knows, AI might actually be able to get JunoSwap working." — Jake Hartnell, Juno Telegram, March 18 2026
+
+This proposal does not execute code. This proposal does not request community pool funds.
+
+WHAT EXISTS TODAY (Proven on uni-7 Testnet)
+
+JunoClaw deploys AI agents that operate under on-chain governance. Every agent action is proposed by DAO members, verified by WAVS operators, attested on-chain with cryptographic proof, and executed only after meeting quorum thresholds.
+
+As of March 18, 2026:
+- agent-company v3 contract live (code ID 63, 5 governance proposals executed)
+- Junoswap v2 factory and 2 trading pairs deployed (JUNOX/USDC, JUNOX/STAKE)
+- TEE hardware attestation proven — Proposal 4 ran inside an Intel SGX enclave on Azure DCsv3. TX: 6EA1AE79D373BE7E57A8492A089E543ADA40B30CB5F7E69B177E607879D26B22. The Azure VM used for this proof has been deleted.
+- CodeUpgrade governance with 67% supermajority quorum (9 of 13 buds)
+- On-chain randomness via NOIS/drand for fair jury selection (sortition)
+- Validator sidecar docker-compose ready for distributed TEE attestation
+- WAVS operator stack LIVE on Akash decentralized compute (4 containers: operator + aggregator + warg-registry + IPFS, ~US$8.76/month, 63.77 AKT funded). Runs in software mode — see Akash section below.
+- 34 unit tests passing
+
+THREE INTEGRATIONS
+
+1. JUNOSWAP FOR AGENTS (Clean Rewrite): The original Junoswap was abandoned. JunoClaw includes Junoswap v2 — a clean rewrite from scratch. Two contracts, Apache 2.0. Not a fork and not affiliated with the original Junoswap team. The factory is wired into the agent-company DAO governance contract. Every swap triggers a WAVS verification event. The operator independently recomputes the expected output and attests correctness on-chain.
+
+2. WAVS TEE INTEGRATION (Proven): WAVS (Layer.xyz, founded by Ethan Frey + Jake Hartnell) provides hardware-attested off-chain compute. JunoClaw's 494KB WASI verification component has been proven to run inside an Intel SGX enclave on an Azure DCsv3 instance. When running inside a TEE, the code that ran is the code that was published (no tampering), and the attestation is hardware-grade. Proposal 4 on uni-7 is the first hardware-attested WAVS result submitted to a Cosmos chain. STATUS: TEE capability is proven. The Azure VM used for this proof has been deleted. TEE attestation in production will come from validator sidecars — interested validators run the WASI component inside their own SGX/SEV hardware, producing independent hardware-grade attestations.
+
+3. AKASH DECENTRALIZED INFRASTRUCTURE: The operator coordination layer runs on Akash Network — a permissionless, decentralized compute marketplace. Four containers: WAVS operator (event monitoring + WASI execution), WAVS aggregator (batches attestations), warg-registry (publishes and serves the verification component), IPFS (content-addressed storage). Cost: ~US$8.76/month. Budget: 63.77 AKT (covers ~3-5 months). The registry self-publishes on every container start — zero centralized cloud dependency. IMPORTANT DISTINCTION: Akash does not currently offer TEE-capable instances. The Akash deployment handles coordination and verification logic in software mode. Hardware-grade attestation requires TEE hardware, which is the role of validator sidecars in the target architecture.
+
+WAVS VERIFICATION WORKFLOWS (5 Autonomous)
+
+The WAVS operator runs 5 autonomous verification workflows — no human in the loop. Each follows the same pattern: trigger event on Juno → operator catches it → WASI component verifies → attestation hash submitted back to contract.
+
+1. SWAP VERIFICATION: Every Junoswap swap emits on-chain event data (offer, return, reserves, fees). The WAVS operator independently recomputes XYK constant-product math, checks the invariant (k), measures price impact, and flags manipulation (>5% slippage). Attestation hash stored permanently on-chain.
+
+2. SORTITION (Random Jury): When the DAO needs a random subset of members (dispute resolution, audits), the operator fetches drand randomness and submits it on-chain. The contract runs Fisher-Yates shuffle with SHA-256 sub-randomness — deterministic and verifiable.
+
+3. OUTCOME VERIFICATION: For prediction markets and data tasks, the operator verifies resolution criteria against external sources and attests the result.
+
+4. GOVERNANCE WATCH: Monitors governance proposals for anomalies — unusual voting patterns, quorum manipulation, rapid-fire proposals. Classifies risk level and attests findings.
+
+5. MIGRATION WATCH: Detects contract migration events and verifies the new code_id against known-good hashes. Flags unauthorized migrations before damage spreads.
+
+Every attestation is permanent and queryable on-chain.
+
+JUNOSWAP V2 (Junoswap for Agents) — The Code
+
+Junoswap v1 was abandoned. JunoClaw ships Junoswap v2 (Junoswap for agents) — a clean rewrite, two contracts, Apache 2.0.
+
+Factory contract (code ID 61): manages pair creation, fee config (default 30 bps), duplicate protection, governance integration via JunoClaw agent-company reference.
+
+Pair contract (code ID 60): standalone XYK constant-product AMM. Core formula: fee deducted from offer side, return computed as offer_after_fee * return_reserve / (offer_reserve + offer_after_fee). Slippage protection via min_return. Volume tracking on-chain. Every swap emits wasm-swap event with 12 attributes for WAVS verification.
+
+438 lines for the pair, 209 for the factory. 34 unit tests. Small enough to audit in an afternoon.
+
+GOVERNANCE ARCHITECTURE: Genesis → 13 Buds
+
+JunoClaw uses a "budding" governance model:
+- Genesis address holds 100% weight during setup (pre-budding)
+- Genesis submits WeightChange proposal → distributes weight to 13 initial DAO members ("buds")
+- Each bud: 769/10000 weight. Genesis retains 3/10000 (symbolic) + wasmd admin (emergency only)
+- Normal proposals: 51% quorum (7 of 13 buds)
+- Code upgrades (CodeUpgrade proposal kind): 67% supermajority (9 of 13 buds)
+- Further budding: DAO can add more members via WeightChange proposals
+
+TARGET ARCHITECTURE: Hybrid (Akash + Validator TEE)
+
+The production design separates concerns:
+- Akash → Always-on infrastructure: registry, aggregator, IPFS, event monitoring. Cheap, decentralized, censorship-resistant.
+- Validator sidecars → TEE attestation: Each participating validator runs the WASI component inside their own SGX/SEV hardware. Attestations are distributed across the validator set — no single point of trust.
+
+This means: (1) No single operator holds the keys to verification. (2) TEE attestations come from multiple independent hardware enclaves. (3) Infrastructure (Akash) and attestation (validators) are independently decentralized. (4) If Akash goes down, validators still attest. If a validator goes down, others cover.
+
+The validator sidecar docker-compose is ready. The WASI component is the same 494KB binary — it runs identically on Akash (software) and inside a validator's SGX enclave (hardware-attested).
+
+IF THIS PROPOSAL PASSES
+
+Passing signals that the Juno community recognizes JunoClaw and endorses the following plan:
+
+1. Genesis deploys mainnet contracts: agent-company, Junoswap factory + pairs, escrow, task-ledger, agent-registry
+2. Genesis wires Akash infrastructure: Operator coordination, registry, aggregator, IPFS — all on Akash (software mode, live today)
+3. Genesis distributes TEE attestation: Validator sidecar proposal — interested validators run the WASI component inside their own TEE hardware, producing independent hardware-grade attestations
+4. Genesis buds into 13: DAO governance begins, Genesis loses voting power
+5. Ongoing: DAO governs itself — proposals, code upgrades, new members, WAVS verification
+
+The genesis address for mainnet deployment: juno1tvpe72amnd3arnh4nhlf3hztx5aqznu6hz5f4m
+
+The timeline is with Genesis. This is a seed planted in Juno soil, not a corporate roadmap. Once the 13 buds are active, Genesis loses voting power. The DAO self-governs. No single actor can push changes unilaterally.
+
+WHAT WE ARE ASKING FOR
+
+This is a signaling proposal — no code execution, no community pool funds requested. We ask the Juno community to:
+
+1. Recognize JunoClaw as Juno ecosystem infrastructure
+2. Support the Junoswap revival through verifiable agent verification
+3. Endorse Akash as the decentralized coordination layer for JunoClaw's operator infrastructure
+4. Acknowledge the CodeUpgrade governance framework with 67% supermajority
+5. Support the validator sidecar proposal — distributing TEE attestation across Juno's validator set for hardware-grade trust
+
+RISKS AND LIMITATIONS
+
+Transparency requires stating what this is not:
+- Not audited: The contracts have 34 unit tests but have not undergone a formal third-party security audit. An audit is planned post-mainnet deployment using DAO funds or community support.
+- Testnet only: Everything described is on uni-7. Mainnet deployment follows if this proposal passes.
+- Memory-based registry: The warg component registry uses in-memory storage. If the Akash container restarts, the component is re-published automatically from the baked-in WASM binary (494KB, ~10s startup). The content hash (sha256:b40d3fca...) is deterministic.
+- No liquidity yet: Junoswap v2 pairs exist but have no real liquidity. Liquidity provision is a post-deployment community effort.
+- Single operator: Currently one WAVS operator instance on Akash. The architecture supports multiple operators, and the validator sidecar proposal would distribute attestation across the validator set.
+- Solo developer: JunoClaw is built by one person. The 13-bud governance model is designed to fix this — the DAO can onboard contributors, fund audits, and distribute responsibility.
+- Experimental: This is bleeding-edge infrastructure. Use at your own risk. The Apache 2.0 license applies.
+
+LINKS
+- Code (Apache 2.0): https://github.com/Dragonmonk111/junoclaw
+- HackMD Discussion: https://hackmd.io/s/HyZu6qv5Zl
+- TEE Attestation TX: 6EA1AE79D373BE7E57A8492A089E543ADA40B30CB5F7E69B177E607879D26B22 (uni-7)
+- Agent-company contract: juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6 (uni-7)
+- WAVS Component Registry (GHCR): https://github.com/Dragonmonk111/junoclaw/pkgs/container/warg-registry
+- Junoswap Factory: juno12v0t60msclf3hcj56clrnh575ct35clglqunr489aj0xsvawghvq3wtkkh (uni-7)
+- Junoswap Pair JUNOX/USDC: juno1xn4mtv9cfc7q3zphvstkhqgn4g864pppvq64zvdnmcsen3jwacwqfr6e98 (uni-7)
+- Junoswap Pair JUNOX/STAKE: juno156t270zr84xskkj6k6yq6w4pj8xu646kfjsngscpjdhhmmdt7f7s8ttg4s (uni-7)
+
+Proposed by VairagyaNodes — Juno staker since December 30, 2021. Validator candidate (unbonded, position 6). Built JunoClaw as a solo developer contribution to the Juno ecosystem.
