@@ -284,10 +284,10 @@ async function setup() {
     members,
     proposal_timelock_blocks: 5,
     denom: config.denom,
-    voting_period_blocks: 50,
-    quorum_percent: 51,
-    adaptive_threshold_blocks: 5,
-    adaptive_min_blocks: 3,
+    voting_period_blocks: 200,
+    quorum_percent: 100,
+    adaptive_threshold_blocks: 0,
+    adaptive_min_blocks: 200,
     verification: null,
   };
 
@@ -329,7 +329,7 @@ async function setup() {
   console.log(`║  ✅ PARLIAMENT ESTABLISHED                                   ║`);
   console.log(`╠══════════════════════════════════════════════════════════════╣`);
   console.log(`║  Contract: ${instantiateResult.contractAddress}`);
-  console.log(`║  Members:  7 MPs with distinct policy stances               ║`);
+  console.log(`║  Members:  7 MPs, 100% quorum (all must vote)              ║`);
   console.log(`║  Chain:    ${config.chainId.padEnd(49)}║`);
   console.log(`╠══════════════════════════════════════════════════════════════╣`);
   for (let i = 0; i < MP_PROFILES.length; i++) {
