@@ -15,6 +15,7 @@ members = [
 exclude = [
     "contracts",
     "wavs",
+    "tools/bud-seal",
 ]
 resolver = "2"
 

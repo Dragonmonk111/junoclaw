@@ -1,0 +1,12 @@
+[package]
+name = "bud-seal"
+version = "0.1.0"
+edition = "2021"
+description = "Encrypted handover tool for JunoClaw genesis bud onboarding"
+
+[dependencies]
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+chacha20poly1305 = "0.10"
+rand = "0.8"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }

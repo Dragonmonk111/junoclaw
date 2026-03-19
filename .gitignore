@@ -9,6 +9,13 @@ node_modules/
 .env
 deployed.json
 
+# Bud-seal keys and secrets — NEVER commit
+*.key
+*.pub
+*.sealed
+*-secrets.toml
+!secrets-template.toml
+
 # IDE
 .vscode/
 .idea/
