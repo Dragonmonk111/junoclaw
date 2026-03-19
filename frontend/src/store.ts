@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { AgentInfo, ChatMessage, DaoInstance, DelegationRecord, WsClientMessage, WsServerMessage } from './types'
+import type { AgentInfo, ChatMessage, DaoInstance, DelegationRecord, SiloConfig, ToolCallRecord, ToolCategory, WsClientMessage, WsServerMessage } from './types'
+import { DEFAULT_SILOS, getToolCategory } from './types'
 
 // ── localStorage persistence (must be defined before store) ──
 
@@ -7,6 +8,7 @@ const AGENTS_KEY = 'junoclaw_agents'
 const ACTIVE_KEY = 'junoclaw_active_agent'
 const DAOS_KEY = 'junoclaw_daos'
 const ACTIVE_DAO_KEY = 'junoclaw_active_dao'
+const SILOS_KEY = 'junoclaw_silos'
 
 function persistAgents(agents: AgentInfo[]) {
   try {
@@ -26,6 +28,20 @@ function hydrateAgents(): { agents: AgentInfo[]; activeAgentId: string | null } 
   } catch { /* corrupt data — ignore */ }
   return { agents: [], activeAgentId: null }
 }
+
+function persistSilos(silos: Record<string, SiloConfig[]>) {
+  try { localStorage.setItem(SILOS_KEY, JSON.stringify(silos)) } catch {}
+}
+
+function hydrateSilos(): Record<string, SiloConfig[]> {
+  try {
+    const raw = localStorage.getItem(SILOS_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return {}
+}
+
+const initialSilos = hydrateSilos()
 
 function persistDaos(daos: DaoInstance[]) {
   try { localStorage.setItem(DAOS_KEY, JSON.stringify(daos)) } catch {}
@@ -74,7 +90,13 @@ interface AppState {
   lastError: string | null
 
   // Tool call approval
-  pendingToolCall: { taskId: string; toolCallId: string; name: string; args: unknown } | null
+  pendingToolCall: { taskId: string; toolCallId: string; name: string; args: unknown; category: ToolCategory } | null
+
+  // Tool call history (per-agent, for inline rendering)
+  toolCallHistory: Record<string, ToolCallRecord[]>
+
+  // Silo configs (per-agent)
+  agentSilos: Record<string, SiloConfig[]>
 
   // DAOs (multi-DAO)
   daos: DaoInstance[]
@@ -94,6 +116,9 @@ interface AppState {
   getAgentChain: (agentId: string) => AgentInfo[]
   approveToolCall: () => void
   denyToolCall: () => void
+  getAgentSilos: (agentId: string) => SiloConfig[]
+  setAgentSilo: (agentId: string, category: ToolCategory, update: Partial<SiloConfig>) => void
+  resetAgentSilos: (agentId: string) => void
   deployDao: (data: {
     name: string
     members: { addr: string; weight: number; role: string }[]
@@ -123,6 +148,8 @@ export const useStore = create<AppState>((set, get) => ({
   streamingAgentId: null,
   lastError: null,
   pendingToolCall: null,
+  toolCallHistory: {},
+  agentSilos: initialSilos,
   daos: initialDaos,
   activeDaoId: initialActiveDaoId,
 
@@ -219,17 +246,79 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   approveToolCall: () => {
-    const { pendingToolCall, send } = get()
+    const { pendingToolCall, send, activeAgentId, toolCallHistory } = get()
     if (!pendingToolCall) return
     send({ type: 'approve_tool_call', data: { task_id: pendingToolCall.taskId, tool_call_id: pendingToolCall.toolCallId } })
-    set({ pendingToolCall: null, isStreaming: true })
+    // Record approved tool call in history
+    if (activeAgentId) {
+      const agentHistory = toolCallHistory[activeAgentId] || []
+      const record: ToolCallRecord = {
+        id: pendingToolCall.toolCallId,
+        tool_name: pendingToolCall.name,
+        category: pendingToolCall.category,
+        input: pendingToolCall.args,
+        output: null,
+        duration_ms: 0,
+        approved: true,
+        status: 'running',
+      }
+      set({
+        pendingToolCall: null,
+        isStreaming: true,
+        toolCallHistory: { ...toolCallHistory, [activeAgentId]: [...agentHistory, record] },
+      })
+    } else {
+      set({ pendingToolCall: null, isStreaming: true })
+    }
   },
 
   denyToolCall: () => {
-    const { pendingToolCall, send } = get()
+    const { pendingToolCall, send, activeAgentId, toolCallHistory } = get()
     if (!pendingToolCall) return
     send({ type: 'deny_tool_call', data: { task_id: pendingToolCall.taskId, tool_call_id: pendingToolCall.toolCallId } })
-    set({ pendingToolCall: null, isStreaming: true })
+    // Record denied tool call in history
+    if (activeAgentId) {
+      const agentHistory = toolCallHistory[activeAgentId] || []
+      const record: ToolCallRecord = {
+        id: pendingToolCall.toolCallId,
+        tool_name: pendingToolCall.name,
+        category: pendingToolCall.category,
+        input: pendingToolCall.args,
+        output: null,
+        duration_ms: 0,
+        approved: false,
+        status: 'denied',
+      }
+      set({
+        pendingToolCall: null,
+        isStreaming: true,
+        toolCallHistory: { ...toolCallHistory, [activeAgentId]: [...agentHistory, record] },
+      })
+    } else {
+      set({ pendingToolCall: null, isStreaming: true })
+    }
+  },
+
+  getAgentSilos: (agentId) => {
+    const { agentSilos } = get()
+    return agentSilos[agentId] || [...DEFAULT_SILOS]
+  },
+
+  setAgentSilo: (agentId, category, update) => {
+    const { agentSilos } = get()
+    const current = agentSilos[agentId] || [...DEFAULT_SILOS.map(s => ({ ...s }))]
+    const updated = current.map(s => s.category === category ? { ...s, ...update } : s)
+    const newSilos = { ...agentSilos, [agentId]: updated }
+    set({ agentSilos: newSilos })
+    persistSilos(newSilos)
+  },
+
+  resetAgentSilos: (agentId) => {
+    const { agentSilos } = get()
+    const newSilos = { ...agentSilos }
+    delete newSilos[agentId]
+    set({ agentSilos: newSilos })
+    persistSilos(newSilos)
   },
 
   setAgentTier: (agentId, tier) => {
@@ -508,6 +597,7 @@ function handleServerMessage(
           toolCallId: msg.data.tool_call.id,
           name: msg.data.tool_call.name,
           args: msg.data.tool_call.arguments,
+          category: getToolCategory(msg.data.tool_call.name),
         },
       })
       break

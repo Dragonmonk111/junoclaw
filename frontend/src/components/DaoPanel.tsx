@@ -5,12 +5,19 @@ import {
   ThumbsUp, ThumbsDown, Minus, Play, Timer, Shield, Settings, FileText,
   Cpu, ChevronDown, ChevronUp, Zap, Heart, Wheat, GraduationCap, Vote,
   HandCoins, Globe, LayoutGrid, ArrowLeft, TrendingUp, Handshake, Shuffle, ShoppingBasket,
-  Archive, UserPlus, Bot, HeartPulse
+  Archive, UserPlus, Bot, HeartPulse, Loader2, RefreshCw, Wifi, WifiOff
 } from 'lucide-react'
 import type {
   DaoConfig, DaoInstance, DaoProposal, DaoMember, ProposalKind,
-  ProposalStatus
+  ProposalStatus, VoteOption
 } from '../types'
+import { useChainClient } from '../hooks/useChainClient'
+import {
+  buildFreeTextProposal,
+  buildWavsPushProposal,
+  buildConfigChangeProposal,
+  buildOutcomeCreateProposal,
+} from '../lib/contract-execute'
 
 const DAODAO_BASE = 'https://daodao.zone/dao'
 const CHAIN_ID = 'uni-7'
@@ -174,12 +181,31 @@ function MemberRow({ member, totalWeight }: { member: DaoMember; totalWeight: nu
   )
 }
 
-function ProposalCard({ proposal, config }: { proposal: DaoProposal; config: DaoConfig }) {
+function ProposalCard({ proposal, config, currentBlock, onVote, onExecute, txPending }: {
+  proposal: DaoProposal
+  config: DaoConfig
+  currentBlock: number
+  onVote?: (proposalId: number, option: VoteOption) => Promise<string>
+  onExecute?: (proposalId: number) => Promise<string>
+  txPending?: boolean
+}) {
   const [expanded, setExpanded] = useState(false)
-  const blocksLeft = Math.max(0, proposal.voting_deadline_block - CURRENT_BLOCK)
+  const [votingFor, setVotingFor] = useState<VoteOption | null>(null)
+  const blocksLeft = Math.max(0, proposal.voting_deadline_block - currentBlock)
   const isAdaptiveReduced = proposal.voting_deadline_block < proposal.created_at_block + config.voting_period_blocks
-  const canVote = proposal.status === 'open'
-  const canExecute = proposal.status === 'passed' && CURRENT_BLOCK >= proposal.voting_deadline_block
+  const canVote = proposal.status === 'open' && !!onVote
+  const canExecute = proposal.status === 'passed' && currentBlock >= proposal.voting_deadline_block && !!onExecute
+
+  const handleVote = async (option: VoteOption) => {
+    if (!onVote || txPending) return
+    setVotingFor(option)
+    try { await onVote(proposal.id, option) } catch { /* handled upstream */ }
+    finally { setVotingFor(null) }
+  }
+  const handleExecute = async () => {
+    if (!onExecute || txPending) return
+    try { await onExecute(proposal.id) } catch { /* handled upstream */ }
+  }
 
   return (
     <div className="rounded-xl overflow-hidden"
@@ -271,24 +297,28 @@ function ProposalCard({ proposal, config }: { proposal: DaoProposal; config: Dao
             <div className="flex gap-2 pt-1">
               {canVote && (
                 <>
-                  <button className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-semibold transition hover:opacity-80"
+                  <button onClick={() => handleVote('yes')} disabled={txPending}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-semibold transition hover:opacity-80 disabled:opacity-40"
                           style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.2)', color: '#34d399' }}>
-                    <ThumbsUp className="h-3 w-3" /> Yes
+                    {votingFor === 'yes' ? <Loader2 className="h-3 w-3 animate-spin" /> : <ThumbsUp className="h-3 w-3" />} Yes
                   </button>
-                  <button className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-semibold transition hover:opacity-80"
+                  <button onClick={() => handleVote('no')} disabled={txPending}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-semibold transition hover:opacity-80 disabled:opacity-40"
                           style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171' }}>
-                    <ThumbsDown className="h-3 w-3" /> No
+                    {votingFor === 'no' ? <Loader2 className="h-3 w-3 animate-spin" /> : <ThumbsDown className="h-3 w-3" />} No
                   </button>
-                  <button className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-semibold transition hover:opacity-80"
+                  <button onClick={() => handleVote('abstain')} disabled={txPending}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-semibold transition hover:opacity-80 disabled:opacity-40"
                           style={{ background: 'rgba(107,106,138,0.1)', border: '1px solid rgba(107,106,138,0.2)', color: '#6b6a8a' }}>
-                    <Minus className="h-3 w-3" /> Abstain
+                    {votingFor === 'abstain' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Minus className="h-3 w-3" />} Abstain
                   </button>
                 </>
               )}
               {canExecute && (
-                <button className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-semibold transition hover:opacity-80"
+                <button onClick={handleExecute} disabled={txPending}
+                        className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-semibold transition hover:opacity-80 disabled:opacity-40"
                         style={{ background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)', color: '#a78bfa' }}>
-                  <Play className="h-3 w-3" /> Execute
+                  {txPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} Execute
                 </button>
               )}
             </div>
@@ -299,10 +329,59 @@ function ProposalCard({ proposal, config }: { proposal: DaoProposal; config: Dao
   )
 }
 
-function CreateProposalForm({ onClose }: { onClose: () => void }) {
+function CreateProposalForm({ onClose, onSubmit }: { onClose: () => void; onSubmit?: (kind: Record<string, unknown>) => Promise<string> }) {
   const [kindType, setKindType] = useState<'free_text' | 'wavs_push' | 'weight_change' | 'config_change' | 'outcome_create'>('free_text')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [taskDesc, setTaskDesc] = useState('')
+  const [execTier, setExecTier] = useState('local')
+  const [escrowAmt, setEscrowAmt] = useState('')
+  const [newAdmin, setNewAdmin] = useState('')
+  const [newGov, setNewGov] = useState('')
+  const [question, setQuestion] = useState('')
+  const [resCriteria, setResCriteria] = useState('')
+  const [deadlineBlock, setDeadlineBlock] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async () => {
+    if (!onSubmit) {
+      setError('Connect wallet to submit proposals')
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      let kind: Record<string, unknown>
+      switch (kindType) {
+        case 'free_text':
+          kind = buildFreeTextProposal(title, description)
+          break
+        case 'wavs_push':
+          kind = buildWavsPushProposal(taskDesc, execTier, escrowAmt || '0')
+          break
+        case 'config_change':
+          kind = buildConfigChangeProposal(newAdmin || undefined, newGov || undefined)
+          break
+        case 'outcome_create':
+          kind = buildOutcomeCreateProposal(question, resCriteria, Number(deadlineBlock) || 0)
+          break
+        default:
+          setError('Weight change proposals require the full member editor (coming soon)')
+          setSubmitting(false)
+          return
+      }
+      await onSubmit(kind)
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const inputCls = "w-full rounded-lg px-3 py-2 text-xs text-[#e0dff8] placeholder-[#3a3a5a] outline-none"
+  const inputStyle = { background: '#05050f', border: '1px solid rgba(255,255,255,0.06)' }
 
   return (
     <div className="rounded-xl p-4 space-y-3"
@@ -333,30 +412,30 @@ function CreateProposalForm({ onClose }: { onClose: () => void }) {
         <>
           <input type="text" placeholder="Proposal title"
                  value={title} onChange={(e) => setTitle(e.target.value)}
-                 className="w-full rounded-lg px-3 py-2 text-xs text-[#e0dff8] placeholder-[#3a3a5a] outline-none"
-                 style={{ background: '#05050f', border: '1px solid rgba(255,255,255,0.06)' }} />
+                 className={inputCls} style={inputStyle} />
           <textarea placeholder="Description..."
                     value={description} onChange={(e) => setDescription(e.target.value)}
                     rows={3}
-                    className="w-full rounded-lg px-3 py-2 text-xs text-[#e0dff8] placeholder-[#3a3a5a] outline-none resize-none"
-                    style={{ background: '#05050f', border: '1px solid rgba(255,255,255,0.06)' }} />
+                    className={inputCls + ' resize-none'} style={inputStyle} />
         </>
       )}
 
       {kindType === 'wavs_push' && (
         <>
           <input type="text" placeholder="Task description for WAVS execution"
-                 className="w-full rounded-lg px-3 py-2 text-xs text-[#e0dff8] placeholder-[#3a3a5a] outline-none"
-                 style={{ background: '#05050f', border: '1px solid rgba(255,255,255,0.06)' }} />
+                 value={taskDesc} onChange={(e) => setTaskDesc(e.target.value)}
+                 className={inputCls} style={inputStyle} />
           <div className="flex gap-2">
-            <select className="flex-1 rounded-lg px-3 py-2 text-xs text-[#e0dff8] outline-none"
-                    style={{ background: '#05050f', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <select value={execTier} onChange={(e) => setExecTier(e.target.value)}
+                    className="flex-1 rounded-lg px-3 py-2 text-xs text-[#e0dff8] outline-none"
+                    style={inputStyle}>
               <option value="local">Local</option>
               <option value="akash">Akash (GPU)</option>
             </select>
             <input type="number" placeholder="Escrow (ujunox)"
+                   value={escrowAmt} onChange={(e) => setEscrowAmt(e.target.value)}
                    className="w-32 rounded-lg px-3 py-2 text-xs text-[#e0dff8] placeholder-[#3a3a5a] outline-none"
-                   style={{ background: '#05050f', border: '1px solid rgba(255,255,255,0.06)' }} />
+                   style={inputStyle} />
           </div>
         </>
       )}
@@ -371,31 +450,37 @@ function CreateProposalForm({ onClose }: { onClose: () => void }) {
       {kindType === 'config_change' && (
         <div className="space-y-2">
           <input type="text" placeholder="New admin address (optional)"
-                 className="w-full rounded-lg px-3 py-2 text-xs text-[#e0dff8] placeholder-[#3a3a5a] outline-none"
-                 style={{ background: '#05050f', border: '1px solid rgba(255,255,255,0.06)' }} />
+                 value={newAdmin} onChange={(e) => setNewAdmin(e.target.value)}
+                 className={inputCls} style={inputStyle} />
           <input type="text" placeholder="New governance address (optional)"
-                 className="w-full rounded-lg px-3 py-2 text-xs text-[#e0dff8] placeholder-[#3a3a5a] outline-none"
-                 style={{ background: '#05050f', border: '1px solid rgba(255,255,255,0.06)' }} />
+                 value={newGov} onChange={(e) => setNewGov(e.target.value)}
+                 className={inputCls} style={inputStyle} />
         </div>
       )}
 
       {kindType === 'outcome_create' && (
         <div className="space-y-2">
           <input type="text" placeholder="Outcome question (e.g. Will Prop 42 pass by June?)"
-                 className="w-full rounded-lg px-3 py-2 text-xs text-[#e0dff8] placeholder-[#3a3a5a] outline-none"
-                 style={{ background: '#05050f', border: '1px solid rgba(255,255,255,0.06)' }} />
+                 value={question} onChange={(e) => setQuestion(e.target.value)}
+                 className={inputCls} style={inputStyle} />
           <input type="text" placeholder="Resolution criteria (how outcome is determined)"
-                 className="w-full rounded-lg px-3 py-2 text-xs text-[#e0dff8] placeholder-[#3a3a5a] outline-none"
-                 style={{ background: '#05050f', border: '1px solid rgba(255,255,255,0.06)' }} />
+                 value={resCriteria} onChange={(e) => setResCriteria(e.target.value)}
+                 className={inputCls} style={inputStyle} />
           <input type="number" placeholder="Deadline block height"
-                 className="w-full rounded-lg px-3 py-2 text-xs text-[#e0dff8] placeholder-[#3a3a5a] outline-none"
-                 style={{ background: '#05050f', border: '1px solid rgba(255,255,255,0.06)' }} />
+                 value={deadlineBlock} onChange={(e) => setDeadlineBlock(e.target.value)}
+                 className={inputCls} style={inputStyle} />
         </div>
       )}
 
-      <button className="flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition hover:opacity-80"
+      {error && (
+        <div className="text-[10px] text-red-400 px-2">{error}</div>
+      )}
+
+      <button onClick={handleSubmit} disabled={submitting}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition hover:opacity-80 disabled:opacity-40"
               style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.3)', color: '#a78bfa' }}>
-        <Check className="h-3.5 w-3.5" /> Submit Proposal
+        {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+        {submitting ? 'Submitting...' : 'Submit Proposal'}
       </button>
     </div>
   )
@@ -1134,8 +1219,13 @@ function DaoDashboard({ dao }: { dao: DaoInstance }) {
   const removeAgent = useStore(s => s.removeAgentFromDao)
   const archiveDao = useStore(s => s.archiveDao)
 
-  const config = dao.config
-  const proposals = dao.proposals.length > 0 ? dao.proposals : MOCK_PROPOSALS
+  // ── Live chain data via useChainClient ──
+  const chain = useChainClient(dao.chain_address)
+  const config = chain.config ?? dao.config
+  const proposals = chain.proposals.length > 0 ? chain.proposals : (dao.proposals.length > 0 ? dao.proposals : MOCK_PROPOSALS)
+  const currentBlock = chain.lastFetched ? Math.round(Date.now() / 6000) : CURRENT_BLOCK // ~6s blocks, rough estimate
+  const isLive = chain.proposals.length > 0 && !chain.chainError
+
   const daodaoUrl = `${DAODAO_BASE}/${config.admin}?chain=${CHAIN_ID}`
   const availableAgents = agents.filter(a => !dao.agent_ids.includes(a.id))
 
@@ -1190,7 +1280,7 @@ function DaoDashboard({ dao }: { dao: DaoInstance }) {
 
       <div className="px-5 py-4 space-y-4">
         {showTemplates && <DaoTemplateGallery onBack={() => setShowTemplates(false)} />}
-        {showCreate && <CreateProposalForm onClose={() => setShowCreate(false)} />}
+        {showCreate && <CreateProposalForm onClose={() => setShowCreate(false)} onSubmit={chain.walletConnected ? chain.propose : undefined} />}
 
         {/* Local Agents in this DAO */}
         <div className="rounded-xl p-3" style={{ background: '#0a0a18', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -1278,6 +1368,50 @@ function DaoDashboard({ dao }: { dao: DaoInstance }) {
           </div>
         </div>
 
+        {/* Chain status banner */}
+        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px]"
+             style={{ background: isLive ? 'rgba(52,211,153,0.06)' : 'rgba(251,191,36,0.06)', border: `1px solid ${isLive ? 'rgba(52,211,153,0.15)' : 'rgba(251,191,36,0.15)'}` }}>
+          {isLive ? (
+            <>
+              <Wifi className="h-3 w-3 text-green-400" />
+              <span className="text-green-400 font-medium">Live from chain</span>
+              <span className="text-[#6b6a8a]">· {proposals.length} proposals · block ~{currentBlock}</span>
+              <button onClick={() => chain.refresh()} className="ml-auto text-[#6b6a8a] hover:text-white transition">
+                <RefreshCw className={`h-3 w-3 ${chain.loading ? 'animate-spin' : ''}`} />
+              </button>
+            </>
+          ) : chain.loading ? (
+            <>
+              <Loader2 className="h-3 w-3 text-yellow-400 animate-spin" />
+              <span className="text-yellow-400">Connecting to chain...</span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="h-3 w-3 text-yellow-400" />
+              <span className="text-yellow-400 font-medium">Offline</span>
+              <span className="text-[#6b6a8a]">· showing {proposals === MOCK_PROPOSALS ? 'demo' : 'cached'} data</span>
+              {chain.chainError && <span className="text-red-400/70 truncate ml-1">{chain.chainError.slice(0, 40)}</span>}
+            </>
+          )}
+        </div>
+
+        {/* TX feedback */}
+        {chain.lastTxHash && (
+          <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px]"
+               style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.15)' }}>
+            <Check className="h-3 w-3 text-green-400" />
+            <span className="text-green-400">TX confirmed:</span>
+            <code className="text-[#c0bfd8] font-mono truncate">{chain.lastTxHash}</code>
+          </div>
+        )}
+        {chain.lastTxError && (
+          <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px]"
+               style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
+            <X className="h-3 w-3 text-red-400" />
+            <span className="text-red-400 truncate">{chain.lastTxError}</span>
+          </div>
+        )}
+
         {/* Proposals */}
         <div>
           <div className="mb-1.5 text-[10px] font-semibold text-[#6b6a8a] uppercase tracking-widest">
@@ -1285,7 +1419,15 @@ function DaoDashboard({ dao }: { dao: DaoInstance }) {
           </div>
           <div className="space-y-2">
             {proposals.map((p) => (
-              <ProposalCard key={p.id} proposal={p} config={config} />
+              <ProposalCard
+                key={p.id}
+                proposal={p}
+                config={config}
+                currentBlock={currentBlock}
+                onVote={chain.walletConnected ? chain.vote : undefined}
+                onExecute={chain.walletConnected ? chain.execute : undefined}
+                txPending={chain.txPending}
+              />
             ))}
           </div>
         </div>

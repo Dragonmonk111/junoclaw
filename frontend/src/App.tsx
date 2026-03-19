@@ -2,17 +2,21 @@ import { useEffect, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { ChatPanel } from './components/ChatPanel'
 import { DaoPanel } from './components/DaoPanel'
+import { DexPanel } from './components/DexPanel'
+import { IntelPanel } from './components/IntelPanel'
 import { UpdatesPanel } from './components/UpdatesPanel'
 import { StatusBar } from './components/StatusBar'
 import { useStore } from './store'
-import { MessageSquare, Building2, RefreshCw } from 'lucide-react'
+import { MessageSquare, Building2, RefreshCw, ArrowLeftRight, Eye } from 'lucide-react'
 
-type MainTab = 'chat' | 'dao' | 'updates'
+type MainTab = 'chat' | 'dao' | 'dex' | 'intel' | 'updates'
 
 const TABS: { id: MainTab; label: string; icon: React.ReactNode }[] = [
-  { id: 'chat',    label: 'Chat',    icon: <MessageSquare className="h-3.5 w-3.5" /> },
-  { id: 'dao',     label: 'DAO',     icon: <Building2     className="h-3.5 w-3.5" /> },
-  { id: 'updates', label: 'Updates', icon: <RefreshCw     className="h-3.5 w-3.5" /> },
+  { id: 'chat',    label: 'Chat',    icon: <MessageSquare   className="h-3.5 w-3.5" /> },
+  { id: 'dao',     label: 'DAO',     icon: <Building2       className="h-3.5 w-3.5" /> },
+  { id: 'dex',     label: 'DEX',     icon: <ArrowLeftRight  className="h-3.5 w-3.5" /> },
+  { id: 'intel',   label: 'Qu-Zeno', icon: <Eye             className="h-3.5 w-3.5" /> },
+  { id: 'updates', label: 'Updates', icon: <RefreshCw       className="h-3.5 w-3.5" /> },
 ]
 
 export default function App() {
@@ -60,6 +64,8 @@ export default function App() {
           <div className="flex flex-1 overflow-hidden">
             {activeTab === 'chat'    && <ChatPanel />}
             {activeTab === 'dao'     && <DaoPanel />}
+            {activeTab === 'dex'     && <DexPanel />}
+            {activeTab === 'intel'   && <IntelPanel />}
             {activeTab === 'updates' && <UpdatesPanel />}
           </div>
         </main>

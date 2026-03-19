@@ -32,6 +32,63 @@ export type Capability = 'web_browsing' | 'file_read_write' | 'shell_execution' 
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool'
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'budget_exceeded'
 
+// ── Tool Silo System ──
+
+export type ToolCategory = 'shell' | 'chain_query' | 'chain_tx' | 'file_io' | 'web_browse' | 'dex' | 'code' | 'image'
+
+export type SiloApprovalMode = 'auto' | 'ask' | 'blocked'
+
+export interface SiloConfig {
+  category: ToolCategory
+  approval: SiloApprovalMode
+  /** Restrict scope (e.g., allowed directories, contract addresses) */
+  scope?: string[]
+  /** Blocklist patterns (e.g., "rm -rf", "sudo") */
+  blocklist?: string[]
+  /** Max spend per tx (for chain_tx silo) in micro-denom */
+  max_spend?: number
+}
+
+export const DEFAULT_SILOS: SiloConfig[] = [
+  { category: 'chain_query', approval: 'auto', scope: [] },
+  { category: 'chain_tx',    approval: 'ask',  scope: [], max_spend: 1_000_000 },
+  { category: 'shell',       approval: 'ask',  scope: [], blocklist: ['rm -rf', 'sudo', 'format', 'del /'] },
+  { category: 'file_io',     approval: 'ask',  scope: [] },
+  { category: 'web_browse',  approval: 'auto', scope: [] },
+  { category: 'dex',         approval: 'ask',  scope: [] },
+  { category: 'code',        approval: 'auto', scope: [] },
+  { category: 'image',       approval: 'auto', scope: [] },
+]
+
+export const TOOL_CATEGORY_META: Record<ToolCategory, { label: string; icon: string; color: string; description: string }> = {
+  shell:       { label: 'Shell',       icon: 'Terminal',    color: '#00d4aa', description: 'Execute shell commands on the host' },
+  chain_query: { label: 'Chain Query', icon: 'Search',      color: '#60a5fa', description: 'Read-only queries to on-chain contracts' },
+  chain_tx:    { label: 'Chain TX',    icon: 'Send',        color: '#f87171', description: 'Submit transactions to the chain (costs gas)' },
+  file_io:     { label: 'File I/O',    icon: 'FileText',    color: '#a78bfa', description: 'Read and write files on the host filesystem' },
+  web_browse:  { label: 'Web Browse',  icon: 'Globe',       color: '#fbbf24', description: 'Fetch URLs and search the web' },
+  dex:         { label: 'DEX',         icon: 'ArrowLeftRight', color: '#ff6b4a', description: 'Junoswap v2 swap, liquidity, and pool operations' },
+  code:        { label: 'Code',        icon: 'Code',        color: '#34d399', description: 'Execute code snippets in a sandbox' },
+  image:       { label: 'Image',       icon: 'Image',       color: '#e879f9', description: 'Generate or analyze images' },
+}
+
+/** Map tool names to their silo category */
+export function getToolCategory(toolName: string): ToolCategory {
+  const lower = toolName.toLowerCase()
+  if (lower.includes('shell') || lower.includes('exec_command') || lower.includes('run_command')) return 'shell'
+  if (lower.includes('query') || lower.includes('get_balance') || lower.includes('get_pool') || lower.includes('simulate')) return 'chain_query'
+  if (lower.includes('swap') || lower.includes('provide_liquidity') || lower.includes('withdraw_liquidity')) return 'dex'
+  if (lower.includes('send_tx') || lower.includes('execute_contract') || lower.includes('submit')) return 'chain_tx'
+  if (lower.includes('read_file') || lower.includes('write_file') || lower.includes('list_dir')) return 'file_io'
+  if (lower.includes('browse') || lower.includes('fetch_url') || lower.includes('search_web')) return 'web_browse'
+  if (lower.includes('run_code') || lower.includes('eval') || lower.includes('python')) return 'code'
+  if (lower.includes('image') || lower.includes('generate_image')) return 'image'
+  return 'shell' // fallback to most restrictive
+}
+
+// ── Enhanced Chat Messages ──
+
+export type ToolCallStatus = 'pending' | 'approved' | 'denied' | 'running' | 'completed' | 'failed'
+
 export interface ChatMessage {
   id: string
   role: MessageRole
@@ -41,11 +98,15 @@ export interface ChatMessage {
 }
 
 export interface ToolCallRecord {
+  id?: string
   tool_name: string
+  category?: ToolCategory
   input: unknown
   output: unknown
   duration_ms: number
   approved: boolean
+  status?: ToolCallStatus
+  error?: string
 }
 
 export interface Task {
@@ -180,6 +241,60 @@ export type WsClientMessage =
   | { type: 'expire_proposal'; data: { proposal_id: number } }
   | { type: 'query_proposals' }
   | { type: 'query_config' }
+
+// ── Junoswap v2 DEX Types ──
+
+export type DexAssetInfo = { native: string }
+
+export interface DexPairInfo {
+  pair_addr: string
+  token_a: DexAssetInfo
+  token_b: DexAssetInfo
+  fee_bps: number
+  factory: string
+  junoclaw_contract?: string
+}
+
+export interface DexPoolState {
+  pair_addr: string
+  reserve_a: string
+  reserve_b: string
+  total_lp_shares: string
+  total_swaps: number
+  total_volume_a: string
+  total_volume_b: string
+  price_a_per_b: string
+  price_b_per_a: string
+  token_a: DexAssetInfo
+  token_b: DexAssetInfo
+}
+
+export interface DexSimulation {
+  return_amount: string
+  spread_amount: string
+  fee_amount: string
+}
+
+export interface DexSwapAttestation {
+  pair: string
+  offer_asset: string
+  offer_amount: string
+  return_amount: string
+  effective_price: string
+  price_impact_pct: string
+  manipulation_flag: boolean
+  verified: boolean
+  attestation_hash: string
+  timestamp: string
+}
+
+export interface DexLpPosition {
+  pair_addr: string
+  lp_shares: string
+  share_of_pool_pct: string
+  value_a: string
+  value_b: string
+}
 
 export type WsServerMessage =
   | { type: 'stream_token'; data: { agent_id: string; token: string } }

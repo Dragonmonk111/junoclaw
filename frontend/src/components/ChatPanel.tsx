@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { useStore } from '../store'
-import { Send, Bot, User, Sparkles, Monitor, Cloud, ShieldCheck, ArrowLeft, GitBranch, Forward } from 'lucide-react'
+import { Send, Bot, User, Sparkles, Monitor, Cloud, ShieldCheck, ArrowLeft, GitBranch, Forward, Settings2 } from 'lucide-react'
 import type { ChatMessage } from '../types'
+import { ToolCallBlock, PendingToolCallCard } from './ToolCallBlock'
+import { SiloConfigPanel } from './SiloConfigPanel'
 
 export function ChatPanel() {
   const activeAgentId    = useStore((s) => s.activeAgentId)
@@ -24,6 +26,7 @@ export function ChatPanel() {
   const [input, setInput] = useState('')
   const [showDelegateMenu, setShowDelegateMenu] = useState(false)
   const [delegatePrompt, setDelegatePrompt] = useState('')
+  const [showSiloConfig, setShowSiloConfig] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const agent    = agents.find((a) => a.id === activeAgentId)
@@ -177,6 +180,25 @@ export function ChatPanel() {
               <ShieldCheck className="h-3 w-3" />
               WAVS
             </button>
+
+            {/* Tool Silo config button */}
+            <button
+              onClick={() => setShowSiloConfig(!showSiloConfig)}
+              title="Configure tool silos and permissions"
+              className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-all"
+              style={showSiloConfig ? {
+                color: '#a78bfa',
+                background: 'rgba(167,139,250,0.12)',
+                border: '1px solid rgba(167,139,250,0.25)',
+              } : {
+                color: '#6b6a8a',
+                background: 'transparent',
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}
+            >
+              <Settings2 className="h-3 w-3" />
+              Silos
+            </button>
           </div>
         </div>
       </div>
@@ -203,7 +225,17 @@ export function ChatPanel() {
         )}
 
         {messages.map((msg: ChatMessage) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <div key={msg.id}>
+            <MessageBubble message={msg} />
+            {/* Inline tool call blocks for this message */}
+            {msg.tool_calls && msg.tool_calls.length > 0 && (
+              <div className="ml-10 mb-3">
+                {msg.tool_calls.map((tc, i) => (
+                  <ToolCallBlock key={tc.id || `tc-${i}`} record={tc} />
+                ))}
+              </div>
+            )}
+          </div>
         ))}
 
         {/* Thinking indicator — shown before first token arrives */}
@@ -241,34 +273,14 @@ export function ChatPanel() {
           </div>
         )}
 
-        {/* Tool Call Approval Card */}
+        {/* Tool Call Approval Card — now uses the new component */}
         {pendingToolCall && (
-          <div className="mb-5 animate-fade-in rounded-xl overflow-hidden"
-               style={{ border: '1px solid rgba(255,107,74,0.35)', background: 'rgba(255,107,74,0.05)' }}>
-            <div className="flex items-center gap-2 px-4 py-2.5"
-                 style={{ borderBottom: '1px solid rgba(255,107,74,0.15)', background: 'rgba(255,107,74,0.08)' }}>
-              <span className="text-xs font-semibold tracking-wide text-juno-400 uppercase">⚡ Tool Request</span>
-              <span className="ml-auto rounded px-2 py-0.5 text-[10px] font-mono text-juno-300"
-                    style={{ background: 'rgba(255,107,74,0.15)' }}>{pendingToolCall.name}</span>
-            </div>
-            <div className="px-4 py-3">
-              <pre className="mb-3 overflow-x-auto rounded-lg p-3 text-xs text-[#c0bfd8] font-mono"
-                   style={{ background: '#05050f', border: '1px solid rgba(255,255,255,0.06)' }}>
-                {JSON.stringify(pendingToolCall.args, null, 2)}
-              </pre>
-              <div className="flex gap-2">
-                <button onClick={approveToolCall}
-                        className="flex-1 rounded-lg py-2 text-xs font-semibold text-white transition hover:opacity-90"
-                        style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)' }}>
-                  ✓ Approve &amp; Run
-                </button>
-                <button onClick={denyToolCall}
-                        className="flex-1 rounded-lg py-2 text-xs font-semibold transition hover:opacity-90"
-                        style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171' }}>
-                  ✕ Deny
-                </button>
-              </div>
-            </div>
+          <div className="mb-5 animate-fade-in">
+            <PendingToolCallCard
+              toolCall={pendingToolCall}
+              onApprove={approveToolCall}
+              onDeny={denyToolCall}
+            />
           </div>
         )}
 
@@ -363,6 +375,16 @@ export function ChatPanel() {
           {(tierFooterText[agent.default_tier] ?? tierFooterText.local) + footerWavs}
         </p>
       </form>
+      {/* Silo Config Overlay */}
+      {showSiloConfig && (
+        <div className="absolute inset-0 z-50 bg-[#06060f]/95 backdrop-blur-sm animate-fade-in">
+          <SiloConfigPanel
+            agentId={agent.id}
+            agentName={agent.name}
+            onClose={() => setShowSiloConfig(false)}
+          />
+        </div>
+      )}
     </div>
   )
 }
