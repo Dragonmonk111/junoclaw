@@ -277,11 +277,35 @@ Proposal #373 is in voting period now. Voting ends **March 24, 2026 at 00:08 UTC
 
 **Vote on ping.pub:** [ping.pub/juno/gov/373](https://ping.pub/juno/gov/373)
 
+---
+
+## A Note From the Founder
+
+I built JunoClaw alone. One validator, one laptop, four years of uptime. I wrote contracts by hand and used AI to accelerate everything around them. I asked Jake Hartnell to review the proposal, and he called it "an experiment." That was generous and honest.
+
+Now I'm doing the part most founders avoid.
+
+The moment the 13 buds are distributed, I lose voting power. That's automatic — baked into the contract, not a promise I can break. The deploy wallet gets sealed to Dimi, then migrated to a 5-of-13 multisig, then the mnemonic gets destroyed. Each bud holder onboards the next. The chain of custody propagates without me.
+
+I'm handing Dimi the keys. Not because I have to — because the system only proves itself when the creator can walk away and nothing breaks.
+
+If the 13 decide to invite me back as bud #13 someday, that's their call. If they don't, the tree was designed to grow without me. That's not a sacrifice. That's the whole point.
+
+To the Juno community: thank you for four years. To Dimi: you're bud #1. Find #2.
+
+To whoever reads this later — the code is open, the attestations are on-chain, and the seats are waiting.
+
+*Vairagya* means detachment. Not indifference — the willingness to let go of what you built, because holding on would make it smaller than it needs to be.
+
+See you on the other side of the new moon.
+
+**— VairagyaNodes**
+
 [IMAGE 7 — CLOSING: use prompt G below]
 
 ---
 
-*Submitted on the new moon. Built in the open. Verified by hardware. Governed by trust.*
+*Submitted on the new moon. Built in the open. Verified by hardware. Governed by trust. Released by choice.*
 
 ---
 
