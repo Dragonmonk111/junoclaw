@@ -54,13 +54,14 @@ impl JunoClawConfig {
     }
 
     pub fn default_path() -> PathBuf {
-        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        home.join(".junoclaw").join("config.toml")
+        Self::data_dir().join("config.toml")
     }
 
     pub fn data_dir() -> PathBuf {
-        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        home.join(".junoclaw")
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| ".".to_string());
+        PathBuf::from(home).join(".junoclaw")
     }
 
     pub fn workspaces_dir() -> PathBuf {

@@ -1,6 +1,26 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+static ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Lightweight unique ID: timestamp_nanos hex + atomic counter. No uuid crate needed.
+pub fn gen_id() -> String {
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let nanos = ts.as_secs() * 1_000_000_000 + ts.subsec_nanos() as u64;
+    let seq = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("{:016x}-{:04x}", nanos, seq & 0xFFFF)
+}
+
+/// Unix milliseconds timestamp. No chrono crate needed.
+pub fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
 
 // ──────────────────────────────────────────────
 // Execution Tiers
@@ -52,7 +72,7 @@ pub struct AgentInfo {
     pub wavs_verified: bool,
     pub personality: Personality,
     pub system_prompt: Option<String>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: u64,
     pub is_active: bool,
     /// On-chain agent ID (if registered on Juno)
     pub chain_id: Option<String>,
@@ -82,8 +102,8 @@ pub struct Task {
     pub input: String,
     pub tier: ExecutionTier,
     pub status: TaskStatus,
-    pub created_at: DateTime<Utc>,
-    pub completed_at: Option<DateTime<Utc>>,
+    pub created_at: u64,
+    pub completed_at: Option<u64>,
     pub result: Option<TaskResult>,
     pub cost: Option<TaskCost>,
     /// On-chain tx hash (if logged to TaskLedger)
@@ -93,12 +113,12 @@ pub struct Task {
 impl Task {
     pub fn new(agent_id: &str, input: &str, tier: ExecutionTier) -> Self {
         Self {
-            id: Uuid::new_v4().to_string(),
+            id: gen_id(),
             agent_id: agent_id.to_string(),
             input: input.to_string(),
             tier,
             status: TaskStatus::Pending,
-            created_at: Utc::now(),
+            created_at: now_millis(),
             completed_at: None,
             result: None,
             cost: None,
@@ -158,15 +178,15 @@ pub struct Session {
     pub id: String,
     pub agent_id: String,
     pub messages: Vec<ChatMessage>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: u64,
+    pub updated_at: u64,
 }
 
 impl Session {
     pub fn new(agent_id: &str) -> Self {
-        let now = Utc::now();
+        let now = now_millis();
         Self {
-            id: Uuid::new_v4().to_string(),
+            id: gen_id(),
             agent_id: agent_id.to_string(),
             messages: Vec::new(),
             created_at: now,
@@ -181,7 +201,7 @@ pub struct ChatMessage {
     pub role: MessageRole,
     pub content: String,
     pub tool_calls: Option<Vec<ToolCallRecord>>,
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

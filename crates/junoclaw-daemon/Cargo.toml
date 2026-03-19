@@ -12,7 +12,6 @@ plugin-compute-local = { path = "../../plugins/plugin-compute-local" }
 plugin-storage-local = { path = "../../plugins/plugin-storage-local" }
 plugin-shell = { path = "../../plugins/plugin-shell" }
 axum = { workspace = true }
-tower = { workspace = true }
 tower-http = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }

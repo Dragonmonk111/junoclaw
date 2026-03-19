@@ -1,9 +1,8 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Uint128;
-#[allow(unused_imports)]
 use crate::state::{
-    Attestation, Config, Member, NoisCallback, PaymentRecord, PendingSortition, Proposal,
-    ProposalKind, SortitionRound, VerificationConfig, VoteOption, WeightProposal,
+    Attestation, CodeUpgradeAction, Config, Member, NoisCallback, PaymentRecord, PendingSortition,
+    Proposal, SortitionRound, VerificationConfig, VoteOption, WeightProposal,
 };
 use junoclaw_common::ExecutionTier;
 
@@ -45,6 +44,13 @@ pub enum ProposalKindMsg {
         count: u32,
         purpose: String,
     },
+    /// Code upgrade proposal: bundles store/instantiate/migrate/execute actions.
+    /// Requires supermajority quorum (default 67%) to pass.
+    CodeUpgrade {
+        title: String,
+        description: String,
+        actions: Vec<CodeUpgradeAction>,
+    },
 }
 
 #[cw_serde]
@@ -78,6 +84,8 @@ pub struct InstantiateMsg {
     pub adaptive_min_blocks: Option<u64>,
     /// DAO-wide verification config (defaults to V2+V3)
     pub verification: Option<VerificationConfig>,
+    /// Supermajority quorum for CodeUpgrade proposals (default 67)
+    pub supermajority_quorum_percent: Option<u64>,
 }
 
 #[cw_serde]

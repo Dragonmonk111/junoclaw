@@ -8,15 +8,15 @@ use tracing::{info, warn};
 use junoclaw_core::config::JunoClawConfig;
 use junoclaw_core::plugin::StreamEvent;
 use junoclaw_core::types::{
-    AgentInfo, ChatMessage, CompletionRequest, LlmMessage, MessageRole, Session, Task,
-    ToolCall, WsClientMessage, WsServerMessage,
+    gen_id, now_millis, AgentInfo, ChatMessage, CompletionRequest, LlmMessage, MessageRole,
+    Session, Task, ToolCall, WsClientMessage, WsServerMessage,
 };
 use plugin_llm::ollama::OllamaProvider;
 use plugin_llm::LlmProviderRegistry;
 use plugin_shell::ShellPlugin;
 
 pub struct Runtime {
-    config: JunoClawConfig,
+    _config: JunoClawConfig,
     agents: Arc<RwLock<HashMap<String, AgentInfo>>>,
     sessions: Arc<RwLock<HashMap<String, Session>>>,
     tasks: Arc<RwLock<Vec<Task>>>,
@@ -59,7 +59,7 @@ impl Runtime {
         info!("Loaded {} agent(s) and {} session(s) from disk", agents.len(), sessions.len());
 
         let runtime = Self {
-            config: config.clone(),
+            _config: config.clone(),
             agents: Arc::new(RwLock::new(agents)),
             sessions: Arc::new(RwLock::new(sessions)),
             tasks: Arc::new(RwLock::new(Vec::new())),
@@ -127,20 +127,20 @@ impl Runtime {
 
                 // Store user message
                 let user_msg = ChatMessage {
-                    id: uuid::Uuid::new_v4().to_string(),
+                    id: gen_id(),
                     role: MessageRole::User,
                     content: content.clone(),
                     tool_calls: None,
-                    timestamp: chrono::Utc::now(),
+                    timestamp: now_millis(),
                 };
                 {
                     let mut sessions = self.sessions.write().await;
                     let session = sessions.entry(agent_id.clone()).or_insert_with(|| Session {
-                        id: uuid::Uuid::new_v4().to_string(),
+                        id: gen_id(),
                         agent_id: agent_id.clone(),
                         messages: Vec::new(),
-                        created_at: chrono::Utc::now(),
-                        updated_at: chrono::Utc::now(),
+                        created_at: now_millis(),
+                        updated_at: now_millis(),
                     });
                     session.messages.push(user_msg);
                 }
@@ -252,11 +252,11 @@ impl Runtime {
                         // Store the visible part (text before tool call) as assistant msg
                         if !visible_text.trim().is_empty() {
                             let partial_msg = ChatMessage {
-                                id: uuid::Uuid::new_v4().to_string(),
+                                id: gen_id(),
                                 role: MessageRole::Assistant,
                                 content: visible_text.clone(),
                                 tool_calls: None,
-                                timestamp: chrono::Utc::now(),
+                                timestamp: now_millis(),
                             };
                             let mut sessions = self.sessions.write().await;
                             if let Some(s) = sessions.get_mut(&agent_id) {
@@ -295,11 +295,11 @@ impl Runtime {
 
                         if !approved {
                             let denied_msg = ChatMessage {
-                                id: uuid::Uuid::new_v4().to_string(),
+                                id: gen_id(),
                                 role: MessageRole::Tool,
                                 content: format!("Tool call '{}' was denied by user.", tc.name),
                                 tool_calls: None,
-                                timestamp: chrono::Utc::now(),
+                                timestamp: now_millis(),
                             };
                             let mut sessions = self.sessions.write().await;
                             if let Some(s) = sessions.get_mut(&agent_id) {
@@ -322,11 +322,11 @@ impl Runtime {
 
                         // Add tool result to session so LLM sees it
                         let tool_msg = ChatMessage {
-                            id: uuid::Uuid::new_v4().to_string(),
+                            id: gen_id(),
                             role: MessageRole::Tool,
                             content: tool_output.clone(),
                             tool_calls: None,
-                            timestamp: chrono::Utc::now(),
+                            timestamp: now_millis(),
                         };
                         {
                             let mut sessions = self.sessions.write().await;
@@ -341,17 +341,17 @@ impl Runtime {
                     // ── No tool call — this is the final response ─────────────
                     let clean_content = full_content.trim().to_string();
                     let assistant_msg = ChatMessage {
-                        id: uuid::Uuid::new_v4().to_string(),
+                        id: gen_id(),
                         role: MessageRole::Assistant,
                         content: clean_content,
                         tool_calls: None,
-                        timestamp: chrono::Utc::now(),
+                        timestamp: now_millis(),
                     };
                     {
                         let mut sessions = self.sessions.write().await;
                         if let Some(session) = sessions.get_mut(&agent_id) {
                             session.messages.push(assistant_msg.clone());
-                            session.updated_at = chrono::Utc::now();
+                            session.updated_at = now_millis();
                         }
                     }
                     // Persist sessions after final response
@@ -558,7 +558,7 @@ fn extract_tool_call(text: &str) -> Option<(ToolCall, String)> {
 
     Some((
         ToolCall {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: gen_id(),
             name: tool_name,
             arguments: serde_json::Value::Object(args),
         },

@@ -26,7 +26,6 @@ futures = "0.3"
 
 # Web server
 axum = { version = "0.8", features = ["ws"] }
-tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 
 # Serialization
@@ -45,10 +44,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0"
 thiserror = "2.0"
 
-# Misc
-uuid = { version = "1.11", features = ["v4"] }
-chrono = { version = "0.4", features = ["serde"] }
-dirs = "5.0"
 
 [profile.release]
 opt-level = 3
