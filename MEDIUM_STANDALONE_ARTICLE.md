@@ -95,7 +95,7 @@ What the local operator cannot provide is *hardware attestation* — the guarant
 
 The code for this is written:
 
-- A **WASI component** (352 KB, Rust, targets `wavs:operator@2.1.0`) — handles all three verification workflows, compiles for the WAVS sandbox
+- A **WASI component** (494 KB, Rust, targets `wavs:operator@2.1.0`) — handles all verification workflows, compiles for the WAVS sandbox
 - A **service manifest** (`service.json`) — configured with real v2 contract addresses and the `wa.dev` registry. An operator loading this file would start indexing events immediately
 - A **local operator** (`local-operator.ts`) — watches the chain, computes SHA-256 attestations, submits automatically. Already proven on-chain
 - A **contract** — emits typed trigger events, validates and stores attestations immutably
@@ -114,7 +114,7 @@ The remaining step is deploying the WASI component to a WAVS operator node runni
 
 ## The Contracts
 
-**New agent-company v2:**
+**New agent-company v3:**
 `juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6`
 
 **Original contracts (unchanged, still live):**

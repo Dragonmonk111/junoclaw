@@ -44,7 +44,7 @@ That's JunoClaw. Now let's walk through it piece by piece.
 **What a developer needs to know:**
 
 - **agent-company** (v3, code ID 63) — The core DAO contract. Handles member weights, proposal creation, voting with adaptive block reduction, attestation storage, sortition via drand randomness, and now CodeUpgrade proposals with supermajority quorum. ~470KB optimized WASM.
-- **junoswap-factory** (code ID 61) — Manages trading pair creation. Forked from Astroport's XYK model, stripped to essentials, WAVS hooks built in from day one. Not a full Astroport clone — lean JunoClaw-native contracts.
+- **junoswap-factory** (code ID 61) — Manages trading pair creation. Clean rewrite from scratch — not a fork and not affiliated with the original Junoswap team. XYK constant-product model, WAVS hooks built in from day one. Lean JunoClaw-native contracts.
 - **junoswap-pair** (code ID 60) — Each trading pair (like JUNOX/USDC) is its own contract. Handles swaps, liquidity provision, and fee collection. 0.30% swap fee.
 - **escrow, task-ledger, agent-registry** — Supporting contracts for payment splits, task tracking, and agent identity.
 
@@ -142,11 +142,11 @@ Akash is a decentralized compute marketplace. You post a "help wanted" ad (the S
 services:
   wavs-operator:    # 2 CPU, 4GB — watches Juno, runs WASI verification, submits attestations
   wavs-aggregator:  # 1 CPU, 1GB — collects results, health API
-  ipfs:             # 0.5 CPU, 512MB — stores the 355KB WASI component binary
+  ipfs:             # 0.5 CPU, 512MB — stores the 494KB WASI component binary
 ```
 
 - **LIVE on Akash**: Aggregator at `http://provider.akash-palmito.org:31812` — running since March 17, 2026
-- **63.77 AKT funded** — covers 3-5 months at US$7.85/month
+- **63.77 AKT funded** — covers 3-5 months at ~US$8.76/month
 - **Not TEE**: Regular compute. TEE was proven on Azure (Proposal 4). Akash = permanent decentralized hosting. Same operator code runs with or without hardware attestation.
 - **Eliminates SPOF**: If the provider dies, redeploy to another in 2 minutes via Console
 - **Connects to Juno**: Operator polls Juno RPC for events, submits attestation TXs back. All outbound — nothing connects inbound.
@@ -213,10 +213,10 @@ Everything described in this article is live on uni-7 testnet. Nothing is theore
 | CodeUpgrade governance | ✅ Tested | 34/34 unit tests, 3 supermajority tests |
 | Adaptive voting | ✅ Working | Unanimous votes resolve in ~1 min |
 | Sortition (random jury) | ✅ Working | Fisher-Yates via SHA-256 sub-randomness, 5 tests |
-| WAVS WASI component | ✅ Built | 355KB, deterministic SHA-256 verification |
+| WAVS WASI component | ✅ Built | 494KB, deterministic SHA-256 verification |
 | Akash operator | ✅ LIVE | `http://provider.akash-palmito.org:31812` — 3 containers, chain healthy, US$7.85/mo |
 | Genesis → 13 Buds | ✅ Ready | Script + architecture doc, needs bud addresses |
-| Juno governance proposal | ✅ Submitted | Mar 17, 2026 on juno-1, VairagyaNodes |
+| Juno governance proposal | ✅ Submitted | Mar 19, 2026 on juno-1, Proposal #373, VairagyaNodes |
 | Frontend | ✅ Built | Chat, DAO, DEX, Updates — 317KB Vite |
 | Jake Hartnell endorsement | ✅ | "very cool!", "junoclaw was long overdue", "good chance for Juno to rise again" |
 

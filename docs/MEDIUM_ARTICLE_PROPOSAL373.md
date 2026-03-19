@@ -232,9 +232,9 @@ It asks the Juno community five things:
 
 ## The Honest Risks
 
-Transparency requires stating what this is not. Verbatim from the proposal:
+Transparency requires stating what this is not. From the proposal, updated to reflect the current codebase:
 
-**Not audited.** The contracts have 86 unit tests across 7 crates but have not undergone a formal third-party security audit. An audit is planned post-mainnet deployment using DAO funds or community support. Unit tests verify logic correctness but do not substitute for adversarial review.
+**Not audited.** The contracts have 86 unit tests across 7 crates (expanded from 34 at proposal submission — Junoswap v2 added 52 tests). No formal third-party security audit has been conducted. An audit is planned post-mainnet deployment using DAO funds or community support. Unit tests verify logic correctness but do not substitute for adversarial review.
 
 **Testnet only.** Everything described is deployed on uni-7. Mainnet deployment follows if this proposal passes. Testnet tokens have no monetary value.
 
@@ -261,7 +261,7 @@ Nothing in this article, the code, the proposal, or any related communication co
 Open source. Apache 2.0. Auditable now.
 
 - **7 contracts**: agent-company, agent-registry, escrow, task-ledger, junoswap-factory, junoswap-pair, junoclaw-common
-- **86 tests** passing across all contract crates
+- **86 tests** passing across all contract crates (34 at proposal submission + 52 from Junoswap v2)
 - **11 workspace dependencies** for the entire off-chain stack (after cleanup)
 - **Deployed on uni-7 testnet** with verified contract addresses
 

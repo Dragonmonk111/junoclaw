@@ -4,7 +4,7 @@
 
 ---
 
-**TL;DR** — JunoClaw is fully deployed on Juno testnet. Junoswap for Agents (v2) is live. 6 WAVS verification workflows run autonomously on Akash. The WASI component is published to a live registry. The governance proposal is written. Everything below is on-chain, verifiable, and open source.
+**TL;DR** — JunoClaw is fully deployed on Juno testnet. Junoswap for Agents (v2) is live. 5 WAVS verification workflows run autonomously on Akash. The WASI component is published to a live registry. Proposal #373 is live on juno-1 mainnet. Everything below is on-chain, verifiable, and open source.
 
 ---
 
@@ -24,7 +24,7 @@ Here's what's running right now, as you read this:
 - WAVS operator — watches Juno for events, runs WASI verification inside containers
 - WAVS aggregator — collects and serves verification results
 - IPFS node — stores the 494KB WASI component binary
-- Cost: US$7.85/month. 63.77 AKT funded. No AWS, no Azure dependency.
+- Cost: ~US$8.76/month. 63.77 AKT funded. No AWS, no Azure dependency.
 
 **On Azure (component registry):**
 - `warg-server` running as a systemd service — auto-starts on boot
@@ -34,12 +34,12 @@ Here's what's running right now, as you read this:
 
 **The WASI component (494KB of Rust):**
 - Compiled to `wasm32-wasip1` — runs anywhere WASI is supported
-- Handles 6 verification workflows autonomously
+- Handles 5 verification workflows autonomously
 - Proven inside Intel SGX enclave (Proposal 4, TX: `6EA1AE79...D26B22`)
 
 ---
 
-### 6 workflows, zero humans
+### 5 workflows, zero humans
 
 The WAVS operator watches Juno and reacts. No one tells it what to do. It reads on-chain events and independently computes verification results.
 
@@ -50,16 +50,13 @@ Every Junoswap swap emits 12 attributes. The operator recomputes XYK math — of
 When the DAO needs a random subset of members, the operator fetches drand beacon randomness and submits it on-chain. Fisher-Yates shuffle with SHA-256 sub-randomness. Deterministic. Verifiable. No one picks the jury.
 
 **3. Outcome Verification**
-Prediction markets and data tasks. The operator verifies resolution criteria against external sources. TEE hardware guarantees the code wasn't tampered with.
+Prediction markets and data tasks. The operator verifies resolution criteria against external sources. TEE hardware guarantees the code wasn’t tampered with.
 
 **4. Governance Watch**
 Monitors proposals for anomalies — unusual voting patterns, quorum manipulation, rapid-fire submissions. Classifies risk and attests findings on-chain.
 
 **5. Migration Watch**
 Detects contract migration events. Verifies the new code_id against known-good hashes. Flags unauthorized migrations before damage spreads. This is how you catch rug pulls at the contract level.
-
-**6. Swap Verify (JUNOX/USDC)**
-Dedicated verification for the primary trading pair. Separate trigger, same math, independent attestation.
 
 ---
 
@@ -105,7 +102,7 @@ The community watches the tree grow. Bad branches get pruned via `BreakChannel`.
 
 ### The governance proposal
 
-A signaling proposal is going to juno-1. No code execution. No community pool funds. We're asking the Juno community to:
+Proposal #373 is live on juno-1 (voting ends March 24, 2026). No code execution. No community pool funds. We asked the Juno community to:
 
 1. Recognize JunoClaw as a Juno ecosystem infrastructure reboot.
 2. Support Junoswap revival through TEE-attested verification.
@@ -154,7 +151,7 @@ Every claim above is on-chain:
 
 ### What's next
 
-The governance proposal goes live on juno-1. Then Genesis buds into 13. Then the DAO takes over.
+Proposal #373 is live on juno-1 (voting ends March 24, 2026). Then Genesis buds into 13. Then the DAO takes over.
 
 If it passes, we keep building. If it doesn't, we keep building. The code is already deployed.
 
