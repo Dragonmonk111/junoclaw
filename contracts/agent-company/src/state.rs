@@ -94,6 +94,10 @@ pub struct Config {
     pub verification: VerificationConfig,
     /// Optional NOIS proxy address for on-chain randomness (sortition, arbitration)
     pub nois_proxy: Option<Addr>,
+    /// Supermajority quorum for CodeUpgrade proposals (default 67)
+    pub supermajority_quorum_percent: u64,
+    /// Optional Junoswap factory address (set via CodeUpgrade proposal)
+    pub dex_factory: Option<Addr>,
 }
 
 // ──────────────────────────────────────────────
@@ -136,6 +140,50 @@ pub enum ProposalKind {
     SortitionRequest {
         count: u32,
         purpose: String,
+    },
+    /// Code upgrade: bundle store/instantiate/migrate actions behind supermajority quorum
+    CodeUpgrade {
+        title: String,
+        description: String,
+        actions: Vec<CodeUpgradeAction>,
+    },
+}
+
+/// Individual action within a CodeUpgrade proposal
+#[cw_serde]
+pub enum CodeUpgradeAction {
+    /// Upload WASM code to the chain, returning a code_id
+    StoreCode {
+        /// Label for tracking (e.g. "junoswap-factory")
+        label: String,
+        /// Base64-encoded WASM binary
+        wasm_base64: String,
+    },
+    /// Instantiate a new contract from an existing code_id
+    InstantiateContract {
+        label: String,
+        code_id: u64,
+        /// JSON-encoded instantiate message
+        msg_json: String,
+        /// Optional admin for the new contract
+        admin: Option<String>,
+    },
+    /// Migrate an existing contract to a new code_id
+    MigrateContract {
+        contract_addr: String,
+        new_code_id: u64,
+        /// JSON-encoded migrate message
+        msg_json: String,
+    },
+    /// Execute a message on an existing contract
+    ExecuteContract {
+        contract_addr: String,
+        /// JSON-encoded execute message
+        msg_json: String,
+    },
+    /// Update this DAO's config to wire in new contract addresses
+    SetDexFactory {
+        factory_addr: String,
     },
 }
 

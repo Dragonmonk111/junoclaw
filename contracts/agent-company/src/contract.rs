@@ -10,10 +10,10 @@ use crate::msg::{
     ExecuteMsg, InstantiateMsg, MemberInput, MigrateMsg, ProposalKindMsg, QueryMsg,
 };
 use crate::state::{
-    Attestation, Config, Member, NoisCallback, PaymentRecord, PendingSortition, Proposal,
-    ProposalKind, ProposalStatus, SortitionRound, Vote, VoteOption, WeightProposal,
-    ATTESTATIONS, CONFIG, MEMBER_EARNINGS, PAYMENT_HISTORY, PENDING_SORTITION, PROPOSAL,
-    PROPOSALS, PROPOSAL_SEQ, SORTITION_ROUNDS, SORTITION_SEQ,
+    Attestation, CodeUpgradeAction, Config, Member, NoisCallback, PaymentRecord,
+    PendingSortition, Proposal, ProposalKind, ProposalStatus, SortitionRound, Vote, VoteOption,
+    WeightProposal, ATTESTATIONS, CONFIG, MEMBER_EARNINGS, PAYMENT_HISTORY, PENDING_SORTITION,
+    PROPOSAL, PROPOSALS, PROPOSAL_SEQ, SORTITION_ROUNDS, SORTITION_SEQ,
 };
 use sha2::{Sha256, Digest};
 
@@ -86,6 +86,8 @@ pub fn instantiate(
         adaptive_min_blocks: msg.adaptive_min_blocks.unwrap_or(13),
         verification: msg.verification.unwrap_or_default(),
         nois_proxy,
+        supermajority_quorum_percent: msg.supermajority_quorum_percent.unwrap_or(67),
+        dex_factory: None,
     })?;
     PROPOSAL.save(deps.storage, &None)?;
     PROPOSAL_SEQ.save(deps.storage, &0u64)?;
@@ -245,6 +247,14 @@ fn execute_create_proposal(
             }
             ProposalKind::SortitionRequest { count, purpose }
         }
+        ProposalKindMsg::CodeUpgrade { title, description, actions } => {
+            if actions.is_empty() {
+                return Err(ContractError::Std(cosmwasm_std::StdError::generic_err(
+                    "CodeUpgrade proposal must have at least one action",
+                )));
+            }
+            ProposalKind::CodeUpgrade { title, description, actions }
+        }
     };
 
     let seq = PROPOSAL_SEQ.load(deps.storage)? + 1;
@@ -343,7 +353,12 @@ fn execute_cast_vote(
     }
 
     // Check if proposal can auto-resolve (quorum met)
-    let quorum_threshold = cfg.total_weight * cfg.quorum_percent / 100;
+    // CodeUpgrade proposals require supermajority quorum (default 67%)
+    let required_quorum = match &proposal.kind {
+        ProposalKind::CodeUpgrade { .. } => cfg.supermajority_quorum_percent,
+        _ => cfg.quorum_percent,
+    };
+    let quorum_threshold = cfg.total_weight * required_quorum / 100;
     if proposal.total_voted_weight >= quorum_threshold {
         if proposal.yes_weight > proposal.no_weight {
             proposal.status = ProposalStatus::Passed;
@@ -569,6 +584,97 @@ fn execute_execute_proposal(
                     .add_attribute("contract_address", env.contract.address.to_string());
                 response = response.add_event(sortition_event);
             }
+        }
+        ProposalKind::CodeUpgrade { title, description, actions } => {
+            // Process each action in order — generates WasmMsg sub-messages
+            for (i, action) in actions.iter().enumerate() {
+                match action {
+                    CodeUpgradeAction::StoreCode { label, wasm_base64 } => {
+                        // Validate the base64 is well-formed
+                        let wasm_bytes = cosmwasm_std::Binary::from_base64(wasm_base64)
+                            .map_err(|e| ContractError::Std(cosmwasm_std::StdError::generic_err(
+                                format!("Invalid base64 in StoreCode action {}: {}", i, e),
+                            )))?;
+                        // StoreCode is not a native CosmWasm message — the DAO records
+                        // the intent on-chain; off-chain relayer (bridge) handles the
+                        // actual wasmd StoreCode via authz or gov proposal.
+                        let store_event = Event::new("code_upgrade_store")
+                            .add_attribute("action_index", i.to_string())
+                            .add_attribute("label", label)
+                            .add_attribute("wasm_size", wasm_bytes.len().to_string());
+                        response = response.add_event(store_event);
+                    }
+                    CodeUpgradeAction::InstantiateContract { label, code_id, msg_json, admin } => {
+                        let msg_binary = cosmwasm_std::Binary::from(
+                            msg_json.as_bytes().to_vec()
+                        );
+                        let instantiate_msg = WasmMsg::Instantiate {
+                            admin: admin.clone().or_else(|| Some(env.contract.address.to_string())),
+                            code_id: *code_id,
+                            msg: msg_binary,
+                            funds: vec![],
+                            label: label.clone(),
+                        };
+                        response = response.add_message(instantiate_msg);
+                        let inst_event = Event::new("code_upgrade_instantiate")
+                            .add_attribute("action_index", i.to_string())
+                            .add_attribute("label", label)
+                            .add_attribute("code_id", code_id.to_string());
+                        response = response.add_event(inst_event);
+                    }
+                    CodeUpgradeAction::MigrateContract { contract_addr, new_code_id, msg_json } => {
+                        let msg_binary = cosmwasm_std::Binary::from(
+                            msg_json.as_bytes().to_vec()
+                        );
+                        let migrate_msg = WasmMsg::Migrate {
+                            contract_addr: contract_addr.clone(),
+                            new_code_id: *new_code_id,
+                            msg: msg_binary,
+                        };
+                        response = response.add_message(migrate_msg);
+                        let mig_event = Event::new("code_upgrade_migrate")
+                            .add_attribute("action_index", i.to_string())
+                            .add_attribute("contract_addr", contract_addr)
+                            .add_attribute("new_code_id", new_code_id.to_string());
+                        response = response.add_event(mig_event);
+                    }
+                    CodeUpgradeAction::ExecuteContract { contract_addr, msg_json } => {
+                        let msg_binary = cosmwasm_std::Binary::from(
+                            msg_json.as_bytes().to_vec()
+                        );
+                        let exec_msg = WasmMsg::Execute {
+                            contract_addr: contract_addr.clone(),
+                            msg: msg_binary,
+                            funds: vec![],
+                        };
+                        response = response.add_message(exec_msg);
+                        let exec_event = Event::new("code_upgrade_execute")
+                            .add_attribute("action_index", i.to_string())
+                            .add_attribute("contract_addr", contract_addr);
+                        response = response.add_event(exec_event);
+                    }
+                    CodeUpgradeAction::SetDexFactory { factory_addr } => {
+                        cfg.dex_factory = Some(deps.api.addr_validate(factory_addr)?);
+                        CONFIG.save(deps.storage, &cfg)?;
+                        let dex_event = Event::new("code_upgrade_set_dex")
+                            .add_attribute("factory_addr", factory_addr);
+                        response = response.add_event(dex_event);
+                    }
+                }
+            }
+
+            response = response
+                .add_attribute("kind", "code_upgrade")
+                .add_attribute("title", title)
+                .add_attribute("action_count", actions.len().to_string());
+
+            let upgrade_event = Event::new("code_upgrade")
+                .add_attribute("proposal_id", proposal_id.to_string())
+                .add_attribute("title", title)
+                .add_attribute("description", description)
+                .add_attribute("action_count", actions.len().to_string())
+                .add_attribute("contract_address", env.contract.address.to_string());
+            response = response.add_event(upgrade_event);
         }
     }
 
@@ -998,5 +1104,33 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 #[entry_point]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    Ok(Response::new().add_attribute("action", "migrate"))
+
+    // ── v3 migration: add supermajority_quorum_percent + dex_factory to Config ──
+    // Read raw storage bytes and attempt to deserialize as the new Config.
+    // If new fields are missing (migrating from v2), manually patch the JSON.
+    let raw = deps.storage.get(b"config");
+    if let Some(data) = raw {
+        // Try deserializing as new Config first
+        if cosmwasm_std::from_json::<Config>(&data).is_err() {
+            // Old format — parse as serde_json Value, inject defaults, re-save
+            // Since we can't use serde_json, use a simpler approach:
+            // Deserialize old config as a map-like structure by appending defaults
+            let mut json_str = String::from_utf8(data.to_vec())
+                .map_err(|_| ContractError::Std(cosmwasm_std::StdError::generic_err("invalid utf8 in config")))?;
+            // Remove trailing `}` and append new fields
+            if let Some(pos) = json_str.rfind('}') {
+                json_str.truncate(pos);
+                json_str.push_str(",\"supermajority_quorum_percent\":67,\"dex_factory\":null}");
+            }
+            let new_cfg: Config = cosmwasm_std::from_json(json_str.as_bytes())
+                .map_err(|e| ContractError::Std(cosmwasm_std::StdError::generic_err(
+                    format!("v3 migration: failed to parse patched config: {}", e),
+                )))?;
+            CONFIG.save(deps.storage, &new_cfg)?;
+        }
+    }
+
+    Ok(Response::new()
+        .add_attribute("action", "migrate")
+        .add_attribute("version", CONTRACT_VERSION))
 }

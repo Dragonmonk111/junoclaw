@@ -94,6 +94,55 @@ pub type EscrowDeposit = PaymentObligation;
 pub type EscrowStatus = ObligationStatus;
 
 // ──────────────────────────────────────────────
+// Junoswap v2 DEX Types
+// ──────────────────────────────────────────────
+
+#[cw_serde]
+pub struct PairInfo {
+    pub pair_addr: Addr,
+    pub token_a: AssetInfo,
+    pub token_b: AssetInfo,
+    pub lp_token: Addr,
+    pub total_fee_bps: u16,
+    pub wavs_verified: bool,
+}
+
+#[cw_serde]
+pub enum AssetInfo {
+    Native(String),
+    Cw20(Addr),
+}
+
+impl AssetInfo {
+    pub fn denom_key(&self) -> String {
+        match self {
+            AssetInfo::Native(d) => d.clone(),
+            AssetInfo::Cw20(a) => a.to_string(),
+        }
+    }
+}
+
+#[cw_serde]
+pub struct Asset {
+    pub info: AssetInfo,
+    pub amount: Uint128,
+}
+
+#[cw_serde]
+pub struct SwapEvent {
+    pub pair: String,
+    pub sender: String,
+    pub offer_asset: String,
+    pub offer_amount: Uint128,
+    pub return_asset: String,
+    pub return_amount: Uint128,
+    pub spread_amount: Uint128,
+    pub fee_amount: Uint128,
+    pub block_height: u64,
+    pub timestamp: u64,
+}
+
+// ──────────────────────────────────────────────
 // Contract Registry (V30-safe inter-contract refs)
 // ──────────────────────────────────────────────
 

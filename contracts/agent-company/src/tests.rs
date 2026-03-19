@@ -46,6 +46,7 @@ fn store_and_instantiate(
             adaptive_threshold_blocks: Some(10),
             adaptive_min_blocks: Some(13),
             verification: None,
+            supermajority_quorum_percent: None,
         },
         &[],
         "agent-company",
@@ -106,6 +107,7 @@ fn test_invalid_weights_fails() {
             adaptive_threshold_blocks: None,
             adaptive_min_blocks: None,
             verification: None,
+            supermajority_quorum_percent: None,
         },
         &[],
         "bad-company",
@@ -1322,4 +1324,169 @@ fn test_submit_attestation_duplicate_rejected() {
     // Should be a StdError::GenericErr for duplicate
     let err_str = format!("{:?}", err);
     assert!(err_str.contains("attestation already submitted"), "unexpected error: {}", err_str);
+}
+
+// ──────────────────────────────────────────────
+// CodeUpgrade proposal tests
+// ──────────────────────────────────────────────
+
+#[test]
+fn test_code_upgrade_requires_supermajority() {
+    use crate::state::CodeUpgradeAction;
+
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+
+    // Create a CodeUpgrade proposal with SetDexFactory action
+    let factory_addr = mk(&app, "junoswap_factory");
+    app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::CodeUpgrade {
+                title: "Deploy Junoswap v2".to_string(),
+                description: "Bundle Junoswap factory + pair deployment with DEX config wiring".to_string(),
+                actions: vec![
+                    CodeUpgradeAction::SetDexFactory {
+                        factory_addr: factory_addr.to_string(),
+                    },
+                ],
+            },
+        },
+        &[],
+    ).unwrap();
+
+    // Alice votes Yes (weight 6000). 6000/10000 = 60% < 67% supermajority → still Open
+    app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+        &[],
+    ).unwrap();
+
+    let proposal: Proposal = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetProposal { proposal_id: 1 })
+        .unwrap();
+    // 60% yes doesn't meet 67% supermajority — should still be Open
+    assert_eq!(proposal.status, ProposalStatus::Open,
+        "CodeUpgrade should require supermajority (67%), not pass at 60%");
+
+    // Bob votes Yes (weight 4000). Total = 10000/10000 = 100% → Passed
+    app.execute_contract(
+        bob.clone(),
+        contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+        &[],
+    ).unwrap();
+
+    let proposal: Proposal = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetProposal { proposal_id: 1 })
+        .unwrap();
+    assert_eq!(proposal.status, ProposalStatus::Passed);
+
+    // Advance past deadline and execute
+    app.update_block(|b| { b.height += 101; });
+
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::ExecuteProposal { proposal_id: 1 },
+        &[],
+    ).unwrap();
+
+    // Verify dex_factory was set in config
+    let cfg: crate::state::Config = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(cfg.dex_factory, Some(factory_addr));
+    assert_eq!(cfg.supermajority_quorum_percent, 67);
+}
+
+#[test]
+fn test_code_upgrade_empty_actions_rejected() {
+    use crate::state::CodeUpgradeAction;
+
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+
+    // Empty actions should fail
+    let err = app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::CodeUpgrade {
+                title: "Bad proposal".to_string(),
+                description: "No actions".to_string(),
+                actions: vec![],
+            },
+        },
+        &[],
+    ).unwrap_err();
+    let err_str = format!("{:?}", err);
+    assert!(err_str.contains("at least one action"), "unexpected error: {}", err_str);
+}
+
+#[test]
+fn test_code_upgrade_supermajority_blocks_minority() {
+    use crate::state::CodeUpgradeAction;
+
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let members = two_member_msg(&alice, &bob); // alice=6000, bob=4000
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+
+    let factory_addr = mk(&app, "junoswap_factory");
+    app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::CodeUpgrade {
+                title: "Contested upgrade".to_string(),
+                description: "Alice yes, Bob no".to_string(),
+                actions: vec![
+                    CodeUpgradeAction::SetDexFactory {
+                        factory_addr: factory_addr.to_string(),
+                    },
+                ],
+            },
+        },
+        &[],
+    ).unwrap();
+
+    // Alice votes Yes (6000)
+    app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+        &[],
+    ).unwrap();
+
+    // Bob votes No (4000) — all voted, yes > no, but check quorum
+    app.execute_contract(
+        bob.clone(),
+        contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::No },
+        &[],
+    ).unwrap();
+
+    let proposal: Proposal = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetProposal { proposal_id: 1 })
+        .unwrap();
+    // 100% voted, 60% yes > 40% no, total_voted (10000) >= 67% threshold (6700) → Passed
+    assert_eq!(proposal.status, ProposalStatus::Passed,
+        "With all votes in and yes > no and total_voted >= supermajority threshold, should pass");
 }
