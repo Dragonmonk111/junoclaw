@@ -12,7 +12,7 @@ service_manifest = "./service.json"
 chain_id = "uni-7"
 bech32_prefix = "juno"
 rpc_endpoint = "https://juno-testnet-rpc.polkachu.com"
-grpc_endpoint = "https://juno-testnet-grpc.polkachu.com:443"
+grpc_endpoint = "http://juno-testnet-grpc.polkachu.com:12690"
 gas_price = 0.075
 gas_denom = "ujunox"
 

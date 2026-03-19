@@ -1,0 +1,12 @@
+{
+  "ibc_health_check": {
+    "channel_id": "channel-42",
+    "port_id": "transfer",
+    "counterparty_channel": "channel-0",
+    "connection_id": "connection-11",
+    "state": "OPEN",
+    "packets_sent": "1500",
+    "packets_recv": "1480",
+    "packets_timeout": "12"
+  }
+}

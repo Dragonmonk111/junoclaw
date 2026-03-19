@@ -20,7 +20,7 @@ export const config = {
   mnemonic: process.env.WAVS_OPERATOR_MNEMONIC || "",
 
   // WAVS aggregator endpoint (for polling results)
-  wavsAggregatorUrl: process.env.WAVS_AGGREGATOR_URL || "http://localhost:8080",
+  wavsAggregatorUrl: process.env.WAVS_AGGREGATOR_URL || "http://provider.akash-palmito.org:31812",
 
   // Polling interval in ms
   pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS || "5000"),

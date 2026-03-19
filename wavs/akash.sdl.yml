@@ -1,0 +1,183 @@
+﻿---
+# JunoClaw WAVS Operator Stack â€” Akash SDL
+# Deploy via: https://console.akash.network
+#
+# WHAT THIS DOES (Phase 2 â€” Akash-to-Akash, zero cloud dependency):
+#   Runs 4 containers on a rented Akash server:
+#   1. warg-registry   â€" Component registry serving junoclaw:verifier WASM (replaces Azure VM)
+#   2. wavs-operator   â€" Watches Juno chain for events, pulls WASM from registry, runs verification
+#   3. wavs-aggregator â€" Collects results from operator(s), exposes health API
+#   4. ipfs            â€" Stores component binaries
+#
+# ARCHITECTURE:
+#   Phase 1: Azure VM hosted registry (stepping stone)
+#   Phase 2: THIS â€” warg-registry runs ON Akash alongside operator (fully decentralized)
+#   Phase 3: Juno validators run TEE enclaves as sidecars (validator-native trust)
+#
+# WHAT IT CONNECTS TO:
+#   - Outbound to Juno RPC (reads events + submits attestation TXs)
+#   - Internal: operator <-> registry <-> aggregator <-> IPFS
+#   - Nothing connects inbound from outside except aggregator health API
+#
+# Wallet: akash1tvpe72amnd3arnh4nhlf3hztx5aqznu6vt64ta
+# Balance: ~63.77 AKT (covers 3-5 months)
+# Est. cost: ~15-22 AKT/month for all 4 services
+# Escrow deposit: 5 AKT (refundable on close)
+#
+# NOTE: This is NOT a TEE/SGX deployment. This is regular compute.
+# The operator runs verification correctly but without hardware attestation.
+# TEE was proven on Azure (Proposal 4). Akash = permanent decentralized hosting.
+# When Akash providers offer AMD SEV, add: attributes: { tee: "sev" }
+
+version: "2.0"
+
+services:
+  wavs-operator:
+    image: ghcr.io/lay3rlabs/wavs:1.5.1
+    command:
+      - /bin/sh
+    args:
+      - -c
+      - "echo '=== CREATING CONFIG ===' && printf '[default]\nservice_manifest = \"/root/service.json\"\n[default.chains.cosmos.juno_testnet]\nchain_id = \"uni-7\"\nbech32_prefix = \"juno\"\nrpc_endpoint = \"https://juno-testnet-rpc.polkachu.com\"\ngrpc_endpoint = \"http://juno-testnet-grpc.polkachu.com:12690\"\ngas_price = 0.075\ngas_denom = \"ujunox\"\n[default.registry]\ndomain = \"warg-registry:8090\"\n' > /root/wavs.toml && echo '=== WAVS.TOML ===' && cat /root/wavs.toml && printf '{\"name\":\"junoclaw-verifier\",\"description\":\"JunoClaw off-chain verification service for agentic DAOs on Juno Network\",\"version\":\"0.1.0\",\"workflows\":{\"wavs-push-verify\":{\"trigger\":{\"cosmos_contract_event\":{\"address\":{\"Cosmos\":{\"bech32_addr\":\"juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6\",\"prefix_len\":4}},\"chain_name\":\"juno_testnet\",\"event_type\":\"wasm-wavs_push\"}},\"component\":{\"source\":{\"Registry\":{\"registry\":{\"domain\":\"warg-registry:8090\",\"package\":\"junoclaw:verifier\",\"version\":\"0.1.0\"}}},\"permissions\":{\"allowed_http_hosts\":\"all\",\"file_system\":false},\"fuel_limit\":null,\"time_limit_seconds\":60,\"config\":{},\"env_keys\":[]},\"submit\":{\"cosmos\":{\"chain_name\":\"juno_testnet\",\"contract_address\":\"juno1agw6f05wxx5rm8d3etq7cejcm5g8e224s00dvykylaja7jlx3ljq6f0u46\"}}},\"sortition-randomness\":{\"trigger\":{\"cosmos_contract_event\":{\"address\":{\"Cosmos\":{\"bech32_addr\":\"juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6\",\"prefix_len\":4}},\"chain_name\":\"juno_testnet\",\"event_type\":\"wasm-sortition_request\"}},\"component\":{\"source\":{\"Registry\":{\"registry\":{\"domain\":\"warg-registry:8090\",\"package\":\"junoclaw:verifier\",\"version\":\"0.1.0\"}}},\"permissions\":{\"allowed_http_hosts\":\"all\",\"file_system\":false},\"fuel_limit\":null,\"time_limit_seconds\":30,\"config\":{},\"env_keys\":[]},\"submit\":{\"cosmos\":{\"chain_name\":\"juno_testnet\",\"contract_address\":\"juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6\"}}},\"outcome-verify\":{\"trigger\":{\"cosmos_contract_event\":{\"address\":{\"Cosmos\":{\"bech32_addr\":\"juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6\",\"prefix_len\":4}},\"chain_name\":\"juno_testnet\",\"event_type\":\"wasm-outcome_create\"}},\"component\":{\"source\":{\"Registry\":{\"registry\":{\"domain\":\"warg-registry:8090\",\"package\":\"junoclaw:verifier\",\"version\":\"0.1.0\"}}},\"permissions\":{\"allowed_http_hosts\":\"all\",\"file_system\":false},\"fuel_limit\":null,\"time_limit_seconds\":60,\"config\":{},\"env_keys\":[]},\"submit\":{\"cosmos\":{\"chain_name\":\"juno_testnet\",\"contract_address\":\"juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6\"}}},\"governance-watch\":{\"trigger\":{\"cosmos_contract_event\":{\"address\":{\"Cosmos\":{\"bech32_addr\":\"juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6\",\"prefix_len\":4}},\"chain_name\":\"juno_testnet\",\"event_type\":\"wasm\"}},\"component\":{\"source\":{\"Registry\":{\"registry\":{\"domain\":\"warg-registry:8090\",\"package\":\"junoclaw:verifier\",\"version\":\"0.1.0\"}}},\"permissions\":{\"allowed_http_hosts\":\"all\",\"file_system\":false},\"fuel_limit\":null,\"time_limit_seconds\":30,\"config\":{},\"env_keys\":[]},\"submit\":{\"cosmos\":{\"chain_name\":\"juno_testnet\",\"contract_address\":\"juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6\"}}},\"migration-watch\":{\"trigger\":{\"cosmos_contract_event\":{\"address\":{\"Cosmos\":{\"bech32_addr\":\"juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6\",\"prefix_len\":4}},\"chain_name\":\"juno_testnet\",\"event_type\":\"wasm-code_upgrade_migrate\"}},\"component\":{\"source\":{\"Registry\":{\"registry\":{\"domain\":\"warg-registry:8090\",\"package\":\"junoclaw:verifier\",\"version\":\"0.1.0\"}}},\"permissions\":{\"allowed_http_hosts\":\"all\",\"file_system\":false},\"fuel_limit\":null,\"time_limit_seconds\":30,\"config\":{},\"env_keys\":[]},\"submit\":{\"cosmos\":{\"chain_name\":\"juno_testnet\",\"contract_address\":\"juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6\"}}},\"swap-verify\":{\"trigger\":{\"cosmos_contract_event\":{\"address\":{\"Cosmos\":{\"bech32_addr\":\"juno1xn4mtv9cfc7q3zphvstkhqgn4g864pppvq64zvdnmcsen3jwacwqfr6e98\",\"prefix_len\":4}},\"chain_name\":\"juno_testnet\",\"event_type\":\"wasm-swap\"}},\"component\":{\"source\":{\"Registry\":{\"registry\":{\"domain\":\"warg-registry:8090\",\"package\":\"junoclaw:verifier\",\"version\":\"0.1.0\"}}},\"permissions\":{\"allowed_http_hosts\":\"all\",\"file_system\":false},\"fuel_limit\":null,\"time_limit_seconds\":30,\"config\":{},\"env_keys\":[]},\"submit\":{\"cosmos\":{\"chain_name\":\"juno_testnet\",\"contract_address\":\"juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6\"}}}}}' > /root/service.json && echo '=== SERVICE.JSON ===' && cat /root/service.json | head -c 200 && echo ... && echo '=== 6 WORKFLOWS ===' && exec wavs --home /root"
+    env:
+      - HOME=/root
+      - RUST_LOG=info
+      - WAVS_MODE=operator
+      - WAVS_SERVICE_ID=572b188a0605b36f9019833720de30125a4dfa4c3c614d90801068e2335a2a81
+      - WAVS_AGGREGATOR_URL=http://wavs-aggregator:8040
+      - WAVS_IPFS_URL=http://ipfs:5001
+      - WAVS_CHAIN_RPC=https://rpc.uni.junonetwork.io:443
+      - WAVS_CONTRACT=juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6
+      - WAVS_CHAIN_ID=uni-7
+      - WAVS_COMPONENT_REGISTRY=warg-registry:8090
+    expose:
+      - port: 8041
+        as: 8041
+        to:
+          - service: wavs-aggregator
+        proto: tcp
+
+  wavs-aggregator:
+    image: ghcr.io/lay3rlabs/wavs:1.5.1
+    command:
+      - /bin/sh
+    args:
+      - -c
+      - "echo '=== CREATING AGGREGATOR CONFIG ===' && printf '[default]\nservice_manifest = \"/root/service.json\"\n[default.chains.cosmos.juno_testnet]\nchain_id = \"uni-7\"\nbech32_prefix = \"juno\"\nrpc_endpoint = \"https://juno-testnet-rpc.polkachu.com\"\ngrpc_endpoint = \"http://juno-testnet-grpc.polkachu.com:12690\"\ngas_price = 0.075\ngas_denom = \"ujunox\"\n[default.registry]\ndomain = \"wa.dev\"\n' > /root/wavs.toml && echo '=== WAVS.TOML ===' && cat /root/wavs.toml && exec wavs --home /root"
+    env:
+      - HOME=/root
+      - RUST_LOG=info
+      - WAVS_MODE=aggregator
+      - WAVS_OPERATOR_URL=http://wavs-operator:8041
+      - WAVS_IPFS_URL=http://ipfs:5001
+      - WAVS_CHAIN_RPC=https://rpc.uni.junonetwork.io:443
+      - WAVS_CONTRACT=juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6
+      - WAVS_CHAIN_ID=uni-7
+    expose:
+      - port: 8040
+        as: 8080
+        to:
+          - global: true
+        proto: tcp
+
+  ipfs:
+    image: ipfs/kubo:v0.37.0
+    env:
+      - IPFS_PROFILE=server
+    expose:
+      - port: 5001
+        as: 5001
+        to:
+          - service: wavs-operator
+          - service: wavs-aggregator
+        proto: tcp
+      - port: 8080
+        as: 8081
+        to:
+          - service: wavs-operator
+          - service: wavs-aggregator
+        proto: tcp
+
+  warg-registry:
+    # Image has warg-server, warg-cli, and junoclaw_wavs_component.wasm baked in
+    # Entrypoint overridden here to fix startup order (server must start before warg config)
+    image: ghcr.io/dragonmonk111/warg-registry:0.1.0
+    command:
+      - /bin/bash
+    args:
+      - -c
+      - "echo '=== Warg Registry Starting ==='; RAWKEY=$(head -c 32 /dev/urandom | base64 -w0); OPKEY=\"ecdsa-p256:$RAWKEY\"; echo \"Operator key: $OPKEY\"; warg-server --listen 0.0.0.0:8090 --content-dir /root/warg-content --operator-key $OPKEY --namespace junoclaw & sleep 10 && warg config --registry http://localhost:8090 --keyring-backend flat-file --overwrite && sed -i 's/\"keyringBackend\"/\"keys\":[\"default\"],\"keyringBackend\"/' /root/.config/warg/config.json && echo '=== Config ===' && cat /root/.config/warg/config.json && mkdir -p /root/.config/warg/keyring && chmod 700 /root/.config/warg/keyring && printf '%s' \"$OPKEY\" > '/root/.config/warg/keyring/service=warg-signing-key&user=default' && chmod 600 '/root/.config/warg/keyring/service=warg-signing-key&user=default' && echo '=== Keyring ===' && cat '/root/.config/warg/keyring/service=warg-signing-key&user=default' && echo '' && echo '=== Publishing ===' && warg publish abort 2>/dev/null || true && warg publish start junoclaw:verifier && warg publish init junoclaw:verifier && warg publish release --name junoclaw:verifier --version 0.1.0 /opt/component.wasm && warg publish submit && echo '=== REGISTRY LIVE: junoclaw:verifier v0.1.0 ===' && wait"
+    expose:
+      - port: 8090
+        as: 8090
+        to:
+          - service: wavs-operator
+        proto: tcp
+
+profiles:
+  compute:
+    wavs-operator:
+      resources:
+        cpu:
+          units: 2
+        memory:
+          size: 4Gi
+        storage:
+          - size: 10Gi
+    wavs-aggregator:
+      resources:
+        cpu:
+          units: 1
+        memory:
+          size: 1Gi
+        storage:
+          - size: 2Gi
+    ipfs:
+      resources:
+        cpu:
+          units: 0.5
+        memory:
+          size: 512Mi
+        storage:
+          - size: 5Gi
+    warg-registry:
+      resources:
+        cpu:
+          units: 0.5
+        memory:
+          size: 512Mi
+        storage:
+          - size: 1Gi
+  placement:
+    akash:
+      pricing:
+        wavs-operator:
+          denom: uakt
+          amount: 100
+        wavs-aggregator:
+          denom: uakt
+          amount: 50
+        ipfs:
+          denom: uakt
+          amount: 25
+        warg-registry:
+          denom: uakt
+          amount: 25
+
+deployment:
+  wavs-operator:
+    akash:
+      profile: wavs-operator
+      count: 1
+  wavs-aggregator:
+    akash:
+      profile: wavs-aggregator
+      count: 1
+  ipfs:
+    akash:
+      profile: ipfs
+      count: 1
+  warg-registry:
+    akash:
+      profile: warg-registry
+      count: 1

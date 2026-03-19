@@ -20,7 +20,7 @@
         "source": {
           "Registry": {
             "registry": {
-              "domain": "wa.dev",
+              "domain": "145.132.96.212:8090",
               "package": "junoclaw:verifier",
               "version": "0.1.0"
             }
@@ -59,7 +59,7 @@
         "source": {
           "Registry": {
             "registry": {
-              "domain": "wa.dev",
+              "domain": "145.132.96.212:8090",
               "package": "junoclaw:verifier",
               "version": "0.1.0"
             }
@@ -98,7 +98,7 @@
         "source": {
           "Registry": {
             "registry": {
-              "domain": "wa.dev",
+              "domain": "145.132.96.212:8090",
               "package": "junoclaw:verifier",
               "version": "0.1.0"
             }
@@ -110,6 +110,123 @@
         },
         "fuel_limit": null,
         "time_limit_seconds": 60,
+        "config": {},
+        "env_keys": []
+      },
+      "submit": {
+        "cosmos": {
+          "chain_name": "juno_testnet",
+          "contract_address": "juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6"
+        }
+      }
+    },
+    "governance-watch": {
+      "trigger": {
+        "cosmos_contract_event": {
+          "address": {
+            "Cosmos": {
+              "bech32_addr": "juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6",
+              "prefix_len": 4
+            }
+          },
+          "chain_name": "juno_testnet",
+          "event_type": "wasm"
+        }
+      },
+      "component": {
+        "source": {
+          "Registry": {
+            "registry": {
+              "domain": "145.132.96.212:8090",
+              "package": "junoclaw:verifier",
+              "version": "0.1.0"
+            }
+          }
+        },
+        "permissions": {
+          "allowed_http_hosts": "all",
+          "file_system": false
+        },
+        "fuel_limit": null,
+        "time_limit_seconds": 30,
+        "config": {},
+        "env_keys": []
+      },
+      "submit": {
+        "cosmos": {
+          "chain_name": "juno_testnet",
+          "contract_address": "juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6"
+        }
+      }
+    },
+    "migration-watch": {
+      "trigger": {
+        "cosmos_contract_event": {
+          "address": {
+            "Cosmos": {
+              "bech32_addr": "juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6",
+              "prefix_len": 4
+            }
+          },
+          "chain_name": "juno_testnet",
+          "event_type": "wasm-code_upgrade_migrate"
+        }
+      },
+      "component": {
+        "source": {
+          "Registry": {
+            "registry": {
+              "domain": "145.132.96.212:8090",
+              "package": "junoclaw:verifier",
+              "version": "0.1.0"
+            }
+          }
+        },
+        "permissions": {
+          "allowed_http_hosts": "all",
+          "file_system": false
+        },
+        "fuel_limit": null,
+        "time_limit_seconds": 30,
+        "config": {},
+        "env_keys": []
+      },
+      "submit": {
+        "cosmos": {
+          "chain_name": "juno_testnet",
+          "contract_address": "juno1k8dxll425mcclacaxhrmkx9w5pznx9w5ggmw53tpj0c009ngfnjstj85k6"
+        }
+      }
+    },
+    "swap-verify": {
+      "trigger": {
+        "cosmos_contract_event": {
+          "address": {
+            "Cosmos": {
+              "bech32_addr": "juno1xn4mtv9cfc7q3zphvstkhqgn4g864pppvq64zvdnmcsen3jwacwqfr6e98",
+              "prefix_len": 4
+            }
+          },
+          "chain_name": "juno_testnet",
+          "event_type": "wasm-swap"
+        }
+      },
+      "component": {
+        "source": {
+          "Registry": {
+            "registry": {
+              "domain": "145.132.96.212:8090",
+              "package": "junoclaw:verifier",
+              "version": "0.1.0"
+            }
+          }
+        },
+        "permissions": {
+          "allowed_http_hosts": "all",
+          "file_system": false
+        },
+        "fuel_limit": null,
+        "time_limit_seconds": 30,
         "config": {},
         "env_keys": []
       },

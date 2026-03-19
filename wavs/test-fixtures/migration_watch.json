@@ -1,0 +1,9 @@
+{
+  "migration_watch": {
+    "proposal_id": "5",
+    "contract_addr": "juno12v0t60msclf3hcj56clrnh575ct35clglqunr489aj0xsvawghvq3wtkkh",
+    "new_code_id": "65",
+    "action_index": "0",
+    "title": "Upgrade Junoswap Factory"
+  }
+}

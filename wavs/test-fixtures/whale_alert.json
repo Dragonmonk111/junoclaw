@@ -1,0 +1,16 @@
+{
+  "whale_alert": {
+    "pair": "juno1xn4mtv9cfc7q3zphvstkhqgn4g864pppvq64zvdnmcsen3jwacwqfr6e98",
+    "sender": "juno1tvpe72amnd3arnh4nhlf3hztx5aqznu6hz5f4m",
+    "offer_asset": "ujunox",
+    "offer_amount": "500000000",
+    "return_asset": "uusdc",
+    "return_amount": "485000000",
+    "spread_amount": "10000000",
+    "fee_amount": "5000000",
+    "reserve_a": "1000000000",
+    "reserve_b": "980000000",
+    "block_height": "11900500",
+    "timestamp": "1742248000"
+  }
+}

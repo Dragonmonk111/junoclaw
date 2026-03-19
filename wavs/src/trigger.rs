@@ -38,6 +38,92 @@ pub enum VerificationTask {
         question: String,
         resolution_criteria: String,
     },
+    /// Verify a swap event from Junoswap v2 pair contract.
+    /// Triggered by wasm-swap events — checks price correctness and manipulation.
+    SwapVerify {
+        pair: String,
+        offer_asset: String,
+        offer_amount: String,
+        return_asset: String,
+        return_amount: String,
+        spread_amount: String,
+        fee_amount: String,
+        reserve_a: String,
+        reserve_b: String,
+    },
+    /// Check pool health for a Junoswap v2 pair.
+    /// Triggered by wasm-provide_liquidity or wasm-withdraw_liquidity events.
+    PoolHealthCheck {
+        pair: String,
+        reserve_a: String,
+        reserve_b: String,
+        total_lp_shares: String,
+        action: String,
+    },
+    /// Produce a TEE-attested price snapshot for a Junoswap v2 pair.
+    /// Can be triggered on schedule or by large swaps.
+    PriceAttestation {
+        pair: String,
+        token_a: String,
+        token_b: String,
+        reserve_a: String,
+        reserve_b: String,
+    },
+
+    // ── Chain Intelligence Module (7-10) ──
+
+    /// 7. Governance surveillance: analyze voting/proposal patterns for anomalies.
+    /// Triggered by wasm events from agent-company (create_proposal, cast_vote, execute_proposal).
+    GovernanceWatch {
+        proposal_id: String,
+        action_type: String,
+        actor: String,
+        proposal_kind: String,
+        yes_weight: String,
+        no_weight: String,
+        total_voted_weight: String,
+        total_weight: String,
+        status: String,
+        voting_deadline_block: String,
+        block_height: String,
+    },
+    /// 8. Migration watchdog: verify contract migrations against DAO approval.
+    /// Triggered by wasm-code_upgrade_migrate events from agent-company.
+    MigrationWatch {
+        proposal_id: String,
+        contract_addr: String,
+        new_code_id: String,
+        action_index: String,
+        title: String,
+    },
+    /// 9. Whale alert: flag large swap activity that could impact pool stability.
+    /// Triggered by wasm-swap events where offer_amount exceeds threshold % of reserves.
+    WhaleAlert {
+        pair: String,
+        sender: String,
+        offer_asset: String,
+        offer_amount: String,
+        return_asset: String,
+        return_amount: String,
+        spread_amount: String,
+        fee_amount: String,
+        reserve_a: String,
+        reserve_b: String,
+        block_height: String,
+        timestamp: String,
+    },
+    /// 10. IBC channel health: monitor channel state and packet relay quality.
+    /// Triggered via WavsPush or periodic RPC query.
+    IbcHealthCheck {
+        channel_id: String,
+        port_id: String,
+        counterparty_channel: String,
+        connection_id: String,
+        state: String,
+        packets_sent: String,
+        packets_recv: String,
+        packets_timeout: String,
+    },
 }
 
 /// Result produced by the component after verification.
@@ -163,6 +249,84 @@ fn parse_cosmos_event(
                 resolution_criteria: get_attr("resolution_criteria").unwrap_or_default(),
             })
         }
+        // Junoswap v2: swap event — verify price correctness
+        t if t.contains("swap") => {
+            Ok(VerificationTask::SwapVerify {
+                pair: get_attr("pair").unwrap_or_default(),
+                offer_asset: get_attr("offer_asset").unwrap_or_default(),
+                offer_amount: get_attr("offer_amount").unwrap_or_default(),
+                return_asset: get_attr("return_asset").unwrap_or_default(),
+                return_amount: get_attr("return_amount").unwrap_or_default(),
+                spread_amount: get_attr("spread_amount").unwrap_or_default(),
+                fee_amount: get_attr("fee_amount").unwrap_or_default(),
+                reserve_a: get_attr("reserve_a").unwrap_or_default(),
+                reserve_b: get_attr("reserve_b").unwrap_or_default(),
+            })
+        }
+        // Junoswap v2: liquidity event — check pool health
+        t if t.contains("provide_liquidity") || t.contains("withdraw_liquidity") => {
+            Ok(VerificationTask::PoolHealthCheck {
+                pair: get_attr("pair").unwrap_or_default(),
+                reserve_a: get_attr("reserve_a").unwrap_or_default(),
+                reserve_b: get_attr("reserve_b").unwrap_or_default(),
+                total_lp_shares: get_attr("lp_shares").unwrap_or_default(),
+                action: event_type.to_string(),
+            })
+        }
+
+        // ── Chain Intelligence Module (7-10) ──
+
+        // 8. Migration watchdog — triggered by code_upgrade_migrate events
+        t if t.contains("code_upgrade_migrate") => {
+            Ok(VerificationTask::MigrationWatch {
+                proposal_id: get_attr("proposal_id").unwrap_or_default(),
+                contract_addr: get_attr("contract_addr").unwrap_or_default(),
+                new_code_id: get_attr("new_code_id").unwrap_or_default(),
+                action_index: get_attr("action_index").unwrap_or_default(),
+                title: get_attr("title").unwrap_or_default(),
+            })
+        }
+
+        // 10. IBC health — triggered by IBC-related events or manual push
+        t if t.contains("channel_open") || t.contains("recv_packet") || t.contains("ibc_health") => {
+            Ok(VerificationTask::IbcHealthCheck {
+                channel_id: get_attr("channel_id").or_else(|_| get_attr("packet_channel")).unwrap_or_default(),
+                port_id: get_attr("port_id").or_else(|_| get_attr("packet_port")).unwrap_or_default(),
+                counterparty_channel: get_attr("counterparty_channel_id").unwrap_or_default(),
+                connection_id: get_attr("connection_id").unwrap_or_default(),
+                state: get_attr("state").unwrap_or_else(|_| "unknown".to_string()),
+                packets_sent: get_attr("packets_sent").unwrap_or_else(|_| "0".to_string()),
+                packets_recv: get_attr("packets_recv").unwrap_or_else(|_| "0".to_string()),
+                packets_timeout: get_attr("packets_timeout").unwrap_or_else(|_| "0".to_string()),
+            })
+        }
+
+        // 7. Governance watch — triggered by standard wasm events with governance actions
+        // This MUST come after all specific event_type matches since "wasm" is generic.
+        t if t == "wasm" || t == "execute" => {
+            let action = get_attr("action").unwrap_or_default();
+            match action.as_str() {
+                "create_proposal" | "cast_vote" | "execute_proposal" | "expire_proposal" => {
+                    Ok(VerificationTask::GovernanceWatch {
+                        proposal_id: get_attr("proposal_id").unwrap_or_default(),
+                        action_type: action,
+                        actor: get_attr("voter")
+                            .or_else(|_| get_attr("_contract_address"))
+                            .unwrap_or_default(),
+                        proposal_kind: get_attr("kind").unwrap_or_default(),
+                        yes_weight: get_attr("yes_weight").unwrap_or_else(|_| "0".to_string()),
+                        no_weight: get_attr("no_weight").unwrap_or_else(|_| "0".to_string()),
+                        total_voted_weight: get_attr("total_voted_weight").unwrap_or_else(|_| "0".to_string()),
+                        total_weight: get_attr("total_weight").unwrap_or_else(|_| "10000".to_string()),
+                        status: get_attr("status").unwrap_or_default(),
+                        voting_deadline_block: get_attr("voting_deadline_block").unwrap_or_default(),
+                        block_height: get_attr("block_height").unwrap_or_default(),
+                    })
+                }
+                _ => Err(anyhow!("Non-governance wasm event action: {}", action)),
+            }
+        }
+
         _ => Err(anyhow!("Unknown Cosmos event type: {}", event_type)),
     }
 }

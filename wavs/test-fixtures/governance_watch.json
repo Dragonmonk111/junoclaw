@@ -1,0 +1,15 @@
+{
+  "governance_watch": {
+    "proposal_id": "6",
+    "action_type": "cast_vote",
+    "actor": "juno1tvpe72amnd3arnh4nhlf3hztx5aqznu6hz5f4m",
+    "proposal_kind": "weight_change",
+    "yes_weight": "10000",
+    "no_weight": "0",
+    "total_voted_weight": "10000",
+    "total_weight": "10000",
+    "status": "Passed",
+    "voting_deadline_block": "12000000",
+    "block_height": "11900000"
+  }
+}
