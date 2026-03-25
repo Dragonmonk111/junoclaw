@@ -4,6 +4,10 @@
 
 ---
 
+![A lone figure walks away from a glowing terminal into a vast desert under a new moon. Hand-drawn 2D art, late 1980s anime cel style, ink outlines, muted neon palette, trippy starfield.](images/01_architect_leaves.png)
+
+<!-- MIDJOURNEY PROMPT: hand drawn 2d illustration, late 1980s anime cel art style, a lone figure in a hooded robe walking away from a glowing CRT terminal in a vast desert, new moon overhead, ink outlines, muted neon purple and teal palette, trippy starfield with geometric constellations, Akira meets Moebius, VHS grain texture, no text -->
+
 On the night of the new moon, we asked the question.
 
 The voting period ended March 24, 2026 at 00:08 UTC. The answer: **[FINAL_YES_PCT]% YES.** Final turnout: **[FINAL_TURNOUT]%** (quorum: 33.4%). The chain spoke.
@@ -15,6 +19,8 @@ No funds were requested. No code was executed. The community was asked whether t
 An hour after the vote finalized, the handoff executed. Seven transactions. One command. The deploy wallet became a tombstone. The architect left.
 
 This is what happened.
+
+The image above is what it felt like. A terminal in the desert. A question mark blinking on the screen. The whole chain watching.
 
 ---
 
@@ -33,6 +39,12 @@ Here's what executed:
 5. **Governance handoff** — (Next) Dimi submits the first `WeightChange` proposal, redistributing voting power from the founder to the 13
 
 After step 4, the architect has no admin powers, no voting weight, no recovery path. The wallet that deployed every contract is now a dead address with 13 indivisible tokens on it.
+
+![An open hand releasing 13 glowing seeds into the wind. Each seed trails a different colored light. Hand-drawn 2D, late 80s fantasy illustration style, cross-hatching, psychedelic color bleeding.](images/02_thirteen_seeds.png)
+
+<!-- MIDJOURNEY PROMPT: hand drawn 2d illustration, late 1980s fantasy book cover style, an open human hand releasing 13 glowing seeds into swirling wind, each seed trailing a different colored light stream, cross-hatching ink technique, psychedelic color bleeding at the edges, warm amber and violet tones, Frazetta meets Jean Giraud Moebius, film grain, no text -->
+
+Thirteen seeds. Thirteen seats. Each one a different color because each one will grow into something the architect can't predict. That's the point — you don't plant a garden and then tell each flower what to be.
 
 ---
 
@@ -85,6 +97,42 @@ The deploy wallet mnemonic is deleted. The wasmd admin is transferred on-chain �
 
 There is no button. There is a tree.
 
+![A massive red button on a pedestal, cracked down the middle, with a young tree growing through the crack. Roots wrap around the pedestal. Hand-drawn 2D, early 90s underground comic style, heavy ink, halftone dots.](images/03_button_becomes_tree.png)
+
+<!-- MIDJOURNEY PROMPT: hand drawn 2d illustration, early 1990s underground comic book style, a massive red button on a stone pedestal cracked down the middle, a young sapling tree growing through the crack with roots wrapping around the base, heavy ink lines, halftone dot shading, limited color palette red green black white, Ralph Steadman meets Katsuhiro Otomo, slightly unsettling but hopeful, no text -->
+
+Every governance system in crypto has a button somewhere. A multisig key. A foundation wallet. An emergency shutdown. JunoClaw's contribution to the conversation is simple: what if you just broke the button and planted something alive in its place?
+
+---
+
+## What Is Deterministic AI Verifiability?
+
+This is the core idea. If you take nothing else from this article, take this.
+
+**Deterministic** means: given the same input, the same code always produces the same output. No randomness. No "it depends." The answer is the answer.
+
+**AI verifiability** means: you can *prove* that an AI agent ran a specific piece of code, on specific input, and got a specific result — and that nobody tampered with any of it.
+
+Put them together: **Deterministic AI verifiability** means an AI agent's decisions can be independently reproduced and cryptographically proven. The agent runs inside tamper-proof hardware (a Trusted Execution Environment). The hardware signs a receipt — "this exact code ran on this exact input and produced this exact output." That receipt goes on-chain, where anyone can check it. Forever.
+
+This is not "trust us, we checked." This is not an audit log that someone could edit. This is the CPU itself producing a mathematical proof that the computation happened exactly as claimed. If anyone re-runs the same input through the same code, they get the same output. Deterministic. Verifiable. Permanent.
+
+![A robot inside a transparent glass cube, carefully placing a stamped document onto an infinite wall of receipts. Outside the cube, dozens of eyes watch. Hand-drawn 2D, late 80s Japanese illustration, watercolor wash, dreamlike.](images/04_glass_box_robot.png)
+
+<!-- MIDJOURNEY PROMPT: hand drawn 2d illustration, late 1980s Japanese watercolor illustration style, a small friendly robot inside a transparent glass cube carefully stamping a document, outside the cube dozens of floating disembodied eyes watching from all angles, an infinite wall of pinned receipts stretching into the distance behind, dreamlike watercolor wash, soft teal and gold palette, Hayao Miyazaki meets Katsuhiro Otomo, gentle and precise, no text -->
+
+The glass box. That's the TEE — the Trusted Execution Environment. The robot can't get out. Nobody can get in. The stamp is the attestation. The wall of receipts is the blockchain. And the eyes? That's you. Anyone. Everyone. Watching is the whole point.
+
+**Why this matters:** Every AI system today asks you to trust the operator. Trust that the model did what they say. Trust that the output wasn't modified. Trust that the logs are real. Deterministic verifiability replaces trust with proof. The agent either did the thing or it didn't, and the chain knows which.
+
+> **Tweet-length version:**
+>
+> Deterministic AI verifiability: same input + same code = same output, every time — proven by tamper-proof hardware, receipted on-chain. Not "trust us." Proof. That's what @JunoClaw ships.
+
+> **Explain it to a 5-year-old:**
+>
+> Imagine you ask a robot to count your candy. The robot goes into a special glass box where nobody can touch it. It counts the candy, writes the number on a piece of paper, and the glass box stamps the paper to prove nobody cheated. Then we put that paper on a wall where everyone can see it forever. If anyone else counts the same candy, they get the same number. That's deterministic AI verifiability — the robot can prove it counted right, and everyone can check.
+
 ---
 
 ## Open Source All the Way Up
@@ -94,6 +142,12 @@ Here's what most people miss about open source: it's usually only open at the bo
 The smart contracts are open. The libraries are open. The protocols are open. But the deployment keys? Private. The governance power? Concentrated. The AI models making decisions? Black boxes running on AWS behind an API key.
 
 Open source at the bottom, closed control at the top. A glass floor with opaque ceilings.
+
+![A cross-section of a skyscraper: the bottom floors are transparent glass, the middle floors are frosted, the top floor is a solid black vault. A single figure on the roof holds all the keys. Hand-drawn 2D, late 80s cyberpunk manga, heavy crosshatch, neon against black.](images/05_glass_floor_opaque_ceiling.png)
+
+<!-- MIDJOURNEY PROMPT: hand drawn 2d illustration, late 1980s cyberpunk manga style, cross-section of a tall skyscraper, bottom floors are transparent glass showing code and circuits, middle floors are frosted and obscured, top floor is a solid black vault with a single shadowy figure holding a ring of keys, heavy crosshatch shading, neon pink and electric blue against deep black, Masamune Shirow Ghost in the Shell aesthetic, architectural precision, no text -->
+
+This is what most of crypto looks like if you squint. Glass floors. Opaque ceilings. The code is open but the power isn't.
 
 JunoClaw is built on a different thesis: **open source all the way up.** Vertically. Every layer.
 
@@ -146,6 +200,12 @@ The code is Apache 2.0. The contracts are on GitHub. The attestation TX is on-ch
 
 This isn't about JunoClaw. This is about proving that the pattern works — that you can build AI systems where the power structure is as transparent as the source code.
 
+![A tree with 13 main branches, each branch leading to a different tiny world — a marketplace, a laboratory, a garden, a forge. Roots reach down into blockchain blocks. Hand-drawn 2D, early 90s prog rock album art, extremely detailed, psychedelic.](images/06_tree_of_worlds.png)
+
+<!-- MIDJOURNEY PROMPT: hand drawn 2d illustration, early 1990s progressive rock album cover art style, a massive cosmic tree with exactly 13 main branches, each branch leading to a different tiny floating world like a marketplace a laboratory a garden a forge, roots reaching down into glowing cubic blockchain blocks, extremely detailed ink linework, psychedelic rainbow color palette, Roger Dean meets Moebius meets Akira Toriyama, cosmic scale, awe-inspiring, no text -->
+
+Thirteen branches. Thirteen worlds. Each one built by whoever sits in that seat — not by the person who planted the tree. The roots are the chain. The branches are possibility. And the worlds at the tips? Those don't exist yet. That's the invitation.
+
 ---
 
 ## The Numbers
@@ -154,8 +214,8 @@ For the record:
 
 | Metric | Value |
 |--------|-------|
-| **Final vote** | [FINAL_YES_PCT]% YES |
-| **Turnout** | [FINAL_TURNOUT]% (quorum: 33.4%) |
+| **Final vote** | 91.71% YES |
+| **Turnout** | 59.56% |
 | **No with Veto** | [FINAL_VETO]% |
 | **Voting period** | March 19 – March 24, 2026 |
 | **Handoff executed** | March 24, 2026 at [TIME] UTC |
@@ -185,7 +245,7 @@ After the 13 are seated, the architect has symbolic weight (3/10000) — enough 
 
 ## A Note
 
-I've been building on Juno since December 2021. One validator, one laptop, a lot of late nights.
+One validator, one laptop, a lot of late nights.
 
 When Oppenheimer watched Trinity, he quoted the Bhagavad Gita: *"Now I am become Death, the destroyer of worlds."* It's the most famous misquote in science — he was talking about the weight of creation, not destruction. The weight of building something powerful enough that the right thing to do is hand it over.
 
@@ -199,9 +259,19 @@ To anyone reading this who builds systems — consider making them open all the 
 
 *Vairagya* — detachment. Not indifference. The willingness to let go of what you built, because holding on would make it smaller than it needs to be.
 
+![A small gravestone in a garden, marked with the number 13. Thirteen fireflies rise from it into a night sky full of constellations that look like circuit diagrams. Hand-drawn 2D, late 80s Ghibli-esque watercolor, peaceful and luminous.](images/07_tombstone_garden.png)
+
+<!-- MIDJOURNEY PROMPT: hand drawn 2d illustration, late 1980s Studio Ghibli watercolor style, a small simple gravestone in a lush garden marked only with the number 13, thirteen fireflies rising from the grass around it into a deep night sky, the constellations above form circuit diagram patterns, peaceful luminous atmosphere, soft greens and deep indigo, Hayao Miyazaki aesthetic, nostalgic and hopeful, no text -->
+
+Neo's tombstone. Thirteen tokens. Thirteen fireflies. The garden doesn't mourn the gardener — it grows.
+
 **— VairagyaNodes**
 
 ---
+
+![A hand planting a single seed in cracked earth, with a massive tree already visible as a ghost-image above it, reaching toward stars. Hand-drawn 2D, late 80s cosmic fantasy, Moebius linework, the future visible inside the present.](images/08_seed_and_ghost_tree.png)
+
+<!-- MIDJOURNEY PROMPT: hand drawn 2d illustration, late 1980s cosmic fantasy style, a weathered hand planting a single glowing seed in cracked dry earth, above the seed a massive translucent ghost-image of the fully grown tree already visible reaching toward stars and galaxies, Moebius Jean Giraud linework, the future visible inside the present moment, warm earth tones below transitioning to cosmic purple and gold above, deeply spiritual and psychedelic, no text -->
 
 *Built in the open. Verified by hardware. Governed by trust. Released by choice.*
 

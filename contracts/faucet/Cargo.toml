@@ -1,0 +1,22 @@
+[package]
+name = "faucet"
+version = "0.1.0"
+edition = "2021"
+description = "JunoClaw testnet faucet — 100 JUNOX per first-time builder"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+junoclaw-common = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }
+anyhow = { workspace = true }

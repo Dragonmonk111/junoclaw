@@ -7,6 +7,8 @@ members = [
     "agent-company",
     "junoswap-factory",
     "junoswap-pair",
+    "faucet",
+    "builder-grant",
 ]
 resolver = "2"
 
