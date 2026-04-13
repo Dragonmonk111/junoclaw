@@ -8,6 +8,7 @@ node_modules/
 # Environment / secrets
 .env
 deployed.json
+parliament-state.json
 
 # Bud-seal keys and secrets — NEVER commit
 *.key

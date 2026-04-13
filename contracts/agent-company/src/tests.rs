@@ -8,6 +8,22 @@ use crate::state::{MemberRole, PaymentRecord, Proposal, ProposalStatus, VoteOpti
 
 const UJUNO: &str = "ujuno";
 
+/// Replicates the on-chain SHA-256 attestation hash for test use.
+fn compute_attestation_hash(task_type: &str, data_hash: &str) -> String {
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(b"junoclaw-wavs-v0.1.0");
+    hasher.update(task_type.as_bytes());
+    hasher.update(data_hash.as_bytes());
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(64);
+    for byte in digest.iter() {
+        use std::fmt::Write;
+        let _ = write!(hex, "{:02x}", byte);
+    }
+    hex
+}
+
 fn mk(app: &App, label: &str) -> Addr { app.api().addr_make(label) }
 
 fn two_member_msg(alice: &Addr, bob: &Addr) -> Vec<MemberInput> {
@@ -642,11 +658,11 @@ fn test_execute_passed_proposal() {
     let members = two_member_msg(&alice, &bob);
     let contract = store_and_instantiate(&mut app, &admin, members, None);
 
-    // Propose weight change via new governance system
+    // Propose weight change via new governance system (within max_weight_delta=2000)
     let new_members = vec![
-        MemberInput { addr: alice.to_string(), weight: 3334, role: MemberRole::Human },
-        MemberInput { addr: bob.to_string(), weight: 3333, role: MemberRole::Agent },
-        MemberInput { addr: charlie.to_string(), weight: 3333, role: MemberRole::Agent },
+        MemberInput { addr: alice.to_string(), weight: 4000, role: MemberRole::Human },
+        MemberInput { addr: bob.to_string(), weight: 3000, role: MemberRole::Agent },
+        MemberInput { addr: charlie.to_string(), weight: 3000, role: MemberRole::Agent },
     ];
 
     app.execute_contract(
@@ -1191,14 +1207,17 @@ fn test_submit_attestation_for_outcome_create() {
         &[],
     ).unwrap();
 
-    // Submit attestation from admin (authorized)
+    // Submit attestation from admin (authorized) — with correctly computed hash
+    let task_type = "outcome_verify";
+    let data_hash = "abc123def456";
+    let att_hash = compute_attestation_hash(task_type, data_hash);
     app.execute_contract(
         admin.clone(), contract.clone(),
         &ExecuteMsg::SubmitAttestation {
             proposal_id: 1,
-            task_type: "outcome_verify".to_string(),
-            data_hash: "abc123def456".to_string(),
-            attestation_hash: "wavs_att_hash_001".to_string(),
+            task_type: task_type.to_string(),
+            data_hash: data_hash.to_string(),
+            attestation_hash: att_hash.clone(),
         },
         &[],
     ).unwrap();
@@ -1210,9 +1229,9 @@ fn test_submit_attestation_for_outcome_create() {
     ).unwrap();
     let att = att.unwrap();
     assert_eq!(att.proposal_id, 1);
-    assert_eq!(att.task_type, "outcome_verify");
-    assert_eq!(att.data_hash, "abc123def456");
-    assert_eq!(att.attestation_hash, "wavs_att_hash_001");
+    assert_eq!(att.task_type, task_type);
+    assert_eq!(att.data_hash, data_hash);
+    assert_eq!(att.attestation_hash, att_hash);
     assert_eq!(att.submitter, admin);
 }
 
@@ -1262,7 +1281,7 @@ fn test_submit_attestation_unauthorized_rejected() {
         &[],
     ).unwrap_err();
     let contract_err = err.downcast::<ContractError>().unwrap();
-    assert!(matches!(contract_err, ContractError::UnauthorizedRandomness {}));
+    assert!(matches!(contract_err, ContractError::Unauthorized {}));
 }
 
 #[test]
@@ -1298,26 +1317,30 @@ fn test_submit_attestation_duplicate_rejected() {
         &[],
     ).unwrap();
 
-    // First attestation — succeeds
+    // First attestation — succeeds (with correctly computed hash)
+    let task_type = "outcome_verify";
+    let data_hash = "hash1";
+    let att_hash = compute_attestation_hash(task_type, data_hash);
     app.execute_contract(
         admin.clone(), contract.clone(),
         &ExecuteMsg::SubmitAttestation {
             proposal_id: 1,
-            task_type: "outcome_verify".to_string(),
-            data_hash: "hash1".to_string(),
-            attestation_hash: "att1".to_string(),
+            task_type: task_type.to_string(),
+            data_hash: data_hash.to_string(),
+            attestation_hash: att_hash,
         },
         &[],
     ).unwrap();
 
     // Second attestation — should fail (duplicate)
+    let att_hash2 = compute_attestation_hash(task_type, "hash2");
     let err = app.execute_contract(
         admin.clone(), contract.clone(),
         &ExecuteMsg::SubmitAttestation {
             proposal_id: 1,
-            task_type: "outcome_verify".to_string(),
+            task_type: task_type.to_string(),
             data_hash: "hash2".to_string(),
-            attestation_hash: "att2".to_string(),
+            attestation_hash: att_hash2,
         },
         &[],
     ).unwrap_err();
@@ -1411,8 +1434,6 @@ fn test_code_upgrade_requires_supermajority() {
 
 #[test]
 fn test_code_upgrade_empty_actions_rejected() {
-    use crate::state::CodeUpgradeAction;
-
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let alice = mk(&app, "alice");

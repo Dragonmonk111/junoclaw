@@ -50,9 +50,4 @@ What happens next is up to the tree.
 - **Bridge scripts** — CosmJS tooling for all chain operations
 
 ## What's Next
-
-1. Dimi submits WeightChange proposal — 13 buds get their seats
-2. Faucet + builder-grant deploy to uni-7
-3. Mainnet deployment (validator wallet or Dimi)
-4. AstroAgent 3D frontend launch
-5. The tree grows.
+- Dimi submits WeightChange proposal — 13 buds get their seat.

@@ -78,13 +78,18 @@ export async function findUnattestedProposals(
 
   try {
     // List recent proposals
-    const proposals: any[] = await client.queryContractSmart(contractAddr, {
+    const proposals = await client.queryContractSmart(contractAddr, {
       list_proposals: { start_after: null, limit: 50 },
     });
 
-    const proposalList = Array.isArray(proposals)
+    const proposalList: any[] = Array.isArray(proposals)
       ? proposals
-      : proposals.proposals || [];
+      : (typeof proposals === "object" &&
+          proposals !== null &&
+          "proposals" in proposals &&
+          Array.isArray((proposals as { proposals?: unknown }).proposals))
+        ? (proposals as { proposals: any[] }).proposals
+        : [];
 
     for (const p of proposalList) {
       // Only care about executed proposals

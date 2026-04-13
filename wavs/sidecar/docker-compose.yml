@@ -1,0 +1,101 @@
+# JunoClaw WAVS Validator Sidecar
+#
+# Runs alongside a Juno validator node. Requires TEE hardware (Intel SGX or AMD SEV).
+# Without TEE, there is no point running this — use the Akash operator instead.
+#
+# Usage:
+#   1. Copy .env.example → .env and fill in your values
+#   2. Verify TEE hardware (run one of these on your host):
+#        Intel SGX:   ls /dev/sgx_enclave && echo "SGX ready"
+#        AMD SEV:     ls /dev/sev && echo "SEV ready"
+#        AMD SEV-SNP: dmesg | grep SEV-SNP
+#   3. docker compose up -d
+#   4. docker compose logs -f wavs-sidecar
+#
+# Architecture:
+#   - Single container, self-contained (no aggregator or IPFS needed)
+#   - Watches Juno chain events via validator's local RPC
+#   - Runs WASI component INSIDE the TEE enclave
+#   - Submits hardware-signed attestation TX to Juno
+#   - Does NOT touch consensus or block production
+#
+# Networking:
+#   This compose file uses host networking by default (simplest for bare-metal validators).
+#   If you prefer bridge networking for tighter isolation, see the "BRIDGE NETWORKING"
+#   section commented out below. Both options are fully supported.
+#
+# See docs/01_VALIDATOR_SIDECARS.md for full architecture details.
+
+services:
+  wavs-sidecar:
+    image: ghcr.io/lay3rlabs/wavs:1.5.1
+    container_name: junoclaw-wavs-sidecar
+    restart: unless-stopped
+
+    # ─────────────────────────────────────────────
+    # TEE HARDWARE DEVICES
+    # ─────────────────────────────────────────────
+    # Uncomment the section matching your CPU. The WAVS runtime auto-detects
+    # the TEE type once the device is mounted — no additional config needed.
+    #
+    # To check what you have:
+    #   Intel: ls -la /dev/sgx_enclave /dev/sgx_provision 2>/dev/null
+    #   AMD:   ls -la /dev/sev 2>/dev/null
+    #   CPU:   lscpu | grep -i "model name"
+    #
+    # Common hardware:
+    #   Intel Xeon (Ice Lake / Sapphire Rapids+) → SGX
+    #   AMD EPYC (Milan / Genoa+)                → SEV / SEV-SNP
+    #   Hetzner AX-series, OVH Advance, Equinix c3.medium — typically have one of these
+    devices:
+      # ── Intel SGX (default) ──
+      - /dev/sgx_enclave:/dev/sgx_enclave
+      - /dev/sgx_provision:/dev/sgx_provision
+      #
+      # ── AMD SEV ──
+      # Uncomment these and comment out the SGX lines above:
+      # - /dev/sev:/dev/sev
+      #
+      # ── AMD SEV-SNP (strongest isolation) ──
+      # Same device as SEV. SNP is detected automatically if the CPU supports it.
+      # - /dev/sev:/dev/sev
+
+    environment:
+      - WAVS_MODE=operator
+      - WAVS_CHAIN_RPC=${WAVS_CHAIN_RPC:-http://localhost:26657}
+      - WAVS_CONTRACT=${WAVS_CONTRACT}
+      - WAVS_CHAIN_ID=${WAVS_CHAIN_ID:-uni-7}
+      - WAVS_COMPONENT_REGISTRY=${WAVS_COMPONENT_REGISTRY:-wa.dev}
+      - WAVS_SERVICE_ID=${WAVS_SERVICE_ID}
+      - RUST_LOG=${RUST_LOG:-info}
+      - HOME=/root
+    env_file:
+      - .env
+    volumes:
+      - sidecar-data:/root/.wavs
+
+    # ─────────────────────────────────────────────
+    # NETWORKING — Option A: Host (default)
+    # ─────────────────────────────────────────────
+    # Container shares the host's network stack. localhost:26657 reaches junod directly.
+    # Pros: Zero config, lowest latency, works on bare metal out of the box
+    # Cons: Container can see all host ports (less isolation)
+    # Best for: Validators running junod on bare metal with systemd
+    network_mode: host
+
+    # ─────────────────────────────────────────────
+    # NETWORKING — Option B: Bridge (tighter isolation)
+    # ─────────────────────────────────────────────
+    # Uncomment below and comment out `network_mode: host` above.
+    # The container can only reach the host via the explicit gateway.
+    # Pros: Container isolated — only reaches what's mapped. Standard Docker security.
+    # Cons: Requires extra_hosts workaround on Linux. Slightly more config.
+    # Best for: Multi-service validator setups, cloud VMs, security-conscious operators
+    #
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+    # # Then set in .env: WAVS_CHAIN_RPC=http://host.docker.internal:26657
+
+volumes:
+  sidecar-data:
+    driver: local

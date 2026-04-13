@@ -9,6 +9,7 @@ members = [
     "junoswap-pair",
     "faucet",
     "builder-grant",
+    "zk-verifier",
 ]
 resolver = "2"
 
@@ -24,6 +25,17 @@ cw-multi-test = "2.3"
 anyhow = "1.0"
 sha2 = "0.10"
 junoclaw-common = { path = "junoclaw-common" }
+
+# Arkworks ZK ecosystem (pinned for zk-verifier)
+ark-bn254 = "0.5"
+ark-groth16 = "0.5"
+ark-ec = "0.5"
+ark-ff = "0.5"
+ark-serialize = { version = "0.5", features = ["derive"] }
+ark-std = "0.5"
+ark-relations = "0.5"
+ark-snark = "0.5"
+ark-r1cs-std = "0.5"
 
 [profile.release]
 opt-level = 3

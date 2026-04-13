@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     entry_point, to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response,
-    StdResult, Uint128,
+    StdResult, Uint128, WasmMsg,
 };
 use cw2::{get_contract_version, set_contract_version};
 
@@ -177,10 +177,45 @@ fn execute_complete(
         Ok(s)
     })?;
 
-    Ok(Response::new()
+    // Retrieve the task record for agent_id (needed for registry callback)
+    let task = TASKS.load(deps.storage, task_id)?;
+
+    let mut response = Response::new()
         .add_attribute("action", "complete_task")
         .add_attribute("task_id", task_id.to_string())
-        .add_attribute("output_hash", output_hash))
+        .add_attribute("output_hash", output_hash);
+
+    // ── Status coherence: atomic callbacks ──
+    // Callback 1: Confirm the escrow obligation (if escrow is wired)
+    if let Some(escrow_addr) = &config.registry.escrow {
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "snake_case")]
+        enum EscrowMsg { Confirm { task_id: u64, tx_hash: Option<String> } }
+        let confirm_msg = WasmMsg::Execute {
+            contract_addr: escrow_addr.to_string(),
+            msg: to_json_binary(&EscrowMsg::Confirm { task_id, tx_hash: None })?,
+            funds: vec![],
+        };
+        response = response.add_message(confirm_msg);
+    }
+
+    // Callback 2: Increment agent tasks in registry (if wired via ContractRegistry)
+    if let Some(registry_addr) = &config.registry.agent_registry {
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "snake_case")]
+        enum RegistryMsg { IncrementTasks { agent_id: u64, success: bool } }
+        let increment_msg = WasmMsg::Execute {
+            contract_addr: registry_addr.to_string(),
+            msg: to_json_binary(&RegistryMsg::IncrementTasks {
+                agent_id: task.agent_id,
+                success: true,
+            })?,
+            funds: vec![],
+        };
+        response = response.add_message(increment_msg);
+    }
+
+    Ok(response)
 }
 
 fn execute_fail(
@@ -211,9 +246,44 @@ fn execute_fail(
         Ok(s)
     })?;
 
-    Ok(Response::new()
+    // Retrieve the task record for agent_id (needed for registry callback)
+    let task = TASKS.load(deps.storage, task_id)?;
+
+    let mut response = Response::new()
         .add_attribute("action", "fail_task")
-        .add_attribute("task_id", task_id.to_string()))
+        .add_attribute("task_id", task_id.to_string());
+
+    // ── Status coherence: atomic callbacks ──
+    // Callback: Increment agent tasks with success=false (if wired via ContractRegistry)
+    if let Some(registry_addr) = &config.registry.agent_registry {
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "snake_case")]
+        enum RegistryMsg { IncrementTasks { agent_id: u64, success: bool } }
+        let increment_msg = WasmMsg::Execute {
+            contract_addr: registry_addr.to_string(),
+            msg: to_json_binary(&RegistryMsg::IncrementTasks {
+                agent_id: task.agent_id,
+                success: false,
+            })?,
+            funds: vec![],
+        };
+        response = response.add_message(increment_msg);
+    }
+
+    // Callback: Cancel the escrow obligation (if escrow is wired)
+    if let Some(escrow_addr) = &config.registry.escrow {
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "snake_case")]
+        enum EscrowMsg { Cancel { task_id: u64 } }
+        let cancel_msg = WasmMsg::Execute {
+            contract_addr: escrow_addr.to_string(),
+            msg: to_json_binary(&EscrowMsg::Cancel { task_id })?,
+            funds: vec![],
+        };
+        response = response.add_message(cancel_msg);
+    }
+
+    Ok(response)
 }
 
 fn execute_cancel(
@@ -271,7 +341,7 @@ fn execute_remove_operator(
         return Err(ContractError::Unauthorized {});
     }
     let addr = deps.api.addr_validate(&operator)?;
-    config.operators.retain(|o| o != &addr);
+    config.operators.retain(|o| *o != addr);
     CONFIG.save(deps.storage, &config)?;
     Ok(Response::new()
         .add_attribute("action", "remove_operator")

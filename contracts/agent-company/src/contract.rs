@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     entry_point, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, Event, MessageInfo,
-    Order, Response, StdResult, Uint128, WasmMsg,
+    Order, QueryRequest, Response, StdError, StdResult, Uint128, WasmMsg, WasmQuery,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Bound;
@@ -12,7 +12,8 @@ use crate::msg::{
 use crate::state::{
     Attestation, CodeUpgradeAction, Config, Member, NoisCallback, PaymentRecord,
     PendingSortition, Proposal, ProposalKind, ProposalStatus, SortitionRound, Vote, VoteOption,
-    WeightProposal, ATTESTATIONS, CONFIG, MEMBER_EARNINGS, PAYMENT_HISTORY, PENDING_SORTITION,
+    WeightProposal, ATTESTATIONS, CONFIG, LAST_WEIGHT_CHANGE_BLOCK, MEMBER_EARNINGS,
+    PAYMENT_HISTORY, PENDING_SORTITION,
     PROPOSAL, PROPOSALS, PROPOSAL_SEQ, SORTITION_ROUNDS, SORTITION_SEQ,
 };
 use sha2::{Sha256, Digest};
@@ -88,10 +89,14 @@ pub fn instantiate(
         nois_proxy,
         supermajority_quorum_percent: msg.supermajority_quorum_percent.unwrap_or(67),
         dex_factory: None,
+        max_weight_delta: 2000,
+        weight_change_cooldown_blocks: 500,
+        min_member_weight: 1,
     })?;
     PROPOSAL.save(deps.storage, &None)?;
     PROPOSAL_SEQ.save(deps.storage, &0u64)?;
     SORTITION_SEQ.save(deps.storage, &0u64)?;
+    LAST_WEIGHT_CHANGE_BLOCK.save(deps.storage, &0u64)?;
 
     Ok(Response::new()
         .add_attribute("action", "instantiate")
@@ -219,7 +224,41 @@ fn execute_create_proposal(
     // Convert msg-level ProposalKind (strings) to state-level (validated Addrs)
     let kind = match kind_msg {
         ProposalKindMsg::WeightChange { members } => {
+            // ── Variable 3: cooldown check ──
+            let last_change = LAST_WEIGHT_CHANGE_BLOCK.load(deps.storage).unwrap_or(0);
+            if last_change > 0 && env.block.height < last_change + cfg.weight_change_cooldown_blocks {
+                return Err(ContractError::Std(StdError::generic_err(
+                    format!(
+                        "weight change cooldown: {} blocks remaining",
+                        (last_change + cfg.weight_change_cooldown_blocks).saturating_sub(env.block.height)
+                    ),
+                )));
+            }
             let parsed = parse_members(&deps, members)?;
+            // ── Variable 3: delta cap + floor check ──
+            for new_m in &parsed {
+                // Floor check
+                if new_m.weight < cfg.min_member_weight {
+                    return Err(ContractError::Std(StdError::generic_err(
+                        format!(
+                            "member {} weight {} below min_member_weight {}",
+                            new_m.addr, new_m.weight, cfg.min_member_weight
+                        ),
+                    )));
+                }
+                // Delta cap check against current members
+                if let Some(old_m) = cfg.members.iter().find(|m| m.addr == new_m.addr) {
+                    let delta = new_m.weight.abs_diff(old_m.weight);
+                    if delta > cfg.max_weight_delta {
+                        return Err(ContractError::Std(StdError::generic_err(
+                            format!(
+                                "member {} weight delta {} exceeds max_weight_delta {}",
+                                new_m.addr, delta, cfg.max_weight_delta
+                            ),
+                        )));
+                    }
+                }
+            }
             ProposalKind::WeightChange { members: parsed }
         }
         ProposalKindMsg::WavsPush { task_description, execution_tier, escrow_amount } => {
@@ -415,6 +454,8 @@ fn execute_execute_proposal(
         ProposalKind::WeightChange { members } => {
             cfg.members = members.clone();
             CONFIG.save(deps.storage, &cfg)?;
+            // ── Variable 3: record cooldown timestamp ──
+            LAST_WEIGHT_CHANGE_BLOCK.save(deps.storage, &env.block.height)?;
             response = response.add_attribute("kind", "weight_change");
         }
         ProposalKind::WavsPush { task_description, execution_tier, escrow_amount } => {
@@ -856,7 +897,7 @@ fn execute_submit_attestation(
     let is_governance = cfg.governance.as_ref().map(|g| *g == info.sender).unwrap_or(false);
     let is_wavs_bridge = cfg.task_ledger.as_ref().map(|tl| *tl == info.sender).unwrap_or(false);
     if !is_admin && !is_governance && !is_wavs_bridge {
-        return Err(ContractError::UnauthorizedRandomness {});
+        return Err(ContractError::Unauthorized {});
     }
 
     // Verify the proposal exists and was executed (i.e. the trigger was emitted)
@@ -869,9 +910,55 @@ fn execute_submit_attestation(
     // Only WavsPush and OutcomeCreate proposals accept attestations
     match &proposal.kind {
         ProposalKind::WavsPush { .. } | ProposalKind::OutcomeCreate { .. } => {}
-        _ => return Err(ContractError::Std(cosmwasm_std::StdError::generic_err(
+        _ => return Err(ContractError::Std(StdError::generic_err(
             format!("proposal {} is not a verifiable task type", proposal_id),
         ))),
+    }
+
+    // ── Status coherence: validate task is Completed in task-ledger ──
+    if let Some(task_ledger) = &cfg.task_ledger {
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "snake_case")]
+        enum TaskLedgerQuery { GetTask { task_id: u64 } }
+        let task_query = WasmQuery::Smart {
+            contract_addr: task_ledger.to_string(),
+            msg: to_json_binary(&TaskLedgerQuery::GetTask { task_id: proposal_id })?,
+        };
+        // If the task exists, verify it's Completed
+        if let Ok(task) = deps.querier.query::<junoclaw_common::TaskRecord>(
+            &QueryRequest::Wasm(task_query)
+        ) {
+            if task.status != junoclaw_common::TaskStatus::Completed {
+                return Err(ContractError::Std(StdError::generic_err(
+                    format!("task {} is {:?}, not Completed — cannot attest", proposal_id, task.status),
+                )));
+            }
+        }
+        // If task doesn't exist in ledger (e.g. OutcomeCreate without WavsPush), allow attestation
+    }
+
+    // ── Variable 1 hardening: on-chain re-computation of attestation hash ──
+    // Recompute SHA256("junoclaw-wavs-v0.1.0" || task_type || data_hash) on-chain
+    // and reject if the submitted attestation_hash doesn't match.
+    {
+        let mut hasher = Sha256::new();
+        hasher.update(b"junoclaw-wavs-v0.1.0");
+        hasher.update(task_type.as_bytes());
+        hasher.update(data_hash.as_bytes());
+        let digest = hasher.finalize();
+        let mut expected = String::with_capacity(64);
+        for byte in digest.iter() {
+            use std::fmt::Write;
+            let _ = write!(expected, "{:02x}", byte);
+        }
+        if attestation_hash != expected {
+            return Err(ContractError::Std(StdError::generic_err(
+                format!(
+                    "attestation_hash mismatch: submitted {} but expected {}",
+                    attestation_hash, expected
+                ),
+            )));
+        }
     }
 
     // Prevent duplicate attestations
@@ -1105,29 +1192,39 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    // ── v3 migration: add supermajority_quorum_percent + dex_factory to Config ──
+    // ── v3→v4 migration: patch Config JSON for any missing fields ──
     // Read raw storage bytes and attempt to deserialize as the new Config.
-    // If new fields are missing (migrating from v2), manually patch the JSON.
+    // If new fields are missing, manually patch the JSON.
     let raw = deps.storage.get(b"config");
     if let Some(data) = raw {
         // Try deserializing as new Config first
         if cosmwasm_std::from_json::<Config>(&data).is_err() {
-            // Old format — parse as serde_json Value, inject defaults, re-save
-            // Since we can't use serde_json, use a simpler approach:
-            // Deserialize old config as a map-like structure by appending defaults
             let mut json_str = String::from_utf8(data.to_vec())
                 .map_err(|_| ContractError::Std(cosmwasm_std::StdError::generic_err("invalid utf8 in config")))?;
-            // Remove trailing `}` and append new fields
+            // Remove trailing `}` and append new fields with defaults
             if let Some(pos) = json_str.rfind('}') {
                 json_str.truncate(pos);
-                json_str.push_str(",\"supermajority_quorum_percent\":67,\"dex_factory\":null}");
+                // v3 fields (if missing from v2)
+                if !json_str.contains("supermajority_quorum_percent") {
+                    json_str.push_str(",\"supermajority_quorum_percent\":67,\"dex_factory\":null");
+                }
+                // v4 fields: weight governance guardrails
+                if !json_str.contains("max_weight_delta") {
+                    json_str.push_str(",\"max_weight_delta\":2000,\"weight_change_cooldown_blocks\":500,\"min_member_weight\":1");
+                }
+                json_str.push('}');
             }
             let new_cfg: Config = cosmwasm_std::from_json(json_str.as_bytes())
                 .map_err(|e| ContractError::Std(cosmwasm_std::StdError::generic_err(
-                    format!("v3 migration: failed to parse patched config: {}", e),
+                    format!("v4 migration: failed to parse patched config: {}", e),
                 )))?;
             CONFIG.save(deps.storage, &new_cfg)?;
         }
+    }
+
+    // Initialize LAST_WEIGHT_CHANGE_BLOCK if not present
+    if LAST_WEIGHT_CHANGE_BLOCK.may_load(deps.storage)?.is_none() {
+        LAST_WEIGHT_CHANGE_BLOCK.save(deps.storage, &0u64)?;
     }
 
     Ok(Response::new()

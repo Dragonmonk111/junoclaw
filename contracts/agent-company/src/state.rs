@@ -98,6 +98,13 @@ pub struct Config {
     pub supermajority_quorum_percent: u64,
     /// Optional Junoswap factory address (set via CodeUpgrade proposal)
     pub dex_factory: Option<Addr>,
+    // ── Weight governance guardrails (Variable 3) ──
+    /// Max bps any single member's weight can change per WeightChange proposal (default 2000 = 20%)
+    pub max_weight_delta: u64,
+    /// Blocks after a WeightChange execution before a new WeightChange can be created (default 500)
+    pub weight_change_cooldown_blocks: u64,
+    /// Minimum weight a member can hold while remaining a member (default 1 bps)
+    pub min_member_weight: u64,
 }
 
 // ──────────────────────────────────────────────
@@ -333,3 +340,6 @@ pub struct Attestation {
 
 /// Attestations keyed by proposal_id
 pub const ATTESTATIONS: Map<u64, Attestation> = Map::new("attestations");
+
+/// Block height of the last executed WeightChange proposal (cooldown tracking)
+pub const LAST_WEIGHT_CHANGE_BLOCK: Item<u64> = Item::new("last_weight_change_block");

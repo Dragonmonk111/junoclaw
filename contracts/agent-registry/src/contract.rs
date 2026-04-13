@@ -234,7 +234,12 @@ fn execute_increment_tasks(
     success: bool,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    if info.sender != config.admin {
+    // Status coherence: only task-ledger or admin can increment
+    let is_task_ledger = config.registry.task_ledger
+        .as_ref()
+        .map(|tl| *tl == info.sender)
+        .unwrap_or(false);
+    if !is_task_ledger && info.sender != config.admin {
         return Err(ContractError::Unauthorized {});
     }
 

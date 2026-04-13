@@ -153,7 +153,7 @@ fn execute_verify_work(
     let is_governance = config
         .agent_company
         .as_ref()
-        .map_or(false, |ac| *ac == info.sender);
+        .is_some_and(|ac| *ac == info.sender);
 
     if !is_operator && !is_admin && !is_governance {
         return Err(ContractError::UnauthorizedOperator {});
@@ -421,7 +421,7 @@ fn query_list_submissions(
     limit: Option<u32>,
 ) -> StdResult<SubmissionsResponse> {
     let limit = limit.unwrap_or(20).min(100) as usize;
-    let start = start_after.map(|s| cw_storage_plus::Bound::exclusive(s));
+    let start = start_after.map(cw_storage_plus::Bound::exclusive);
 
     let submissions: Vec<WorkSubmission> = SUBMISSIONS
         .range(deps.storage, start, None, Order::Ascending)
