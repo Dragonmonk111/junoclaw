@@ -38,3 +38,6 @@ package-lock.json
 
 # Frontend build
 frontend/dist/
+
+# MCP build
+mcp/dist/

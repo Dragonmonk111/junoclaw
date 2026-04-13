@@ -1,0 +1,28 @@
+{
+  "name": "@junoclaw/cosmos-mcp",
+  "version": "0.1.0",
+  "description": "Cosmos MCP server — AI-native interface to any Cosmos chain",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "cosmos-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": ["cosmos", "mcp", "cosmwasm", "juno", "ai"],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@cosmjs/cosmwasm-stargate": "^0.32.4",
+    "@cosmjs/proto-signing": "^0.32.4",
+    "@cosmjs/stargate": "^0.32.4",
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
