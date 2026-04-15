@@ -7,6 +7,11 @@
  * Philosophy: a validator doesn't pick favorites. Neither does the MCP.
  */
 
+export interface IbcChannel {
+  sourceChannel: string;
+  destChannel: string;
+}
+
 export interface ChainConfig {
   chainId: string;
   chainName: string;
@@ -19,6 +24,7 @@ export interface ChainConfig {
   explorerTx: string;
   faucet?: string;
   isTestnet: boolean;
+  ibcChannels?: Record<string, IbcChannel>;
 }
 
 export const CHAIN_REGISTRY: Record<string, ChainConfig> = {
@@ -46,6 +52,11 @@ export const CHAIN_REGISTRY: Record<string, ChainConfig> = {
     slip44: 118,
     explorerTx: "https://mintscan.io/juno/tx",
     isTestnet: false,
+    ibcChannels: {
+      "osmosis-1": { sourceChannel: "channel-0", destChannel: "channel-42" },
+      "stargaze-1": { sourceChannel: "channel-20", destChannel: "channel-5" },
+      "neutron-1": { sourceChannel: "channel-548", destChannel: "channel-4328" },
+    },
   },
   "osmosis-1": {
     chainId: "osmosis-1",
@@ -58,6 +69,11 @@ export const CHAIN_REGISTRY: Record<string, ChainConfig> = {
     slip44: 118,
     explorerTx: "https://mintscan.io/osmosis/tx",
     isTestnet: false,
+    ibcChannels: {
+      "juno-1": { sourceChannel: "channel-42", destChannel: "channel-0" },
+      "stargaze-1": { sourceChannel: "channel-75", destChannel: "channel-0" },
+      "neutron-1": { sourceChannel: "channel-874", destChannel: "channel-10" },
+    },
   },
   "stargaze-1": {
     chainId: "stargaze-1",
@@ -70,6 +86,10 @@ export const CHAIN_REGISTRY: Record<string, ChainConfig> = {
     slip44: 118,
     explorerTx: "https://mintscan.io/stargaze/tx",
     isTestnet: false,
+    ibcChannels: {
+      "juno-1": { sourceChannel: "channel-5", destChannel: "channel-20" },
+      "osmosis-1": { sourceChannel: "channel-0", destChannel: "channel-75" },
+    },
   },
   "neutron-1": {
     chainId: "neutron-1",
@@ -82,6 +102,39 @@ export const CHAIN_REGISTRY: Record<string, ChainConfig> = {
     slip44: 118,
     explorerTx: "https://mintscan.io/neutron/tx",
     isTestnet: false,
+    ibcChannels: {
+      "juno-1": { sourceChannel: "channel-4328", destChannel: "channel-548" },
+      "osmosis-1": { sourceChannel: "channel-10", destChannel: "channel-874" },
+    },
+  },
+  "celestia": {
+    chainId: "celestia",
+    chainName: "Celestia Mainnet",
+    rpcEndpoint: "https://celestia-rpc.polkachu.com",
+    restEndpoint: "https://celestia-api.polkachu.com",
+    denom: "utia",
+    bech32Prefix: "celestia",
+    gasPrice: "0.002utia",
+    slip44: 118,
+    explorerTx: "https://mintscan.io/celestia/tx",
+    isTestnet: false,
+    ibcChannels: {
+      "osmosis-1": { sourceChannel: "channel-2", destChannel: "channel-6994" },
+      "neutron-1": { sourceChannel: "channel-8", destChannel: "channel-35" },
+    },
+  },
+  "mocha-4": {
+    chainId: "mocha-4",
+    chainName: "Celestia Mocha Testnet",
+    rpcEndpoint: "https://celestia-testnet-rpc.polkachu.com",
+    restEndpoint: "https://celestia-testnet-api.polkachu.com",
+    denom: "utia",
+    bech32Prefix: "celestia",
+    gasPrice: "0.002utia",
+    slip44: 118,
+    explorerTx: "https://testnet.mintscan.io/celestia-testnet/tx",
+    faucet: "https://faucet.celestia-mocha.com/",
+    isTestnet: true,
   },
 };
 
@@ -99,4 +152,12 @@ export function listTestnets(): ChainConfig[] {
 
 export function listMainnets(): ChainConfig[] {
   return Object.values(CHAIN_REGISTRY).filter((c) => !c.isTestnet);
+}
+
+export function getIbcChannel(
+  sourceChainId: string,
+  destChainId: string
+): IbcChannel | undefined {
+  const chain = CHAIN_REGISTRY[sourceChainId];
+  return chain?.ibcChannels?.[destChainId];
 }

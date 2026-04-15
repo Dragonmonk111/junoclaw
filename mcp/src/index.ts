@@ -26,6 +26,8 @@ import {
   queryTx,
   queryBlockHeight,
   queryCodeInfo,
+  queryZkVerifier,
+  queryMeshSecurity,
 } from "./tools/chain-query.js";
 import {
   sendTokens,
@@ -33,12 +35,14 @@ import {
   uploadWasm,
   instantiateContract,
   migrateContract,
+  ibcTransfer,
+  submitBlob,
 } from "./tools/tx-builder.js";
 import { scaffoldProject, listTemplates, DAO_TEMPLATES } from "./tools/scaffold.js";
 
 const server = new McpServer({
   name: "cosmos-mcp",
-  version: "0.1.0",
+  version: "0.3.0",
 });
 
 // ════════════════════════════════════════════════════
@@ -188,6 +192,33 @@ server.tool(
 );
 
 server.tool(
+  "query_mesh_security",
+  "Query a mesh-security contract (osmosis-labs/mesh-security, Apache 2.0). Auto-detects provider vs consumer. Returns config, validators, delegated security.",
+  {
+    chain_id: z.string().describe("Chain ID where mesh-security contract is deployed"),
+    contract_address: z.string().describe("Mesh-security contract bech32 address"),
+    query_type: z.enum(["provider", "consumer", "auto"]).optional().describe("Contract type (default: auto-detect)"),
+  },
+  async ({ chain_id, contract_address, query_type }) => {
+    const result = await queryMeshSecurity(chain_id, contract_address, query_type || "auto");
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "query_zk_verifier",
+  "Query a deployed zk-verifier contract (Groth16 BN254). Returns VK status and last verification result.",
+  {
+    chain_id: z.string().describe("Chain ID (e.g. 'uni-7')"),
+    contract_address: z.string().describe("ZK verifier contract bech32 address"),
+  },
+  async ({ chain_id, contract_address }) => {
+    const result = await queryZkVerifier(chain_id, contract_address);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
   "list_chains",
   "List all supported Cosmos chains in the registry",
   {},
@@ -292,6 +323,41 @@ server.tool(
   async ({ chain_id, mnemonic, contract_address, new_code_id, migrate_msg, memo }) => {
     const parsedMsg = JSON.parse(migrate_msg);
     const result = await migrateContract(chain_id, mnemonic, contract_address, new_code_id, parsedMsg, memo);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "submit_blob",
+  "Submit a data blob to Celestia DA layer (celestiaorg/celestia-app, Apache 2.0). Used by sovereign rollup chains for data availability. Requires mnemonic.",
+  {
+    chain_id: z.string().describe("Celestia chain ID ('celestia' or 'mocha-4')"),
+    mnemonic: z.string().describe("Sender wallet mnemonic (never stored)"),
+    namespace_hex: z.string().describe("Namespace hex ID for the blob (e.g. '6a756e6f636c6177' for 'junoclaw')"),
+    data: z.string().describe("UTF-8 data to submit as blob"),
+    memo: z.string().optional().describe("TX memo"),
+  },
+  async ({ chain_id, mnemonic, namespace_hex, data, memo }) => {
+    const result = await submitBlob(chain_id, mnemonic, namespace_hex, data, memo);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "ibc_transfer",
+  "Transfer tokens across Cosmos chains via IBC. The first cross-chain primitive for AI agents. Requires mnemonic.",
+  {
+    source_chain_id: z.string().describe("Source chain ID (e.g. 'juno-1')"),
+    dest_chain_id: z.string().describe("Destination chain ID (e.g. 'osmosis-1')"),
+    mnemonic: z.string().describe("Sender wallet mnemonic (never stored)"),
+    receiver: z.string().describe("Receiver bech32 address on destination chain"),
+    amount: z.string().describe("Amount in base denom (e.g. '1000000' for 1 token)"),
+    denom: z.string().optional().describe("Token denom (defaults to source chain native)"),
+    memo: z.string().optional().describe("IBC transfer memo"),
+    timeout_minutes: z.number().optional().describe("Timeout in minutes (default 10)"),
+  },
+  async ({ source_chain_id, dest_chain_id, mnemonic, receiver, amount, denom, memo, timeout_minutes }) => {
+    const result = await ibcTransfer(source_chain_id, dest_chain_id, mnemonic, receiver, amount, denom, memo, timeout_minutes);
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );

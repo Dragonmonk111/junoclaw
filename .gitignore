@@ -41,3 +41,13 @@ frontend/dist/
 
 # MCP build
 mcp/dist/
+
+# Personal files — never commit
+cv_*.html
+cv_*.pdf
+cv_*.txt
+supporting_*.txt
+management_*.txt
+*_for_pdf.html
+html_to_pdf.py
+make_pdf.py

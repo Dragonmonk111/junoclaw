@@ -131,3 +131,106 @@ export async function queryCodeInfo(
     checksum: info.checksum,
   };
 }
+
+/**
+ * Query mesh-security contracts (osmosis-labs/mesh-security — Apache 2.0).
+ *
+ * Provider contract:  manages cross-chain validator staking
+ * Consumer contract:  receives delegated security from provider chains
+ *
+ * This tool queries either contract type, auto-detecting based on which
+ * query messages succeed.
+ */
+export async function queryMeshSecurity(
+  chainId: string,
+  contractAddress: string,
+  queryType: "provider" | "consumer" | "auto" = "auto"
+): Promise<Record<string, unknown>> {
+  const chain = requireChain(chainId);
+  const client = await getQueryClient(chain);
+  const results: Record<string, unknown> = { contractAddress, chainId };
+
+  // Provider contract queries (osmosis-labs/mesh-security/contracts/provider)
+  if (queryType === "provider" || queryType === "auto") {
+    try {
+      const config = await client.queryContractSmart(contractAddress, { config: {} });
+      results.type = "provider";
+      results.config = config;
+
+      // List active cross-stakes
+      try {
+        const stakes = await client.queryContractSmart(contractAddress, {
+          list_validators: {},
+        });
+        results.validators = stakes;
+      } catch { /* optional query */ }
+
+      // Account info
+      try {
+        const account = await client.queryContractSmart(contractAddress, {
+          account: {},
+        });
+        results.account = account;
+      } catch { /* optional query */ }
+
+      if (results.type === "provider") return results;
+    } catch {
+      if (queryType === "provider") throw new Error("Not a mesh-security provider contract");
+    }
+  }
+
+  // Consumer contract queries (osmosis-labs/mesh-security/contracts/consumer)
+  if (queryType === "consumer" || queryType === "auto") {
+    try {
+      const config = await client.queryContractSmart(contractAddress, { config: {} });
+      results.type = "consumer";
+      results.config = config;
+
+      // List authorized providers
+      try {
+        const providers = await client.queryContractSmart(contractAddress, {
+          list_providers: {},
+        });
+        results.providers = providers;
+      } catch { /* optional query */ }
+
+      // Total delegated security
+      try {
+        const security = await client.queryContractSmart(contractAddress, {
+          total_delegated: {},
+        });
+        results.totalDelegated = security;
+      } catch { /* optional query */ }
+
+      return results;
+    } catch {
+      if (queryType === "consumer") throw new Error("Not a mesh-security consumer contract");
+    }
+  }
+
+  throw new Error(
+    `Contract ${contractAddress} does not appear to be a mesh-security contract. ` +
+    `Specify queryType='provider' or 'consumer' to force.`
+  );
+}
+
+export async function queryZkVerifier(
+  chainId: string,
+  contractAddress: string
+): Promise<{
+  contractAddress: string;
+  vkStatus: { has_vk: boolean; vk_size_bytes: number };
+  lastVerify: { verified: boolean; block_height: number };
+}> {
+  const chain = requireChain(chainId);
+  const client = await getQueryClient(chain);
+
+  const vkStatus = await client.queryContractSmart(contractAddress, { vk_status: {} });
+  const lastVerify = await client.queryContractSmart(contractAddress, { last_verify: {} });
+
+  return {
+    contractAddress,
+    vkStatus,
+    lastVerify,
+  };
+}

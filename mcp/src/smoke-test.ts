@@ -11,9 +11,11 @@ import {
   queryContractState,
   queryTx,
   queryAllBalances,
+  queryZkVerifier,
+  queryMeshSecurity,
 } from "./tools/chain-query.js";
 import { listTemplates, scaffoldProject } from "./tools/scaffold.js";
-import { listChains } from "./resources/chains.js";
+import { listChains, getIbcChannel } from "./resources/chains.js";
 
 const CHAIN = "uni-7";
 const NEO_WALLET = "juno1tvpe72amnd3arnh4nhlf3hztx5aqznu6hz5f4m";
@@ -62,6 +64,10 @@ async function main() {
     queryContractState(CHAIN, ZK_VERIFIER, { last_verify: {} })
   );
 
+  await test("query_zk_verifier (combined VK + last verify)", () =>
+    queryZkVerifier(CHAIN, ZK_VERIFIER)
+  );
+
   await test("query_tx (zk-verifier verify proof TX)", () => queryTx(CHAIN, ZK_VERIFY_TX));
 
   await test("list_templates", async () => {
@@ -80,6 +86,38 @@ async function main() {
       ],
     });
     return { description: result.description, files: result.files.length };
+  });
+
+  await test("ibc_channel (juno-1 → osmosis-1)", async () => {
+    const channel = getIbcChannel("juno-1", "osmosis-1");
+    return channel || "NO CHANNEL FOUND";
+  });
+
+  await test("ibc_channel (osmosis-1 → neutron-1)", async () => {
+    const channel = getIbcChannel("osmosis-1", "neutron-1");
+    return channel || "NO CHANNEL FOUND";
+  });
+
+  await test("ibc_channel (uni-7 → osmosis-1) [should be undefined]", async () => {
+    const channel = getIbcChannel("uni-7", "osmosis-1");
+    return channel || "CORRECTLY NO CHANNEL (testnet has no IBC config)";
+  });
+
+  await test("ibc_channel (celestia → osmosis-1)", async () => {
+    const channel = getIbcChannel("celestia", "osmosis-1");
+    return channel || "NO CHANNEL FOUND";
+  });
+
+  await test("list_chains (includes Celestia)", async () => {
+    const chains = listChains();
+    const celestia = chains.find((c) => c.chainId === "celestia");
+    return {
+      totalChains: chains.length,
+      celestiaFound: !!celestia,
+      celestiaDenom: celestia?.denom,
+      testnets: chains.filter((c) => c.isTestnet).map((c) => c.chainId),
+      mainnets: chains.filter((c) => !c.isTestnet).map((c) => c.chainId),
+    };
   });
 
   console.log("═══ Done ═══");

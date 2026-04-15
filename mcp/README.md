@@ -1,6 +1,8 @@
 # 🌌 Cosmos MCP Server
 
 > AI-native interface to any Cosmos chain. Built by [JunoClaw](https://github.com/Dragonmonk111/junoclaw).
+>
+> 📖 [Read the article: The Final Bosses of Cosmos](https://medium.com/@tj.yamlajatt/the-final-bosses-of-cosmos-how-we-built-an-ai-agent-layer-that-scales-to-8-billion-3298a5b17be5)
 
 The first Model Context Protocol server for the Cosmos ecosystem. Lets any MCP-compatible AI assistant (Claude, Windsurf/Cascade, Cursor) query chains, deploy contracts, and scaffold CosmWasm projects — without the developer needing to learn CosmJS, cargo schemas, or gas estimation.
 
@@ -14,7 +16,13 @@ Cosmos MCP   → enables builders    (service to the ecosystem)
 
 The validator doesn't choose transactions. The MCP doesn't choose chains.
 
-## Quick Start
+## Install
+
+```bash
+npm install @junoclaw/cosmos-mcp
+```
+
+Or from source:
 
 ```bash
 cd mcp
@@ -39,7 +47,7 @@ Add to your `~/.codeium/windsurf/mcp_config.json`:
 
 ### Add to Claude Desktop
 
-Add to `claude_desktop_config.json`:
+Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%/Claude/`):
 
 ```json
 {
@@ -52,7 +60,123 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-## Tools (16 total)
+### Add to Cursor
+
+Add to `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "cosmos": {
+      "command": "node",
+      "args": ["/path/to/junoclaw/mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+### Add to VS Code + Continue
+
+Install the [Continue](https://continue.dev) extension, then add to `.continue/config.yaml`:
+
+```yaml
+mcpServers:
+  - name: cosmos
+    command: node
+    args:
+      - /path/to/junoclaw/mcp/dist/index.js
+```
+
+### Add to Cline (VS Code)
+
+Install [Cline](https://github.com/cline/cline) extension. Settings → MCP Servers → Add:
+
+```json
+{
+  "cosmos": {
+    "command": "node",
+    "args": ["/path/to/junoclaw/mcp/dist/index.js"]
+  }
+}
+```
+
+### Add to Zed
+
+Add to `~/.config/zed/settings.json`:
+
+```json
+{
+  "language_models": {
+    "mcp_servers": {
+      "cosmos": {
+        "command": "node",
+        "args": ["/path/to/junoclaw/mcp/dist/index.js"]
+      }
+    }
+  }
+}
+```
+
+### Add to OpenAI ChatGPT
+
+ChatGPT supports MCP via its desktop app. Settings → MCP → Add Server:
+
+```json
+{
+  "cosmos": {
+    "command": "node",
+    "args": ["/path/to/junoclaw/mcp/dist/index.js"]
+  }
+}
+```
+
+### Local GPU (Ollama / llama.cpp / vLLM)
+
+MCP uses **stdio transport** — any process that reads stdin and writes stdout can be an MCP client. Local LLMs can use the Cosmos MCP via bridge tools:
+
+**Option 1: `mcp-client` CLI** (easiest)
+```bash
+npm install -g @anthropic-ai/mcp-client
+mcp-client --server "node /path/to/junoclaw/mcp/dist/index.js"
+```
+
+**Option 2: Ollama + Open WebUI + MCP plugin**
+```bash
+# Run your local model
+ollama run llama3.1:70b
+
+# Open WebUI has MCP tool support via its Functions/Tools pipeline
+# Configure the MCP server as a tool provider in Open WebUI settings
+```
+
+**Option 3: LangChain MCP adapter** (Python)
+```python
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_ollama import ChatOllama
+
+# Connect to your local Ollama model
+llm = ChatOllama(model="llama3.1:70b")
+
+# Connect to Cosmos MCP
+async with MultiServerMCPClient({
+    "cosmos": {
+        "command": "node",
+        "args": ["/path/to/junoclaw/mcp/dist/index.js"]
+    }
+}) as client:
+    tools = client.get_tools()
+    # Your local model can now call all 22 Cosmos tools
+```
+
+**Option 4: `mcphost`** (Rust, any OpenAI-compatible API)
+```bash
+cargo install mcphost
+mcphost --config mcp_config.json --api-base http://localhost:11434/v1
+```
+
+> **Bottom line**: Any model that can do tool-calling (Llama 3.1+, Mistral, Qwen2.5, DeepSeek) running on your own GPU via Ollama can use all 22 Cosmos MCP tools. Your keys, your GPU, your chain interactions. Full sovereignty.
+
+## Tools (22 total)
 
 ### Query Tools (no wallet needed)
 | Tool | Description |
@@ -64,7 +188,9 @@ Add to `claude_desktop_config.json`:
 | `query_tx` | Look up a transaction by hash |
 | `query_block_height` | Get current block height |
 | `query_code_info` | Get info about an uploaded WASM code ID |
-| `list_chains` | List all supported Cosmos chains |
+| `query_zk_verifier` | Query a deployed zk-verifier contract (Groth16 BN254 VK status + last proof) |
+| `query_mesh_security` | **NEW** Query mesh-security contracts ([osmosis-labs/mesh-security](https://github.com/osmosis-labs/mesh-security), Apache 2.0). Auto-detects provider vs consumer. |
+| `list_chains` | List all supported Cosmos chains (now includes IBC channel metadata) |
 
 ### Transaction Tools (require mnemonic)
 | Tool | Description |
@@ -74,6 +200,8 @@ Add to `claude_desktop_config.json`:
 | `upload_wasm` | Upload a WASM binary to a chain |
 | `instantiate_contract` | Instantiate a contract from a code ID |
 | `migrate_contract` | Migrate a contract to a new code ID |
+| `ibc_transfer` | Transfer tokens across Cosmos chains via IBC — the first cross-chain primitive for AI agents |
+| `submit_blob` | **NEW** Submit data blobs to Celestia DA layer ([celestiaorg/celestia-app](https://github.com/celestiaorg/celestia-app), Apache 2.0). Sovereign rollup data availability. |
 
 ### Scaffold Tools (juno.new)
 | Tool | Description |
@@ -98,8 +226,29 @@ Add to `claude_desktop_config.json`:
 | Osmosis | `osmosis-1` | uosmo | Mainnet |
 | Stargaze | `stargaze-1` | ustars | Mainnet |
 | Neutron | `neutron-1` | untrn | Mainnet |
+| Celestia | `celestia` | utia | Mainnet |
+| Celestia Mocha | `mocha-4` | utia | Testnet |
 
 Adding a chain: edit `src/resources/chains.ts`.
+
+## IBC Routes
+
+The chain registry includes IBC channel metadata for cross-chain transfers:
+
+| Route | Source Channel | Dest Channel |
+|-------|---------------|---------------|
+| Juno → Osmosis | channel-0 | channel-42 |
+| Juno → Stargaze | channel-20 | channel-5 |
+| Juno → Neutron | channel-548 | channel-4328 |
+| Osmosis → Juno | channel-42 | channel-0 |
+| Osmosis → Stargaze | channel-75 | channel-0 |
+| Osmosis → Neutron | channel-874 | channel-10 |
+| Stargaze → Juno | channel-5 | channel-20 |
+| Stargaze → Osmosis | channel-0 | channel-75 |
+| Neutron → Juno | channel-4328 | channel-548 |
+| Neutron → Osmosis | channel-10 | channel-874 |
+| Celestia → Osmosis | channel-2 | channel-6994 |
+| Celestia → Neutron | channel-8 | channel-35 |
 
 ## DAO Templates (9)
 
