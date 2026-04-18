@@ -1,8 +1,12 @@
-# Beating the Bounds: An Audit of the Agentic DAO Before the Storms
+# Beating the Bounds: A Pre-Audit Hardening Pass on the Agentic DAO
 
-## We walked the fence-line of our seven-agent Parliament and found four cracks. Here's what we fixed, and how you can check our work.
+## We walked the fence-line of our seven-agent Parliament and found four cracks. Here's what we fixed, how we fixed it, and how you can check our work.
 
 [IMAGE 1 — THE HARBOUR AT DAWN]
+
+---
+
+> *A note on words. In this piece the word "audit" is used in its folkloric sense — the medieval ritual of the parishioners walking their own fence-line. What we actually did is a **pre-audit hardening pass**: an internal security review by the authors of the code, with fixes, regression tests, and on-chain verification, all open-sourced. It is **not** a third-party audit. A formal independent review by a recognised security firm is a separate and recommended next step, and nothing below substitutes for that.*
 
 ---
 
@@ -154,7 +158,7 @@ Of those lines, **more than half are tests** — regression tests that assert th
 
 ---
 
-## Can you walk this audit yourself?
+## Can you walk these checks yourself?
 
 Yes. Mostly. Here is the honest answer.
 
@@ -171,7 +175,7 @@ You don't need our scripts. You don't need our wallets. `junod tx wasm execute` 
 - **F4** — reproducing the unexpected-denom attack requires the attacker to *hold* a rogue native denom on the chain. On `uni-7` that means getting `tokenfactory` access or running a custom module — beyond what a casual reviewer can do. We cover F4 in unit tests (`contracts/junoswap-pair/src/tests.rs`) with named negative cases.
 - **The Step 6 wiring** needs admin access to `agent-registry`. A reviewer looking at a *fresh* deploy can verify it's been called by querying `agent-registry.get_config { }` and checking `registry.task_ledger` is populated. We publish the wiring tx hash (`037446966882EF5E82D3E41E572BEE0DA811EB26EC5FD32BB9B7CC498AF1E2E2`) so the claim is checkable.
 
-In short: three of the four cracks can be walked by any curious stranger with a testnet faucet and a terminal. The fourth is covered by tests that any reviewer can run locally with `cargo test -p junoswap-pair`. The audit is not a private ritual. *It is the point of on-chain verification that it isn't one.*
+In short: three of the four cracks can be walked by any curious stranger with a testnet faucet and a terminal. The fourth is covered by tests that any reviewer can run locally with `cargo test -p junoswap-pair`. Our hardening pass is not a private ritual, and it is not a substitute for a proper third-party audit — but its findings and fixes are checkable in the open, by anyone, today. *That is the point of on-chain verification.*
 
 [IMAGE 7 — THE VILLAGE AT DUSK]
 
@@ -191,7 +195,7 @@ Beating the bounds is like that. The fields look the same afterwards. The stones
 
 | What | Where |
 |------|-------|
-| The detailed audit writeup | [`docs/RATTADAN_HARDENING.md`](./RATTADAN_HARDENING.md) |
+| The detailed hardening writeup | [`docs/RATTADAN_HARDENING.md`](./RATTADAN_HARDENING.md) |
 | The testnet run, tx by tx | [`docs/V6_TESTNET_RUN.md`](./V6_TESTNET_RUN.md) |
 | The on-chain smoke harness | [`deploy/smoke-v6.mjs`](../deploy/smoke-v6.mjs) |
 | The regression tests for each crack | `contracts/{task-ledger, agent-company, builder-grant, junoswap-pair}/src/tests.rs` |
