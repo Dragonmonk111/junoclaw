@@ -152,7 +152,7 @@ The TEE attestation proof (`attestation_hash`) is what gets submitted on-chain. 
 Once the 13 buds are distributed, a sitting member can:
 
 1. **Propose a swap policy** — submit a `TaskRequest` proposal via DAODAO UI or CosmJS
-2. **Vote** — 7-of-13 quorum to pass most proposals, 9-of-13 for contract upgrades
+2. **Vote** — 7-of-13 quorum to pass normal proposals, 9-of-13 for constitutional proposals (`CodeUpgrade` + `WeightChange`)
 3. **Watch it execute** — WAVS picks up the task, runs the WASI component, posts attestation
 4. **Audit the receipt** — query `task_ledger` for the attestation hash, verify on-chain
 5. **BreakChannel** if something goes wrong — prune a bad branch, re-assign the seat

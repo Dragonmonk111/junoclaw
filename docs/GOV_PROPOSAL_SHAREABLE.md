@@ -42,7 +42,7 @@ This is not speculative. As of March 17, 2026:
 - Junoswap v2 factory + 2 trading pairs deployed (JUNOX/USDC, JUNOX/STAKE)
 - TEE hardware attestation proven — Proposal 4 ran inside Intel SGX enclave
   TX: 6EA1AE79D373BE7E57A8492A089E543ADA40B30CB5F7E69B177E607879D26B22
-- CodeUpgrade governance with 67% supermajority quorum (9 of 13 buds)
+- Constitutional governance (`CodeUpgrade` + `WeightChange`) with 67% supermajority quorum (9 of 13 buds)
 - On-chain randomness via NOIS/drand for fair jury selection (sortition)
 - WAVS operator stack LIVE on Akash decentralized compute
 - 34 unit tests passing, Apache 2.0 licensed
@@ -112,12 +112,12 @@ Same philosophy as Juno's own fairdrop — distribute power, don't hoard it.
 - Genesis submits WeightChange → distributes to 13 initial DAO members ("buds")
 - Each bud: 769/10000 weight. Genesis retains 3/10000 (symbolic)
 - Normal proposals: 51% quorum (7 of 13 buds)
-- Code upgrades: 67% supermajority (9 of 13 buds)
-- Further budding: DAO adds members via WeightChange proposals
+- Constitutional proposals (`CodeUpgrade`, `WeightChange`): 67% supermajority (9 of 13 buds)
+- Further budding: DAO adds members via `WeightChange` proposals (constitutional path)
 
 The Genesis Root is urged to evolve JunoClaw and involve up to 13 buds to do so. The timeline is with Genesis. This is not a centralized project with a corporate roadmap — it's a seed planted in Juno soil. Genesis decides when to bud, who to bud, and what to build next. The community's role is to watch the tree grow and prune bad branches via BreakChannel if needed.
 
-Once the 13 buds are active, Genesis loses voting power. The DAO self-governs. Code upgrades require 9 of 13 (67%). No single actor can push changes unilaterally. This is how decentralized infrastructure should work.
+Once the 13 buds are active, Genesis loses voting power. The DAO self-governs. Constitutional changes (code upgrades and member-weight redistribution) require 9 of 13 (67%). No single actor can push changes unilaterally. This is how decentralized infrastructure should work.
 
 ---
 

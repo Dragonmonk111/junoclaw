@@ -15,7 +15,7 @@ Genesis (DragonMonk) distributes all weight to **13 buds**. Genesis retains only
 
 The 13 buds:
 
-- **Governance**: Full voting weight — 7/13 quorum, 9/13 supermajority for code upgrades
+- **Governance**: Full voting weight — 7/13 quorum for normal proposals; 9/13 supermajority for constitutional proposals (`CodeUpgrade` and `WeightChange`)
 - **Infra co-stewardship**: Shared access to deploy tooling, testnet ops, server infrastructure
 - **Each bud is soulbound** — non-transferable, bound to one wallet address
 - **Prunable** — DAO can `BreakChannel` to revoke a branch if trust breaks
@@ -95,7 +95,7 @@ After Path B, **Dimi holds wasmd admin**. These powers transfer to the 5-of-13 m
 | Action | Why Not |
 |--------|---------|
 | **Execute contract messages** | Only the contract's internal logic controls execution — admin is not an executor |
-| **Change governance weight** | Weight changes require a `WeightChange` proposal + DAO vote (7/13 quorum) |
+| **Change governance weight** | Weight changes require a `WeightChange` proposal + DAO supermajority vote (9/13 once all seats are filled) |
 | **Steal escrow funds** | Escrow release is controlled by contract logic, not admin |
 | **Override a DAO decision** | Admin is outside the governance loop — it's a maintenance key, not a power key |
 
@@ -514,7 +514,7 @@ Genesis only seals bud #1. After that, the chain propagates itself.
 5. **Transmit**: Send the `.sealed` file via DM or encrypted channel
 6. **Delete plaintext**: Remove the filled `.toml` — only `.sealed` should exist
 7. **WeightChange proposal**: Submit DAO proposal to add new member with governance weight
-8. **DAO votes**: Existing members approve (7-of-13 quorum once all seated)
+8. **DAO votes**: Existing members approve under constitutional threshold (9-of-13 once all seated)
 9. **Execute**: Proposal passes → new member is a voting bud
 10. **TokenRecord**: Once jclaw-token contract is live, mint their soulbound bud:
     - `holder`: their juno1... address

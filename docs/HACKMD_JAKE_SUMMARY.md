@@ -55,8 +55,7 @@ An open-source agentic AI platform built natively on Juno. AI agents operate und
 - Genesis address: `juno1tvpe72amnd3arnh4nhlf3hztx5aqznu6hz5f4m`
 - Currently 100% weight (pre-budding)
 - Budding: 13 buds × 769 weight, genesis keeps 3 (symbolic)
-- Code upgrades require 67% supermajority (9 of 13)
-- Weight change guardrails (Rattadan hardening): delta cap 20%, cooldown 500 blocks, floor 1 bps
+- Constitutional proposals (`CodeUpgrade` + `WeightChange`) require 67% supermajority (9 of 13). The earlier v4 rate-limit guardrails (delta cap / cooldown / floor) were retracted on 2026-04-17 — see `RATTADAN_HARDENING.md` for the full note.
 
 ---
 
@@ -74,15 +73,17 @@ Pure CosmWasm Groth16 BN254 verifier — the same elliptic curve pairing Ethereu
 - **Gas cost**: 371,486 gas (works, but impractical without a precompile)
 - **The ask**: Three host functions in wasmvm — `bn254_add`, `bn254_scalar_mul`, `bn254_pairing_check` — implemented in Go using gnark-crypto. This would drop gas from 371K to ~3K, enabling privacy protocols, zkRollups, and credential verification natively on Juno.
 
-### 2. Rattadan Variable Hardening (v4)
+### 2. Rattadan Variable Hardening (v4, partially retracted in v5)
 
-After Rattadan's structural audit, three hardening passes were applied:
+After Rattadan's structural audit, three hardening passes were applied. Two stand; the third was retracted on 2026-04-17 and replaced with a supermajority threshold:
 
-| Variable | Risk Before | Fix |
-|----------|-------------|-----|
-| `attestation_hash` | Any hex string accepted blindly | On-chain SHA-256 re-computation |
-| `status` | Independent per-contract, desync possible | Atomic cross-contract callbacks |
-| `weight` | No cap, no cooldown — 51% coalition can zero minorities | Delta cap (20%) + cooldown (500 blocks) + floor (1 bps) |
+| Variable | Risk Before | Fix | Status |
+|----------|-------------|-----|--------|
+| `attestation_hash` | Any hex string accepted blindly | On-chain SHA-256 re-computation | **Active** (v4) |
+| `status` | Independent per-contract, desync possible | Atomic cross-contract callbacks | **Active** (v4) |
+| `weight` | No cap, no cooldown — 51% coalition can zero minorities | ~~Delta cap (20%) + cooldown (500 blocks) + floor (1 bps)~~ → **67% supermajority for `WeightChange`** (mirrors `CodeUpgrade`) | **Retracted → replaced** (v5) |
+
+Retraction rationale: the v4 weight guardrails turned out to be rate-limiting dressed as minority protection. The 67% supermajority is a *structural* protection — minorities holding > 33% can block weight consolidation — and it is architecturally consistent with the existing `CodeUpgrade` threshold. Full detail in `docs/RATTADAN_HARDENING.md`.
 
 ### 3. Cosmos MCP Server (juno.new)
 

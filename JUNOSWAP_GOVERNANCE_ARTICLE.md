@@ -12,7 +12,7 @@ In the last 48 hours, three things went live on Juno testnet that haven't existe
 
 1. **Junoswap v2** — the token exchange that made Juno famous — was rewritten from scratch, deployed, and wired into a DAO contract that verifies every swap with hardware it can't lie about.
 
-2. **A governance system** was upgraded so that code changes to the network require a **supermajority vote** (67%, not 51%). This is the same threshold Cosmos SDK uses for chain upgrades. It's now enforced at the smart contract level.
+2. **A governance system** was upgraded so that constitutional changes — code upgrades and voting-power redistribution — require a **supermajority vote** (67%, not 51%). This is now enforced at the smart contract level.
 
 3. **A single governance proposal** — Proposal 5 — bundled the Junoswap wiring, the WAVS verification update, and the Akash compute deployment into one atomic action. It passed, it executed, and the infrastructure is live.
 
@@ -62,7 +62,7 @@ JunoClaw's governance has **8 proposal types**:
 
 | Type | What It Does | Quorum |
 |------|-------------|--------|
-| **WeightChange** | Add/remove members, change voting weights | 51% |
+| **WeightChange** | Add/remove members, change voting weights | **67%** |
 | **WavsPush** | Send a task to WAVS for off-chain verification | 51% |
 | **ConfigChange** | Change admin, governance contract | 51% |
 | **FreeText** | Signal vote, no on-chain effect | 51% |
@@ -179,7 +179,8 @@ Phase 2 — BUDDING (next)
 
 Phase 3 — DAO GOVERNANCE
   └── Normal proposals: 51% quorum (7 buds)
-  └── Code upgrades: 67% quorum (9 buds)
+  └── Constitutional proposals: 67% quorum (9 buds)
+      (CodeUpgrade + WeightChange)
   └── Further budding: WeightChange proposals to add more members
 ```
 
@@ -194,7 +195,7 @@ VairagyaNodes — our validator, unbonded active at waiting position 6 — is pr
 1. Recognize JunoClaw as official Juno ecosystem infrastructure
 2. Support the Junoswap revival through TEE-attested verification
 3. Endorse decentralized compute via Akash for verification
-4. Acknowledge the CodeUpgrade governance framework
+4. Acknowledge the constitutional governance framework (`CodeUpgrade` + `WeightChange`) with 67% supermajority
 
 We're not asking for community pool funds. JunoClaw is self-funded and operational.
 

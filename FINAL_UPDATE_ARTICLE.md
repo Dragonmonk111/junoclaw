@@ -93,7 +93,7 @@ Right now, Genesis holds 100% weight. That's temporary. Genesis is urged to evol
 Once the 13 buds are active:
 - Genesis loses voting power (retains 3/10000, symbolic)
 - Normal proposals: 51% quorum (7 of 13)
-- Code upgrades: 67% supermajority (9 of 13)
+- Constitutional proposals (`CodeUpgrade` + `WeightChange`): 67% supermajority (9 of 13)
 - No single actor can push changes unilaterally
 
 The community watches the tree grow. Bad branches get pruned via `BreakChannel`.
@@ -107,7 +107,7 @@ Proposal #373 is live on juno-1 (voting ends March 24, 2026). No code execution.
 1. Recognize JunoClaw as a Juno ecosystem infrastructure reboot.
 2. Support Junoswap revival through TEE-attested verification.
 3. Endorse decentralized compute via Akash for Juno's verification layer.
-4. Acknowledge the CodeUpgrade governance framework with 67% supermajority.
+4. Acknowledge the constitutional governance framework (`CodeUpgrade` + `WeightChange`) with 67% supermajority.
 5. Support the future validator sidecar proposal for TEE-grade distributed attestation.
 
 Passing signals that the Juno community recognizes JunoClaw to move to genesis address. Genesis deploys mainnet contracts. Genesis wires infrastructure. Genesis buds into 13. Then the DAO takes over.

@@ -12,7 +12,7 @@ This document describes the three hardening passes applied to JunoClaw's core va
 |---|----------|------|-------------|-----|
 | 1 | `attestation_hash` | Cryptographic spine | Stored blindly — any hex string accepted | On-chain SHA-256 re-computation |
 | 2 | `status` | State machine | Independent per-contract, eventual consistency via off-chain daemon | Atomic cross-contract callbacks |
-| 3 | `weight` | Power variable | No cap, no cooldown, no floor — 51% coalition can zero out minorities | Delta cap + cooldown + floor |
+| 3 | `weight` | Power variable | No cap, no cooldown, no floor — 51% coalition can zero out minorities | ~~Delta cap + cooldown + floor~~ → **retracted 2026-04-17**, replaced by 67% supermajority for `WeightChange` (mirrors `CodeUpgrade`). See retraction note in the Variable 3 section below. |
 
 ## The 5 Declarations (Contracts)
 
@@ -129,6 +129,27 @@ agent-registry UpdateConfig → registry.task_ledger = <task_ledger_addr>
 ---
 
 ## Variable 3: `weight` — Governance Anti-circularity
+
+> ### ⚠ RETRACTED 2026-04-17 — replaced by `WeightChange` supermajority
+>
+> After further analysis, the three guardrails described in this section — **delta cap**, **cooldown**, and **floor** — were determined to be architecturally misplaced and were removed in contract `v5`. In summary:
+>
+> - **Delta cap** (`max_weight_delta`) delays majoritarian consolidation by ~25 minutes without changing the outcome. Patience is not a defence against patience.
+> - **Cooldown** (`weight_change_cooldown_blocks`) protects a compromised key holder against a thief, not minorities against majorities. Key hygiene belongs at the keystore layer, not the governance contract.
+> - **Floor** (`min_member_weight`) is a fat-finger input-validation catch wearing the costume of minority rights. A member at 1 bps of 10,000 is *commemorated*, not *protected*.
+>
+> **What replaces them (Alternative D):** `WeightChange` proposals now require the same 67% supermajority quorum as `CodeUpgrade`. Weight redistribution is treated as a constitutional-class action alongside contract migration. This is a *structural* protection — as long as minorities collectively hold > 33%, they can block weight-change proposals. It mirrors an existing pattern in the contract rather than inventing one.
+>
+> **Why this is safe under JunoClaw's primary deployment shape:** JunoClaw is designed for humans-with-delegate-agents exchanging skills via fixed contracts. AI agents act as delegates of human principals, not as autonomous governance members. The 67% threshold therefore protects humans from other humans' consolidation attempts without blocking emergency interrupts — rogue-agent misbehaviour is handled at the principal–delegate boundary (key rotation, MCP auth changes) and at the task layer (`task-ledger` failed state, `agent-registry` trust_score degradation), not through `WeightChange`.
+>
+> **Variables 1 and 2 are unchanged** by this retraction. The on-chain `attestation_hash` re-computation and the atomic cross-contract status callbacks are clean fixes for real bugs and remain in force.
+>
+> **Files changed on retraction:**
+> - `agent-company/state.rs` — removed `max_weight_delta`, `weight_change_cooldown_blocks`, `min_member_weight` fields from `Config`, removed `LAST_WEIGHT_CHANGE_BLOCK` storage item.
+> - `agent-company/contract.rs` — removed the creation-time validation block in `execute_create_proposal`, removed the cooldown-record side-effect in `execute_execute_proposal`, added `WeightChange` to the supermajority match in vote tallying, **disabled legacy weight-change execute messages at runtime** (decode-compatible but non-executable), and rewrote `migrate` to handle v4→v5 transition and clean up the orphaned `last_weight_change_block` storage key.
+> - `agent-company/tests.rs` — updated `test_execute_passed_proposal` to vote with 100% weight (sufficient to clear the 67% threshold) and removed the stale `max_weight_delta` comment.
+>
+> *The original description of Variable 3 follows below for historical record. It is not accurate about what the contract currently does. It accurately describes what was shipped in v4 and what was overclaimed about it.*
 
 ### Problem
 

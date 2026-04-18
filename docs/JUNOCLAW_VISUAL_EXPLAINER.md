@@ -231,7 +231,7 @@ VOTING RULES:
 │ Proposal Type       │ Quorum       │ Buds Needed  │
 ├─────────────────────┼──────────────┼──────────────┤
 │ FreeText            │ 51%          │ 7 of 13      │
-│ WeightChange        │ 51%          │ 7 of 13      │
+│ WeightChange        │ 67%          │ 9 of 13      │
 │ WavsPush            │ 51%          │ 7 of 13      │
 │ SortitionRequest    │ 51%          │ 7 of 13      │
 │ CodeUpgrade         │ 67%          │ 9 of 13      │

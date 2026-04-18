@@ -69,7 +69,7 @@ JunoClaw is three things working together. Each layer is open source, deployed o
 
 ### Layer 1 — A DAO That Governs the Agents
 
-Thirteen members. Every decision requires a vote. Normal proposals need **7 of 13** (51% quorum). Code upgrades need **9 of 13** (67% supermajority). The genesis address distributes all weight to the 13 buds and retains only symbolic power (3/10000) plus wasmd admin for emergencies.
+Thirteen members. Every decision requires a vote. Normal proposals need **7 of 13** (51% quorum). Constitutional proposals — **CodeUpgrade** and **WeightChange** — need **9 of 13** (67% supermajority). The genesis address distributes all weight to the 13 buds and retains only symbolic power (3/10000) plus wasmd admin for emergencies.
 
 **Genesis loses voting power after budding.** That's not a future promise — it's baked into the architecture.
 
@@ -79,7 +79,7 @@ The governance uses a **soulbound trust-tree**: 13 genesis buds distributed in a
 
 **BreakChannel flow:**
 1. Member raises concern → submits BreakChannel proposal to DAO
-2. DAO votes (7-of-13 quorum for seated members)
+2. DAO votes (constitutional threshold for seat reassignment — 9-of-13 once fully seated)
 3. If passed → target branch is pruned (revoked = true)
 4. Pruned member loses voting weight immediately
 5. DAO can re-assign the seat via new WeightChange proposal
@@ -152,7 +152,7 @@ And here's the part that makes it human: if the 13 decide the founder should hol
 
 **The structure:**
 - Genesis distributes buds #1 through #13 → genesis loses voting power automatically
-- Governance: 7-of-13 quorum, 9-of-13 supermajority
+- Governance: 7-of-13 quorum for normal proposals, 9-of-13 supermajority for constitutional proposals (`CodeUpgrade` + `WeightChange`)
 - Multisig: 5-of-13 for deploy and fund operations
 - Any of the 13 can sunset — pass the bud first, then leave
 - Genesis can re-enter as #13 only if a sitting member offers a bud
@@ -247,7 +247,7 @@ It asks the Juno community five things:
 1. Recognize JunoClaw as ecosystem infrastructure
 2. Support the Junoswap revival through verifiable agent verification
 3. Endorse Akash as the decentralized coordination layer
-4. Acknowledge the CodeUpgrade governance framework with 67% supermajority
+4. Acknowledge the constitutional governance framework (`CodeUpgrade` + `WeightChange`) with 67% supermajority
 5. Support the validator sidecar proposal for distributed TEE attestation
 
 ---

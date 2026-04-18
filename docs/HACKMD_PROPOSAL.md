@@ -121,7 +121,7 @@ JunoClaw uses a "budding" governance model designed to prevent centralization:
 
 1. **Genesis phase** (current): Genesis address holds 100% weight. Used only for initial deployment and setup.
 2. **Budding**: Genesis submits a `WeightChange` proposal distributing weight to 13 initial DAO members ("buds"). Each bud receives 769/10000 weight. Genesis retains 3/10000 (symbolic) plus wasmd admin key (emergency-only, e.g. critical bug migration).
-3. **Self-governance**: Normal proposals require 51% quorum (7 of 13 buds). Code upgrades (`CodeUpgrade` proposal kind) require 67% supermajority (9 of 13 buds). Further members can be added via subsequent `WeightChange` proposals.
+3. **Self-governance**: Normal proposals require 51% quorum (7 of 13 buds). Constitutional proposals (`CodeUpgrade` and `WeightChange`) require 67% supermajority (9 of 13 buds). Further members can be added via subsequent `WeightChange` proposals.
 
 **Once the 13 buds are active, Genesis loses voting power. The DAO self-governs. No single actor can push changes unilaterally.**
 
@@ -137,7 +137,7 @@ Passing signals that the Juno community recognizes JunoClaw and endorses the fol
 2. **Genesis wires Akash infrastructure**: Operator coordination, registry, aggregator, IPFS — all on Akash (software mode, live today)
 3. **Genesis distributes TEE attestation**: Validator sidecar proposal — interested validators run the WASI component inside their own TEE hardware, producing independent hardware-grade attestations
 4. **Genesis buds into 13**: DAO governance begins, Genesis loses voting power
-5. **Ongoing**: DAO governs itself — proposals, code upgrades, new members, WAVS verification
+5. **Ongoing**: DAO governs itself — proposals, constitutional changes (`CodeUpgrade` + `WeightChange`), new members, WAVS verification
 
 The timeline is with Genesis. This is a seed planted in Juno soil, not a corporate roadmap.
 
@@ -148,7 +148,7 @@ The timeline is with Genesis. This is a seed planted in Juno soil, not a corpora
 1. Recognize JunoClaw as Juno ecosystem infrastructure
 2. Support the Junoswap revival through verifiable agent verification
 3. Endorse Akash as the decentralized coordination layer for JunoClaw's operator infrastructure
-4. Acknowledge the CodeUpgrade governance framework with 67% supermajority
+4. Acknowledge the constitutional governance framework (`CodeUpgrade` + `WeightChange`) with 67% supermajority
 5. Support the validator sidecar proposal — distributing TEE attestation across Juno's validator set for hardware-grade trust
 
 ---

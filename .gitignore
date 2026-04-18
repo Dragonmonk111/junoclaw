@@ -43,11 +43,21 @@ frontend/dist/
 mcp/dist/
 
 # Personal files — never commit
+# NOTE: `_private/` contains personal/job-application drafts and must stay local.
+_private/
 cv_*.html
 cv_*.pdf
+*resume*.md
+*resume*.txt
+*resume*.pdf
+*cover*letter*.md
+*cover*letter*.txt
+*cover*letter*.pdf
+*supporting*statement*.md
+*supporting*statement*.txt
+*job*application*.md
+*job*application*.txt
 cv_*.txt
-supporting_*.txt
-management_*.txt
 *_for_pdf.html
 html_to_pdf.py
 make_pdf.py

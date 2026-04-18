@@ -303,7 +303,7 @@ fn test_update_members_unauthorized_fails() {
 }
 
 #[test]
-fn test_propose_and_execute_weight_change() {
+fn test_legacy_propose_weight_change_disabled() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let alice = mk(&app, "alice");
@@ -318,32 +318,18 @@ fn test_propose_and_execute_weight_change() {
         MemberInput { addr: charlie.to_string(), weight: 3333, role: MemberRole::Agent },
     ];
 
-    app.execute_contract(
+    let err = app.execute_contract(
         admin.clone(),
         contract.clone(),
         &ExecuteMsg::ProposeWeightChange { members: new_members },
         &[],
-    ).unwrap();
-
-    // Advance blocks past timelock (50)
-    app.update_block(|b| { b.height += 51; });
-
-    app.execute_contract(
-        admin.clone(),
-        contract.clone(),
-        &ExecuteMsg::ExecuteWeightProposal {},
-        &[],
-    ).unwrap();
-
-    let cfg: crate::state::Config = app
-        .wrap()
-        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
-        .unwrap();
-    assert_eq!(cfg.members.len(), 3);
+    ).unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::LegacyWeightChangeDisabled {}));
 }
 
 #[test]
-fn test_execute_proposal_before_timelock_fails() {
+fn test_legacy_execute_weight_proposal_disabled() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let alice = mk(&app, "alice");
@@ -351,14 +337,6 @@ fn test_execute_proposal_before_timelock_fails() {
     let members = two_member_msg(&alice, &bob);
     let contract = store_and_instantiate(&mut app, &admin, members, None);
 
-    app.execute_contract(
-        admin.clone(),
-        contract.clone(),
-        &ExecuteMsg::ProposeWeightChange { members: two_member_msg(&alice, &bob) },
-        &[],
-    ).unwrap();
-
-    // Don't advance blocks — should fail
     let err = app.execute_contract(
         admin.clone(),
         contract.clone(),
@@ -366,11 +344,11 @@ fn test_execute_proposal_before_timelock_fails() {
         &[],
     ).unwrap_err();
     let contract_err = err.downcast::<ContractError>().unwrap();
-    assert!(matches!(contract_err, ContractError::TimelockNotElapsed { .. }));
+    assert!(matches!(contract_err, ContractError::LegacyWeightChangeDisabled {}));
 }
 
 #[test]
-fn test_cancel_proposal() {
+fn test_legacy_cancel_weight_proposal_disabled() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let alice = mk(&app, "alice");
@@ -378,25 +356,14 @@ fn test_cancel_proposal() {
     let members = two_member_msg(&alice, &bob);
     let contract = store_and_instantiate(&mut app, &admin, members, None);
 
-    app.execute_contract(
-        admin.clone(),
-        contract.clone(),
-        &ExecuteMsg::ProposeWeightChange { members: two_member_msg(&alice, &bob) },
-        &[],
-    ).unwrap();
-
-    app.execute_contract(
+    let err = app.execute_contract(
         admin.clone(),
         contract.clone(),
         &ExecuteMsg::CancelWeightProposal {},
         &[],
-    ).unwrap();
-
-    let proposal: Option<crate::state::WeightProposal> = app
-        .wrap()
-        .query_wasm_smart(&contract, &QueryMsg::GetPendingProposal {})
-        .unwrap();
-    assert!(proposal.is_none());
+    ).unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::LegacyWeightChangeDisabled {}));
 }
 
 #[test]
@@ -658,7 +625,7 @@ fn test_execute_passed_proposal() {
     let members = two_member_msg(&alice, &bob);
     let contract = store_and_instantiate(&mut app, &admin, members, None);
 
-    // Propose weight change via new governance system (within max_weight_delta=2000)
+    // Propose weight redistribution via the governance system.
     let new_members = vec![
         MemberInput { addr: alice.to_string(), weight: 4000, role: MemberRole::Human },
         MemberInput { addr: bob.to_string(), weight: 3000, role: MemberRole::Agent },
@@ -674,9 +641,17 @@ fn test_execute_passed_proposal() {
         &[],
     ).unwrap();
 
-    // Alice votes Yes → passes (6000 > 51% of 10000)
+    // `WeightChange` is constitutional — requires the 67% supermajority
+    // threshold (same bar as `CodeUpgrade`). Alice's 6000 bps alone is below
+    // 6700; Bob's 4000 must also vote Yes to reach 10000 > 6700 and pass.
     app.execute_contract(
         alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+        &[],
+    ).unwrap();
+    app.execute_contract(
+        bob.clone(),
         contract.clone(),
         &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
         &[],

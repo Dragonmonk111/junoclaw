@@ -97,7 +97,8 @@ Genesis submits WeightChange proposal (auto-passes at 100%)
         │
         ├── Normal proposals: 51% (7 buds)
         ├── Code upgrades: 67% (9 buds)
-        ├── Can add more buds via WeightChange
+        ├── Weight changes: 67% (9 buds)
+        ├── Can add more buds via WeightChange (constitutional path)
         │
         ▼
 DAO is sovereign. Genesis is symbolic.

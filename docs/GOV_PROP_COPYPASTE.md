@@ -36,7 +36,7 @@ As of March 18, 2026:
 - agent-company v3 contract live (code ID 63, 5 governance proposals executed)
 - Junoswap v2 factory and 2 trading pairs deployed (JUNOX/USDC, JUNOX/STAKE)
 - TEE hardware attestation proven — Proposal 4 ran inside an Intel SGX enclave on Azure DCsv3. TX: 6EA1AE79D373BE7E57A8492A089E543ADA40B30CB5F7E69B177E607879D26B22. The Azure VM used for this proof has been deleted.
-- CodeUpgrade governance with 67% supermajority quorum (9 of 13 buds)
+- Constitutional governance (`CodeUpgrade` + `WeightChange`) with 67% supermajority quorum (9 of 13 buds)
 - On-chain randomness via NOIS/drand for fair jury selection (sortition)
 - Validator sidecar docker-compose ready for distributed TEE attestation
 - WAVS operator stack LIVE on Akash decentralized compute (4 containers: operator + aggregator + warg-registry + IPFS, ~US$8.76/month, 63.77 AKT funded). Runs in software mode — see Akash section below.
@@ -83,8 +83,8 @@ JunoClaw uses a "budding" governance model:
 - Genesis submits WeightChange proposal → distributes weight to 13 initial DAO members ("buds")
 - Each bud: 769/10000 weight. Genesis retains 3/10000 (symbolic) + wasmd admin (emergency only)
 - Normal proposals: 51% quorum (7 of 13 buds)
-- Code upgrades (CodeUpgrade proposal kind): 67% supermajority (9 of 13 buds)
-- Further budding: DAO can add more members via WeightChange proposals
+- Constitutional proposals (CodeUpgrade + WeightChange): 67% supermajority (9 of 13 buds)
+- Further budding: DAO can add more members via WeightChange proposals (constitutional path)
 
 **Target Architecture: Hybrid (Akash + Validator TEE)**
 
@@ -104,7 +104,7 @@ Passing signals that the Juno community recognizes JunoClaw and endorses the fol
 2. Genesis wires Akash infrastructure: Operator coordination, registry, aggregator, IPFS — all on Akash (software mode, live today)
 3. Genesis distributes TEE attestation: Validator sidecar proposal — interested validators run the WASI component inside their own TEE hardware, producing independent hardware-grade attestations
 4. Genesis buds into 13: DAO governance begins, Genesis loses voting power
-5. Ongoing: DAO governs itself — proposals, code upgrades, new members, WAVS verification
+5. Ongoing: DAO governs itself — proposals, constitutional changes (`CodeUpgrade` + `WeightChange`), new members, WAVS verification
 
 The genesis address for mainnet deployment: juno1tvpe72amnd3arnh4nhlf3hztx5aqznu6hz5f4m
 
@@ -117,7 +117,7 @@ This is a signaling proposal — no code execution, no community pool funds requ
 1. Recognize JunoClaw as Juno ecosystem infrastructure
 2. Support the Junoswap revival through verifiable agent verification
 3. Endorse Akash as the decentralized coordination layer for JunoClaw's operator infrastructure
-4. Acknowledge the CodeUpgrade governance framework with 67% supermajority
+4. Acknowledge the constitutional governance framework (`CodeUpgrade` + `WeightChange`) with 67% supermajority
 5. Support the validator sidecar proposal — distributing TEE attestation across Juno's validator set for hardware-grade trust
 
 **Risks and Limitations**

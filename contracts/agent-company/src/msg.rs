@@ -84,7 +84,8 @@ pub struct InstantiateMsg {
     pub adaptive_min_blocks: Option<u64>,
     /// DAO-wide verification config (defaults to V2+V3)
     pub verification: Option<VerificationConfig>,
-    /// Supermajority quorum for CodeUpgrade proposals (default 67)
+    /// Supermajority quorum for constitutional proposals
+    /// (`CodeUpgrade` and `WeightChange`) (default 67)
     pub supermajority_quorum_percent: Option<u64>,
 }
 
@@ -107,15 +108,18 @@ pub enum ExecuteMsg {
     /// Mark an expired proposal (deadline passed without quorum).
     ExpireProposal { proposal_id: u64 },
 
-    // ── Legacy (kept for backward compat / migration) ──
+    // ── Legacy (decode-compatible; disabled in v5 execute path) ──
 
-    /// Propose a new member weight schedule. Opens a timelock window.
+    /// Legacy message retained for backward decoding compatibility.
+    /// Disabled at runtime in v5; use `CreateProposal { kind: WeightChange }`.
     ProposeWeightChange { members: Vec<MemberInput> },
 
-    /// Execute the pending legacy proposal after the timelock has elapsed.
+    /// Legacy message retained for backward decoding compatibility.
+    /// Disabled at runtime in v5; use `ExecuteProposal { proposal_id }`.
     ExecuteWeightProposal {},
 
-    /// Cancel the pending legacy proposal before it executes.
+    /// Legacy message retained for backward decoding compatibility.
+    /// Disabled at runtime in v5.
     CancelWeightProposal {},
 
     /// Direct weight update — only callable if governance is None.

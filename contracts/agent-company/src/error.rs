@@ -56,6 +56,9 @@ pub enum ContractError {
     #[error("Proposal {id} did not pass (yes_weight <= no_weight)")]
     ProposalNotPassed { id: u64 },
 
+    #[error("Legacy weight-change messages are disabled; use CreateProposal{{kind: WeightChange}}, CastVote, and ExecuteProposal")]
+    LegacyWeightChangeDisabled {},
+
     #[error("No task-ledger address configured for WavsPush proposals")]
     NoTaskLedger {},
 

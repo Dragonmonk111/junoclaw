@@ -20,7 +20,8 @@
       770  770  770  770  770  770  770  770  770  770  770  770  770
         │                        │                        │
         └──── DAO voting ────────┴──── JCLAW token ───────┘
-              (67% for code upgrades, 51% for normal props)
+             (67% for constitutional props: code upgrades + weight changes,
+              51% for normal props)
 ```
 
 ## Phase 0: Genesis Amendments — Mar 13-17, 2026 ✅ COMPLETE
@@ -95,7 +96,7 @@ After budding:
 |--------|----------|-------|
 | Normal proposal (FreeText, ConfigChange) | 51% quorum (5,131 weight → 7 buds) | Simple majority |
 | Code upgrade (Migrate, Instantiate, SetDex) | 67% quorum (6,700 weight → 9 buds) | Supermajority |
-| Weight change (add/remove buds) | 51% quorum | Can add new buds |
+| Weight change (add/remove buds) | 67% quorum (6,700 weight → 9 buds) | Constitutional supermajority |
 | WAVS push | 51% quorum | Off-chain verification tasks |
 
 ### Further Budding

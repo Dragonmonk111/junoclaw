@@ -12,7 +12,7 @@
 
 ## Summary
 
-JunoClaw is an open-source agentic AI platform built natively on Juno Network. We are proposing to revive Junoswap with TEE-attested verification, deploy verifiable AI agents on Akash decentralized compute, and establish a DAO-governed code upgrade framework that requires 67% validator quorum for infrastructure changes.
+JunoClaw is an open-source agentic AI platform built natively on Juno Network. We are proposing to revive Junoswap with TEE-attested verification, deploy verifiable AI agents on Akash decentralized compute, and establish a DAO-governed constitutional framework where both code upgrades and voting-power redistribution require 67% supermajority.
 
 This proposal signals community support for JunoClaw's roadmap and requests recognition as official Juno ecosystem infrastructure.
 
@@ -77,14 +77,14 @@ JunoClaw uses a novel "budding" governance model:
 1. **Genesis phase**: A single genesis address prepares the entire contract database
 2. **Budding**: Genesis distributes voting weight to 13 initial "buds" (DAO members)
 3. **Post-budding**: The 13 buds vote on all further changes
-4. **Code upgrades require 67% supermajority** — 9 of 13 buds must agree
+4. **Constitutional proposals (`CodeUpgrade` + `WeightChange`) require 67% supermajority** — 9 of 13 buds must agree
 5. **Further budding**: The DAO can vote to add more members, redistributing weight
 
 This is implemented as a **CodeUpgrade proposal kind** with atomic multi-action execution — the DAO can bundle contract migrations, instantiations, and config changes into a single governance-gated proposal.
 
 ### Why 67% Supermajority
 
-Code changes are irreversible. Requiring 67% for code upgrades matches the Cosmos SDK's `x/gov` pattern for software upgrades and ensures no small faction can push infrastructure changes.
+Constitutional changes are high-impact. Requiring 67% for code upgrades and weight redistribution ensures no small faction can unilaterally change infrastructure or voting-power structure.
 
 ---
 
@@ -105,7 +105,7 @@ This is a **signaling proposal**. We are asking the Juno community to:
 1. **Recognize JunoClaw** as official Juno ecosystem infrastructure
 2. **Support Junoswap revival** through TEE-attested verification
 3. **Endorse decentralized compute** via Akash for Juno's verification layer
-4. **Acknowledge the governance framework** — CodeUpgrade proposals with supermajority quorum
+4. **Acknowledge the governance framework** — constitutional proposals (`CodeUpgrade` + `WeightChange`) with supermajority quorum
 5. **Support the future validator sidecar proposal** — TEE-only Docker process alongside validator nodes for hardware-attested verification across the validator set
 
 We are **not** asking for community pool funds at this time. JunoClaw is self-funded and operational.
@@ -120,7 +120,7 @@ Passing this proposal signals that the Juno community recognizes VairagyaNodes a
 2. **Genesis deploys mainnet contracts**: agent-company, Junoswap factory, escrow, task-ledger, agent-registry — all on juno-1.
 3. **Genesis wires infrastructure**: Junoswap factory linked, WAVS operator configured, Akash deployment active.
 4. **Genesis buds into 13**: WeightChange proposal distributes voting weight to 13 DAO members. Genesis retains symbolic weight (3/10000) and wasmd admin (emergency only).
-5. **DAO governs**: The 13 buds control all future proposals. Code upgrades require 67% supermajority (9 of 13).
+5. **DAO governs**: The 13 buds control all future proposals. Constitutional changes (`CodeUpgrade` + `WeightChange`) require 67% supermajority (9 of 13).
 6. **Validator sidecar proposal**: The DAO (not Genesis) asks validators to run TEE sidecars for hardware-attested verification.
 
 **Timeline is decided by the Genesis Root.**

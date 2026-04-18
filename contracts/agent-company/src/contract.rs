@@ -12,7 +12,7 @@ use crate::msg::{
 use crate::state::{
     Attestation, CodeUpgradeAction, Config, Member, NoisCallback, PaymentRecord,
     PendingSortition, Proposal, ProposalKind, ProposalStatus, SortitionRound, Vote, VoteOption,
-    WeightProposal, ATTESTATIONS, CONFIG, LAST_WEIGHT_CHANGE_BLOCK, MEMBER_EARNINGS,
+    ATTESTATIONS, CONFIG, MEMBER_EARNINGS,
     PAYMENT_HISTORY, PENDING_SORTITION,
     PROPOSAL, PROPOSALS, PROPOSAL_SEQ, SORTITION_ROUNDS, SORTITION_SEQ,
 };
@@ -89,14 +89,10 @@ pub fn instantiate(
         nois_proxy,
         supermajority_quorum_percent: msg.supermajority_quorum_percent.unwrap_or(67),
         dex_factory: None,
-        max_weight_delta: 2000,
-        weight_change_cooldown_blocks: 500,
-        min_member_weight: 1,
     })?;
     PROPOSAL.save(deps.storage, &None)?;
     PROPOSAL_SEQ.save(deps.storage, &0u64)?;
     SORTITION_SEQ.save(deps.storage, &0u64)?;
-    LAST_WEIGHT_CHANGE_BLOCK.save(deps.storage, &0u64)?;
 
     Ok(Response::new()
         .add_attribute("action", "instantiate")
@@ -123,13 +119,12 @@ pub fn execute(
             execute_execute_proposal(deps, env, info, proposal_id),
         ExecuteMsg::ExpireProposal { proposal_id } =>
             execute_expire_proposal(deps, env, proposal_id),
-        // ── Legacy ──
-        ExecuteMsg::ProposeWeightChange { members } =>
-            execute_propose_weight(deps, env, info, members),
-        ExecuteMsg::ExecuteWeightProposal {} =>
-            execute_weight_proposal(deps, env, info),
-        ExecuteMsg::CancelWeightProposal {} =>
-            execute_cancel_proposal(deps, env, info),
+        // ── Legacy (disabled in v5) ──
+        ExecuteMsg::ProposeWeightChange { .. }
+        | ExecuteMsg::ExecuteWeightProposal {}
+        | ExecuteMsg::CancelWeightProposal {} => {
+            Err(ContractError::LegacyWeightChangeDisabled {})
+        }
         ExecuteMsg::UpdateMembers { members } =>
             execute_update_members(deps, env, info, members),
         ExecuteMsg::TransferAdmin { new_admin } =>
@@ -224,41 +219,11 @@ fn execute_create_proposal(
     // Convert msg-level ProposalKind (strings) to state-level (validated Addrs)
     let kind = match kind_msg {
         ProposalKindMsg::WeightChange { members } => {
-            // ── Variable 3: cooldown check ──
-            let last_change = LAST_WEIGHT_CHANGE_BLOCK.load(deps.storage).unwrap_or(0);
-            if last_change > 0 && env.block.height < last_change + cfg.weight_change_cooldown_blocks {
-                return Err(ContractError::Std(StdError::generic_err(
-                    format!(
-                        "weight change cooldown: {} blocks remaining",
-                        (last_change + cfg.weight_change_cooldown_blocks).saturating_sub(env.block.height)
-                    ),
-                )));
-            }
+            // Weight redistribution is gated at tally time by
+            // `supermajority_quorum_percent` (Alternative D, mirrors `CodeUpgrade`).
+            // No proposal-creation guardrails: weights mean what they say, and
+            // the contract does not rate-limit or floor what governance may decide.
             let parsed = parse_members(&deps, members)?;
-            // ── Variable 3: delta cap + floor check ──
-            for new_m in &parsed {
-                // Floor check
-                if new_m.weight < cfg.min_member_weight {
-                    return Err(ContractError::Std(StdError::generic_err(
-                        format!(
-                            "member {} weight {} below min_member_weight {}",
-                            new_m.addr, new_m.weight, cfg.min_member_weight
-                        ),
-                    )));
-                }
-                // Delta cap check against current members
-                if let Some(old_m) = cfg.members.iter().find(|m| m.addr == new_m.addr) {
-                    let delta = new_m.weight.abs_diff(old_m.weight);
-                    if delta > cfg.max_weight_delta {
-                        return Err(ContractError::Std(StdError::generic_err(
-                            format!(
-                                "member {} weight delta {} exceeds max_weight_delta {}",
-                                new_m.addr, delta, cfg.max_weight_delta
-                            ),
-                        )));
-                    }
-                }
-            }
             ProposalKind::WeightChange { members: parsed }
         }
         ProposalKindMsg::WavsPush { task_description, execution_tier, escrow_amount } => {
@@ -391,10 +356,15 @@ fn execute_cast_vote(
         }
     }
 
-    // Check if proposal can auto-resolve (quorum met)
-    // CodeUpgrade proposals require supermajority quorum (default 67%)
+    // Check if proposal can auto-resolve (quorum met).
+    // Constitutional proposals — `CodeUpgrade` (changes the contract code) and
+    // `WeightChange` (redistributes voting power) — require the supermajority
+    // quorum (default 67%). All other proposal kinds use the ordinary quorum
+    // (default 51%).
     let required_quorum = match &proposal.kind {
-        ProposalKind::CodeUpgrade { .. } => cfg.supermajority_quorum_percent,
+        ProposalKind::CodeUpgrade { .. } | ProposalKind::WeightChange { .. } => {
+            cfg.supermajority_quorum_percent
+        }
         _ => cfg.quorum_percent,
     };
     let quorum_threshold = cfg.total_weight * required_quorum / 100;
@@ -454,8 +424,6 @@ fn execute_execute_proposal(
         ProposalKind::WeightChange { members } => {
             cfg.members = members.clone();
             CONFIG.save(deps.storage, &cfg)?;
-            // ── Variable 3: record cooldown timestamp ──
-            LAST_WEIGHT_CHANGE_BLOCK.save(deps.storage, &env.block.height)?;
             response = response.add_attribute("kind", "weight_change");
         }
         ProposalKind::WavsPush { task_description, execution_tier, escrow_amount } => {
@@ -987,92 +955,10 @@ fn execute_submit_attestation(
 }
 
 // ──────────────────────────────────────────────
-// Legacy governance handlers
+// Legacy governance execute handlers were intentionally removed in v5.
+// Legacy message variants remain decode-compatible but return
+// `ContractError::LegacyWeightChangeDisabled` from `execute`.
 // ──────────────────────────────────────────────
-
-fn execute_propose_weight(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    member_inputs: Vec<MemberInput>,
-) -> Result<Response, ContractError> {
-    let cfg = CONFIG.load(deps.storage)?;
-    let is_admin = info.sender == cfg.admin;
-    let is_governance = cfg.governance.as_ref().map(|g| *g == info.sender).unwrap_or(false);
-    if !is_admin && !is_governance {
-        return Err(ContractError::Unauthorized {});
-    }
-
-    let proposed_members = parse_members(&deps, member_inputs)?;
-
-    // Timelock: default 50 blocks (~5 min on Juno). Could be stored in config.
-    let executable_after = env.block.height + 50;
-
-    let seq = PROPOSAL_SEQ.load(deps.storage)? + 1;
-    PROPOSAL_SEQ.save(deps.storage, &seq)?;
-
-    PROPOSAL.save(deps.storage, &Some(WeightProposal {
-        id: seq,
-        proposer: info.sender,
-        proposed_members,
-        executable_after,
-        executed: false,
-    }))?;
-
-    Ok(Response::new()
-        .add_attribute("action", "propose_weight_change")
-        .add_attribute("proposal_id", seq.to_string())
-        .add_attribute("executable_after", executable_after.to_string()))
-}
-
-fn execute_weight_proposal(
-    deps: DepsMut,
-    env: Env,
-    _info: MessageInfo,
-) -> Result<Response, ContractError> {
-    let proposal = PROPOSAL.load(deps.storage)?
-        .ok_or(ContractError::NoProposal {})?;
-
-    if proposal.executed {
-        return Err(ContractError::AlreadyExecuted {});
-    }
-    if env.block.height < proposal.executable_after {
-        return Err(ContractError::TimelockNotElapsed {
-            executable_after: proposal.executable_after,
-            current: env.block.height,
-        });
-    }
-
-    let mut cfg = CONFIG.load(deps.storage)?;
-    cfg.members = proposal.proposed_members.clone();
-    CONFIG.save(deps.storage, &cfg)?;
-
-    let mut executed_proposal = proposal;
-    executed_proposal.executed = true;
-    PROPOSAL.save(deps.storage, &Some(executed_proposal))?;
-
-    Ok(Response::new()
-        .add_attribute("action", "execute_weight_proposal")
-        .add_attribute("new_member_count", cfg.members.len().to_string()))
-}
-
-fn execute_cancel_proposal(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-) -> Result<Response, ContractError> {
-    let cfg = CONFIG.load(deps.storage)?;
-    let is_admin = info.sender == cfg.admin;
-    let is_governance = cfg.governance.as_ref().map(|g| *g == info.sender).unwrap_or(false);
-    if !is_admin && !is_governance {
-        return Err(ContractError::Unauthorized {});
-    }
-
-    PROPOSAL.load(deps.storage)?.ok_or(ContractError::NoProposal {})?;
-    PROPOSAL.save(deps.storage, &None)?;
-
-    Ok(Response::new().add_attribute("action", "cancel_weight_proposal"))
-}
 
 fn execute_update_members(
     deps: DepsMut,
@@ -1192,40 +1078,44 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    // ── v3→v4 migration: patch Config JSON for any missing fields ──
-    // Read raw storage bytes and attempt to deserialize as the new Config.
-    // If new fields are missing, manually patch the JSON.
+    // ── Config migration ──
+    // We try to deserialize the stored bytes as the current Config shape. Serde's
+    // default behaviour ignores unknown fields, so v4 stores (which had the three
+    // retracted Variable 3 fields) deserialize cleanly — we just re-save to
+    // persist the canonical v5 shape.
+    //
+    // If deserialization fails, the stored bytes are pre-v4 (missing the v3
+    // fields `supermajority_quorum_percent` and `dex_factory`) and we patch
+    // them in with defaults before deserializing.
     let raw = deps.storage.get(b"config");
     if let Some(data) = raw {
-        // Try deserializing as new Config first
-        if cosmwasm_std::from_json::<Config>(&data).is_err() {
-            let mut json_str = String::from_utf8(data.to_vec())
-                .map_err(|_| ContractError::Std(cosmwasm_std::StdError::generic_err("invalid utf8 in config")))?;
-            // Remove trailing `}` and append new fields with defaults
-            if let Some(pos) = json_str.rfind('}') {
-                json_str.truncate(pos);
-                // v3 fields (if missing from v2)
-                if !json_str.contains("supermajority_quorum_percent") {
-                    json_str.push_str(",\"supermajority_quorum_percent\":67,\"dex_factory\":null");
+        let new_cfg: Config = match cosmwasm_std::from_json::<Config>(&data) {
+            Ok(cfg) => cfg,
+            Err(_) => {
+                // Pre-v4 storage: patch the v3 fields and try again.
+                let mut json_str = String::from_utf8(data.to_vec())
+                    .map_err(|_| ContractError::Std(cosmwasm_std::StdError::generic_err(
+                        "invalid utf8 in config",
+                    )))?;
+                if let Some(pos) = json_str.rfind('}') {
+                    json_str.truncate(pos);
+                    if !json_str.contains("supermajority_quorum_percent") {
+                        json_str.push_str(",\"supermajority_quorum_percent\":67,\"dex_factory\":null");
+                    }
+                    json_str.push('}');
                 }
-                // v4 fields: weight governance guardrails
-                if !json_str.contains("max_weight_delta") {
-                    json_str.push_str(",\"max_weight_delta\":2000,\"weight_change_cooldown_blocks\":500,\"min_member_weight\":1");
-                }
-                json_str.push('}');
+                cosmwasm_std::from_json(json_str.as_bytes())
+                    .map_err(|e| ContractError::Std(cosmwasm_std::StdError::generic_err(
+                        format!("migration: failed to parse patched config: {}", e),
+                    )))?
             }
-            let new_cfg: Config = cosmwasm_std::from_json(json_str.as_bytes())
-                .map_err(|e| ContractError::Std(cosmwasm_std::StdError::generic_err(
-                    format!("v4 migration: failed to parse patched config: {}", e),
-                )))?;
-            CONFIG.save(deps.storage, &new_cfg)?;
-        }
+        };
+        CONFIG.save(deps.storage, &new_cfg)?;
     }
 
-    // Initialize LAST_WEIGHT_CHANGE_BLOCK if not present
-    if LAST_WEIGHT_CHANGE_BLOCK.may_load(deps.storage)?.is_none() {
-        LAST_WEIGHT_CHANGE_BLOCK.save(deps.storage, &0u64)?;
-    }
+    // v4 → v5: remove the orphaned LAST_WEIGHT_CHANGE_BLOCK storage item.
+    // No-op if it was never written (pre-v4) or already removed (re-migration).
+    deps.storage.remove(b"last_weight_change_block");
 
     Ok(Response::new()
         .add_attribute("action", "migrate")
