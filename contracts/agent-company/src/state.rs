@@ -73,6 +73,8 @@ pub struct Config {
     pub admin: Addr,
     /// Optional on-chain governance contract (e.g. DAODAO dao-core).
     pub governance: Option<Addr>,
+    #[serde(default)]
+    pub wavs_operator: Option<Addr>,
     pub escrow_contract: Addr,
     pub agent_registry: Addr,
     /// Optional task-ledger address for WavsPush proposals
@@ -119,6 +121,8 @@ pub enum ProposalKind {
     ConfigChange {
         new_admin: Option<String>,
         new_governance: Option<String>,
+        #[serde(default)]
+        new_wavs_operator: Option<String>,
     },
     /// Free-text proposal (signal vote, no on-chain side-effects)
     FreeText {

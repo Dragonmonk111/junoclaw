@@ -121,6 +121,7 @@ function kindDetail(kind: ProposalKind) {
       const parts = []
       if (kind.new_admin) parts.push(`admin → ${truncAddr(kind.new_admin)}`)
       if (kind.new_governance) parts.push(`gov → ${truncAddr(kind.new_governance)}`)
+      if (kind.new_wavs_operator) parts.push(`wavs op → ${truncAddr(kind.new_wavs_operator)}`)
       return parts.join(', ') || 'No changes specified'
     }
     case 'free_text':      return kind.description
@@ -338,6 +339,7 @@ function CreateProposalForm({ onClose, onSubmit }: { onClose: () => void; onSubm
   const [escrowAmt, setEscrowAmt] = useState('')
   const [newAdmin, setNewAdmin] = useState('')
   const [newGov, setNewGov] = useState('')
+  const [newWavsOp, setNewWavsOp] = useState('')
   const [question, setQuestion] = useState('')
   const [resCriteria, setResCriteria] = useState('')
   const [deadlineBlock, setDeadlineBlock] = useState('')
@@ -361,7 +363,11 @@ function CreateProposalForm({ onClose, onSubmit }: { onClose: () => void; onSubm
           kind = buildWavsPushProposal(taskDesc, execTier, escrowAmt || '0')
           break
         case 'config_change':
-          kind = buildConfigChangeProposal(newAdmin || undefined, newGov || undefined)
+          kind = buildConfigChangeProposal(
+            newAdmin || undefined,
+            newGov || undefined,
+            newWavsOp || undefined,
+          )
           break
         case 'outcome_create':
           kind = buildOutcomeCreateProposal(question, resCriteria, Number(deadlineBlock) || 0)
@@ -454,6 +460,9 @@ function CreateProposalForm({ onClose, onSubmit }: { onClose: () => void; onSubm
                  className={inputCls} style={inputStyle} />
           <input type="text" placeholder="New governance address (optional)"
                  value={newGov} onChange={(e) => setNewGov(e.target.value)}
+                 className={inputCls} style={inputStyle} />
+          <input type="text" placeholder="New WAVS operator address (optional)"
+                 value={newWavsOp} onChange={(e) => setNewWavsOp(e.target.value)}
                  className={inputCls} style={inputStyle} />
         </div>
       )}

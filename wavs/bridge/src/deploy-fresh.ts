@@ -74,6 +74,7 @@ async function main() {
     name: "JunoClaw Core Team",
     admin: null, // contract-level admin defaults to sender
     governance: null,
+    wavs_operator: account.address,
     escrow_contract: EXISTING.escrow,
     agent_registry: EXISTING.agentRegistry,
     task_ledger: EXISTING.taskLedger,
@@ -108,6 +109,23 @@ async function main() {
   console.log(`[deploy] Contract: ${instantiateResult.contractAddress}`);
   console.log(`[deploy] TX: ${instantiateResult.transactionHash}`);
   console.log(`[deploy] Gas: ${instantiateResult.gasUsed}`);
+
+  console.log(`\n[deploy] Step 2b: Wiring task-ledger agent_company...`);
+  const linkResult = await client.execute(
+    account.address,
+    EXISTING.taskLedger,
+    {
+      update_config: {
+        admin: null,
+        agent_registry: null,
+        agent_company: instantiateResult.contractAddress,
+      },
+    },
+    "auto",
+    "Wire task-ledger agent_company"
+  );
+  console.log(`[deploy] Link TX: ${linkResult.transactionHash}`);
+  console.log(`[deploy] Link Gas: ${linkResult.gasUsed}`);
 
   // Step 3: Verify
   console.log(`\n[deploy] Step 3: Verifying...`);

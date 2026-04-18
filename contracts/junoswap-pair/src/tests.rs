@@ -60,6 +60,54 @@ fn test_instantiate_pair() {
 }
 
 #[test]
+fn test_provide_liquidity_rejects_unexpected_denom() {
+    // v6 F4 — `ProvideLiquidity` previously silently dropped any denom
+    // in `info.funds` that wasn't `token_a` or `token_b`, absorbing
+    // those funds into the pair contract's bank balance with no way
+    // for the depositor to reclaim them. The pair now fails closed so
+    // the revert refunds every attached coin atomically.
+    let alice = MockApi::default().addr_make("alice");
+    let alice_clone = alice.clone();
+    let mut app = App::new(move |router, _, storage| {
+        router
+            .bank
+            .init_balance(storage, &alice_clone, vec![
+                Coin::new(10_000_000u128, "ujuno"),
+                Coin::new(50_000_000u128, "uusdc"),
+                Coin::new(1_000u128, "uatom"), // intruder denom
+            ])
+            .unwrap();
+    });
+    let factory = mk(&app, "factory");
+    let pair = store_and_instantiate(&mut app, &factory);
+
+    let err = app
+        .execute_contract(
+            alice.clone(),
+            pair.clone(),
+            &ExecuteMsg::ProvideLiquidity {},
+            &[
+                Coin::new(1_000_000u128, "ujuno"),
+                Coin::new(5_000_000u128, "uusdc"),
+                Coin::new(1_000u128, "uatom"),
+            ],
+        )
+        .unwrap_err();
+    assert!(
+        err.root_cause().to_string().contains("Unexpected denom"),
+        "expected UnexpectedDenom, got: {}",
+        err.root_cause()
+    );
+
+    // Alice's `uatom` must still be on her balance — the revert refunded
+    // every attached coin, including the two legitimate ones.
+    let atom_bal = app.wrap().query_balance(alice.to_string(), "uatom").unwrap();
+    assert_eq!(atom_bal.amount, Uint128::new(1_000));
+    let juno_bal = app.wrap().query_balance(alice.to_string(), "ujuno").unwrap();
+    assert_eq!(juno_bal.amount, Uint128::new(10_000_000));
+}
+
+#[test]
 fn test_provide_initial_liquidity() {
     let alice = MockApi::default().addr_make("alice");
     let alice_clone = alice.clone();

@@ -157,7 +157,7 @@ export interface DaoMember {
 export type ProposalKind =
   | { type: 'weight_change'; members: DaoMember[] }
   | { type: 'wavs_push'; task_description: string; execution_tier: ExecutionTier; escrow_amount: number }
-  | { type: 'config_change'; new_admin?: string; new_governance?: string }
+  | { type: 'config_change'; new_admin?: string; new_governance?: string; new_wavs_operator?: string }
   | { type: 'free_text'; title: string; description: string }
   | { type: 'outcome_create'; question: string; resolution_criteria: string; deadline_block: number }
   | { type: 'outcome_resolve'; market_id: number; outcome: boolean; attestation_hash: string }

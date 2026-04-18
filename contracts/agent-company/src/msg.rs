@@ -25,6 +25,8 @@ pub enum ProposalKindMsg {
     ConfigChange {
         new_admin: Option<String>,
         new_governance: Option<String>,
+        #[serde(default)]
+        new_wavs_operator: Option<String>,
     },
     FreeText {
         title: String,
@@ -61,6 +63,8 @@ pub struct InstantiateMsg {
     pub admin: Option<String>,
     /// Optional DAODAO dao-core address; if set, weight proposals require governance approval
     pub governance: Option<String>,
+    #[serde(default)]
+    pub wavs_operator: Option<String>,
     pub escrow_contract: String,
     pub agent_registry: String,
     /// Optional task-ledger address for WavsPush proposals
@@ -125,6 +129,14 @@ pub enum ExecuteMsg {
 
     /// Transfer admin to a new address (or governance contract).
     TransferAdmin { new_admin: String },
+
+    /// Admin-only: rotate the WAVS operator (the off-chain signer whose
+    /// address is trusted for `SubmitAttestation` and `SubmitRandomness`).
+    /// `new_operator = None` *clears* the operator entirely, disabling WAVS
+    /// submissions until a new one is set. Admin-only because this is a
+    /// bootstrap / emergency rotation knob; the decentralized rotation path
+    /// is a `ConfigChange` governance proposal with `new_wavs_operator`.
+    RotateWavsOperator { new_operator: Option<String> },
 
     // ── Randomness ──
 

@@ -72,6 +72,7 @@ function adaptProposalKind(kind: any): DaoProposal['kind'] {
       type: 'config_change',
       new_admin: kind.config_change.new_admin,
       new_governance: kind.config_change.new_governance,
+      new_wavs_operator: kind.config_change.new_wavs_operator,
     }
   }
   if ('free_text' in kind) {

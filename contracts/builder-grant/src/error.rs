@@ -38,4 +38,7 @@ pub enum ContractError {
 
     #[error("empty evidence")]
     EmptyEvidence {},
+
+    #[error("duplicate work_hash: already submitted as id {existing_submission_id}")]
+    DuplicateWorkHash { existing_submission_id: u64 },
 }

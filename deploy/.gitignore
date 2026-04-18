@@ -1,3 +1,5 @@
 node_modules/
 .env
 deployed.json
+deployed.v*.json
+smoke-*-results.json

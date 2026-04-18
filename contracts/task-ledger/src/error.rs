@@ -20,4 +20,13 @@ pub enum ContractError {
 
     #[error("Only task submitter or admin can modify task")]
     NotSubmitter {},
+
+    #[error("Sender must own active agent {agent_id} to submit a public task")]
+    AgentNotOwned { agent_id: u64 },
+
+    #[error("agent_id 0 is reserved for authorized system tasks")]
+    ReservedAgentId {},
+
+    #[error("Proposal-linked task already exists for proposal {proposal_id}")]
+    ProposalTaskAlreadyExists { proposal_id: u64 },
 }

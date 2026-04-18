@@ -13,24 +13,59 @@ const __dir = dirname(fileURLToPath(import.meta.url))
 const CHAIN_ID  = process.env.CHAIN_ID  || 'uni-7'
 const RPC_URL   = process.env.RPC_URL   || 'https://juno-testnet-rpc.polkachu.com'
 const GAS_PRICE = process.env.GAS_PRICE || '0.075ujunox'
-const MNEMONIC  = process.env.MNEMONIC
 const AUTO      = process.env.AUTO_CONFIRM === 'true'
 
-if (!MNEMONIC) {
-  console.error('❌  MNEMONIC not set. Copy .env.example → .env and fill it in.')
+// Mnemonic sourcing: either MNEMONIC env var, or PARLIAMENT_ROLE (e.g. "The Builder")
+// which reads wavs/bridge/parliament-state.json for the wallet with that `name`.
+// parliament-state.json is gitignored and kept out of logs.
+const PARLIAMENT_STATE = join(__dir, '..', 'wavs', 'bridge', 'parliament-state.json')
+
+function loadMnemonic() {
+  if (process.env.MNEMONIC) return process.env.MNEMONIC
+  if (process.env.PARLIAMENT_ROLE) {
+    if (!existsSync(PARLIAMENT_STATE)) {
+      console.error(`❌  PARLIAMENT_ROLE set but ${PARLIAMENT_STATE} not found`)
+      process.exit(1)
+    }
+    const state = JSON.parse(readFileSync(PARLIAMENT_STATE, 'utf8'))
+    const role = process.env.PARLIAMENT_ROLE
+    const mp = (state.mps || []).find((m) => m.name === role)
+    if (!mp) {
+      console.error(`❌  No MP with name "${role}" in parliament-state.json`)
+      process.exit(1)
+    }
+    console.log(`  Wallet:   ${role} (${mp.address})`)
+    return mp.mnemonic
+  }
+  console.error('❌  Set MNEMONIC or PARLIAMENT_ROLE (e.g. "The Builder"). See .env.example.')
   process.exit(1)
 }
+const MNEMONIC = loadMnemonic()
 
 // Wasm file locations — copy built artifacts here, or set ARTIFACTS_DIR env var
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR
   || 'C:\\Temp\\junoclaw-wasm-target\\wasm32-unknown-unknown\\release'
 
+// Each contract has an optimized and a raw fallback. Raw release wasms are
+// accepted on testnet (just larger); `_opt.wasm` is preferred when the
+// cosmwasm-optimizer Docker image is available.
 const CONTRACTS = [
-  { name: 'agent-registry', wasm: 'agent_registry_opt.wasm' },
-  { name: 'task-ledger',    wasm: 'task_ledger_opt.wasm' },
-  { name: 'escrow',         wasm: 'escrow_opt.wasm' },
-  { name: 'agent-company',  wasm: 'agent_company_opt.wasm' },
+  { name: 'agent-registry', wasm: ['agent_registry_opt.wasm', 'agent_registry.wasm'] },
+  { name: 'task-ledger',    wasm: ['task_ledger_opt.wasm',    'task_ledger.wasm'] },
+  { name: 'escrow',         wasm: ['escrow_opt.wasm',         'escrow.wasm'] },
+  { name: 'agent-company',  wasm: ['agent_company_opt.wasm',  'agent_company.wasm'] },
+  { name: 'builder-grant',  wasm: ['builder_grant_opt.wasm',  'builder_grant.wasm'], optional: true },
+  { name: 'junoswap-pair',  wasm: ['junoswap_pair_opt.wasm',  'junoswap_pair.wasm'], optional: true },
 ]
+
+function resolveWasm(contract) {
+  const candidates = Array.isArray(contract.wasm) ? contract.wasm : [contract.wasm]
+  for (const name of candidates) {
+    const p = join(ARTIFACTS_DIR, name)
+    if (existsSync(p)) return { path: p, name }
+  }
+  return null
+}
 
 const DEPLOYED_FILE = join(__dir, 'deployed.json')
 
@@ -95,10 +130,15 @@ async function main() {
   console.log('━━━  Step 1: Store WASM artifacts  ━━━\n')
 
   for (const contract of CONTRACTS) {
-    const wasmPath = join(ARTIFACTS_DIR, contract.wasm)
-    if (!existsSync(wasmPath)) {
-      console.error(`❌  Not found: ${wasmPath}`)
-      console.error(`    Build WASMs first: cd contracts && cargo build --release --target wasm32-unknown-unknown`)
+    const resolved = resolveWasm(contract)
+    if (!resolved) {
+      if (contract.optional) {
+        console.log(`  ⏭  ${contract.name} (optional) — no wasm found, skipping`)
+        continue
+      }
+      console.error(`❌  Not found in ${ARTIFACTS_DIR}:`)
+      console.error(`    Expected one of: ${contract.wasm.join(', ')}`)
+      console.error(`    Build WASMs: cd contracts && cargo build --release --target wasm32-unknown-unknown --lib`)
       process.exit(1)
     }
 
@@ -107,16 +147,20 @@ async function main() {
       continue
     }
 
-    const ok = await confirm(`  Store ${contract.name}?`)
+    const ok = await confirm(`  Store ${contract.name} (${resolved.name})?`)
     if (!ok) { console.log('  Skipped.'); continue }
 
-    const wasm = readFileSync(wasmPath)
+    const wasm = readFileSync(resolved.path)
     console.log(`  📦 Storing ${contract.name} (${(wasm.length / 1024).toFixed(1)} KB)…`)
 
     const result = await client.upload(address, wasm, 'auto', `JunoClaw ${contract.name}`)
     console.log(`  ✅  code_id: ${result.codeId}  tx: ${result.transactionHash}`)
 
-    deployed[contract.name] = { code_id: result.codeId, store_tx: result.transactionHash }
+    deployed[contract.name] = {
+      code_id: result.codeId,
+      store_tx: result.transactionHash,
+      wasm_file: resolved.name,
+    }
     saveDeployed(deployed)
   }
 
@@ -191,6 +235,7 @@ async function main() {
           admin: address,
           agent_registry: registryAddr,
           operators: [],
+          agent_company: null,
         }
         const res = await client.instantiate(address, codeId, msg, 'JunoClaw Task Ledger', 'auto')
         console.log(`  ✅  address: ${res.contractAddress}  tx: ${res.transactionHash}`)
@@ -221,6 +266,7 @@ async function main() {
           name: 'JunoClaw Core Team',
           admin: address,
           governance: null,
+          wavs_operator: address,
           escrow_contract: escrowAddr,
           agent_registry: registryAddr,
           task_ledger: taskLedgerAddr,
@@ -246,10 +292,69 @@ async function main() {
         deployed['agent-company'].address = res.contractAddress
         deployed['agent-company'].instantiate_tx = res.transactionHash
         saveDeployed(deployed)
+
+        if (taskLedgerAddr) {
+          const updateRes = await client.execute(
+            address,
+            taskLedgerAddr,
+            {
+              update_config: {
+                admin: null,
+                agent_registry: null,
+                agent_company: res.contractAddress,
+              },
+            },
+            'auto'
+          )
+          console.log(`  ✅  wired task-ledger.agent_company  tx: ${updateRes.transactionHash}`)
+        }
       }
     }
   } else {
     console.log(`  ⏭  Already instantiated: ${deployed['agent-company'].address}`)
+  }
+
+  // ── STEP 6: Cross-contract registry wiring ──────────────────────────────
+  //
+  // `CompleteTask` / `FailTask` on task-ledger fire an `IncrementTasks`
+  // callback into agent-registry. Agent-registry gates that call on its own
+  // `config.registry.task_ledger` pointer — which is None at instantiate
+  // time because the registry's task_ledger address wasn't yet known.
+  // Without this wiring step, the first real CompleteTask reverts with
+  // Unauthorized (a sub-message failure bubbles into the parent tx), and the
+  // whole stack looks broken despite every contract being healthy on its own.
+  // Keeping the wiring in deploy (admin-only UpdateRegistry) makes the full
+  // stack usable from block 1 of instantiation.
+  console.log('\n━━━  Step 6: Wire agent-registry.registry.task_ledger  ━━━\n')
+
+  if (deployed['agent-registry']?.address && deployed['task-ledger']?.address) {
+    const registryAddr   = deployed['agent-registry'].address
+    const taskLedgerAddr = deployed['task-ledger'].address
+    let already = false
+    try {
+      const cfg = await client.queryContractSmart(registryAddr, { get_config: {} })
+      already = cfg?.registry?.task_ledger === taskLedgerAddr
+    } catch (e) { /* ignore */ }
+    if (already) {
+      console.log(`  ⏭  agent-registry already knows task-ledger`)
+    } else {
+      const ok = await confirm('  Wire agent-registry.registry.task_ledger?')
+      if (ok) {
+        const res = await client.execute(
+          address,
+          registryAddr,
+          { update_registry: {
+            agent_registry: null,
+            task_ledger: taskLedgerAddr,
+            escrow: deployed['escrow']?.address || null,
+          } },
+          'auto',
+        )
+        console.log(`  ✅  wired agent-registry.registry  tx: ${res.transactionHash}`)
+        deployed['agent-registry'].registry_wired_tx = res.transactionHash
+        saveDeployed(deployed)
+      }
+    }
   }
 
   // ── Summary ──────────────────────────────────────────────────────────────

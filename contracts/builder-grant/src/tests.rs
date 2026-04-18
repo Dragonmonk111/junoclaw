@@ -7,6 +7,11 @@ use crate::state::{GrantTier, SubmissionStatus, WorkSubmission};
 
 const DENOM: &str = "ujunox";
 const VALID_HASH: &str = "9d0f7354205de1fcaa41a8642ee704ed8e6201bdf8e4951b36923499a7367a3b";
+/// v6 F3: `SubmitWork` enforces global uniqueness of `work_hash`, so any
+/// test submitting more than one distinct work item needs a second hex
+/// digest. `VALID_HASH_2` is just a different 64-char SHA-256-shaped
+/// string; it carries no semantics beyond "not equal to `VALID_HASH`".
+const VALID_HASH_2: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f9001122334455667788990aabbccddeeff";
 const ATTEST_HASH: &str = "945a53c5c1aab2e99432e659d47633da491fffc399d95cbce66b8e88fae5c0e8";
 
 fn mk(app: &App, label: &str) -> Addr { app.api().addr_make(label) }
@@ -448,14 +453,17 @@ fn test_add_remove_operator() {
 fn test_builder_stats() {
     let mut env = setup_app();
 
-    for _ in 0..2 {
+    // v6 F3: each SubmitWork must carry a distinct `work_hash`, so feed
+    // two different hashes to exercise the 2-submission accumulation the
+    // test actually checks.
+    for (i, wh) in [VALID_HASH, VALID_HASH_2].iter().enumerate() {
         env.app.execute_contract(
             env.builder1.clone(),
             env.contract.clone(),
             &ExecuteMsg::SubmitWork {
                 tier: GrantTier::ContractDeploy,
-                evidence: "evidence".to_string(),
-                work_hash: VALID_HASH.to_string(),
+                evidence: format!("evidence-{}", i),
+                work_hash: wh.to_string(),
             },
             &[],
         )
@@ -473,6 +481,79 @@ fn test_builder_stats() {
         .unwrap();
     assert_eq!(stats.submissions.len(), 2);
     assert_eq!(stats.total_granted, 0);
+}
+
+#[test]
+fn test_submit_work_rejects_duplicate_hash() {
+    // v6 F3 — `work_hash` is the SHA-256 of the actual work output. Two
+    // submissions of the same hash are by definition the same work and
+    // may only be claimed once. Without this invariant an attacker
+    // could spam the pending-verification queue with the same output
+    // under rotating `evidence` strings, bloating state and confusing
+    // the TEE verifier about which record is canonical.
+    let mut env = setup_app();
+
+    // First submission wins — records the hash in WORK_HASH_USED.
+    env.app.execute_contract(
+        env.builder1.clone(),
+        env.contract.clone(),
+        &ExecuteMsg::SubmitWork {
+            tier: GrantTier::ContractDeploy,
+            evidence: "first-claim".to_string(),
+            work_hash: VALID_HASH.to_string(),
+        },
+        &[],
+    )
+    .unwrap();
+
+    // Same hash, same builder, different evidence — must be rejected.
+    let err = env
+        .app
+        .execute_contract(
+            env.builder1.clone(),
+            env.contract.clone(),
+            &ExecuteMsg::SubmitWork {
+                tier: GrantTier::ContractDeploy,
+                evidence: "second-claim-same-output".to_string(),
+                work_hash: VALID_HASH.to_string(),
+            },
+            &[],
+        )
+        .unwrap_err();
+    assert!(err.root_cause().to_string().contains("duplicate work_hash"));
+
+    // Same hash from a *different* builder must also be rejected —
+    // uniqueness is global, not per-builder, because the hash is the
+    // output, not the claim.
+    let err = env
+        .app
+        .execute_contract(
+            env.builder2.clone(),
+            env.contract.clone(),
+            &ExecuteMsg::SubmitWork {
+                tier: GrantTier::ContractDeploy,
+                evidence: "other-builder-same-hash".to_string(),
+                work_hash: VALID_HASH.to_string(),
+            },
+            &[],
+        )
+        .unwrap_err();
+    assert!(err.root_cause().to_string().contains("duplicate work_hash"));
+
+    // A different hash from the same builder must still succeed — the
+    // builder isn't banned, only the specific output is.
+    env.app
+        .execute_contract(
+            env.builder1.clone(),
+            env.contract.clone(),
+            &ExecuteMsg::SubmitWork {
+                tier: GrantTier::ContractDeploy,
+                evidence: "genuinely-new-work".to_string(),
+                work_hash: VALID_HASH_2.to_string(),
+            },
+            &[],
+        )
+        .unwrap();
 }
 
 #[test]

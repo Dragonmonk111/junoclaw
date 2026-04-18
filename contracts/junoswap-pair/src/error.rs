@@ -29,4 +29,11 @@ pub enum ContractError {
 
     #[error("Zero amount not allowed")]
     ZeroAmount {},
+
+    #[error("Unexpected denom in funds: {denom} (pair accepts only {expected_a} and {expected_b})")]
+    UnexpectedDenom {
+        denom: String,
+        expected_a: String,
+        expected_b: String,
+    },
 }

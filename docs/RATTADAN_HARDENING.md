@@ -4,6 +4,225 @@
 
 This document describes the hardening passes applied to JunoClaw's core variables, inspired by Rattadan's structural audit. Each variable maps to a security property that was either missing or weakly enforced.
 
+> ### v6.1 Update — 2026-04-18 — Cross-contract security sweep
+>
+> After v6 closed the identity-mismatch holes, a full-workspace sweep for
+> *value-flow* bugs found four more sharp edges where the contract
+> accepted inputs it had no business accepting. Each one is a single
+> predicate that fails closed; none of them changes the public-API shape.
+>
+> **F1 (CRITICAL) — `task-ledger::CompleteTask` / `FailTask` let the
+> submitter self-attest.** The v5 atomic-callback fabric routes task
+> completion straight into `escrow::Confirm` (and `FailTask` into
+> `escrow::Cancel`). Both paths were gated on
+> `record.submitter == info.sender || is_authorized(...)` — meaning the
+> original submitter could finalise their own task. Combined with
+> `escrow::Authorize` (where `info.sender` becomes the payer), this gave
+> a payer-who-is-also-submitter the ability to file an escrow obligation
+> against any victim payee and then mark that obligation `Confirmed`
+> without a single ujunox ever moving: a complete bypass of the payment
+> journal's core promise. F1 removes the submitter path from
+> `CompleteTask` / `FailTask` — only operators (incl. admin) and the
+> configured `agent_company` can finalise a task. `CancelTask`'s
+> submitter-self-cancel path is retained because it has no escrow
+> side-effect. The WAVS daemon still finalises tasks unimpeded: it is
+> registered as an operator, so `is_authorized` covers it. Regressions
+> `test_complete_task_by_submitter_is_rejected` and
+> `test_fail_task_by_submitter_is_rejected` nail the invariant shut.
+>
+> **F2 (HIGH) — `agent-company::DistributePayment` was front-runnable
+> for one ujunox.** The handler keyed idempotency on
+> `PAYMENT_HISTORY.has(task_id)` and was open to any caller. A griefer
+> watching the mempool could pre-empt a pending distribution with 1
+> ujunox against the same `task_id`, permanently locking out the
+> legitimate large distribution with `AlreadyDistributed`. The asymmetry
+> (1 ujunox of attacker cost vs. arbitrary legitimate value blocked) is
+> now closed: `DistributePayment` is gated to `admin | DAO member`,
+> which is also the intended operational model (members fund
+> distributions from their own wallets; external funders route through a
+> member proxy). Fixture change: the four existing tests re-route their
+> payer through `admin` (who passes the gate); a new regression
+> `test_distribute_payment_rejects_non_member_caller` verifies the gate
+> rejects strangers.
+>
+> **F3 (HIGH) — `builder-grant::SubmitWork` accepted unlimited
+> duplicates of the same `work_hash`.** `work_hash` is the SHA-256 of
+> the actual work output: by construction, two identical hashes are the
+> same work and must only be claimed once. Without a uniqueness index,
+> an attacker (or a confused legitimate user) could spam the
+> pending-verification queue with structurally-identical entries
+> (rotating only the `evidence` string), bloating state, confusing the
+> TEE verifier about which record is canonical, and potentially racing
+> the rightful builder's own claim. F3 introduces
+> `WORK_HASH_USED: Map<&str, u64>` as a reverse index and rejects
+> duplicates with a new `DuplicateWorkHash { existing_submission_id }`
+> error. Uniqueness is **global**, not per-builder: if two builders
+> somehow produce the same output hash, only the first-submitter wins —
+> which is the correct outcome because the hash *is* the output.
+> Regression `test_submit_work_rejects_duplicate_hash` covers same-builder,
+> different-builder, and different-hash-same-builder cases.
+>
+> **F4 (MED) — `junoswap-pair` silently ate unexpected denoms.**
+> `extract_native_amounts` (used by `ProvideLiquidity`) looked for
+> `token_a` and `token_b` by name in `info.funds` and `unwrap_or_default`'d
+> anything else — so a user attaching a third coin (or a typo'd denom)
+> would forfeit those funds into the pair contract's bank balance with
+> no reclaim path. `execute_swap` had the same shape for its offer-side
+> funds. F4 makes both handlers fail closed on any denom outside the
+> expected set, via a new `ContractError::UnexpectedDenom { denom,
+> expected_a, expected_b }` variant. The revert refunds every attached
+> coin atomically. Regression
+> `test_provide_liquidity_rejects_unexpected_denom` confirms `uatom`
+> sent alongside a legitimate `ujuno+uusdc` deposit is fully refunded.
+>
+> **Known-by-design, deliberately not patched in v6.1:**
+>
+> 1. `escrow::Confirm` still accepts `payer == info.sender` without any
+>    on-chain proof of payment. This is the intended shape of the
+>    **non-custodial payment journal** — the contract holds no funds,
+>    it only records attestations. The real guarantee for the payee is
+>    the `attestation_hash` subsequently attached by the WAVS operator
+>    via `AttachAttestation`. F1 closes the *indirect* self-confirm via
+>    `CompleteTask`; the *direct* self-confirm remains by design, and
+>    any downstream consumer of escrow status MUST wait for
+>    `attestation_hash.is_some()` before treating an obligation as
+>    settled. This is now called out explicitly in the integration
+>    docstring so no future contract misreads `Confirmed` as "paid".
+>
+> 2. `junoswap-factory::CreatePair` spawns a pair subcontract but never
+>    records the instantiated address into its `PAIRS` map — it would
+>    need a reply-based `SubMsg` flow to capture the address. The
+>    factory's own state is therefore incomplete (queries to
+>    `PAIRS` return empty) but no state is *corrupted* and no funds are
+>    at risk. This is a UX/feature-completeness issue, not a security
+>    one. Flagged here so it doesn't get confused with the v6.1 fixes.
+>
+> 3. `junoswap-pair::ProvideLiquidity` has no Uniswap-V2-style "minimum
+>    liquidity burn" on the first deposit. The classic donation-attack
+>    shape this protects against (attacker deposits 1 wei of each,
+>    then bank-sends a donation to inflate exchange rate) does **not**
+>    apply here because the pair tracks reserves in storage, not in
+>    bank balance — bank sends to the pair contract do not move the
+>    reserves. The first-depositor-sets-initial-price property remains,
+>    but that is price discovery, not theft. Left unchanged.
+>
+> **Files changed (v6.1):**
+>
+> | File | Change |
+> |------|--------|
+> | `task-ledger/src/contract.rs` | `execute_complete` / `execute_fail` auth gated to `operators ∪ admin ∪ agent_company` (no submitter-self-path) |
+> | `task-ledger/src/tests.rs` | 4 test sites retargeted to `admin`; 2 new regressions (`test_complete_task_by_submitter_is_rejected`, `test_fail_task_by_submitter_is_rejected`) |
+> | `agent-company/src/contract.rs` | `execute_distribute` gated to `admin ∪ members` |
+> | `agent-company/src/tests.rs` | 4 test fixtures re-funnelled through `admin` / `alice`; 1 new regression (`test_distribute_payment_rejects_non_member_caller`) |
+> | `builder-grant/src/state.rs` | New `WORK_HASH_USED: Map<&str, u64>` reverse index |
+> | `builder-grant/src/error.rs` | New `DuplicateWorkHash { existing_submission_id }` variant |
+> | `builder-grant/src/contract.rs` | `execute_submit` checks + writes `WORK_HASH_USED` |
+> | `builder-grant/src/tests.rs` | New `VALID_HASH_2` constant; `test_builder_stats` updated to use distinct hashes; 1 new regression (`test_submit_work_rejects_duplicate_hash`) |
+> | `junoswap-pair/src/error.rs` | New `UnexpectedDenom { denom, expected_a, expected_b }` variant |
+> | `junoswap-pair/src/contract.rs` | `extract_native_amounts` + `execute_swap` reject unknown denoms in `info.funds` |
+> | `junoswap-pair/src/tests.rs` | 1 new regression (`test_provide_liquidity_rejects_unexpected_denom`) |
+>
+> **Tests (v6.1):** `cargo test --workspace` → all crates green, 136
+> passing (up from ~131 at v6.0 baseline), 0 failed, 0 ignored. The
+> `v6.0` auth gates, atomic callbacks, attestation coherence, and
+> supermajority ratio checks remain enforced.
+>
+> v6.1 is a pure tightening pass — no new capabilities, no new contracts,
+> no new message shapes at the public ABI (the new errors are additive
+> variants on existing enums). Migration is trivial: redeploy + re-run
+> the v6.0 `UpdateConfig.agent_company` and `ConfigChange.new_wavs_operator`
+> wires (documented in the v6.0 block below). Existing on-chain obligations
+> and tasks are unaffected.
+>
+> ---
+>
+> ### v6.0 Update — 2026-04-18
+>
+> A second structural audit after v5 landed found two sharp-edged
+> **identity mismatches** that v5 had papered over rather than fixed. Both
+> were single-variable problems wearing architectural costume. v6 removes
+> the costume.
+>
+> 1. **Public `SubmitTask` was unauthenticated.** `task-ledger::SubmitTask`
+>    is a public execute — anyone can call it. It recorded
+>    `agent_id`, `submitter`, and (after v5) `proposal_id` verbatim,
+>    with no check that the submitter actually *owned* the agent. This
+>    let any wallet forge task records against any registered agent and
+>    drive that agent's `agent-registry` reputation counters (via the v5
+>    atomic callback) — a pure reputation-forgery surface.
+>    v6 hardens `execute_submit` with three invariants: public callers
+>    (a) cannot claim the reserved `agent_id = 0` sentinel, (b) must be
+>    the registered owner of the `agent_id` they are submitting under,
+>    verified by a cross-contract `agent-registry::GetAgent` query, and
+>    (c) cannot overwrite an existing `proposal_id -> task_id` mapping
+>    (closing the duplicate-proposal-task loophole that would have let a
+>    second submitter clobber a governance-initiated task's reverse
+>    index).
+>    The `agent_id == 0` sentinel remains reserved for
+>    governance-initiated tasks dispatched by the `agent-company`
+>    contract itself — v6 adds an optional `agent_company` pointer to
+>    `task-ledger::Config` and accepts `agent_id = 0` only when
+>    `info.sender == config.agent_company`.
+>
+> 2. **WAVS operator identity was overloaded onto `task_ledger`.**
+>    `agent-company::SubmitAttestation` and
+>    `agent-company::SubmitRandomness` authorised the caller if it was
+>    admin, governance, *or* the configured `task_ledger` address —
+>    because the WAVS bridge in v5 was deployed under the same wallet as
+>    the task-ledger contract admin. This coupling was incidental, not
+>    structural: the WAVS operator is an off-chain signer (currently
+>    Neo's deploy key), not an on-chain contract. Using `task_ledger` as
+>    its stand-in meant rotating the WAVS operator would require
+>    migrating the `task-ledger` contract, and any contract that ever
+>    became `task_ledger` would gain attestation privileges for free.
+>    v6 introduces an explicit `wavs_operator: Option<Addr>` field on
+>    `agent-company::Config`. Attestation and randomness authorisation
+>    now checks `admin | governance | wavs_operator` — `task_ledger` is
+>    no longer implicitly trusted. The field is set at instantiate and
+>    rotatable via a `ConfigChange` governance proposal
+>    (`new_wavs_operator`).
+>
+> 3. **A silent latent bug surfaced while wiring v6.** `agent-company`'s
+>    `instantiate` in v5 built a fresh `Config { … }` value and forgot to
+>    call `CONFIG.save(deps.storage, &config)`. Every fresh deployment
+>    was effectively running on an unsaved config — the contract only
+>    worked because v5 tests happened to exercise paths that loaded from
+>    defaults or from post-instantiate updates. v6 restores the missing
+>    `CONFIG.save` (and the regression is covered by the new
+>    `wavs_operator` assertions in `test_transfer_admin` /
+>    `test_config_change_proposal`, which now *require* the stored config
+>    to match the instantiate inputs).
+>
+> **Files changed (v6):**
+>
+> | File | Change |
+> |------|--------|
+> | `task-ledger/src/state.rs` | `Config.agent_company: Option<Addr>` (`#[serde(default)]`) |
+> | `task-ledger/src/msg.rs` | `InstantiateMsg.agent_company`, `UpdateConfig.agent_company` |
+> | `task-ledger/src/error.rs` | `ReservedAgentId`, `AgentNotOwnedBySender`, `ProposalAlreadyHasTask` |
+> | `task-ledger/src/contract.rs` | `execute_submit` agent ownership + reserved-id + reverse-index-uniqueness gates; `execute_update_config` manages `agent_company` |
+> | `task-ledger/src/tests.rs` | Stub registry extended to answer `GetAgent`; 3 new regressions (`test_submit_task_rejects_reserved_agent_id_for_public_sender`, `test_submit_task_rejects_unowned_agent`, `test_submit_task_proposal_id_requires_agent_company_and_is_unique`) |
+> | `agent-company/src/state.rs` | `Config.wavs_operator: Option<Addr>`; `ProposalKind::ConfigChange.new_wavs_operator` |
+> | `agent-company/src/msg.rs` | `InstantiateMsg.wavs_operator`; `ProposalKindMsg::ConfigChange.new_wavs_operator` |
+> | `agent-company/src/contract.rs` | Restored `CONFIG.save` in instantiate; `wavs_operator` wired through instantiate + `ConfigChange` execution + `SubmitAttestation` / `SubmitRandomness` auth |
+> | `agent-company/src/tests.rs` | 3 new regressions (`test_sortition_wavs_operator_authorized`, `test_submit_attestation_wavs_operator_authorized`, `test_submit_attestation_task_ledger_not_authorized_when_wavs_operator_set`); `test_config_change_proposal` updated to drive `new_wavs_operator` end-to-end |
+> | `agent-company/src/integration.rs` | Fresh-stack deploy now calls `task-ledger::UpdateConfig { agent_company }` so governance-originated `SubmitTask` calls carry explicit authority |
+> | `deploy/deploy.mjs` | Fresh deploy sets `wavs_operator = deployer` on agent-company and wires `task-ledger.agent_company` right after |
+> | `wavs/bridge/src/deploy-fresh.ts` | Same two wires for the operator-facing deployer |
+>
+> **Tests (v6):** `cargo test -p task-ledger -p agent-company` → task-ledger
+> `15 passed`, agent-company `44 passed`. No pre-existing tests were
+> weakened; the v5 auth paths (admin / governance) remain green without
+> change.
+>
+> v6 is a pure tightening: no new capabilities, no new contracts, no new
+> external surface. Every change is either an invariant check that
+> rejects previously-accepted inputs, or a field that is `Option<_>` and
+> defaults to the pre-v6 behaviour when unset. Migration path documented
+> in "Deployment path for existing chains (v6)" below.
+>
+> ---
+>
 > ### v5 Update — 2026-04-18
 >
 > A follow-up on-chain state-machine review found that three of the v4 claims had drifted into **architectural theatre**: the wiring existed, but the state never reached it. v5 turns them from theatre into enforced contracts. Highlights, in priority order:
@@ -399,6 +618,60 @@ agent-registry.UpdateRegistry { task_ledger: Some(<tl>),  agent_registry: None, 
 ```
 
 After step 2, `CompleteTask → Confirm → IncrementTasks` fires atomically.
+
+### Deployment path for existing chains (v6)
+
+v6 adds two **identity pointers** that default to `None` in migrated
+configs:
+
+- `task-ledger::Config.agent_company` — must point at the
+  `agent-company` contract address before governance-initiated
+  `WavsPush → SubmitTask` calls (which carry `agent_id = 0`) will be
+  accepted. Between migrate and wire-up, all governance-initiated task
+  submissions fail with `ReservedAgentId`.
+- `agent-company::Config.wavs_operator` — must point at the off-chain
+  WAVS bridge wallet before `SubmitAttestation` and `SubmitRandomness`
+  will be accepted. Between migrate and wire-up, all WAVS submissions
+  fail with `Unauthorized` / `UnauthorizedRandomness`.
+
+Both are fail-closed: pre-v6 behaviour is **not** silently recreated
+when the pointer is `None`. This is intentional — the whole point of v6
+is to stop overloading `task_ledger` as the WAVS identity and to stop
+accepting the reserved `agent_id = 0` from unauthenticated callers.
+
+**Migration order (admin wallet, same session):**
+
+```
+# 1. Upload new code-ids for task-ledger and agent-company.
+# 2. Migrate both in either order. MigrateMsg is {} for both; no new
+#    config fields are required at migrate time.
+# 3. Wire task-ledger → agent-company (admin-only, one-shot):
+task-ledger.UpdateConfig {
+    admin: None,
+    agent_registry: None,
+    agent_company: Some("<agent_company_addr>")
+}
+# 4. Wire agent-company → wavs-operator (admin-only, one-shot):
+agent-company.RotateWavsOperator {
+    new_operator: Some("<wavs_bridge_wallet>")
+}
+```
+
+Steps 3 and 4 are admin-only direct executes — no voting cycle is
+required during the migration window. Decentralized rotation after the
+fact is still available via a `ConfigChange` governance proposal with
+`new_wavs_operator`, which follows the ordinary 51 % / simple-majority
+flow.
+
+**Fresh deployments** (via `deploy/deploy.mjs` or
+`wavs/bridge/src/deploy-fresh.ts`) wire both pointers automatically at
+instantiate time — see the deploy-script diff in the v6 files table
+above.
+
+**Clearing the operator** (`RotateWavsOperator { new_operator: None }`)
+is an explicit **kill-switch**: it disables WAVS submissions entirely
+without touching code-id or governance. Useful if the operator key is
+suspected of compromise and a replacement is not yet ready.
 
 ---
 

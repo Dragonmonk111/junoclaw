@@ -12,6 +12,8 @@ pub struct InstantiateMsg {
     pub agent_registry: String,
     /// Optional initial operator wallets (e.g. daemon address).
     pub operators: Option<Vec<String>>,
+    #[serde(default)]
+    pub agent_company: Option<String>,
     /// Optional cross-contract registry. When `None`, registry is initialised
     /// from `agent_registry` alone (task_ledger/escrow remain unset until
     /// `UpdateRegistry` is called by the admin). Supplying a registry here
@@ -50,6 +52,8 @@ pub enum ExecuteMsg {
     UpdateConfig {
         admin: Option<String>,
         agent_registry: Option<String>,
+        #[serde(default)]
+        agent_company: Option<String>,
     },
     /// Admin-only: rewire the cross-contract registry (agent-registry,
     /// task-ledger self-ref, escrow). Any field left as `None` is untouched;

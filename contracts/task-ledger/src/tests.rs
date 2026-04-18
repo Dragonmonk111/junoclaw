@@ -3,6 +3,7 @@ use cosmwasm_std::{
     Reply, Response, Uint128,
 };
 use cw_multi_test::{App, Contract, ContractWrapper, Executor};
+use cw_storage_plus::Map;
 
 fn mk(app: &App, label: &str) -> Addr { app.api().addr_make(label) }
 
@@ -10,7 +11,33 @@ use crate::contract::{execute, instantiate, migrate, query};
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::LedgerStats;
-use junoclaw_common::{ExecutionTier, TaskRecord, TaskStatus};
+use junoclaw_common::{AgentProfile, ExecutionTier, TaskRecord, TaskStatus};
+
+const STUB_AGENTS: Map<u64, AgentProfile> = Map::new("stub_agents");
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum StubRegistryExecuteMsg {
+    RegisterAgent {
+        agent_id: u64,
+        owner: String,
+    },
+    IncrementTasks {
+        agent_id: u64,
+        success: bool,
+    },
+    UpdateRegistry {
+        agent_registry: Option<String>,
+        task_ledger: Option<String>,
+        escrow: Option<String>,
+    },
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum StubRegistryQueryMsg {
+    GetAgent { agent_id: u64 },
+}
 
 // ── Test-only stub "agent-registry" ──
 // task-ledger now wires the `IncrementTasks` callback by default at
@@ -29,11 +56,35 @@ where
 {
     fn execute(
         &self,
-        _deps: DepsMut<QueryC>,
+        deps: DepsMut<QueryC>,
         _env: Env,
         _info: MessageInfo,
-        _msg: Vec<u8>,
+        msg: Vec<u8>,
     ) -> anyhow::Result<Response<ExecC>> {
+        if let Ok(msg) = cosmwasm_std::from_json::<StubRegistryExecuteMsg>(&msg) {
+            match msg {
+                StubRegistryExecuteMsg::RegisterAgent { agent_id, owner } => {
+                    STUB_AGENTS.save(
+                        deps.storage,
+                        agent_id,
+                        &AgentProfile {
+                            owner: Addr::unchecked(owner),
+                            name: format!("stub-agent-{}", agent_id),
+                            description: "stub".to_string(),
+                            capabilities_hash: format!("cap-{}", agent_id),
+                            model: "stub".to_string(),
+                            registered_at: 0,
+                            is_active: true,
+                            total_tasks: 0,
+                            successful_tasks: 0,
+                            trust_score: 0,
+                        },
+                    )?;
+                }
+                StubRegistryExecuteMsg::IncrementTasks { .. }
+                | StubRegistryExecuteMsg::UpdateRegistry { .. } => {}
+            }
+        }
         Ok(Response::new())
     }
     fn instantiate(
@@ -47,10 +98,16 @@ where
     }
     fn query(
         &self,
-        _deps: Deps<QueryC>,
+        deps: Deps<QueryC>,
         _env: Env,
-        _msg: Vec<u8>,
+        msg: Vec<u8>,
     ) -> anyhow::Result<Binary> {
+        if let Ok(StubRegistryQueryMsg::GetAgent { agent_id }) =
+            cosmwasm_std::from_json::<StubRegistryQueryMsg>(&msg)
+        {
+            let profile = STUB_AGENTS.load(deps.storage, agent_id)?;
+            return Ok(to_json_binary(&profile)?);
+        }
         Ok(to_json_binary(&()).unwrap())
     }
     fn sudo(
@@ -96,7 +153,26 @@ fn instantiate_stub_registry(app: &mut App, admin: &Addr) -> Addr {
     .unwrap()
 }
 
-fn store_and_instantiate(app: &mut App, admin: &Addr, registry: &Addr, operators: Option<Vec<String>>) -> Addr {
+fn register_stub_agent(app: &mut App, registry: &Addr, owner: &Addr, agent_id: u64) {
+    app.execute_contract(
+        owner.clone(),
+        registry.clone(),
+        &StubRegistryExecuteMsg::RegisterAgent {
+            agent_id,
+            owner: owner.to_string(),
+        },
+        &[],
+    )
+    .unwrap();
+}
+
+fn store_and_instantiate_with_agent_company(
+    app: &mut App,
+    admin: &Addr,
+    registry: &Addr,
+    operators: Option<Vec<String>>,
+    agent_company: Option<String>,
+) -> Addr {
     let code = ContractWrapper::new(execute, instantiate, query).with_migrate(migrate);
     let code_id = app.store_code(Box::new(code));
     app.instantiate_contract(
@@ -106,6 +182,7 @@ fn store_and_instantiate(app: &mut App, admin: &Addr, registry: &Addr, operators
             admin: None,
             agent_registry: registry.to_string(),
             operators,
+            agent_company,
             registry: None,
         },
         &[],
@@ -113,6 +190,10 @@ fn store_and_instantiate(app: &mut App, admin: &Addr, registry: &Addr, operators
         Some(admin.to_string()),
     )
     .unwrap()
+}
+
+fn store_and_instantiate(app: &mut App, admin: &Addr, registry: &Addr, operators: Option<Vec<String>>) -> Addr {
+    store_and_instantiate_with_agent_company(app, admin, registry, operators, None)
 }
 
 fn submit_task(app: &mut App, contract: &Addr, sender: &Addr, agent_id: u64) -> u64 {
@@ -158,6 +239,7 @@ fn test_submit_task() {
     let user = mk(&app, "user1");
     let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 1);
 
     let task_id = submit_task(&mut app, &contract, &user, 1);
     assert_eq!(task_id, 1);
@@ -173,33 +255,162 @@ fn test_submit_task() {
 }
 
 #[test]
-fn test_complete_task_by_submitter() {
+fn test_submit_task_rejects_unowned_agent() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let owner = mk(&app, "owner");
+    let stranger = mk(&app, "stranger");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &owner, 1);
+
+    let err = app
+        .execute_contract(
+            stranger,
+            contract.clone(),
+            &ExecuteMsg::SubmitTask {
+                agent_id: 1,
+                input_hash: "hash-1".to_string(),
+                execution_tier: ExecutionTier::Local,
+                proposal_id: None,
+            },
+            &[],
+        )
+        .unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::AgentNotOwned { agent_id: 1 }));
+}
+
+#[test]
+fn test_submit_task_rejects_reserved_agent_id_for_public_sender() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let user = mk(&app, "user1");
     let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
 
-    submit_task(&mut app, &contract, &user, 1);
+    let err = app
+        .execute_contract(
+            user,
+            contract.clone(),
+            &ExecuteMsg::SubmitTask {
+                agent_id: 0,
+                input_hash: "hash-0".to_string(),
+                execution_tier: ExecutionTier::Local,
+                proposal_id: None,
+            },
+            &[],
+        )
+        .unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::ReservedAgentId {}));
+}
+
+#[test]
+fn test_submit_task_proposal_id_requires_agent_company_and_is_unique() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let agent_company = mk(&app, "agent-company");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate_with_agent_company(
+        &mut app,
+        &admin,
+        &reg,
+        None,
+        Some(agent_company.to_string()),
+    );
+
+    let err = app
+        .execute_contract(
+            user,
+            contract.clone(),
+            &ExecuteMsg::SubmitTask {
+                agent_id: 0,
+                input_hash: "hash-prop".to_string(),
+                execution_tier: ExecutionTier::Local,
+                proposal_id: Some(7),
+            },
+            &[],
+        )
+        .unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::Unauthorized {}));
 
     app.execute_contract(
-        user.clone(),
+        agent_company.clone(),
         contract.clone(),
-        &ExecuteMsg::CompleteTask {
-            task_id: 1,
-            output_hash: "output_abc".to_string(),
-            cost_ujuno: None,
+        &ExecuteMsg::SubmitTask {
+            agent_id: 0,
+            input_hash: "hash-prop".to_string(),
+            execution_tier: ExecutionTier::Local,
+            proposal_id: Some(7),
         },
         &[],
     )
     .unwrap();
 
+    let task: Option<TaskRecord> = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetTaskByProposal { proposal_id: 7 })
+        .unwrap();
+    assert!(task.is_some());
+
+    let err = app
+        .execute_contract(
+            agent_company,
+            contract.clone(),
+            &ExecuteMsg::SubmitTask {
+                agent_id: 0,
+                input_hash: "hash-prop-2".to_string(),
+                execution_tier: ExecutionTier::Local,
+                proposal_id: Some(7),
+            },
+            &[],
+        )
+        .unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::ProposalTaskAlreadyExists { proposal_id: 7 }));
+}
+
+#[test]
+fn test_complete_task_by_submitter_is_rejected() {
+    // v6 F1 — Completion is an attestation, not a self-declaration. A
+    // submitter who was also the payer on a linked escrow obligation used
+    // to be able to self-complete and fire the atomic `escrow::Confirm`
+    // callback, which marked the obligation paid without any funds ever
+    // moving. The submitter path is now closed.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 1);
+
+    submit_task(&mut app, &contract, &user, 1);
+
+    let err = app
+        .execute_contract(
+            user.clone(),
+            contract.clone(),
+            &ExecuteMsg::CompleteTask {
+                task_id: 1,
+                output_hash: "output_abc".to_string(),
+                cost_ujuno: None,
+            },
+            &[],
+        )
+        .unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::Unauthorized {}));
+
+    // Task must still be Running — the rejected Complete must not have
+    // leaked any state change.
     let task: TaskRecord = app
         .wrap()
         .query_wasm_smart(&contract, &QueryMsg::GetTask { task_id: 1 })
         .unwrap();
-    assert_eq!(task.status, TaskStatus::Completed);
-    assert_eq!(task.output_hash, Some("output_abc".to_string()));
+    assert_eq!(task.status, TaskStatus::Running);
 }
 
 #[test]
@@ -215,6 +426,7 @@ fn test_complete_task_by_operator() {
         &reg,
         Some(vec![daemon.to_string()]),
     );
+    register_stub_agent(&mut app, &reg, &user, 1);
 
     submit_task(&mut app, &contract, &user, 1);
 
@@ -247,6 +459,7 @@ fn test_complete_task_unauthorized_fails() {
     let stranger = mk(&app, "stranger");
     let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 1);
 
     submit_task(&mut app, &contract, &user, 1);
 
@@ -263,7 +476,41 @@ fn test_complete_task_unauthorized_fails() {
         )
         .unwrap_err();
     let contract_err = err.downcast::<ContractError>().unwrap();
-    assert!(matches!(contract_err, ContractError::NotSubmitter {}));
+    assert!(matches!(contract_err, ContractError::Unauthorized {}));
+}
+
+#[test]
+fn test_fail_task_by_submitter_is_rejected() {
+    // v6 F1 — the symmetric invariant for `FailTask`: a payer who was also
+    // the task submitter used to be able to unilaterally mark the task
+    // Failed, which fires the atomic `escrow::Cancel` callback and voids
+    // their debt. The submitter path is now closed for `FailTask` as
+    // well; only operators/admin/agent_company can finalise a task.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 1);
+
+    submit_task(&mut app, &contract, &user, 1);
+
+    let err = app
+        .execute_contract(
+            user.clone(),
+            contract.clone(),
+            &ExecuteMsg::FailTask { task_id: 1 },
+            &[],
+        )
+        .unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::Unauthorized {}));
+
+    let task: TaskRecord = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetTask { task_id: 1 })
+        .unwrap();
+    assert_eq!(task.status, TaskStatus::Running);
 }
 
 #[test]
@@ -279,6 +526,7 @@ fn test_fail_task_by_operator() {
         &reg,
         Some(vec![daemon.to_string()]),
     );
+    register_stub_agent(&mut app, &reg, &user, 1);
 
     submit_task(&mut app, &contract, &user, 1);
 
@@ -310,6 +558,7 @@ fn test_cancel_task() {
     let user = mk(&app, "user1");
     let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 1);
 
     submit_task(&mut app, &contract, &user, 1);
 
@@ -334,12 +583,14 @@ fn test_double_complete_fails() {
     let admin = mk(&app, "admin");
     let user = mk(&app, "user1");
     let reg = instantiate_stub_registry(&mut app, &admin);
+    // admin is the operator; a daemon-style wallet would work equally.
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 1);
 
     submit_task(&mut app, &contract, &user, 1);
 
     app.execute_contract(
-        user.clone(),
+        admin.clone(),
         contract.clone(),
         &ExecuteMsg::CompleteTask { task_id: 1, output_hash: "h1".to_string(), cost_ujuno: None },
         &[],
@@ -348,7 +599,7 @@ fn test_double_complete_fails() {
 
     let err = app
         .execute_contract(
-            user.clone(),
+            admin.clone(),
             contract.clone(),
             &ExecuteMsg::CompleteTask { task_id: 1, output_hash: "h2".to_string(), cost_ujuno: None },
             &[],
@@ -424,6 +675,8 @@ fn test_tasks_by_agent_query() {
     let user = mk(&app, "user1");
     let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 42);
+    register_stub_agent(&mut app, &reg, &user, 99);
 
     submit_task(&mut app, &contract, &user, 42);
     submit_task(&mut app, &contract, &user, 42);
@@ -443,19 +696,21 @@ fn test_stats_counter() {
     let user = mk(&app, "user1");
     let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 1);
 
     submit_task(&mut app, &contract, &user, 1);
     submit_task(&mut app, &contract, &user, 1);
 
+    // v6 F1 — only operators/admin/agent_company may finalise a task.
     app.execute_contract(
-        user.clone(),
+        admin.clone(),
         contract.clone(),
         &ExecuteMsg::CompleteTask { task_id: 1, output_hash: "h".to_string(), cost_ujuno: None },
         &[],
     )
     .unwrap();
     app.execute_contract(
-        user.clone(),
+        admin.clone(),
         contract.clone(),
         &ExecuteMsg::FailTask { task_id: 2 },
         &[],

@@ -39,6 +39,17 @@ fn store_and_instantiate(
     members: Vec<MemberInput>,
     governance: Option<String>,
 ) -> Addr {
+    store_and_instantiate_with_overrides(app, admin, members, governance, None, None)
+}
+
+fn store_and_instantiate_with_overrides(
+    app: &mut App,
+    admin: &Addr,
+    members: Vec<MemberInput>,
+    governance: Option<String>,
+    wavs_operator: Option<String>,
+    task_ledger: Option<String>,
+) -> Addr {
     let code = ContractWrapper::new(execute, instantiate, query).with_migrate(migrate);
     let code_id = app.store_code(Box::new(code));
     let escrow = mk(app, "escrow");
@@ -50,9 +61,10 @@ fn store_and_instantiate(
             name: "TestCo".to_string(),
             admin: None,
             governance,
+            wavs_operator,
             escrow_contract: escrow.to_string(),
             agent_registry: registry.to_string(),
-            task_ledger: None,
+            task_ledger,
             nois_proxy: None,
             members,
             denom: Some(UJUNO.to_string()),
@@ -110,6 +122,7 @@ fn test_invalid_weights_fails() {
             name: "BadCo".to_string(),
             admin: None,
             governance: None,
+            wavs_operator: None,
             escrow_contract: escrow.to_string(),
             agent_registry: registry.to_string(),
             task_ledger: None,
@@ -137,10 +150,11 @@ fn test_distribute_payment_split() {
     let admin = mk(&app, "admin");
     let alice = mk(&app, "alice");
     let bob = mk(&app, "bob");
-    let payer = mk(&app, "payer");
 
+    // v6 F2: DistributePayment is admin/member-gated. Fund the admin (not
+    // a separate `payer`) so the call passes the gate.
     app.init_modules(|router, _, storage| {
-        router.bank.init_balance(storage, &payer, coins(10_000_000, UJUNO)).unwrap();
+        router.bank.init_balance(storage, &admin, coins(10_000_000, UJUNO)).unwrap();
     });
 
     let members = two_member_msg(&alice, &bob);
@@ -148,7 +162,7 @@ fn test_distribute_payment_split() {
 
     // Distribute 1_000_000 ujuno for task 1
     app.execute_contract(
-        payer.clone(),
+        admin.clone(),
         contract.clone(),
         &ExecuteMsg::DistributePayment { task_id: 1 },
         &coins(1_000_000, UJUNO),
@@ -194,30 +208,62 @@ fn test_double_distribute_fails() {
     let admin = mk(&app, "admin");
     let alice = mk(&app, "alice");
     let bob = mk(&app, "bob");
-    let payer = mk(&app, "payer");
 
     app.init_modules(|router, _, storage| {
-        router.bank.init_balance(storage, &payer, coins(10_000_000, UJUNO)).unwrap();
+        router.bank.init_balance(storage, &admin, coins(10_000_000, UJUNO)).unwrap();
     });
 
     let members = two_member_msg(&alice, &bob);
     let contract = store_and_instantiate(&mut app, &admin, members, None);
 
     app.execute_contract(
-        payer.clone(),
+        admin.clone(),
         contract.clone(),
         &ExecuteMsg::DistributePayment { task_id: 1 },
         &coins(1_000_000, UJUNO),
     ).unwrap();
 
     let err = app.execute_contract(
-        payer.clone(),
+        admin.clone(),
         contract.clone(),
         &ExecuteMsg::DistributePayment { task_id: 1 },
         &coins(1_000_000, UJUNO),
     ).unwrap_err();
     let contract_err = err.downcast::<ContractError>().unwrap();
     assert!(matches!(contract_err, ContractError::AlreadyDistributed { .. }));
+}
+
+#[test]
+fn test_distribute_payment_rejects_non_member_caller() {
+    // v6 F2 — DistributePayment is gated to admin or DAO members. A
+    // public caller used to be able to pre-empt a pending distribution by
+    // calling with 1 ujunox against a target `task_id`, permanently
+    // locking the legitimate distribution out via the
+    // `PAYMENT_HISTORY.has` idempotency key — a 1-ujunox grief of
+    // arbitrarily large payments. v6 closes that with an explicit gate.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let griefer = mk(&app, "griefer");
+
+    app.init_modules(|router, _, storage| {
+        router.bank.init_balance(storage, &griefer, coins(10, UJUNO)).unwrap();
+    });
+
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+
+    let err = app
+        .execute_contract(
+            griefer,
+            contract,
+            &ExecuteMsg::DistributePayment { task_id: 42 },
+            &coins(1, UJUNO),
+        )
+        .unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::Unauthorized {}));
 }
 
 #[test]
@@ -235,9 +281,19 @@ fn test_member_earnings_accumulate() {
     let members = two_member_msg(&alice, &bob);
     let contract = store_and_instantiate(&mut app, &admin, members, None);
 
+    // v6 F2: re-funnel payments through a member (Alice) so the gate
+    // passes. Alice ends up both funding and receiving a 60 % share, and
+    // Bob still accrues 40 % of every round — which is what the test is
+    // really asserting (accumulation across rounds, not the flow of any
+    // single payer).
+    app.init_modules(|router, _, storage| {
+        router.bank.init_balance(storage, &alice, coins(10_000_000, UJUNO)).unwrap();
+    });
+    let _ = payer; // retained to keep the fixture shape symmetric
+
     for task_id in 1..=3u64 {
         app.execute_contract(
-            payer.clone(),
+            alice.clone(),
             contract.clone(),
             &ExecuteMsg::DistributePayment { task_id },
             &coins(1_000_000, UJUNO),
@@ -298,6 +354,188 @@ fn test_update_members_unauthorized_fails() {
     ).unwrap_err();
     let contract_err = err.downcast::<ContractError>().unwrap();
     assert!(matches!(contract_err, ContractError::Unauthorized {}));
+}
+
+#[test]
+fn test_submit_attestation_wavs_operator_authorized() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let wavs_operator = mk(&app, "wavs-operator");
+    let task_ledger = mk(&app, "task-ledger");
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate_with_overrides(
+        &mut app,
+        &admin,
+        members,
+        None,
+        Some(wavs_operator.to_string()),
+        Some(task_ledger.to_string()),
+    );
+
+    app.execute_contract(
+        alice.clone(), contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::OutcomeCreate {
+                question: "Test question".to_string(),
+                resolution_criteria: "Test criteria".to_string(),
+                deadline_block: 999999,
+            },
+        },
+        &[],
+    ).unwrap();
+    app.execute_contract(
+        alice.clone(), contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+        &[],
+    ).unwrap();
+    app.update_block(|b| b.height += 200);
+    app.execute_contract(
+        admin.clone(), contract.clone(),
+        &ExecuteMsg::ExecuteProposal { proposal_id: 1 },
+        &[],
+    ).unwrap();
+
+    let task_type = "outcome_verify";
+    let data_hash = "hash-operator";
+    let att_hash = compute_attestation_hash(task_type, data_hash);
+    app.execute_contract(
+        wavs_operator.clone(),
+        contract.clone(),
+        &ExecuteMsg::SubmitAttestation {
+            proposal_id: 1,
+            task_type: task_type.to_string(),
+            data_hash: data_hash.to_string(),
+            attestation_hash: att_hash.clone(),
+        },
+        &[],
+    ).unwrap();
+
+    let att: Option<crate::state::Attestation> = app.wrap().query_wasm_smart(
+        contract.clone(),
+        &QueryMsg::GetAttestation { proposal_id: 1 },
+    ).unwrap();
+    assert_eq!(att.unwrap().submitter, wavs_operator);
+}
+
+#[test]
+fn test_submit_attestation_task_ledger_not_authorized_when_wavs_operator_set() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let wavs_operator = mk(&app, "wavs-operator");
+    let task_ledger = mk(&app, "task-ledger");
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate_with_overrides(
+        &mut app,
+        &admin,
+        members,
+        None,
+        Some(wavs_operator.to_string()),
+        Some(task_ledger.to_string()),
+    );
+
+    app.execute_contract(
+        alice.clone(), contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::OutcomeCreate {
+                question: "Test question".to_string(),
+                resolution_criteria: "Test criteria".to_string(),
+                deadline_block: 999999,
+            },
+        },
+        &[],
+    ).unwrap();
+    app.execute_contract(
+        alice.clone(), contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+        &[],
+    ).unwrap();
+    app.update_block(|b| b.height += 200);
+    app.execute_contract(
+        admin.clone(), contract.clone(),
+        &ExecuteMsg::ExecuteProposal { proposal_id: 1 },
+        &[],
+    ).unwrap();
+
+    let err = app.execute_contract(
+        task_ledger,
+        contract.clone(),
+        &ExecuteMsg::SubmitAttestation {
+            proposal_id: 1,
+            task_type: "outcome_verify".to_string(),
+            data_hash: "fake".to_string(),
+            attestation_hash: "fake".to_string(),
+        },
+        &[],
+    ).unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::Unauthorized {}));
+}
+
+#[test]
+fn test_rotate_wavs_operator_admin_only() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let operator_v1 = mk(&app, "operator-v1");
+    let operator_v2 = mk(&app, "operator-v2");
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate_with_overrides(
+        &mut app,
+        &admin,
+        members,
+        None,
+        Some(operator_v1.to_string()),
+        None,
+    );
+
+    // Non-admin cannot rotate.
+    let err = app
+        .execute_contract(
+            alice.clone(),
+            contract.clone(),
+            &ExecuteMsg::RotateWavsOperator {
+                new_operator: Some(operator_v2.to_string()),
+            },
+            &[],
+        )
+        .unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::Unauthorized {}));
+
+    // Admin can rotate.
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::RotateWavsOperator {
+            new_operator: Some(operator_v2.to_string()),
+        },
+        &[],
+    )
+    .unwrap();
+    let cfg: crate::state::Config = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(cfg.wavs_operator, Some(operator_v2));
+
+    // Admin can clear (to lock out WAVS entirely).
+    app.execute_contract(
+        admin,
+        contract.clone(),
+        &ExecuteMsg::RotateWavsOperator { new_operator: None },
+        &[],
+    )
+    .unwrap();
+    let cfg: crate::state::Config = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(cfg.wavs_operator, None);
 }
 
 #[test]
@@ -787,6 +1025,7 @@ fn test_config_change_proposal() {
     let alice = mk(&app, "alice");
     let bob = mk(&app, "bob");
     let new_admin = mk(&app, "newadmin");
+    let wavs_operator = mk(&app, "wavs-operator");
     let members = two_member_msg(&alice, &bob);
     let contract = store_and_instantiate(&mut app, &admin, members, None);
 
@@ -797,6 +1036,7 @@ fn test_config_change_proposal() {
             kind: ProposalKindMsg::ConfigChange {
                 new_admin: Some(new_admin.to_string()),
                 new_governance: None,
+                new_wavs_operator: Some(wavs_operator.to_string()),
             },
         },
         &[],
@@ -823,6 +1063,7 @@ fn test_config_change_proposal() {
         .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
         .unwrap();
     assert_eq!(cfg.admin, new_admin);
+    assert_eq!(cfg.wavs_operator, Some(wavs_operator));
 }
 
 #[test]
@@ -844,8 +1085,13 @@ fn test_dust_goes_to_last_member() {
     ];
     let contract = store_and_instantiate(&mut app, &admin, members, None);
 
+    // v6 F2: route through admin (gate-allowed) rather than an external payer.
+    app.init_modules(|router, _, storage| {
+        router.bank.init_balance(storage, &admin, coins(10_000_000, UJUNO)).unwrap();
+    });
+    let _ = payer;
     app.execute_contract(
-        payer.clone(),
+        admin.clone(),
         contract.clone(),
         &ExecuteMsg::DistributePayment { task_id: 1 },
         &coins(3, UJUNO),
@@ -1070,6 +1316,66 @@ fn test_sortition_unauthorized_randomness_rejected() {
     ).unwrap_err();
     let contract_err = err.downcast::<ContractError>().unwrap();
     assert!(matches!(contract_err, ContractError::UnauthorizedRandomness {}));
+}
+
+#[test]
+fn test_sortition_wavs_operator_authorized() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let wavs_operator = mk(&app, "wavs-operator");
+    let task_ledger = mk(&app, "task-ledger");
+    let (members, addrs) = five_member_msg(&app);
+    let contract = store_and_instantiate_with_overrides(
+        &mut app,
+        &admin,
+        members,
+        None,
+        Some(wavs_operator.to_string()),
+        Some(task_ledger.to_string()),
+    );
+
+    app.execute_contract(
+        addrs[0].clone(), contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::SortitionRequest { count: 1, purpose: "WAVS auth".to_string() },
+        },
+        &[],
+    ).unwrap();
+    for addr in &addrs[0..3] {
+        app.execute_contract(
+            addr.clone(), contract.clone(),
+            &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+            &[],
+        ).unwrap();
+    }
+    app.update_block(|b| b.height += 200);
+    let exec_res = app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::ExecuteProposal { proposal_id: 1 },
+        &[],
+    ).unwrap();
+    let job_id = exec_res.events.iter()
+        .flat_map(|e| e.attributes.iter())
+        .find(|a| a.key == "job_id")
+        .unwrap().value.clone();
+
+    app.execute_contract(
+        wavs_operator,
+        contract.clone(),
+        &ExecuteMsg::SubmitRandomness {
+            job_id,
+            randomness_hex: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789".to_string(),
+            attestation_hash: "wavs-auth".to_string(),
+        },
+        &[],
+    ).unwrap();
+
+    let round: crate::state::SortitionRound = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetSortitionRound { round_id: 1 })
+        .unwrap();
+    assert_eq!(round.selected.len(), 1);
 }
 
 #[test]
@@ -1626,6 +1932,7 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
                 name: "BadCo1".to_string(),
                 admin: None,
                 governance: None,
+                wavs_operator: None,
                 escrow_contract: escrow.to_string(),
                 agent_registry: registry.to_string(),
                 task_ledger: None,
@@ -1658,6 +1965,7 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
                 name: "BadCo2".to_string(),
                 admin: None,
                 governance: None,
+                wavs_operator: None,
                 escrow_contract: escrow.to_string(),
                 agent_registry: registry.to_string(),
                 task_ledger: None,
@@ -1690,6 +1998,7 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
                 name: "BadCo3".to_string(),
                 admin: None,
                 governance: None,
+                wavs_operator: None,
                 escrow_contract: escrow.to_string(),
                 agent_registry: registry.to_string(),
                 task_ledger: None,

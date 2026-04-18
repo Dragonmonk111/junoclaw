@@ -79,3 +79,14 @@ pub const SUBMISSION_SEQ: Item<u64> = Item::new("submission_seq");
 pub const SUBMISSIONS: Map<u64, WorkSubmission> = Map::new("submissions");
 /// Track total granted per builder address
 pub const BUILDER_TOTALS: Map<&Addr, u128> = Map::new("builder_totals");
+/// Reverse index enforcing **global uniqueness of `work_hash`**.
+///
+/// `work_hash` is the SHA-256 digest of the actual work output: two
+/// identical outputs are, by definition, the same work and may only be
+/// claimed once. Without this index a single valid output could be
+/// submitted many times (same hash, different `evidence` strings),
+/// bloating state and confusing the verifier pipeline about which
+/// submission is canonical. The index is written inside `execute_submit`
+/// before `SUBMISSIONS.save`, so the duplicate check and the state write
+/// cannot drift apart.
+pub const WORK_HASH_USED: Map<&str, u64> = Map::new("work_hash_used");

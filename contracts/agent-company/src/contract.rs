@@ -59,16 +59,17 @@ pub fn instantiate(
     let governance = msg.governance
         .map(|g| deps.api.addr_validate(&g))
         .transpose()?;
+    let wavs_operator = msg
+        .wavs_operator
+        .map(|w| deps.api.addr_validate(&w))
+        .transpose()?;
     let escrow_contract = deps.api.addr_validate(&msg.escrow_contract)?;
     let agent_registry = deps.api.addr_validate(&msg.agent_registry)?;
-    let members = parse_members(&deps, msg.members)?;
-
     let task_ledger = msg.task_ledger
-        .map(|tl| deps.api.addr_validate(&tl))
+        .map(|t| deps.api.addr_validate(&t))
         .transpose()?;
-
     let nois_proxy = msg.nois_proxy
-        .map(|np| deps.api.addr_validate(&np))
+        .map(|n| deps.api.addr_validate(&n))
         .transpose()?;
 
     // ── L5: governance-percent bounds ──
@@ -103,14 +104,15 @@ pub fn instantiate(
         )));
     }
 
-    CONFIG.save(deps.storage, &Config {
+    let config = Config {
         name: msg.name.clone(),
         admin,
         governance,
+        wavs_operator,
         escrow_contract,
         agent_registry,
         task_ledger,
-        members,
+        members: parse_members(&deps, msg.members)?,
         total_weight: TOTAL_WEIGHT,
         denom: msg.denom.unwrap_or_else(|| "ujunox".to_string()),
         voting_period_blocks: msg.voting_period_blocks.unwrap_or(100),
@@ -121,7 +123,8 @@ pub fn instantiate(
         nois_proxy,
         supermajority_quorum_percent,
         dex_factory: None,
-    })?;
+    };
+    CONFIG.save(deps.storage, &config)?;
     PROPOSAL.save(deps.storage, &None)?;
     PROPOSAL_SEQ.save(deps.storage, &0u64)?;
     SORTITION_SEQ.save(deps.storage, &0u64)?;
@@ -160,6 +163,8 @@ pub fn execute(
             execute_update_members(deps, env, info, members),
         ExecuteMsg::TransferAdmin { new_admin } =>
             execute_transfer_admin(deps, info, new_admin),
+        ExecuteMsg::RotateWavsOperator { new_operator } =>
+            execute_rotate_wavs_operator(deps, info, new_operator),
         // ── Randomness ──
         ExecuteMsg::NoisReceive { callback } =>
             execute_nois_receive(deps, env, info, callback),
@@ -177,11 +182,28 @@ fn execute_distribute(
     info: MessageInfo,
     task_id: u64,
 ) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    // ── v6 F2: gate `DistributePayment` by admin or DAO member ──
+    // `PAYMENT_HISTORY` keys idempotency by `task_id`, so a public caller
+    // could front-run a pending distribution with 1 ujunox against the
+    // same task_id and permanently lock the legitimate distribution out
+    // with `AlreadyDistributed` — a 1-ujunox grief of arbitrarily large
+    // payments. Restricting the caller to DAO-internal identities (admin
+    // or any weighted member) eliminates the asymmetric grief without
+    // reducing the contract's legitimate flexibility: any member can
+    // still fund a distribution from their own wallet, and an outside
+    // funder must route through a member proxy (or have admin add them
+    // as a zero-weight member).
+    let is_member = cfg.members.iter().any(|m| m.addr == info.sender);
+    if info.sender != cfg.admin && !is_member {
+        return Err(ContractError::Unauthorized {});
+    }
+
     if PAYMENT_HISTORY.has(deps.storage, task_id) {
         return Err(ContractError::AlreadyDistributed { task_id });
     }
 
-    let cfg = CONFIG.load(deps.storage)?;
     let total_amount: Uint128 = info.funds.iter()
         .filter(|c| c.denom == cfg.denom)
         .map(|c| c.amount)
@@ -263,7 +285,7 @@ fn execute_create_proposal(
             }
             ProposalKind::WavsPush { task_description, execution_tier, escrow_amount }
         }
-        ProposalKindMsg::ConfigChange { new_admin, new_governance } => {
+        ProposalKindMsg::ConfigChange { new_admin, new_governance, new_wavs_operator } => {
             // Validate addresses eagerly so invalid strings fail at proposal
             // creation instead of wasting an entire voting cycle before we
             // discover the error at execute time.
@@ -273,7 +295,10 @@ fn execute_create_proposal(
             if let Some(ref g) = new_governance {
                 deps.api.addr_validate(g)?;
             }
-            ProposalKind::ConfigChange { new_admin, new_governance }
+            if let Some(ref w) = new_wavs_operator {
+                deps.api.addr_validate(w)?;
+            }
+            ProposalKind::ConfigChange { new_admin, new_governance, new_wavs_operator }
         }
         ProposalKindMsg::FreeText { title, description } => {
             ProposalKind::FreeText { title, description }
@@ -612,12 +637,15 @@ fn execute_execute_proposal(
                 .add_attribute("contract_address", env.contract.address.to_string());
             response = response.add_event(wavs_event);
         }
-        ProposalKind::ConfigChange { new_admin, new_governance } => {
+        ProposalKind::ConfigChange { new_admin, new_governance, new_wavs_operator } => {
             if let Some(admin_str) = new_admin {
                 cfg.admin = deps.api.addr_validate(admin_str)?;
             }
             if let Some(gov_str) = new_governance {
                 cfg.governance = Some(deps.api.addr_validate(gov_str)?);
+            }
+            if let Some(wavs_str) = new_wavs_operator {
+                cfg.wavs_operator = Some(deps.api.addr_validate(wavs_str)?);
             }
             CONFIG.save(deps.storage, &cfg)?;
             response = response.add_attribute("kind", "config_change");
@@ -948,11 +976,15 @@ fn execute_submit_randomness(
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // Authorized submitters: admin, governance, or task_ledger (WAVS bridge)
+    // Authorized submitters: admin, governance, or explicit WAVS operator.
     let is_admin = info.sender == cfg.admin;
     let is_governance = cfg.governance.as_ref().map(|g| *g == info.sender).unwrap_or(false);
-    let is_wavs_bridge = cfg.task_ledger.as_ref().map(|tl| *tl == info.sender).unwrap_or(false);
-    if !is_admin && !is_governance && !is_wavs_bridge {
+    let is_wavs_operator = cfg
+        .wavs_operator
+        .as_ref()
+        .map(|w| *w == info.sender)
+        .unwrap_or(false);
+    if !is_admin && !is_governance && !is_wavs_operator {
         return Err(ContractError::UnauthorizedRandomness {});
     }
 
@@ -972,11 +1004,15 @@ fn execute_submit_attestation(
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // Authorized submitters: admin, governance, or task_ledger (WAVS bridge)
+    // Authorized submitters: admin, governance, or explicit WAVS operator.
     let is_admin = info.sender == cfg.admin;
     let is_governance = cfg.governance.as_ref().map(|g| *g == info.sender).unwrap_or(false);
-    let is_wavs_bridge = cfg.task_ledger.as_ref().map(|tl| *tl == info.sender).unwrap_or(false);
-    if !is_admin && !is_governance && !is_wavs_bridge {
+    let is_wavs_operator = cfg
+        .wavs_operator
+        .as_ref()
+        .map(|w| *w == info.sender)
+        .unwrap_or(false);
+    if !is_admin && !is_governance && !is_wavs_operator {
         return Err(ContractError::Unauthorized {});
     }
 
@@ -1123,6 +1159,29 @@ fn execute_transfer_admin(
     Ok(Response::new()
         .add_attribute("action", "transfer_admin")
         .add_attribute("new_admin", new_admin))
+}
+
+fn execute_rotate_wavs_operator(
+    deps: DepsMut,
+    info: MessageInfo,
+    new_operator: Option<String>,
+) -> Result<Response, ContractError> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+    if info.sender != cfg.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let resolved = match &new_operator {
+        Some(raw) => Some(deps.api.addr_validate(raw)?),
+        None => None,
+    };
+    cfg.wavs_operator = resolved;
+    CONFIG.save(deps.storage, &cfg)?;
+    Ok(Response::new()
+        .add_attribute("action", "rotate_wavs_operator")
+        .add_attribute(
+            "new_operator",
+            new_operator.unwrap_or_else(|| "<cleared>".to_string()),
+        ))
 }
 
 #[entry_point]

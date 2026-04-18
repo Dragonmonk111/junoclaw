@@ -223,6 +223,22 @@ fn execute_swap(
             });
         };
 
+    // ── v6 F4: a swap accepts exactly one denom — the offer denom. ──
+    // Any other denom attached to `info.funds` would have been silently
+    // absorbed by the pair contract with no way for the sender to
+    // reclaim it. Fail closed on any mismatch so the revert refunds
+    // every attached coin atomically.
+    let offer_denom_key = offer_asset.denom_key();
+    for coin in info.funds.iter() {
+        if coin.denom != offer_denom_key {
+            return Err(ContractError::UnexpectedDenom {
+                denom: coin.denom.clone(),
+                expected_a: offer_denom_key.clone(),
+                expected_b: offer_denom_key.clone(),
+            });
+        }
+    }
+
     let offer_amount = find_native_amount(&info.funds, &offer_asset)?;
     if offer_amount.is_zero() {
         return Err(ContractError::ZeroAmount {});
@@ -391,6 +407,24 @@ fn extract_native_amounts(
         AssetInfo::Native(d) => d.clone(),
         _ => return Err(ContractError::Std(cosmwasm_std::StdError::generic_err("CW20 not yet supported"))),
     };
+
+    // ── v6 F4: reject unexpected denoms in `funds` ──
+    // Previously any extra denom in `info.funds` was silently dropped
+    // because the helper only looks for `denom_a` and `denom_b` by name.
+    // A user who attached a third token (or a typo'd denom) would
+    // forfeit those funds into the pair contract with no way to
+    // reclaim them. The pair now fails closed on any unknown denom so
+    // the sender gets a clear error and a refund via the revert, rather
+    // than a silent loss.
+    for coin in funds.iter() {
+        if coin.denom != denom_a && coin.denom != denom_b {
+            return Err(ContractError::UnexpectedDenom {
+                denom: coin.denom.clone(),
+                expected_a: denom_a,
+                expected_b: denom_b,
+            });
+        }
+    }
 
     let amount_a = funds
         .iter()

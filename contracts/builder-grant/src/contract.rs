@@ -11,7 +11,7 @@ use crate::msg::{
 };
 use crate::state::{
     Config, SubmissionStatus, WorkSubmission, BUILDER_TOTALS, CONFIG, SUBMISSIONS,
-    SUBMISSION_SEQ,
+    SUBMISSION_SEQ, WORK_HASH_USED,
 };
 
 const CONTRACT_NAME: &str = "crates.io:junoclaw-builder-grant";
@@ -110,6 +110,20 @@ fn execute_submit_work(
         return Err(ContractError::InvalidWorkHash {});
     }
 
+    // ── v6 F3: work_hash is the SHA-256 of the actual work output, so a
+    // duplicate hash is by definition the same work. Allowing multiple
+    // submissions of the same hash would let an attacker spam the
+    // pending-verification queue with structurally-identical entries
+    // (different `evidence` strings, same output hash) to bloat state,
+    // confuse the TEE verifier about which record is canonical, and
+    // potentially race the legitimate builder's own claim. We index
+    // `work_hash -> submission_id` and reject duplicates up front.
+    if let Some(existing) = WORK_HASH_USED.may_load(deps.storage, work_hash.as_str())? {
+        return Err(ContractError::DuplicateWorkHash {
+            existing_submission_id: existing,
+        });
+    }
+
     let seq = SUBMISSION_SEQ.load(deps.storage)? + 1;
     SUBMISSION_SEQ.save(deps.storage, &seq)?;
 
@@ -126,6 +140,7 @@ fn execute_submit_work(
     };
 
     SUBMISSIONS.save(deps.storage, seq, &submission)?;
+    WORK_HASH_USED.save(deps.storage, work_hash.as_str(), &seq)?;
     config.total_submissions += 1;
     CONFIG.save(deps.storage, &config)?;
 

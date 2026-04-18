@@ -10,6 +10,8 @@ pub struct Config {
     pub agent_registry: Addr,
     /// Wallets allowed to call CompleteTask/FailTask (e.g. the daemon wallet).
     pub operators: Vec<Addr>,
+    #[serde(default)]
+    pub agent_company: Option<Addr>,
     pub registry: ContractRegistry,
 }
 

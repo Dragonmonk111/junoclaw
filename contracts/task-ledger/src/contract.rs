@@ -37,6 +37,11 @@ pub fn instantiate(
         .map(|o| deps.api.addr_validate(o))
         .collect::<Result<Vec<_>, _>>()?;
 
+    let agent_company = msg
+        .agent_company
+        .map(|a| deps.api.addr_validate(&a))
+        .transpose()?;
+
     let agent_registry_addr = deps.api.addr_validate(&msg.agent_registry)?;
 
     // Build ContractRegistry from explicit msg.registry, falling back to
@@ -72,6 +77,7 @@ pub fn instantiate(
         admin,
         agent_registry: agent_registry_addr,
         operators,
+        agent_company,
         registry,
     };
     CONFIG.save(deps.storage, &config)?;
@@ -116,7 +122,8 @@ pub fn execute(
         ExecuteMsg::UpdateConfig {
             admin,
             agent_registry,
-        } => execute_update_config(deps, info, admin, agent_registry),
+            agent_company,
+        } => execute_update_config(deps, info, admin, agent_registry, agent_company),
         ExecuteMsg::UpdateRegistry {
             agent_registry,
             task_ledger,
@@ -134,6 +141,43 @@ fn execute_submit(
     execution_tier: junoclaw_common::ExecutionTier,
     proposal_id: Option<u64>,
 ) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let is_operator = is_authorized(&config, &info.sender);
+    let is_agent_company = config
+        .agent_company
+        .as_ref()
+        .map(|addr| *addr == info.sender)
+        .unwrap_or(false);
+
+    if let Some(pid) = proposal_id {
+        if !is_agent_company {
+            return Err(ContractError::Unauthorized {});
+        }
+        if TASKS_BY_PROPOSAL.has(deps.storage, pid) {
+            return Err(ContractError::ProposalTaskAlreadyExists { proposal_id: pid });
+        }
+    } else if agent_id == 0 && !is_operator {
+        return Err(ContractError::ReservedAgentId {});
+    } else if agent_id != 0 && !is_operator {
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "snake_case")]
+        enum AgentRegistryQuery {
+            GetAgent { agent_id: u64 },
+        }
+
+        let profile: junoclaw_common::AgentProfile = deps
+            .querier
+            .query_wasm_smart(
+                config.agent_registry.to_string(),
+                &AgentRegistryQuery::GetAgent { agent_id },
+            )
+            .map_err(|_| ContractError::AgentNotOwned { agent_id })?;
+
+        if profile.owner != info.sender || !profile.is_active {
+            return Err(ContractError::AgentNotOwned { agent_id });
+        }
+    }
+
     let task_id = NEXT_TASK_ID.load(deps.storage)?;
 
     let record = TaskRecord {
@@ -201,11 +245,23 @@ fn execute_complete(
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
+    // ── Completion is an attestation, not a self-declaration ──
+    // Only operators (incl. admin) or the configured `agent-company` may
+    // mark a task Completed. Allowing the submitter to self-complete let
+    // any public `SubmitTask` caller trigger the atomic
+    // `escrow::Confirm` callback and mark their own obligation paid
+    // without any funds ever moving — a full bypass of escrow's payment
+    // journal. Agent-company is permitted so governance-initiated tasks
+    // can be marked complete when the DAO (not an operator) is the
+    // settlement authority.
+    if !is_authorized(&config, &info.sender)
+        && config.agent_company.as_ref() != Some(&info.sender)
+    {
+        return Err(ContractError::Unauthorized {});
+    }
+
     TASKS.update(deps.storage, task_id, |existing| match existing {
         Some(mut record) => {
-            if record.submitter != info.sender && !is_authorized(&config, &info.sender) {
-                return Err(ContractError::NotSubmitter {});
-            }
             if record.status != TaskStatus::Running {
                 return Err(ContractError::TaskNotRunning { task_id });
             }
@@ -288,11 +344,22 @@ fn execute_fail(
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
+    // ── Failure is a verdict, not a self-declaration ──
+    // Same invariant as `execute_complete`: a `Failed` task fires the
+    // atomic `escrow::Cancel` callback, which would otherwise let the
+    // obligation's payer unilaterally void their debt by submitting a
+    // task and marking it Failed. The submitter path is therefore
+    // closed; only operators/admin/agent-company may finalise a task.
+    // Users retain the ability to withdraw *their own* pending task via
+    // `CancelTask`, which has no escrow side-effect.
+    if !is_authorized(&config, &info.sender)
+        && config.agent_company.as_ref() != Some(&info.sender)
+    {
+        return Err(ContractError::Unauthorized {});
+    }
+
     TASKS.update(deps.storage, task_id, |existing| match existing {
         Some(mut record) => {
-            if record.submitter != info.sender && !is_authorized(&config, &info.sender) {
-                return Err(ContractError::NotSubmitter {});
-            }
             if record.status != TaskStatus::Running {
                 return Err(ContractError::TaskNotRunning { task_id });
             }
@@ -422,6 +489,7 @@ fn execute_update_config(
     info: MessageInfo,
     admin: Option<String>,
     agent_registry: Option<String>,
+    agent_company: Option<String>,
 ) -> Result<Response, ContractError> {
     let mut config = CONFIG.load(deps.storage)?;
     if info.sender != config.admin {
@@ -438,6 +506,9 @@ fn execute_update_config(
         // direct field so callbacks remain coherent even if admin only uses
         // the old UpdateConfig call.
         config.registry.agent_registry = Some(validated);
+    }
+    if let Some(ac) = agent_company {
+        config.agent_company = Some(deps.api.addr_validate(&ac)?);
     }
 
     CONFIG.save(deps.storage, &config)?;

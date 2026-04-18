@@ -166,11 +166,13 @@ export function buildWavsPushProposal(
 export function buildConfigChangeProposal(
   newAdmin?: string,
   newGovernance?: string,
+  newWavsOperator?: string,
 ) {
   return {
     config_change: {
       new_admin: newAdmin ?? null,
       new_governance: newGovernance ?? null,
+      new_wavs_operator: newWavsOperator ?? null,
     },
   }
 }

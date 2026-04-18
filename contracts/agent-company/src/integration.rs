@@ -112,6 +112,7 @@ fn deploy_full_stack(app: &mut App) -> Deployment {
                 admin: Some(admin.to_string()),
                 agent_registry: agent_registry_addr.to_string(),
                 operators: Some(vec![admin.to_string()]),
+                agent_company: None,
                 registry: None, // mirroring will fill registry.agent_registry
             },
             &[],
@@ -164,6 +165,7 @@ fn deploy_full_stack(app: &mut App) -> Deployment {
                 name: "TestCo".to_string(),
                 admin: Some(admin.to_string()),
                 governance: None,
+                wavs_operator: None,
                 escrow_contract: escrow_addr.to_string(),
                 agent_registry: agent_registry_addr.to_string(),
                 task_ledger: Some(task_ledger_addr.to_string()),
@@ -188,6 +190,17 @@ fn deploy_full_stack(app: &mut App) -> Deployment {
     // agent-registry needs `registry.task_ledger`. The other pointers are
     // already filled in by the required-field mirroring we added in
     // task-ledger/contract.rs and escrow/contract.rs.
+    app.execute_contract(
+        admin.clone(),
+        task_ledger_addr.clone(),
+        &task_ledger::msg::ExecuteMsg::UpdateConfig {
+            admin: None,
+            agent_registry: None,
+            agent_company: Some(agent_company_addr.to_string()),
+        },
+        &[],
+    )
+    .unwrap();
     app.execute_contract(
         admin.clone(),
         task_ledger_addr.clone(),
