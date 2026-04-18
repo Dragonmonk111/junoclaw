@@ -4,7 +4,7 @@ use cosmwasm_std::Uint128;
 #[allow(unused_imports)]
 use crate::state::{Config, LedgerStats};
 #[allow(unused_imports)]
-use junoclaw_common::{ExecutionTier, TaskRecord};
+use junoclaw_common::{ContractRegistry, ExecutionTier, TaskRecord};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -12,6 +12,12 @@ pub struct InstantiateMsg {
     pub agent_registry: String,
     /// Optional initial operator wallets (e.g. daemon address).
     pub operators: Option<Vec<String>>,
+    /// Optional cross-contract registry. When `None`, registry is initialised
+    /// from `agent_registry` alone (task_ledger/escrow remain unset until
+    /// `UpdateRegistry` is called by the admin). Supplying a registry here
+    /// wires all three pointers at instantiate time — preferred for new
+    /// deployments where the address graph is known up-front.
+    pub registry: Option<ContractRegistry>,
 }
 
 #[cw_serde]
@@ -20,6 +26,11 @@ pub enum ExecuteMsg {
         agent_id: u64,
         input_hash: String,
         execution_tier: ExecutionTier,
+        /// Optional governance correlation id. Populated by
+        /// `agent-company::WavsPush` so that downstream escrow callbacks key
+        /// the obligation under the same id the proposal layer used.
+        #[serde(default)]
+        proposal_id: Option<u64>,
     },
     CompleteTask {
         task_id: u64,
@@ -40,6 +51,14 @@ pub enum ExecuteMsg {
         admin: Option<String>,
         agent_registry: Option<String>,
     },
+    /// Admin-only: rewire the cross-contract registry (agent-registry,
+    /// task-ledger self-ref, escrow). Any field left as `None` is untouched;
+    /// passing an empty-Addr would be rejected by `addr_validate`.
+    UpdateRegistry {
+        agent_registry: Option<String>,
+        task_ledger: Option<String>,
+        escrow: Option<String>,
+    },
 }
 
 #[cw_serde]
@@ -52,6 +71,10 @@ pub enum QueryMsg {
     GetConfig {},
     #[returns(TaskRecord)]
     GetTask { task_id: u64 },
+    /// Reverse lookup: fetch the task record spawned by a given governance
+    /// proposal id. Returns `None` if no task is correlated to that proposal.
+    #[returns(Option<TaskRecord>)]
+    GetTaskByProposal { proposal_id: u64 },
     #[returns(Vec<TaskRecord>)]
     GetTasksByAgent { agent_id: u64, limit: Option<u32> },
     #[returns(Vec<TaskRecord>)]

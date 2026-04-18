@@ -21,3 +21,11 @@ junoclaw-common = { workspace = true }
 [dev-dependencies]
 cw-multi-test = { workspace = true }
 anyhow = { workspace = true }
+# Path-deps for cross-contract integration tests. These are *not* linked into
+# the wasm artefact (dev-dependencies only), but let the test harness spin up
+# real `task-ledger`, `escrow` and `agent-registry` contracts inside
+# cw_multi_test so the full WavsPush → SubmitTask → Authorize → CompleteTask
+# → Confirm pipeline can be verified end-to-end.
+task-ledger = { path = "../task-ledger" }
+escrow = { path = "../escrow" }
+agent-registry = { path = "../agent-registry" }

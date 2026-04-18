@@ -27,16 +27,35 @@ pub fn instantiate(
         .transpose()?
         .unwrap_or(info.sender.clone());
 
+    let registry = match msg.registry {
+        Some(r) => {
+            let agent_registry = match r.agent_registry {
+                Some(a) => Some(deps.api.addr_validate(a.as_str())?),
+                None => None,
+            };
+            let task_ledger = match r.task_ledger {
+                Some(a) => Some(deps.api.addr_validate(a.as_str())?),
+                None => None,
+            };
+            let escrow = match r.escrow {
+                Some(a) => Some(deps.api.addr_validate(a.as_str())?),
+                None => None,
+            };
+            ContractRegistry { agent_registry, task_ledger, escrow }
+        }
+        None => ContractRegistry {
+            agent_registry: None,
+            task_ledger: None,
+            escrow: None,
+        },
+    };
+
     let config = Config {
         admin,
         max_agents: msg.max_agents,
         registration_fee_ujuno: msg.registration_fee_ujuno,
         denom: msg.denom.unwrap_or_else(|| "ujunox".to_string()),
-        registry: ContractRegistry {
-            agent_registry: None,
-            task_ledger: None,
-            escrow: None,
-        },
+        registry,
     };
     CONFIG.save(deps.storage, &config)?;
     NEXT_AGENT_ID.save(deps.storage, &1u64)?;
@@ -87,6 +106,11 @@ pub fn execute(
             max_agents,
             registration_fee_ujuno,
         } => execute_update_config(deps, info, admin, max_agents, registration_fee_ujuno),
+        ExecuteMsg::UpdateRegistry {
+            agent_registry,
+            task_ledger,
+            escrow,
+        } => execute_update_registry(deps, info, agent_registry, task_ledger, escrow),
     }
 }
 
@@ -311,6 +335,46 @@ fn execute_update_config(
     CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::new().add_attribute("action", "update_config"))
+}
+
+/// Admin-only: rewire any subset of the cross-contract registry pointers.
+/// This is the sole mechanism by which `IncrementTasks` can be authorised
+/// (via `registry.task_ledger`) after instantiate.
+fn execute_update_registry(
+    deps: DepsMut,
+    info: MessageInfo,
+    agent_registry: Option<String>,
+    task_ledger: Option<String>,
+    escrow: Option<String>,
+) -> Result<Response, ContractError> {
+    let mut config = CONFIG.load(deps.storage)?;
+    if info.sender != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    if let Some(a) = agent_registry.as_ref() {
+        config.registry.agent_registry = Some(deps.api.addr_validate(a)?);
+    }
+    if let Some(a) = task_ledger.as_ref() {
+        config.registry.task_ledger = Some(deps.api.addr_validate(a)?);
+    }
+    if let Some(a) = escrow.as_ref() {
+        config.registry.escrow = Some(deps.api.addr_validate(a)?);
+    }
+
+    CONFIG.save(deps.storage, &config)?;
+
+    let mut response = Response::new().add_attribute("action", "update_registry");
+    if let Some(a) = agent_registry {
+        response = response.add_attribute("agent_registry", a);
+    }
+    if let Some(a) = task_ledger {
+        response = response.add_attribute("task_ledger", a);
+    }
+    if let Some(a) = escrow {
+        response = response.add_attribute("escrow", a);
+    }
+    Ok(response)
 }
 
 #[entry_point]

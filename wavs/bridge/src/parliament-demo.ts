@@ -282,7 +282,6 @@ async function setup() {
     task_ledger: null,
     nois_proxy: null,
     members,
-    proposal_timelock_blocks: 5,
     denom: config.denom,
     voting_period_blocks: 200,
     quorum_percent: 100,

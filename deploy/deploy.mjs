@@ -228,7 +228,6 @@ async function main() {
           members: [
             { addr: address, weight: 10000, role: 'human' },
           ],
-          proposal_timelock_blocks: 50,
           denom: 'ujunox',
           voting_period_blocks: 100,
           quorum_percent: 51,

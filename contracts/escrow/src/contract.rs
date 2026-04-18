@@ -30,16 +30,41 @@ pub fn instantiate(
         .transpose()?
         .unwrap_or(info.sender.clone());
 
-    let config = Config {
-        admin,
-        task_ledger: deps.api.addr_validate(&msg.task_ledger)?,
-        timeout_blocks: msg.timeout_blocks,
-        denom: msg.denom.unwrap_or_else(|| "ujunox".to_string()),
-        registry: ContractRegistry {
+    let task_ledger_addr = deps.api.addr_validate(&msg.task_ledger)?;
+
+    // Initialise the registry. The direct `task_ledger` field is always
+    // required; we mirror it into `registry.task_ledger` so downstream
+    // lookups via `config.registry.task_ledger` work without an explicit
+    // `UpdateRegistry` call.
+    let registry = match msg.registry {
+        Some(r) => {
+            let agent_registry = match r.agent_registry {
+                Some(a) => Some(deps.api.addr_validate(a.as_str())?),
+                None => None,
+            };
+            let task_ledger = match r.task_ledger {
+                Some(a) => Some(deps.api.addr_validate(a.as_str())?),
+                None => Some(task_ledger_addr.clone()),
+            };
+            let escrow = match r.escrow {
+                Some(a) => Some(deps.api.addr_validate(a.as_str())?),
+                None => None,
+            };
+            ContractRegistry { agent_registry, task_ledger, escrow }
+        }
+        None => ContractRegistry {
             agent_registry: None,
-            task_ledger: None,
+            task_ledger: Some(task_ledger_addr.clone()),
             escrow: None,
         },
+    };
+
+    let config = Config {
+        admin,
+        task_ledger: task_ledger_addr,
+        timeout_blocks: msg.timeout_blocks,
+        denom: msg.denom.unwrap_or_else(|| "ujunox".to_string()),
+        registry,
     };
     CONFIG.save(deps.storage, &config)?;
     NEXT_OBLIGATION_ID.save(deps.storage, &1u64)?;
@@ -88,6 +113,11 @@ pub fn execute(
             task_ledger,
             timeout_blocks,
         } => execute_update_config(deps, info, admin, task_ledger, timeout_blocks),
+        ExecuteMsg::UpdateRegistry {
+            agent_registry,
+            task_ledger,
+            escrow,
+        } => execute_update_registry(deps, info, agent_registry, task_ledger, escrow),
     }
 }
 
@@ -306,7 +336,11 @@ fn execute_update_config(
         config.admin = deps.api.addr_validate(&a)?;
     }
     if let Some(tl) = task_ledger {
-        config.task_ledger = deps.api.addr_validate(&tl)?;
+        let validated = deps.api.addr_validate(&tl)?;
+        config.task_ledger = validated.clone();
+        // Mirror the change into the canonical registry pointer so callback
+        // auth checks and the cross-contract pointer stay in lockstep.
+        config.registry.task_ledger = Some(validated);
     }
     if let Some(tb) = timeout_blocks {
         config.timeout_blocks = tb;
@@ -315,6 +349,47 @@ fn execute_update_config(
     CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::new().add_attribute("action", "update_config"))
+}
+
+/// Admin-only: rewire any subset of the cross-contract registry pointers.
+fn execute_update_registry(
+    deps: DepsMut,
+    info: MessageInfo,
+    agent_registry: Option<String>,
+    task_ledger: Option<String>,
+    escrow: Option<String>,
+) -> Result<Response, ContractError> {
+    let mut config = CONFIG.load(deps.storage)?;
+    if info.sender != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    if let Some(a) = agent_registry.as_ref() {
+        config.registry.agent_registry = Some(deps.api.addr_validate(a)?);
+    }
+    if let Some(a) = task_ledger.as_ref() {
+        let validated = deps.api.addr_validate(a)?;
+        config.registry.task_ledger = Some(validated.clone());
+        // Keep the direct auth-field in lockstep.
+        config.task_ledger = validated;
+    }
+    if let Some(a) = escrow.as_ref() {
+        config.registry.escrow = Some(deps.api.addr_validate(a)?);
+    }
+
+    CONFIG.save(deps.storage, &config)?;
+
+    let mut response = Response::new().add_attribute("action", "update_registry");
+    if let Some(a) = agent_registry {
+        response = response.add_attribute("agent_registry", a);
+    }
+    if let Some(a) = task_ledger {
+        response = response.add_attribute("task_ledger", a);
+    }
+    if let Some(a) = escrow {
+        response = response.add_attribute("escrow", a);
+    }
+    Ok(response)
 }
 
 #[entry_point]

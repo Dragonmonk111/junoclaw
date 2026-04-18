@@ -8,7 +8,7 @@ use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 use crate::state::{
     Config, LedgerStats, CONFIG, LEDGER_STATS, NEXT_TASK_ID, TASKS, TASKS_BY_AGENT,
-    TASKS_BY_SUBMITTER,
+    TASKS_BY_PROPOSAL, TASKS_BY_SUBMITTER,
 };
 use junoclaw_common::{ContractRegistry, TaskRecord, TaskStatus};
 
@@ -37,15 +37,42 @@ pub fn instantiate(
         .map(|o| deps.api.addr_validate(o))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let config = Config {
-        admin,
-        agent_registry: deps.api.addr_validate(&msg.agent_registry)?,
-        operators,
-        registry: ContractRegistry {
-            agent_registry: None,
+    let agent_registry_addr = deps.api.addr_validate(&msg.agent_registry)?;
+
+    // Build ContractRegistry from explicit msg.registry, falling back to
+    // populating only the agent_registry pointer we already required above.
+    // This guarantees that cross-contract callbacks (to agent-registry and
+    // escrow) have a non-None pointer to target the moment the contract is
+    // live — or, if only agent_registry is known at instantiate time, at
+    // least that pointer wires through without a mandatory `UpdateRegistry`.
+    let registry = match msg.registry {
+        Some(r) => {
+            let agent_registry = match r.agent_registry {
+                Some(a) => Some(deps.api.addr_validate(a.as_str())?),
+                None => Some(agent_registry_addr.clone()),
+            };
+            let task_ledger = match r.task_ledger {
+                Some(a) => Some(deps.api.addr_validate(a.as_str())?),
+                None => None,
+            };
+            let escrow = match r.escrow {
+                Some(a) => Some(deps.api.addr_validate(a.as_str())?),
+                None => None,
+            };
+            ContractRegistry { agent_registry, task_ledger, escrow }
+        }
+        None => ContractRegistry {
+            agent_registry: Some(agent_registry_addr.clone()),
             task_ledger: None,
             escrow: None,
         },
+    };
+
+    let config = Config {
+        admin,
+        agent_registry: agent_registry_addr,
+        operators,
+        registry,
     };
     CONFIG.save(deps.storage, &config)?;
     NEXT_TASK_ID.save(deps.storage, &1u64)?;
@@ -75,7 +102,8 @@ pub fn execute(
             agent_id,
             input_hash,
             execution_tier,
-        } => execute_submit(deps, env, info, agent_id, input_hash, execution_tier),
+            proposal_id,
+        } => execute_submit(deps, env, info, agent_id, input_hash, execution_tier, proposal_id),
         ExecuteMsg::CompleteTask {
             task_id,
             output_hash,
@@ -89,6 +117,11 @@ pub fn execute(
             admin,
             agent_registry,
         } => execute_update_config(deps, info, admin, agent_registry),
+        ExecuteMsg::UpdateRegistry {
+            agent_registry,
+            task_ledger,
+            escrow,
+        } => execute_update_registry(deps, info, agent_registry, task_ledger, escrow),
     }
 }
 
@@ -99,6 +132,7 @@ fn execute_submit(
     agent_id: u64,
     input_hash: String,
     execution_tier: junoclaw_common::ExecutionTier,
+    proposal_id: Option<u64>,
 ) -> Result<Response, ContractError> {
     let task_id = NEXT_TASK_ID.load(deps.storage)?;
 
@@ -113,6 +147,7 @@ fn execute_submit(
         submitted_at: env.block.time.seconds(),
         completed_at: None,
         cost_ujuno: None,
+        proposal_id,
     };
 
     TASKS.save(deps.storage, task_id, &record)?;
@@ -130,15 +165,26 @@ fn execute_submit(
         Ok(ids)
     })?;
 
+    // Write the reverse index so downstream contracts (agent-company's
+    // attestation coherence check, for instance) can resolve the real task_id
+    // from the proposal_id that governance used.
+    if let Some(pid) = proposal_id {
+        TASKS_BY_PROPOSAL.save(deps.storage, pid, &task_id)?;
+    }
+
     LEDGER_STATS.update(deps.storage, |mut s| -> StdResult<_> {
         s.total_tasks += 1;
         Ok(s)
     })?;
 
-    Ok(Response::new()
+    let mut response = Response::new()
         .add_attribute("action", "submit_task")
         .add_attribute("task_id", task_id.to_string())
-        .add_attribute("agent_id", agent_id.to_string()))
+        .add_attribute("agent_id", agent_id.to_string());
+    if let Some(pid) = proposal_id {
+        response = response.add_attribute("proposal_id", pid.to_string());
+    }
+    Ok(response)
 }
 
 fn is_authorized(config: &Config, sender: &cosmwasm_std::Addr) -> bool {
@@ -186,6 +232,14 @@ fn execute_complete(
         .add_attribute("output_hash", output_hash);
 
     // ── Status coherence: atomic callbacks ──
+    // Escrow callback keys the obligation by whatever id the *payer* used at
+    // Authorize-time. For governance-initiated tasks the payer was
+    // `agent-company` and the id is the proposal_id; for daemon-initiated
+    // tasks the id is the local task_id. Using `proposal_id.unwrap_or(task_id)`
+    // keeps both flows coherent without forcing escrow to learn about either
+    // layer's id space.
+    let escrow_key = task.proposal_id.unwrap_or(task_id);
+
     // Callback 1: Confirm the escrow obligation (if escrow is wired)
     if let Some(escrow_addr) = &config.registry.escrow {
         #[derive(serde::Serialize)]
@@ -193,26 +247,34 @@ fn execute_complete(
         enum EscrowMsg { Confirm { task_id: u64, tx_hash: Option<String> } }
         let confirm_msg = WasmMsg::Execute {
             contract_addr: escrow_addr.to_string(),
-            msg: to_json_binary(&EscrowMsg::Confirm { task_id, tx_hash: None })?,
+            msg: to_json_binary(&EscrowMsg::Confirm { task_id: escrow_key, tx_hash: None })?,
             funds: vec![],
         };
         response = response.add_message(confirm_msg);
     }
 
-    // Callback 2: Increment agent tasks in registry (if wired via ContractRegistry)
-    if let Some(registry_addr) = &config.registry.agent_registry {
-        #[derive(serde::Serialize)]
-        #[serde(rename_all = "snake_case")]
-        enum RegistryMsg { IncrementTasks { agent_id: u64, success: bool } }
-        let increment_msg = WasmMsg::Execute {
-            contract_addr: registry_addr.to_string(),
-            msg: to_json_binary(&RegistryMsg::IncrementTasks {
-                agent_id: task.agent_id,
-                success: true,
-            })?,
-            funds: vec![],
-        };
-        response = response.add_message(increment_msg);
+    // Callback 2: Increment agent tasks in registry (if wired via ContractRegistry).
+    // `agent_id == 0` is a reserved sentinel meaning "no specific agent" —
+    // `agent-company::WavsPush` uses it for governance-initiated tasks that
+    // are dispatched to the WAVS layer without binding to any registered
+    // agent. For such tasks there's no trust-score to bump, so skipping the
+    // callback keeps the CompleteTask atomic (agent-registry would otherwise
+    // reject `agent_id: 0` with `AgentNotFound` and revert the whole tx).
+    if task.agent_id != 0 {
+        if let Some(registry_addr) = &config.registry.agent_registry {
+            #[derive(serde::Serialize)]
+            #[serde(rename_all = "snake_case")]
+            enum RegistryMsg { IncrementTasks { agent_id: u64, success: bool } }
+            let increment_msg = WasmMsg::Execute {
+                contract_addr: registry_addr.to_string(),
+                msg: to_json_binary(&RegistryMsg::IncrementTasks {
+                    agent_id: task.agent_id,
+                    success: true,
+                })?,
+                funds: vec![],
+            };
+            response = response.add_message(increment_msg);
+        }
     }
 
     Ok(response)
@@ -254,30 +316,37 @@ fn execute_fail(
         .add_attribute("task_id", task_id.to_string());
 
     // ── Status coherence: atomic callbacks ──
-    // Callback: Increment agent tasks with success=false (if wired via ContractRegistry)
-    if let Some(registry_addr) = &config.registry.agent_registry {
-        #[derive(serde::Serialize)]
-        #[serde(rename_all = "snake_case")]
-        enum RegistryMsg { IncrementTasks { agent_id: u64, success: bool } }
-        let increment_msg = WasmMsg::Execute {
-            contract_addr: registry_addr.to_string(),
-            msg: to_json_binary(&RegistryMsg::IncrementTasks {
-                agent_id: task.agent_id,
-                success: false,
-            })?,
-            funds: vec![],
-        };
-        response = response.add_message(increment_msg);
+    // Callback: Increment agent tasks with success=false (if wired via ContractRegistry).
+    // Skipped for the `agent_id == 0` sentinel (governance-initiated tasks
+    // with no bound agent) — see the comment in `execute_complete`.
+    if task.agent_id != 0 {
+        if let Some(registry_addr) = &config.registry.agent_registry {
+            #[derive(serde::Serialize)]
+            #[serde(rename_all = "snake_case")]
+            enum RegistryMsg { IncrementTasks { agent_id: u64, success: bool } }
+            let increment_msg = WasmMsg::Execute {
+                contract_addr: registry_addr.to_string(),
+                msg: to_json_binary(&RegistryMsg::IncrementTasks {
+                    agent_id: task.agent_id,
+                    success: false,
+                })?,
+                funds: vec![],
+            };
+            response = response.add_message(increment_msg);
+        }
     }
 
-    // Callback: Cancel the escrow obligation (if escrow is wired)
+    // Callback: Cancel the escrow obligation (if escrow is wired).
+    // Route via proposal_id when set so governance-originated obligations
+    // (keyed by proposal_id in escrow) can be found.
     if let Some(escrow_addr) = &config.registry.escrow {
         #[derive(serde::Serialize)]
         #[serde(rename_all = "snake_case")]
         enum EscrowMsg { Cancel { task_id: u64 } }
+        let escrow_key = task.proposal_id.unwrap_or(task_id);
         let cancel_msg = WasmMsg::Execute {
             contract_addr: escrow_addr.to_string(),
-            msg: to_json_binary(&EscrowMsg::Cancel { task_id })?,
+            msg: to_json_binary(&EscrowMsg::Cancel { task_id: escrow_key })?,
             funds: vec![],
         };
         response = response.add_message(cancel_msg);
@@ -363,7 +432,12 @@ fn execute_update_config(
         config.admin = deps.api.addr_validate(&a)?;
     }
     if let Some(ar) = agent_registry {
-        config.agent_registry = deps.api.addr_validate(&ar)?;
+        let validated = deps.api.addr_validate(&ar)?;
+        config.agent_registry = validated.clone();
+        // Keep the canonical registry pointer in lockstep with the legacy
+        // direct field so callbacks remain coherent even if admin only uses
+        // the old UpdateConfig call.
+        config.registry.agent_registry = Some(validated);
     }
 
     CONFIG.save(deps.storage, &config)?;
@@ -371,11 +445,61 @@ fn execute_update_config(
     Ok(Response::new().add_attribute("action", "update_config"))
 }
 
+/// Admin-only: rewire any subset of the cross-contract registry pointers.
+/// A missing field leaves that pointer untouched; supplying an invalid
+/// address rejects with the underlying `addr_validate` error.
+fn execute_update_registry(
+    deps: DepsMut,
+    info: MessageInfo,
+    agent_registry: Option<String>,
+    task_ledger: Option<String>,
+    escrow: Option<String>,
+) -> Result<Response, ContractError> {
+    let mut config = CONFIG.load(deps.storage)?;
+    if info.sender != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    if let Some(a) = agent_registry.as_ref() {
+        let validated = deps.api.addr_validate(a)?;
+        config.registry.agent_registry = Some(validated.clone());
+        // Mirror into the legacy direct field for consumers that still read it.
+        config.agent_registry = validated;
+    }
+    if let Some(a) = task_ledger.as_ref() {
+        config.registry.task_ledger = Some(deps.api.addr_validate(a)?);
+    }
+    if let Some(a) = escrow.as_ref() {
+        config.registry.escrow = Some(deps.api.addr_validate(a)?);
+    }
+
+    CONFIG.save(deps.storage, &config)?;
+
+    let mut response = Response::new().add_attribute("action", "update_registry");
+    if let Some(a) = agent_registry {
+        response = response.add_attribute("agent_registry", a);
+    }
+    if let Some(a) = task_ledger {
+        response = response.add_attribute("task_ledger", a);
+    }
+    if let Some(a) = escrow {
+        response = response.add_attribute("escrow", a);
+    }
+    Ok(response)
+}
+
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::GetConfig {} => to_json_binary(&CONFIG.load(deps.storage)?),
         QueryMsg::GetTask { task_id } => to_json_binary(&TASKS.load(deps.storage, task_id)?),
+        QueryMsg::GetTaskByProposal { proposal_id } => {
+            let task = match TASKS_BY_PROPOSAL.may_load(deps.storage, proposal_id)? {
+                Some(task_id) => TASKS.may_load(deps.storage, task_id)?,
+                None => None,
+            };
+            to_json_binary(&task)
+        }
         QueryMsg::GetTasksByAgent { agent_id, limit } => {
             let limit = limit.unwrap_or(20).min(50) as usize;
             let ids = TASKS_BY_AGENT

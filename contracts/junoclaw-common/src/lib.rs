@@ -36,6 +36,14 @@ pub struct TaskRecord {
     pub submitted_at: u64,
     pub completed_at: Option<u64>,
     pub cost_ujuno: Option<Uint128>,
+    /// Optional governance correlation id. When a task is spawned by an
+    /// `agent-company` `WavsPush` proposal, this is set to the proposal id so
+    /// downstream contracts (e.g. `escrow`) can be addressed by the same key
+    /// the governance layer used for `Authorize`. Defaults to `None` for tasks
+    /// submitted directly by a daemon wallet, preserving backward compatibility
+    /// with pre-v5 stored records.
+    #[serde(default)]
+    pub proposal_id: Option<u64>,
 }
 
 #[cw_serde]

@@ -69,8 +69,6 @@ pub struct InstantiateMsg {
     pub nois_proxy: Option<String>,
     /// Initial member roster. Weights must sum to 10,000.
     pub members: Vec<MemberInput>,
-    /// Blocks to wait before a proposed weight change can be executed (timelock)
-    pub proposal_timelock_blocks: u64,
     /// Native token denom. Defaults to "ujunox".
     pub denom: Option<String>,
     // ── Governance parameters (all optional with defaults) ──

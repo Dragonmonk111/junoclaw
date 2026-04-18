@@ -20,6 +20,7 @@ fn store_and_instantiate(app: &mut App, admin: &Addr, task_ledger: &Addr) -> Add
             task_ledger: task_ledger.to_string(),
             timeout_blocks: 100,
             denom: Some(UJUNO.to_string()),
+            registry: None,
         },
         &[],
         "payment-ledger",

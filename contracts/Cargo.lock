@@ -6,16 +6,19 @@ version = 4
 name = "agent-company"
 version = "0.1.0"
 dependencies = [
+ "agent-registry",
  "anyhow",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-multi-test",
  "cw-storage-plus",
  "cw2",
+ "escrow",
  "junoclaw-common",
  "schemars",
  "serde",
  "sha2",
+ "task-ledger",
  "thiserror 2.0.18",
 ]
 

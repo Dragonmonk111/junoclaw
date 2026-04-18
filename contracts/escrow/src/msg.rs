@@ -3,7 +3,7 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 #[allow(unused_imports)]
 use crate::state::{Config, LedgerStats};
 #[allow(unused_imports)]
-use junoclaw_common::PaymentObligation;
+use junoclaw_common::{ContractRegistry, PaymentObligation};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -12,6 +12,10 @@ pub struct InstantiateMsg {
     pub timeout_blocks: u64,
     /// Native token denom. Defaults to "ujunox".
     pub denom: Option<String>,
+    /// Optional cross-contract registry snapshot. When `None`, `registry`
+    /// is initialised with `task_ledger` wired from the required field above
+    /// and the other pointers left `None` until `UpdateRegistry` is called.
+    pub registry: Option<ContractRegistry>,
 }
 
 #[cw_serde]
@@ -48,6 +52,13 @@ pub enum ExecuteMsg {
         admin: Option<String>,
         task_ledger: Option<String>,
         timeout_blocks: Option<u64>,
+    },
+    /// Admin-only: rewire the cross-contract registry. Any field left as
+    /// `None` is untouched.
+    UpdateRegistry {
+        agent_registry: Option<String>,
+        task_ledger: Option<String>,
+        escrow: Option<String>,
     },
 }
 

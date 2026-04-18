@@ -1,5 +1,8 @@
-use cosmwasm_std::{Addr, Uint128};
-use cw_multi_test::{App, ContractWrapper, Executor};
+use cosmwasm_std::{
+    to_json_binary, Addr, Binary, CustomMsg, CustomQuery, Deps, DepsMut, Empty, Env, MessageInfo,
+    Reply, Response, Uint128,
+};
+use cw_multi_test::{App, Contract, ContractWrapper, Executor};
 
 fn mk(app: &App, label: &str) -> Addr { app.api().addr_make(label) }
 
@@ -8,6 +11,90 @@ use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::LedgerStats;
 use junoclaw_common::{ExecutionTier, TaskRecord, TaskStatus};
+
+// ── Test-only stub "agent-registry" ──
+// task-ledger now wires the `IncrementTasks` callback by default at
+// instantiate (C1/C2: registry.agent_registry mirrors msg.agent_registry).
+// The unit tests therefore need a real contract at that address, not a
+// bare `Addr`. This stub implements `Contract` at the raw `Vec<u8>` msg
+// level so it can accept *any* structured execute message (including
+// `IncrementTasks`) without having to expose its full schema or pull in
+// the real `agent-registry` crate as a dev-dep.
+struct StubRegistry;
+
+impl<ExecC, QueryC> Contract<ExecC, QueryC> for StubRegistry
+where
+    ExecC: CustomMsg + 'static,
+    QueryC: CustomQuery + serde::de::DeserializeOwned + 'static,
+{
+    fn execute(
+        &self,
+        _deps: DepsMut<QueryC>,
+        _env: Env,
+        _info: MessageInfo,
+        _msg: Vec<u8>,
+    ) -> anyhow::Result<Response<ExecC>> {
+        Ok(Response::new())
+    }
+    fn instantiate(
+        &self,
+        _deps: DepsMut<QueryC>,
+        _env: Env,
+        _info: MessageInfo,
+        _msg: Vec<u8>,
+    ) -> anyhow::Result<Response<ExecC>> {
+        Ok(Response::new())
+    }
+    fn query(
+        &self,
+        _deps: Deps<QueryC>,
+        _env: Env,
+        _msg: Vec<u8>,
+    ) -> anyhow::Result<Binary> {
+        Ok(to_json_binary(&()).unwrap())
+    }
+    fn sudo(
+        &self,
+        _deps: DepsMut<QueryC>,
+        _env: Env,
+        _msg: Vec<u8>,
+    ) -> anyhow::Result<Response<ExecC>> {
+        Ok(Response::new())
+    }
+    fn reply(
+        &self,
+        _deps: DepsMut<QueryC>,
+        _env: Env,
+        _msg: Reply,
+    ) -> anyhow::Result<Response<ExecC>> {
+        Ok(Response::new())
+    }
+    fn migrate(
+        &self,
+        _deps: DepsMut<QueryC>,
+        _env: Env,
+        _msg: Vec<u8>,
+    ) -> anyhow::Result<Response<ExecC>> {
+        Ok(Response::new())
+    }
+}
+
+/// Instantiate the stub registry at a fresh address and return that address.
+/// Tests that previously passed a cosmetic `mk(..)` registry should use this
+/// so the `IncrementTasks` callback during `complete_task` / `fail_task`
+/// succeeds instead of erroring on a non-existent contract.
+fn instantiate_stub_registry(app: &mut App, admin: &Addr) -> Addr {
+    let code_id = app.store_code(Box::new(StubRegistry));
+    app.instantiate_contract(
+        code_id,
+        admin.clone(),
+        &Empty {},
+        &[],
+        "stub-registry",
+        Some(admin.to_string()),
+    )
+    .unwrap()
+}
 
 fn store_and_instantiate(app: &mut App, admin: &Addr, registry: &Addr, operators: Option<Vec<String>>) -> Addr {
     let code = ContractWrapper::new(execute, instantiate, query).with_migrate(migrate);
@@ -19,6 +106,7 @@ fn store_and_instantiate(app: &mut App, admin: &Addr, registry: &Addr, operators
             admin: None,
             agent_registry: registry.to_string(),
             operators,
+            registry: None,
         },
         &[],
         "task-ledger",
@@ -35,6 +123,7 @@ fn submit_task(app: &mut App, contract: &Addr, sender: &Addr, agent_id: u64) -> 
             agent_id,
             input_hash: format!("hash-{}", agent_id),
             execution_tier: ExecutionTier::Local,
+            proposal_id: None,
         },
         &[],
     )
@@ -51,7 +140,7 @@ fn submit_task(app: &mut App, contract: &Addr, sender: &Addr, agent_id: u64) -> 
 fn test_instantiate() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
-    let reg = mk(&app, "registry");
+    let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
 
     let cfg: crate::state::Config = app
@@ -67,7 +156,7 @@ fn test_submit_task() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let user = mk(&app, "user1");
-    let reg = mk(&app, "registry");
+    let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
 
     let task_id = submit_task(&mut app, &contract, &user, 1);
@@ -88,7 +177,7 @@ fn test_complete_task_by_submitter() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let user = mk(&app, "user1");
-    let reg = mk(&app, "registry");
+    let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
 
     submit_task(&mut app, &contract, &user, 1);
@@ -119,7 +208,7 @@ fn test_complete_task_by_operator() {
     let admin = mk(&app, "admin");
     let user = mk(&app, "user1");
     let daemon = mk(&app, "daemon");
-    let reg = mk(&app, "registry");
+    let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(
         &mut app,
         &admin,
@@ -156,7 +245,7 @@ fn test_complete_task_unauthorized_fails() {
     let admin = mk(&app, "admin");
     let user = mk(&app, "user1");
     let stranger = mk(&app, "stranger");
-    let reg = mk(&app, "registry");
+    let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
 
     submit_task(&mut app, &contract, &user, 1);
@@ -183,7 +272,7 @@ fn test_fail_task_by_operator() {
     let admin = mk(&app, "admin");
     let user = mk(&app, "user1");
     let daemon = mk(&app, "daemon");
-    let reg = mk(&app, "registry");
+    let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(
         &mut app,
         &admin,
@@ -219,7 +308,7 @@ fn test_cancel_task() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let user = mk(&app, "user1");
-    let reg = mk(&app, "registry");
+    let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
 
     submit_task(&mut app, &contract, &user, 1);
@@ -244,7 +333,7 @@ fn test_double_complete_fails() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let user = mk(&app, "user1");
-    let reg = mk(&app, "registry");
+    let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
 
     submit_task(&mut app, &contract, &user, 1);
@@ -274,7 +363,7 @@ fn test_add_remove_operator() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let daemon = mk(&app, "daemon");
-    let reg = mk(&app, "registry");
+    let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
 
     // Add operator
@@ -313,7 +402,7 @@ fn test_add_operator_only_admin() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let user = mk(&app, "user1");
-    let reg = mk(&app, "registry");
+    let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
 
     let err = app
@@ -333,7 +422,7 @@ fn test_tasks_by_agent_query() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let user = mk(&app, "user1");
-    let reg = mk(&app, "registry");
+    let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
 
     submit_task(&mut app, &contract, &user, 42);
@@ -352,7 +441,7 @@ fn test_stats_counter() {
     let mut app = App::default();
     let admin = mk(&app, "admin");
     let user = mk(&app, "user1");
-    let reg = mk(&app, "registry");
+    let reg = instantiate_stub_registry(&mut app, &admin);
     let contract = store_and_instantiate(&mut app, &admin, &reg, None);
 
     submit_task(&mut app, &contract, &user, 1);

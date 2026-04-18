@@ -55,7 +55,6 @@ fn store_and_instantiate(
             task_ledger: None,
             nois_proxy: None,
             members,
-            proposal_timelock_blocks: 50,
             denom: Some(UJUNO.to_string()),
             voting_period_blocks: Some(100),
             quorum_percent: Some(51),
@@ -116,7 +115,6 @@ fn test_invalid_weights_fails() {
             task_ledger: None,
             nois_proxy: None,
             members: bad_members,
-            proposal_timelock_blocks: 50,
             denom: Some(UJUNO.to_string()),
             voting_period_blocks: None,
             quorum_percent: None,
@@ -1482,7 +1480,236 @@ fn test_code_upgrade_supermajority_blocks_minority() {
         .wrap()
         .query_wasm_smart(&contract, &QueryMsg::GetProposal { proposal_id: 1 })
         .unwrap();
-    // 100% voted, 60% yes > 40% no, total_voted (10000) >= 67% threshold (6700) → Passed
-    assert_eq!(proposal.status, ProposalStatus::Passed,
-        "With all votes in and yes > no and total_voted >= supermajority threshold, should pass");
+    // Under the constitutional **yes-ratio** gate (v5+), a `CodeUpgrade`
+    // passes only when `yes_weight * 100 >= total_weight * 67`. Alice's
+    // 6000 bps Yes amounts to 60% of total_weight — strictly below the 67%
+    // threshold — so Bob's 40% No correctly blocks passage, living up to
+    // this test's name. (Under the old participation-quorum gate this
+    // 60/40 split would have passed, which was the exact exploit C4 fixed.)
+    assert_eq!(proposal.status, ProposalStatus::Rejected,
+        "60% Yes falls below the 67% supermajority threshold and must be Rejected");
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// v5 — M3 / M4 / L5 regression tests
+// ─────────────────────────────────────────────────────────────────────
+
+/// M3: `CodeUpgradeAction::ExecuteContract` with malformed `msg_json`
+/// must be rejected at proposal creation, not after a voting cycle.
+#[test]
+fn test_m3_execute_contract_rejects_malformed_msg_json_at_create() {
+    use crate::state::CodeUpgradeAction;
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+
+    let target = mk(&app, "some_target");
+    let err = app
+        .execute_contract(
+            alice.clone(),
+            contract.clone(),
+            &ExecuteMsg::CreateProposal {
+                kind: ProposalKindMsg::CodeUpgrade {
+                    title: "Malformed JSON".to_string(),
+                    description: "payload is not valid JSON".to_string(),
+                    actions: vec![CodeUpgradeAction::ExecuteContract {
+                        contract_addr: target.to_string(),
+                        msg_json: "{ this is not valid json".to_string(),
+                    }],
+                },
+            },
+            &[],
+        )
+        .unwrap_err();
+    let root = format!("{:?}", err.root_cause());
+    assert!(
+        root.contains("malformed msg_json"),
+        "M3: malformed JSON in ExecuteContract must be rejected at creation; got: {}",
+        root
+    );
+}
+
+/// M4: `ExecuteProposal` at block == voting_deadline_block must fail.
+/// Strict `>` deadline closes the single-block vote/execute race.
+#[test]
+fn test_m4_execute_at_exact_deadline_is_rejected() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+
+    // Create a FreeText proposal (ordinary quorum; alice's 6000 auto-passes).
+    app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::FreeText {
+                title: "Exactly at deadline".to_string(),
+                description: "race-guard test".to_string(),
+            },
+        },
+        &[],
+    )
+    .unwrap();
+
+    // Alice's 6000 bps alone clears 51% participation quorum and flips to Passed.
+    app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+        &[],
+    )
+    .unwrap();
+
+    // Look up the actual deadline — adaptive logic may have reduced it.
+    let proposal: Proposal = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetProposal { proposal_id: 1 })
+        .unwrap();
+    let deadline = proposal.voting_deadline_block;
+
+    // Advance to the EXACT deadline block.
+    app.update_block(|b| b.height = deadline);
+
+    // Execute at block == deadline must now fail (M4 strict-`>`).
+    let err = app
+        .execute_contract(
+            admin.clone(),
+            contract.clone(),
+            &ExecuteMsg::ExecuteProposal { proposal_id: 1 },
+            &[],
+        )
+        .unwrap_err();
+    let root = format!("{:?}", err.root_cause());
+    assert!(
+        root.to_lowercase().contains("voting") || root.to_lowercase().contains("deadline"),
+        "M4: execute at height == deadline must reject with VotingNotEnded; got: {}",
+        root
+    );
+
+    // One more block should let it through.
+    app.update_block(|b| b.height = deadline + 1);
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::ExecuteProposal { proposal_id: 1 },
+        &[],
+    )
+    .expect("M4: execute at height > deadline must succeed");
+}
+
+/// L5: Governance-percent bounds rejected at instantiate.
+#[test]
+fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let members = two_member_msg(&alice, &bob);
+
+    let code = ContractWrapper::new(execute, instantiate, query).with_migrate(migrate);
+    let code_id = app.store_code(Box::new(code));
+    let escrow = mk(&app, "escrow");
+    let registry = mk(&app, "registry");
+
+    // (a) quorum_percent > 100 — freezes governance (threshold > total_weight).
+    let err = app
+        .instantiate_contract(
+            code_id,
+            admin.clone(),
+            &InstantiateMsg {
+                name: "BadCo1".to_string(),
+                admin: None,
+                governance: None,
+                escrow_contract: escrow.to_string(),
+                agent_registry: registry.to_string(),
+                task_ledger: None,
+                nois_proxy: None,
+                members: members.clone(),
+                denom: Some(UJUNO.to_string()),
+                voting_period_blocks: Some(100),
+                quorum_percent: Some(150),
+                adaptive_threshold_blocks: None,
+                adaptive_min_blocks: None,
+                verification: None,
+                supermajority_quorum_percent: None,
+            },
+            &[],
+            "bad-co-1",
+            None,
+        )
+        .unwrap_err();
+    assert!(
+        format!("{:?}", err.root_cause()).contains("quorum_percent must be in 1..=100"),
+        "L5: quorum_percent > 100 must be rejected"
+    );
+
+    // (b) supermajority < quorum — incoherent (constitutional weaker than ordinary).
+    let err = app
+        .instantiate_contract(
+            code_id,
+            admin.clone(),
+            &InstantiateMsg {
+                name: "BadCo2".to_string(),
+                admin: None,
+                governance: None,
+                escrow_contract: escrow.to_string(),
+                agent_registry: registry.to_string(),
+                task_ledger: None,
+                nois_proxy: None,
+                members: members.clone(),
+                denom: Some(UJUNO.to_string()),
+                voting_period_blocks: Some(100),
+                quorum_percent: Some(60),
+                adaptive_threshold_blocks: None,
+                adaptive_min_blocks: None,
+                verification: None,
+                supermajority_quorum_percent: Some(50),
+            },
+            &[],
+            "bad-co-2",
+            None,
+        )
+        .unwrap_err();
+    assert!(
+        format!("{:?}", err.root_cause()).contains("must be >= quorum_percent"),
+        "L5: supermajority_quorum_percent < quorum_percent must be rejected"
+    );
+
+    // (c) quorum_percent = 0 — auto-pass on zero votes, catastrophic.
+    let err = app
+        .instantiate_contract(
+            code_id,
+            admin.clone(),
+            &InstantiateMsg {
+                name: "BadCo3".to_string(),
+                admin: None,
+                governance: None,
+                escrow_contract: escrow.to_string(),
+                agent_registry: registry.to_string(),
+                task_ledger: None,
+                nois_proxy: None,
+                members,
+                denom: Some(UJUNO.to_string()),
+                voting_period_blocks: Some(100),
+                quorum_percent: Some(0),
+                adaptive_threshold_blocks: None,
+                adaptive_min_blocks: None,
+                verification: None,
+                supermajority_quorum_percent: None,
+            },
+            &[],
+            "bad-co-3",
+            None,
+        )
+        .unwrap_err();
+    assert!(
+        format!("{:?}", err.root_cause()).contains("quorum_percent must be in 1..=100"),
+        "L5: quorum_percent = 0 must be rejected"
+    );
 }

@@ -71,6 +71,38 @@ pub fn instantiate(
         .map(|np| deps.api.addr_validate(&np))
         .transpose()?;
 
+    // ── L5: governance-percent bounds ──
+    // `quorum_percent` and `supermajority_quorum_percent` are used verbatim
+    // in the tally arithmetic (e.g. `total_weight * quorum_percent / 100`).
+    // Values outside 1..=100 are either nonsensical (0 → auto-pass on zero
+    // votes) or exploitable (>100 → participation/supermajority can never
+    // be cleared, freezing governance). A supermajority below the ordinary
+    // quorum is also incoherent. Reject these at instantiate instead of
+    // letting the chain live with them.
+    let quorum_percent = msg.quorum_percent.unwrap_or(51);
+    let supermajority_quorum_percent = msg.supermajority_quorum_percent.unwrap_or(67);
+    if !(1..=100).contains(&quorum_percent) {
+        return Err(ContractError::Std(cosmwasm_std::StdError::generic_err(
+            format!("quorum_percent must be in 1..=100, got {}", quorum_percent),
+        )));
+    }
+    if !(1..=100).contains(&supermajority_quorum_percent) {
+        return Err(ContractError::Std(cosmwasm_std::StdError::generic_err(
+            format!(
+                "supermajority_quorum_percent must be in 1..=100, got {}",
+                supermajority_quorum_percent
+            ),
+        )));
+    }
+    if supermajority_quorum_percent < quorum_percent {
+        return Err(ContractError::Std(cosmwasm_std::StdError::generic_err(
+            format!(
+                "supermajority_quorum_percent ({}) must be >= quorum_percent ({})",
+                supermajority_quorum_percent, quorum_percent
+            ),
+        )));
+    }
+
     CONFIG.save(deps.storage, &Config {
         name: msg.name.clone(),
         admin,
@@ -82,12 +114,12 @@ pub fn instantiate(
         total_weight: TOTAL_WEIGHT,
         denom: msg.denom.unwrap_or_else(|| "ujunox".to_string()),
         voting_period_blocks: msg.voting_period_blocks.unwrap_or(100),
-        quorum_percent: msg.quorum_percent.unwrap_or(51),
+        quorum_percent,
         adaptive_threshold_blocks: msg.adaptive_threshold_blocks.unwrap_or(10),
         adaptive_min_blocks: msg.adaptive_min_blocks.unwrap_or(13),
         verification: msg.verification.unwrap_or_default(),
         nois_proxy,
-        supermajority_quorum_percent: msg.supermajority_quorum_percent.unwrap_or(67),
+        supermajority_quorum_percent,
         dex_factory: None,
     })?;
     PROPOSAL.save(deps.storage, &None)?;
@@ -96,8 +128,7 @@ pub fn instantiate(
 
     Ok(Response::new()
         .add_attribute("action", "instantiate")
-        .add_attribute("name", msg.name)
-        .add_attribute("proposal_timelock_blocks", msg.proposal_timelock_blocks.to_string()))
+        .add_attribute("name", msg.name))
 }
 
 #[entry_point]
@@ -233,6 +264,15 @@ fn execute_create_proposal(
             ProposalKind::WavsPush { task_description, execution_tier, escrow_amount }
         }
         ProposalKindMsg::ConfigChange { new_admin, new_governance } => {
+            // Validate addresses eagerly so invalid strings fail at proposal
+            // creation instead of wasting an entire voting cycle before we
+            // discover the error at execute time.
+            if let Some(ref a) = new_admin {
+                deps.api.addr_validate(a)?;
+            }
+            if let Some(ref g) = new_governance {
+                deps.api.addr_validate(g)?;
+            }
             ProposalKind::ConfigChange { new_admin, new_governance }
         }
         ProposalKindMsg::FreeText { title, description } => {
@@ -256,6 +296,32 @@ fn execute_create_proposal(
                 return Err(ContractError::Std(cosmwasm_std::StdError::generic_err(
                     "CodeUpgrade proposal must have at least one action",
                 )));
+            }
+            // ── M3: eager msg_json validation ──
+            // `InstantiateContract`, `MigrateContract` and `ExecuteContract`
+            // actions carry a `msg_json: String` that is fed verbatim into the
+            // downstream `WasmMsg::{Instantiate,Migrate,Execute}.msg` binary
+            // slot at execute time. If the JSON is malformed, execution
+            // reverts the entire upgrade — *after* a full voting cycle. We
+            // therefore pre-parse the JSON here via `serde::de::IgnoredAny`
+            // (zero-allocation, zero-new-dep, zero-schema-assumption) so that
+            // malformed payloads are rejected at proposal creation instead.
+            for (i, action) in actions.iter().enumerate() {
+                let msg_json: Option<&str> = match action {
+                    CodeUpgradeAction::InstantiateContract { msg_json, .. } => Some(msg_json.as_str()),
+                    CodeUpgradeAction::MigrateContract { msg_json, .. } => Some(msg_json.as_str()),
+                    CodeUpgradeAction::ExecuteContract { msg_json, .. } => Some(msg_json.as_str()),
+                    _ => None,
+                };
+                if let Some(json) = msg_json {
+                    cosmwasm_std::from_json::<serde::de::IgnoredAny>(json.as_bytes())
+                        .map_err(|e| ContractError::Std(cosmwasm_std::StdError::generic_err(
+                            format!(
+                                "CodeUpgrade action {}: malformed msg_json: {}",
+                                i, e
+                            ),
+                        )))?;
+                }
             }
             ProposalKind::CodeUpgrade { title, description, actions }
         }
@@ -356,27 +422,48 @@ fn execute_cast_vote(
         }
     }
 
-    // Check if proposal can auto-resolve (quorum met).
-    // Constitutional proposals — `CodeUpgrade` (changes the contract code) and
-    // `WeightChange` (redistributes voting power) — require the supermajority
-    // quorum (default 67%). All other proposal kinds use the ordinary quorum
-    // (default 51%).
-    let required_quorum = match &proposal.kind {
+    // ── Auto-resolution ──
+    // Two distinct gates, by proposal class:
+    //
+    //   * Constitutional (`CodeUpgrade`, `WeightChange`) — **yes-ratio** gate:
+    //     `yes_weight * 100 >= total_weight * supermajority_quorum_percent`.
+    //     Abstain votes do NOT count toward Yes. This is the honest 9/13 bar
+    //     the governance narrative promises: nine weighted Yes votes out of
+    //     thirteen, irrespective of participation.
+    //
+    //   * Ordinary — **participation-quorum + simple-majority** gate:
+    //     `total_voted_weight >= quorum_percent` AND `yes > no`.
+    //
+    // In both cases we also mark Rejected early when passage has become
+    // mathematically impossible (No blocks supermajority, or all voted).
+    let all_voted = proposal.total_voted_weight == cfg.total_weight;
+    let new_status = match &proposal.kind {
         ProposalKind::CodeUpgrade { .. } | ProposalKind::WeightChange { .. } => {
-            cfg.supermajority_quorum_percent
+            let yes_threshold = cfg.total_weight * cfg.supermajority_quorum_percent / 100;
+            let max_no_tolerable = cfg.total_weight - yes_threshold;
+            if proposal.yes_weight >= yes_threshold {
+                Some(ProposalStatus::Passed)
+            } else if proposal.no_weight > max_no_tolerable || all_voted {
+                Some(ProposalStatus::Rejected)
+            } else {
+                None
+            }
         }
-        _ => cfg.quorum_percent,
+        _ => {
+            let participation_threshold = cfg.total_weight * cfg.quorum_percent / 100;
+            if proposal.total_voted_weight >= participation_threshold
+                && proposal.yes_weight > proposal.no_weight
+            {
+                Some(ProposalStatus::Passed)
+            } else if all_voted && proposal.no_weight >= proposal.yes_weight {
+                Some(ProposalStatus::Rejected)
+            } else {
+                None
+            }
+        }
     };
-    let quorum_threshold = cfg.total_weight * required_quorum / 100;
-    if proposal.total_voted_weight >= quorum_threshold {
-        if proposal.yes_weight > proposal.no_weight {
-            proposal.status = ProposalStatus::Passed;
-        } else if proposal.no_weight >= proposal.yes_weight
-            && proposal.total_voted_weight == cfg.total_weight
-        {
-            // All votes in and no > yes (or tied) → rejected
-            proposal.status = ProposalStatus::Rejected;
-        }
+    if let Some(s) = new_status {
+        proposal.status = s;
     }
 
     PROPOSALS.save(deps.storage, proposal_id, &proposal)?;
@@ -392,7 +479,7 @@ fn execute_cast_vote(
 fn execute_execute_proposal(
     deps: DepsMut,
     env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     proposal_id: u64,
 ) -> Result<Response, ContractError> {
     let mut proposal = PROPOSALS.load(deps.storage, proposal_id)
@@ -407,8 +494,15 @@ fn execute_execute_proposal(
         return Err(ContractError::ProposalNotPassed { id: proposal_id });
     }
 
-    // Must be past the voting deadline
-    if env.block.height < proposal.voting_deadline_block {
+    // Must be *strictly* past the voting deadline. `cast_vote` still accepts
+    // a vote at `height == deadline`, so allowing execute at the same block
+    // opens a single-block race: a member could, within one mempool batch,
+    // submit the tipping Yes vote (auto-flipping status to Passed) and
+    // immediately call ExecuteProposal — or a mempool observer could splice
+    // its own side-effectful txs between the two. Requiring `height > deadline`
+    // gives voters one full block (`deadline`) to cast the decisive vote
+    // without ever competing with execution in the same block.
+    if env.block.height <= proposal.voting_deadline_block {
         return Err(ContractError::VotingNotEnded {
             deadline: proposal.voting_deadline_block,
             current: env.block.height,
@@ -416,6 +510,18 @@ fn execute_execute_proposal(
     }
 
     let mut cfg = CONFIG.load(deps.storage)?;
+
+    // ── Caller gate ──
+    // Execution is restricted to DAO members (and the admin, who is always
+    // allowed for emergency dispatch). Permissionless execution opens
+    // trivial front-running / ordering games around `CodeUpgrade`,
+    // `WavsPush` and `ConfigChange` — any mempool observer could interleave
+    // side-effectful actions with the proposal's downstream messages. A
+    // member-only gate keeps the trust surface aligned with who can vote.
+    let sender_is_member = cfg.members.iter().any(|m| m.addr == info.sender);
+    if info.sender != cfg.admin && !sender_is_member {
+        return Err(ContractError::Unauthorized {});
+    }
     let mut response = Response::new()
         .add_attribute("action", "execute_proposal")
         .add_attribute("proposal_id", proposal_id.to_string());
@@ -441,7 +547,11 @@ fn execute_execute_proposal(
                 h
             });
 
-            // Cross-contract call: task-ledger SubmitTask
+            // Cross-contract call: task-ledger SubmitTask.
+            // Tag the task with `proposal_id` so that (a) the attestation
+            // coherence check here can resolve the real task_id later, and
+            // (b) task-ledger's escrow callback at completion uses the same
+            // correlation id that `Authorize` below keys the obligation on.
             #[derive(serde::Serialize)]
             #[serde(rename_all = "snake_case")]
             enum TaskLedgerMsg {
@@ -449,6 +559,7 @@ fn execute_execute_proposal(
                     agent_id: u64,
                     input_hash: String,
                     execution_tier: junoclaw_common::ExecutionTier,
+                    proposal_id: Option<u64>,
                 },
             }
 
@@ -458,6 +569,7 @@ fn execute_execute_proposal(
                     agent_id: 0u64,
                     input_hash,
                     execution_tier: execution_tier.clone(),
+                    proposal_id: Some(proposal_id),
                 })?,
                 funds: vec![],
             };
@@ -884,25 +996,38 @@ fn execute_submit_attestation(
     }
 
     // ── Status coherence: validate task is Completed in task-ledger ──
+    // We query by *proposal_id*, not task_id: task-ledger's task_id space is
+    // an independent autoincrement counter, so the old `GetTask { task_id:
+    // proposal_id }` lookup silently returned `Err` for every WavsPush task
+    // and let attestations pass without coherence checking. The new
+    // `GetTaskByProposal` reverse index binds the two id spaces correctly.
     if let Some(task_ledger) = &cfg.task_ledger {
         #[derive(serde::Serialize)]
         #[serde(rename_all = "snake_case")]
-        enum TaskLedgerQuery { GetTask { task_id: u64 } }
+        enum TaskLedgerQuery { GetTaskByProposal { proposal_id: u64 } }
         let task_query = WasmQuery::Smart {
             contract_addr: task_ledger.to_string(),
-            msg: to_json_binary(&TaskLedgerQuery::GetTask { task_id: proposal_id })?,
+            msg: to_json_binary(&TaskLedgerQuery::GetTaskByProposal { proposal_id })?,
         };
-        // If the task exists, verify it's Completed
-        if let Ok(task) = deps.querier.query::<junoclaw_common::TaskRecord>(
-            &QueryRequest::Wasm(task_query)
+        // Older task-ledger code-ids don't expose `GetTaskByProposal`; in that
+        // case the query errors and we fall through (legacy behaviour). Once
+        // task-ledger is migrated, the Ok(Some(_)) branch is authoritative.
+        if let Ok(Some(task)) = deps.querier.query::<Option<junoclaw_common::TaskRecord>>(
+            &QueryRequest::Wasm(task_query),
         ) {
             if task.status != junoclaw_common::TaskStatus::Completed {
                 return Err(ContractError::Std(StdError::generic_err(
-                    format!("task {} is {:?}, not Completed — cannot attest", proposal_id, task.status),
+                    format!(
+                        "task {} (proposal {}) is {:?}, not Completed — cannot attest",
+                        task.id, proposal_id, task.status
+                    ),
                 )));
             }
         }
-        // If task doesn't exist in ledger (e.g. OutcomeCreate without WavsPush), allow attestation
+        // If no task is correlated to this proposal (e.g. an `OutcomeCreate`
+        // proposal that never spawned a task, or the task-ledger pre-dates
+        // the reverse index), allow attestation — consistent with prior
+        // behaviour.
     }
 
     // ── Variable 1 hardening: on-chain re-computation of attestation hash ──
