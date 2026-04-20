@@ -29,4 +29,7 @@ pub enum ContractError {
 
     #[error("Proposal-linked task already exists for proposal {proposal_id}")]
     ProposalTaskAlreadyExists { proposal_id: u64 },
+
+    #[error("Constraint violated: {reason}")]
+    ConstraintViolated { reason: String },
 }

@@ -4,7 +4,7 @@ use cosmwasm_std::Uint128;
 #[allow(unused_imports)]
 use crate::state::{Config, LedgerStats};
 #[allow(unused_imports)]
-use junoclaw_common::{ContractRegistry, ExecutionTier, TaskRecord};
+use junoclaw_common::{Constraint, ContractRegistry, ExecutionTier, TaskRecord};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -33,6 +33,17 @@ pub enum ExecuteMsg {
         /// the obligation under the same id the proposal layer used.
         #[serde(default)]
         proposal_id: Option<u64>,
+        /// Constraints evaluated at `CompleteTask` *before* the status
+        /// transition. Any violation reverts the whole completion tx
+        /// atomically. Empty Vec (the default) preserves pre-v7 behaviour.
+        #[serde(default)]
+        pre_hooks: Vec<Constraint>,
+        /// Constraints evaluated at `CompleteTask` *after* the status
+        /// transition but before escrow/registry sub-messages fire. Same
+        /// atomic revert semantics as `pre_hooks`. Empty Vec preserves
+        /// pre-v7 behaviour.
+        #[serde(default)]
+        post_hooks: Vec<Constraint>,
     },
     CompleteTask {
         task_id: u64,

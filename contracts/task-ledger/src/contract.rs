@@ -109,7 +109,19 @@ pub fn execute(
             input_hash,
             execution_tier,
             proposal_id,
-        } => execute_submit(deps, env, info, agent_id, input_hash, execution_tier, proposal_id),
+            pre_hooks,
+            post_hooks,
+        } => execute_submit(
+            deps,
+            env,
+            info,
+            agent_id,
+            input_hash,
+            execution_tier,
+            proposal_id,
+            pre_hooks,
+            post_hooks,
+        ),
         ExecuteMsg::CompleteTask {
             task_id,
             output_hash,
@@ -132,6 +144,7 @@ pub fn execute(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn execute_submit(
     deps: DepsMut,
     env: Env,
@@ -140,6 +153,8 @@ fn execute_submit(
     input_hash: String,
     execution_tier: junoclaw_common::ExecutionTier,
     proposal_id: Option<u64>,
+    pre_hooks: Vec<junoclaw_common::Constraint>,
+    post_hooks: Vec<junoclaw_common::Constraint>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let is_operator = is_authorized(&config, &info.sender);
@@ -192,6 +207,8 @@ fn execute_submit(
         completed_at: None,
         cost_ujuno: None,
         proposal_id,
+        pre_hooks,
+        post_hooks,
     };
 
     TASKS.save(deps.storage, task_id, &record)?;
@@ -260,27 +277,69 @@ fn execute_complete(
         return Err(ContractError::Unauthorized {});
     }
 
-    TASKS.update(deps.storage, task_id, |existing| match existing {
-        Some(mut record) => {
-            if record.status != TaskStatus::Running {
-                return Err(ContractError::TaskNotRunning { task_id });
-            }
-            record.status = TaskStatus::Completed;
-            record.output_hash = Some(output_hash.clone());
-            record.completed_at = Some(env.block.time.seconds());
-            record.cost_ujuno = cost_ujuno;
-            Ok(record)
-        }
-        None => Err(ContractError::TaskNotFound { task_id }),
-    })?;
+    // ── v7: pre-completion hook evaluation ──
+    // Read the task first without mutating so we can evaluate pre_hooks
+    // against the *current* chain state. A violation reverts the whole
+    // completion tx atomically, leaving the task Running and firing
+    // neither the escrow nor the registry callback.
+    let existing = TASKS
+        .may_load(deps.storage, task_id)?
+        .ok_or(ContractError::TaskNotFound { task_id })?;
+    if existing.status != TaskStatus::Running {
+        return Err(ContractError::TaskNotRunning { task_id });
+    }
+
+    let registry_addr = config.registry.agent_registry.as_ref();
+    if !existing.pre_hooks.is_empty() {
+        junoclaw_common::evaluate_all(
+            deps.as_ref(),
+            &env,
+            &existing.pre_hooks,
+            registry_addr,
+        )
+        .map_err(|reason| ContractError::ConstraintViolated {
+            reason: format!("pre_hook: {}", reason),
+        })?;
+    }
+
+    // ── State transition ──
+    let mut record = existing;
+    record.status = TaskStatus::Completed;
+    record.output_hash = Some(output_hash.clone());
+    record.completed_at = Some(env.block.time.seconds());
+    record.cost_ujuno = cost_ujuno;
+    TASKS.save(deps.storage, task_id, &record)?;
 
     LEDGER_STATS.update(deps.storage, |mut s| -> StdResult<_> {
         s.total_completed += 1;
         Ok(s)
     })?;
 
-    // Retrieve the task record for agent_id (needed for registry callback)
-    let task = TASKS.load(deps.storage, task_id)?;
+    // ── v7: post-completion hook evaluation ──
+    // Evaluated after the status transition but *before* the escrow /
+    // registry sub-messages are appended to the Response. Sub-messages
+    // haven't fired yet at this point so post_hooks see:
+    //   • the task's new `Completed` status (visible via self-query)
+    //   • pre-callback escrow/registry state (their Increment/Confirm
+    //     will fire only if we return Ok below)
+    // This is intentional: post_hooks should express invariants on
+    // state that is within this contract's write scope, not on the
+    // downstream sub-message effects. For those, use a reply-based
+    // hook in a future v8 pattern.
+    if !record.post_hooks.is_empty() {
+        junoclaw_common::evaluate_all(
+            deps.as_ref(),
+            &env,
+            &record.post_hooks,
+            registry_addr,
+        )
+        .map_err(|reason| ContractError::ConstraintViolated {
+            reason: format!("post_hook: {}", reason),
+        })?;
+    }
+
+    // Alias so the downstream callback assembly keeps its original name.
+    let task = record;
 
     let mut response = Response::new()
         .add_attribute("action", "complete_task")

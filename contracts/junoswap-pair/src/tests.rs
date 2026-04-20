@@ -108,6 +108,68 @@ fn test_provide_liquidity_rejects_unexpected_denom() {
 }
 
 #[test]
+fn test_swap_rejects_unexpected_denom() {
+    // v6 F4 — the symmetric invariant for `Swap`. The pair previously
+    // accepted `info.funds` entries whose denom wasn't the declared
+    // `offer_asset`; the excess was silently absorbed by the pair's
+    // bank balance with no refund path for the swapper. The swap path
+    // now fails closed so the revert refunds every attached coin
+    // atomically.
+    let alice = MockApi::default().addr_make("alice");
+    let bob = MockApi::default().addr_make("bob");
+    let alice_fund = alice.clone();
+    let bob_fund = bob.clone();
+    let mut app = App::new(move |router, _, storage| {
+        router
+            .bank
+            .init_balance(storage, &alice_fund, vec![
+                Coin::new(10_000_000u128, "ujuno"),
+                Coin::new(50_000_000u128, "uusdc"),
+            ])
+            .unwrap();
+        router
+            .bank
+            .init_balance(storage, &bob_fund, vec![
+                Coin::new(1_000_000u128, "ujuno"),
+                Coin::new(1_000u128, "uatom"), // intruder denom
+            ])
+            .unwrap();
+    });
+    let factory = mk(&app, "factory");
+    let pair = store_and_instantiate(&mut app, &factory);
+
+    provide(&mut app, &pair, &alice, 1_000_000, 5_000_000);
+
+    let err = app
+        .execute_contract(
+            bob.clone(),
+            pair.clone(),
+            &ExecuteMsg::Swap {
+                offer_asset: AssetInfo::Native("ujuno".to_string()),
+                min_return: None,
+            },
+            &[
+                Coin::new(100_000u128, "ujuno"),
+                Coin::new(1_000u128, "uatom"),
+            ],
+        )
+        .unwrap_err();
+    assert!(
+        err.root_cause().to_string().contains("Unexpected denom"),
+        "expected UnexpectedDenom, got: {}",
+        err.root_cause()
+    );
+
+    // Bob's `uatom` and his full `ujuno` balance must still be intact —
+    // the revert refunded every attached coin, including the legitimate
+    // offer denom.
+    let atom_bal = app.wrap().query_balance(bob.to_string(), "uatom").unwrap();
+    assert_eq!(atom_bal.amount, Uint128::new(1_000));
+    let juno_bal = app.wrap().query_balance(bob.to_string(), "ujuno").unwrap();
+    assert_eq!(juno_bal.amount, Uint128::new(1_000_000));
+}
+
+#[test]
 fn test_provide_initial_liquidity() {
     let alice = MockApi::default().addr_make("alice");
     let alice_clone = alice.clone();

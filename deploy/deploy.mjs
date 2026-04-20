@@ -180,7 +180,11 @@ async function main() {
           registration_fee_ujuno: '0',
           denom: 'ujunox',
         }
-        const res = await client.instantiate(address, codeId, msg, 'JunoClaw Agent Registry', 'auto')
+        // 6th arg `{ admin: address }` sets the wasmd-level migrate authority.
+        // Omitting it leaves the contract permanently immutable (the v6 deploy
+        // did exactly that, which forced the Tier 1.5 fresh-deploy detour on
+        // 2026-04-20 — see docs/TIER15_TESTNET_RUN.md).
+        const res = await client.instantiate(address, codeId, msg, 'JunoClaw Agent Registry', 'auto', { admin: address })
         console.log(`  ✅  address: ${res.contractAddress}  tx: ${res.transactionHash}`)
         deployed['agent-registry'].address = res.contractAddress
         deployed['agent-registry'].instantiate_tx = res.transactionHash
@@ -208,7 +212,7 @@ async function main() {
           timeout_blocks: 1000,
           denom: 'ujunox',
         }
-        const res = await client.instantiate(address, codeId, msg, 'JunoClaw Escrow', 'auto')
+        const res = await client.instantiate(address, codeId, msg, 'JunoClaw Escrow', 'auto', { admin: address })
         console.log(`  ✅  address: ${res.contractAddress}  tx: ${res.transactionHash}`)
         deployed['escrow'].address = res.contractAddress
         deployed['escrow'].instantiate_tx = res.transactionHash
@@ -237,7 +241,7 @@ async function main() {
           operators: [],
           agent_company: null,
         }
-        const res = await client.instantiate(address, codeId, msg, 'JunoClaw Task Ledger', 'auto')
+        const res = await client.instantiate(address, codeId, msg, 'JunoClaw Task Ledger', 'auto', { admin: address })
         console.log(`  ✅  address: ${res.contractAddress}  tx: ${res.transactionHash}`)
         deployed['task-ledger'].address = res.contractAddress
         deployed['task-ledger'].instantiate_tx = res.transactionHash
@@ -287,7 +291,7 @@ async function main() {
             auto_release_on_verify: true,
           },
         }
-        const res = await client.instantiate(address, codeId, msg, 'JunoClaw Agent Company', 'auto')
+        const res = await client.instantiate(address, codeId, msg, 'JunoClaw Agent Company', 'auto', { admin: address })
         console.log(`  ✅  address: ${res.contractAddress}  tx: ${res.transactionHash}`)
         deployed['agent-company'].address = res.contractAddress
         deployed['agent-company'].instantiate_tx = res.transactionHash

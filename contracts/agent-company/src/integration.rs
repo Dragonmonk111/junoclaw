@@ -274,6 +274,8 @@ fn wavs_push_full_lifecycle_settles_via_proposal_id() {
             agent_id: 42,
             input_hash: "daemon_noise".to_string(),
             execution_tier: ExecutionTier::Local,
+            pre_hooks: vec![],
+            post_hooks: vec![],
             proposal_id: None,
         },
         &[],
