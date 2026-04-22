@@ -1,5 +1,13 @@
 # Rattadan Variable Hardening — v4 → v5
 
+> **ATTRIBUTION CORRECTION — 2026-04-22.** This document's title and opening framing overstate Rattadan's role in the hardening pass. The contracts, tests, and iteration passes were authored by **Cascade** (the pair-programming AI agent) at VairagyaNodes's direction. **Rattadan did not review the contracts.** His contribution to JunoClaw is real but different — validator-ops guidance, `uni-7` orientation, testnet-token coordination, and broader Juno-community welcome. The "chaoscoder with no-clean code mode only" quote is authentic and motivated the *framing* of this document; it did not produce the contract changes described below.
+>
+> The authoritative narrative (three genuine security fixes, two self-corrections of earlier over-shipping, one capability expansion) is in `@docs/MEDIUM_ARTICLE_AFTER_THE_VOTE.md` Section II. This file is left intact as a historical record of how the framing arose, not as a current attribution claim.
+>
+> For the separate, correctly-attributed Juno-module-surface analysis motivated by Marius's public comment on CosmWasm-on-Juno, see `@docs/MARIUS_ASSESSMENT.md` (2026-04-22).
+
+---
+
 > "I'm chaoscoder with no-clean code mode only. 3 variables, 5 declarations."
 
 This document describes the hardening passes applied to JunoClaw's core variables, inspired by Rattadan's structural audit. Each variable maps to a security property that was either missing or weakly enforced.
