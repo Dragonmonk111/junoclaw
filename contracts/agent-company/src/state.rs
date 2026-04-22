@@ -75,6 +75,14 @@ pub struct Config {
     pub governance: Option<Addr>,
     #[serde(default)]
     pub wavs_operator: Option<Addr>,
+    /// Optional `zk-verifier` contract address. When set, `SubmitAttestation`
+    /// accepts an optional Groth16 proof bundle (`proof_base64` +
+    /// `public_inputs_base64`) that is cross-verified atomically via a
+    /// sub-message before the attestation is stored. When `None`, the
+    /// attestation flow is unchanged (hash-only, as in v3–v6). See the
+    /// `execute_submit_attestation` docstring for the authorisation matrix.
+    #[serde(default)]
+    pub zk_verifier: Option<Addr>,
     pub escrow_contract: Addr,
     pub agent_registry: Addr,
     /// Optional task-ledger address for WavsPush proposals

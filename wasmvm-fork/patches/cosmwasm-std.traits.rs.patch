@@ -1,0 +1,81 @@
+diff --git a/packages/std/src/traits.rs b/packages/std/src/traits.rs
+--- a/packages/std/src/traits.rs
++++ b/packages/std/src/traits.rs
+@@ -188,6 +188,46 @@ pub trait Api {
+     /// Support for BLS12-381 is added in 2.1, i.e. cosmwasm_2_1 feature.
+     fn bls12_381_pairing_equality(
+         &self,
+         ps: &[u8],
+         qs: &[u8],
+         r: &[u8],
+         s: &[u8],
+     ) -> Result<bool, VerificationError>;
+ 
++    /// BN254 (alt_bn128) G1 point addition. Ethereum ECADD equivalent.
++    ///
++    /// - Input: 128 bytes (two 64-byte G1 points).
++    /// - Output: 64 bytes (one G1 point).
++    ///
++    /// Byte layout matches EIP-196: big-endian `x || y` with `(0, 0)` for
++    /// the point at infinity.
++    ///
++    /// Support for BN254 is added in cosmwasm_2_3.
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_add(&self, input: &[u8]) -> Result<Vec<u8>, VerificationError>;
++
++    /// BN254 G1 scalar multiplication. Ethereum ECMUL equivalent.
++    ///
++    /// - Input: 96 bytes (`g1_point || scalar_be`).
++    /// - Output: 64 bytes.
++    ///
++    /// Scalars are reduced mod r silently (matches EIP-196).
++    ///
++    /// Support for BN254 is added in cosmwasm_2_3.
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_scalar_mul(&self, input: &[u8]) -> Result<Vec<u8>, VerificationError>;
++
++    /// BN254 pairing equality check. Ethereum ECPAIRING equivalent.
++    ///
++    /// - Input: `192·N` bytes, each 192-byte chunk a `(G1, G2)` pair in
++    ///   EIP-197 ordering: `(g1_x, g1_y, g2_x_c1, g2_x_c0, g2_y_c1, g2_y_c0)`.
++    /// - Output: `true` iff `Π e(G1_i, G2_i) = 1` in `Gt`.
++    ///
++    /// Empty input returns `true` (matches EIP-197).
++    ///
++    /// Support for BN254 is added in cosmwasm_2_3.
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_pairing_equality(&self, input: &[u8]) -> Result<bool, VerificationError>;
++
+     fn debug(&self, message: &str);
+ 
+     /// Emits a debug message that is intended for developer use during contract debugging.
+diff --git a/packages/std/src/testing/mock.rs b/packages/std/src/testing/mock.rs
+--- a/packages/std/src/testing/mock.rs
++++ b/packages/std/src/testing/mock.rs
+@@ -312,6 +312,31 @@ impl Api for MockApi {
+         )
+     }
+ 
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_add(&self, input: &[u8]) -> Result<Vec<u8>, VerificationError> {
++        cosmwasm_crypto_bn254::bn254_add(input)
++            .map(|arr| arr.to_vec())
++            .map_err(|e| VerificationError::generic_err(e.to_string()))
++    }
++
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_scalar_mul(&self, input: &[u8]) -> Result<Vec<u8>, VerificationError> {
++        cosmwasm_crypto_bn254::bn254_scalar_mul(input)
++            .map(|arr| arr.to_vec())
++            .map_err(|e| VerificationError::generic_err(e.to_string()))
++    }
++
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_pairing_equality(&self, input: &[u8]) -> Result<bool, VerificationError> {
++        cosmwasm_crypto_bn254::bn254_pairing_equality(input)
++            .map_err(|e| VerificationError::generic_err(e.to_string()))
++    }
++
+     fn debug(&self, message: &str) {
+         println!("{message}");
+     }

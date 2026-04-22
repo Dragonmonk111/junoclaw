@@ -1,0 +1,95 @@
+diff --git a/packages/std/src/imports.rs b/packages/std/src/imports.rs
+--- a/packages/std/src/imports.rs
++++ b/packages/std/src/imports.rs
+@@ -64,6 +64,14 @@ extern "C" {
+     #[cfg(feature = "cosmwasm_2_1")]
+     fn bls12_381_pairing_equality(ps_ptr: u32, qs_ptr: u32, r_ptr: u32, s_ptr: u32) -> u32;
+ 
++    // BN254 (alt_bn128) host functions. Added by wasmvm-fork /
++    // cosmwasm-crypto-bn254 in cosmwasm_2_3. Absence on pre-cosmwasm_2_3
++    // chains surfaces as a "missing import" VM error at contract load time,
++    // which is the intended behaviour for feature-gated capabilities.
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_add(input_ptr: u32) -> u32;
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_scalar_mul(input_ptr: u32) -> u32;
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_pairing_equality(input_ptr: u32) -> u32;
++
+     fn secp256k1_verify(message_hash_ptr: u32, signature_ptr: u32, public_key_ptr: u32) -> u32;
+     fn secp256k1_recover_pubkey(
+         message_hash_ptr: u32,
+@@ -345,6 +353,71 @@ impl Api for ExternalApi {
+             _ => Err(BLS12_381_InvalidPoint.into()),
+         }
+     }
+ 
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_add(&self, input: &[u8]) -> Result<Vec<u8>, CryptoError> {
++        if input.len() != 128 {
++            return Err(CryptoError::generic_err("bn254_add: input must be 128 bytes"));
++        }
++        let input_region = build_region(input);
++        let input_region_ptr = &*input_region as *const Region<'_> as u32;
++        let result = unsafe { bn254_add(input_region_ptr) };
++        match result {
++            0 => {
++                let data = unsafe { consume_region(result as *mut Region<'_>) };
++                Ok(data)
++            }
++            _ => {
++                let err_region = unsafe { Region::from_raw(result as *mut u8, 0, 0) };
++                let msg = unsafe { consume_region(result as *mut Region<'_>) };
++                let msg_string = String::from_utf8_lossy(&msg).into_owned();
++                Err(CryptoError::generic_err(msg_string))
++            }
++        }
++    }
++
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_scalar_mul(&self, input: &[u8]) -> Result<Vec<u8>, CryptoError> {
++        if input.len() != 96 {
++            return Err(CryptoError::generic_err(
++                "bn254_scalar_mul: input must be 96 bytes",
++            ));
++        }
++        let input_region = build_region(input);
++        let input_region_ptr = &*input_region as *const Region<'_> as u32;
++        let result = unsafe { bn254_scalar_mul(input_region_ptr) };
++        match result {
++            0 => {
++                let data = unsafe { consume_region(result as *mut Region<'_>) };
++                Ok(data)
++            }
++            _ => {
++                let msg = unsafe { consume_region(result as *mut Region<'_>) };
++                let msg_string = String::from_utf8_lossy(&msg).into_owned();
++                Err(CryptoError::generic_err(msg_string))
++            }
++        }
++    }
++
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_pairing_equality(&self, input: &[u8]) -> Result<bool, CryptoError> {
++        if input.len() % 192 != 0 {
++            return Err(CryptoError::generic_err(format!(
++                "bn254_pairing_equality: input length {} is not a multiple of 192",
++                input.len()
++            )));
++        }
++        let input_region = build_region(input);
++        let input_region_ptr = &*input_region as *const Region<'_> as u32;
++        let result = unsafe { bn254_pairing_equality(input_region_ptr) };
++        let data = unsafe { consume_region(result as *mut Region<'_>) };
++        match data.as_slice() {
++            [0u8] => Ok(false),
++            [1u8] => Ok(true),
++            _ => Err(CryptoError::generic_err(
++                "bn254_pairing_equality: host returned invalid discriminant",
++            )),
++        }
++    }
++
+     fn secp256k1_verify(
+         &self,
+         message_hash: &[u8],

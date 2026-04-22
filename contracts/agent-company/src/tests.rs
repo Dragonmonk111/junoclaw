@@ -1,5 +1,9 @@
-use cosmwasm_std::{coins, Addr, Uint128};
+use cosmwasm_std::{
+    coins, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult, Uint128,
+};
 use cw_multi_test::{App, ContractWrapper, Executor};
+use cw_storage_plus::Item;
 
 use crate::contract::{execute, instantiate, migrate, query};
 use crate::error::ContractError;
@@ -62,6 +66,7 @@ fn store_and_instantiate_with_overrides(
             admin: None,
             governance,
             wavs_operator,
+            zk_verifier: None,
             escrow_contract: escrow.to_string(),
             agent_registry: registry.to_string(),
             task_ledger,
@@ -123,6 +128,7 @@ fn test_invalid_weights_fails() {
             admin: None,
             governance: None,
             wavs_operator: None,
+            zk_verifier: None,
             escrow_contract: escrow.to_string(),
             agent_registry: registry.to_string(),
             task_ledger: None,
@@ -408,6 +414,8 @@ fn test_submit_attestation_wavs_operator_authorized() {
             task_type: task_type.to_string(),
             data_hash: data_hash.to_string(),
             attestation_hash: att_hash.clone(),
+            proof_base64: None,
+            public_inputs_base64: None,
         },
         &[],
     ).unwrap();
@@ -468,6 +476,8 @@ fn test_submit_attestation_task_ledger_not_authorized_when_wavs_operator_set() {
             task_type: "outcome_verify".to_string(),
             data_hash: "fake".to_string(),
             attestation_hash: "fake".to_string(),
+            proof_base64: None,
+            public_inputs_base64: None,
         },
         &[],
     ).unwrap_err();
@@ -1497,6 +1507,8 @@ fn test_submit_attestation_for_outcome_create() {
             task_type: task_type.to_string(),
             data_hash: data_hash.to_string(),
             attestation_hash: att_hash.clone(),
+            proof_base64: None,
+            public_inputs_base64: None,
         },
         &[],
     ).unwrap();
@@ -1556,6 +1568,8 @@ fn test_submit_attestation_unauthorized_rejected() {
             task_type: "outcome_verify".to_string(),
             data_hash: "fake".to_string(),
             attestation_hash: "fake".to_string(),
+            proof_base64: None,
+            public_inputs_base64: None,
         },
         &[],
     ).unwrap_err();
@@ -1607,6 +1621,8 @@ fn test_submit_attestation_duplicate_rejected() {
             task_type: task_type.to_string(),
             data_hash: data_hash.to_string(),
             attestation_hash: att_hash,
+            proof_base64: None,
+            public_inputs_base64: None,
         },
         &[],
     ).unwrap();
@@ -1620,6 +1636,8 @@ fn test_submit_attestation_duplicate_rejected() {
             task_type: task_type.to_string(),
             data_hash: "hash2".to_string(),
             attestation_hash: att_hash2,
+            proof_base64: None,
+            public_inputs_base64: None,
         },
         &[],
     ).unwrap_err();
@@ -1933,6 +1951,7 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
                 admin: None,
                 governance: None,
                 wavs_operator: None,
+                zk_verifier: None,
                 escrow_contract: escrow.to_string(),
                 agent_registry: registry.to_string(),
                 task_ledger: None,
@@ -1966,6 +1985,7 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
                 admin: None,
                 governance: None,
                 wavs_operator: None,
+                zk_verifier: None,
                 escrow_contract: escrow.to_string(),
                 agent_registry: registry.to_string(),
                 task_ledger: None,
@@ -1999,6 +2019,7 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
                 admin: None,
                 governance: None,
                 wavs_operator: None,
+                zk_verifier: None,
                 escrow_contract: escrow.to_string(),
                 agent_registry: registry.to_string(),
                 task_ledger: None,
@@ -2021,4 +2042,486 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
         format!("{:?}", err.root_cause()).contains("quorum_percent must be in 1..=100"),
         "L5: quorum_percent = 0 must be rejected"
     );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// v7 zk-sidecar: SubmitAttestation with optional Groth16 proof bundle
+// ──────────────────────────────────────────────────────────────────────
+//
+// These tests exercise the sub-message path wired in `execute_submit_
+// attestation`. The real `zk-verifier` contract runs an arkworks
+// Groth16 check over BN254, which is expensive and requires real VK +
+// proof bytes; for unit testing we substitute a tiny stub that accepts
+// or rejects the `VerifyProof` message based on a storage flag. That
+// lets us verify the atomic-revert invariant and the config-gating
+// logic without pulling in arkworks as a dev-dependency.
+
+/// Storage flag on the stub: `true` → accept every VerifyProof call;
+/// `false` → reject with a generic StdError (modelling a proof that
+/// fails verification).
+const ZK_STUB_ACCEPT: Item<bool> = Item::new("zk_stub_accept");
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+struct ZkStubInstantiateMsg {
+    accept: bool,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum ZkStubExecuteMsg {
+    /// Must match the shape emitted by `execute_submit_attestation`.
+    VerifyProof {
+        proof_base64: String,
+        public_inputs_base64: String,
+    },
+    /// Test-only: flip the accept/reject flag mid-test.
+    SetAccept { accept: bool },
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum ZkStubQueryMsg {
+    Accept {},
+}
+
+fn zk_stub_instantiate(
+    deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    msg: ZkStubInstantiateMsg,
+) -> Result<Response, StdError> {
+    ZK_STUB_ACCEPT.save(deps.storage, &msg.accept)?;
+    Ok(Response::new().add_attribute("action", "zk_stub_instantiate"))
+}
+
+fn zk_stub_execute(
+    deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    msg: ZkStubExecuteMsg,
+) -> Result<Response, StdError> {
+    match msg {
+        ZkStubExecuteMsg::VerifyProof { proof_base64, public_inputs_base64 } => {
+            let accept = ZK_STUB_ACCEPT.load(deps.storage)?;
+            if accept {
+                Ok(Response::new()
+                    .add_attribute("action", "zk_stub_verify")
+                    .add_attribute("result", "valid")
+                    .add_attribute("proof_len", proof_base64.len().to_string())
+                    .add_attribute("inputs_len", public_inputs_base64.len().to_string()))
+            } else {
+                Err(StdError::generic_err(
+                    "zk_stub: proof invalid (stub configured to reject)",
+                ))
+            }
+        }
+        ZkStubExecuteMsg::SetAccept { accept } => {
+            ZK_STUB_ACCEPT.save(deps.storage, &accept)?;
+            Ok(Response::new().add_attribute("action", "zk_stub_set_accept"))
+        }
+    }
+}
+
+fn zk_stub_query(deps: Deps, _env: Env, msg: ZkStubQueryMsg) -> StdResult<Binary> {
+    match msg {
+        ZkStubQueryMsg::Accept {} => to_json_binary(&ZK_STUB_ACCEPT.load(deps.storage)?),
+    }
+}
+
+/// Store + instantiate the zk-stub. The `accept` flag becomes the
+/// stub's policy: `true` means every `VerifyProof` call returns Ok,
+/// `false` means every call returns Err (triggering an atomic revert
+/// in the caller).
+fn instantiate_zk_stub(app: &mut App, admin: &Addr, accept: bool) -> Addr {
+    let code = ContractWrapper::new(zk_stub_execute, zk_stub_instantiate, zk_stub_query);
+    let code_id = app.store_code(Box::new(code));
+    app.instantiate_contract(
+        code_id,
+        admin.clone(),
+        &ZkStubInstantiateMsg { accept },
+        &[],
+        "zk-stub",
+        Some(admin.to_string()),
+    )
+    .unwrap()
+}
+
+/// Store + instantiate agent-company with `zk_verifier` wired to the
+/// supplied address. The other fields mirror `store_and_instantiate`.
+fn store_and_instantiate_with_zk_verifier(
+    app: &mut App,
+    admin: &Addr,
+    members: Vec<MemberInput>,
+    zk_verifier: &Addr,
+) -> Addr {
+    let code = ContractWrapper::new(execute, instantiate, query).with_migrate(migrate);
+    let code_id = app.store_code(Box::new(code));
+    let escrow = mk(app, "escrow");
+    let registry = mk(app, "registry");
+    app.instantiate_contract(
+        code_id,
+        admin.clone(),
+        &InstantiateMsg {
+            name: "TestCoZk".to_string(),
+            admin: None,
+            governance: None,
+            wavs_operator: None,
+            zk_verifier: Some(zk_verifier.to_string()),
+            escrow_contract: escrow.to_string(),
+            agent_registry: registry.to_string(),
+            task_ledger: None,
+            nois_proxy: None,
+            members,
+            denom: Some(UJUNO.to_string()),
+            voting_period_blocks: Some(100),
+            quorum_percent: Some(51),
+            adaptive_threshold_blocks: Some(10),
+            adaptive_min_blocks: Some(13),
+            verification: None,
+            supermajority_quorum_percent: None,
+        },
+        &[],
+        "agent-company-zk",
+        Some(admin.to_string()),
+    )
+    .unwrap()
+}
+
+/// Create → vote → execute an OutcomeCreate proposal that an
+/// attestation can later be filed against. Returns the `proposal_id`,
+/// which is always 1 in a freshly-instantiated contract.
+fn create_outcome_ready_for_attestation(
+    app: &mut App,
+    contract: &Addr,
+    admin: &Addr,
+    alice: &Addr,
+) -> u64 {
+    app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::OutcomeCreate {
+                question: "zk test outcome".to_string(),
+                resolution_criteria: "stub".to_string(),
+                deadline_block: 999_999,
+            },
+        },
+        &[],
+    )
+    .unwrap();
+    app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+        &[],
+    )
+    .unwrap();
+    app.update_block(|b| b.height += 200);
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::ExecuteProposal { proposal_id: 1 },
+        &[],
+    )
+    .unwrap();
+    1
+}
+
+#[test]
+fn test_submit_attestation_with_valid_zk_proof_succeeds() {
+    // Happy path: zk_verifier configured + proof bundle supplied +
+    // stub accepts → attestation is stored and the response carries
+    // the `zk_verified=true` attribute.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let verifier = instantiate_zk_stub(&mut app, &admin, true);
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate_with_zk_verifier(&mut app, &admin, members, &verifier);
+    let proposal_id = create_outcome_ready_for_attestation(&mut app, &contract, &admin, &alice);
+
+    let task_type = "outcome_verify";
+    let data_hash = "zk-data-happy";
+    let att_hash = compute_attestation_hash(task_type, data_hash);
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::SubmitAttestation {
+            proposal_id,
+            task_type: task_type.to_string(),
+            data_hash: data_hash.to_string(),
+            attestation_hash: att_hash.clone(),
+            proof_base64: Some("valid-proof-bytes".to_string()),
+            public_inputs_base64: Some("valid-inputs-bytes".to_string()),
+        },
+        &[],
+    )
+    .unwrap();
+
+    // Attestation must be stored.
+    let att: Option<crate::state::Attestation> = app
+        .wrap()
+        .query_wasm_smart(contract.clone(), &QueryMsg::GetAttestation { proposal_id })
+        .unwrap();
+    assert_eq!(att.unwrap().attestation_hash, att_hash);
+}
+
+#[test]
+fn test_submit_attestation_with_invalid_zk_proof_reverts_atomically() {
+    // The stub rejects → the SubMsg fails → the whole parent tx reverts.
+    // Crucially: ATTESTATIONS.save ran *before* the SubMsg, but the
+    // atomic tx frame means it rolls back. We verify by querying
+    // GetAttestation after the failed call and confirming None.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let verifier = instantiate_zk_stub(&mut app, &admin, false); // reject all
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate_with_zk_verifier(&mut app, &admin, members, &verifier);
+    let proposal_id = create_outcome_ready_for_attestation(&mut app, &contract, &admin, &alice);
+
+    let task_type = "outcome_verify";
+    let data_hash = "zk-data-reject";
+    let att_hash = compute_attestation_hash(task_type, data_hash);
+    let err = app
+        .execute_contract(
+            admin.clone(),
+            contract.clone(),
+            &ExecuteMsg::SubmitAttestation {
+                proposal_id,
+                task_type: task_type.to_string(),
+                data_hash: data_hash.to_string(),
+                attestation_hash: att_hash,
+                proof_base64: Some("bad-proof".to_string()),
+                public_inputs_base64: Some("bad-inputs".to_string()),
+            },
+            &[],
+        )
+        .unwrap_err();
+    let root = format!("{:?}", err.root_cause());
+    assert!(
+        root.contains("proof invalid"),
+        "expected sub-msg rejection to surface; got: {}",
+        root
+    );
+
+    // Atomicity: no attestation stored.
+    let att: Option<crate::state::Attestation> = app
+        .wrap()
+        .query_wasm_smart(contract.clone(), &QueryMsg::GetAttestation { proposal_id })
+        .unwrap();
+    assert!(
+        att.is_none(),
+        "atomic revert invariant broken: attestation persisted despite failed proof",
+    );
+}
+
+#[test]
+fn test_submit_attestation_incomplete_proof_bundle_rejected() {
+    // proof_base64 = Some, public_inputs_base64 = None → rejected
+    // before any side-effect. Same for the mirror case. The stub is
+    // configured to accept, so any breach would surface as Ok — the
+    // fact that we get IncompleteZkProofBundle proves the pre-check
+    // happens *before* the sub-msg is fired.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let verifier = instantiate_zk_stub(&mut app, &admin, true);
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate_with_zk_verifier(&mut app, &admin, members, &verifier);
+    let proposal_id = create_outcome_ready_for_attestation(&mut app, &contract, &admin, &alice);
+
+    let task_type = "outcome_verify";
+    let data_hash = "zk-data-partial";
+    let att_hash = compute_attestation_hash(task_type, data_hash);
+
+    // proof present, inputs missing.
+    let err = app
+        .execute_contract(
+            admin.clone(),
+            contract.clone(),
+            &ExecuteMsg::SubmitAttestation {
+                proposal_id,
+                task_type: task_type.to_string(),
+                data_hash: data_hash.to_string(),
+                attestation_hash: att_hash.clone(),
+                proof_base64: Some("only-proof".to_string()),
+                public_inputs_base64: None,
+            },
+            &[],
+        )
+        .unwrap_err();
+    let ce = err.downcast::<ContractError>().unwrap();
+    assert!(
+        matches!(
+            ce,
+            ContractError::IncompleteZkProofBundle { proof_some: true, inputs_some: false }
+        ),
+        "expected IncompleteZkProofBundle(proof=true, inputs=false)",
+    );
+
+    // inputs present, proof missing.
+    let err = app
+        .execute_contract(
+            admin.clone(),
+            contract.clone(),
+            &ExecuteMsg::SubmitAttestation {
+                proposal_id,
+                task_type: task_type.to_string(),
+                data_hash: data_hash.to_string(),
+                attestation_hash: att_hash,
+                proof_base64: None,
+                public_inputs_base64: Some("only-inputs".to_string()),
+            },
+            &[],
+        )
+        .unwrap_err();
+    let ce = err.downcast::<ContractError>().unwrap();
+    assert!(
+        matches!(
+            ce,
+            ContractError::IncompleteZkProofBundle { proof_some: false, inputs_some: true }
+        ),
+        "expected IncompleteZkProofBundle(proof=false, inputs=true)",
+    );
+}
+
+#[test]
+fn test_submit_attestation_proof_without_zk_verifier_rejected() {
+    // No zk_verifier configured, but caller supplies a proof. Fail-
+    // closed: the proof is never silently dropped.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let members = two_member_msg(&alice, &bob);
+    // Default store_and_instantiate leaves zk_verifier = None.
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+    let proposal_id = create_outcome_ready_for_attestation(&mut app, &contract, &admin, &alice);
+
+    let task_type = "outcome_verify";
+    let data_hash = "zk-data-orphaned";
+    let att_hash = compute_attestation_hash(task_type, data_hash);
+    let err = app
+        .execute_contract(
+            admin.clone(),
+            contract.clone(),
+            &ExecuteMsg::SubmitAttestation {
+                proposal_id,
+                task_type: task_type.to_string(),
+                data_hash: data_hash.to_string(),
+                attestation_hash: att_hash,
+                proof_base64: Some("orphan-proof".to_string()),
+                public_inputs_base64: Some("orphan-inputs".to_string()),
+            },
+            &[],
+        )
+        .unwrap_err();
+    let ce = err.downcast::<ContractError>().unwrap();
+    assert!(
+        matches!(ce, ContractError::ZkVerifierNotConfigured {}),
+        "expected ZkVerifierNotConfigured when proof supplied without a configured verifier",
+    );
+}
+
+#[test]
+fn test_submit_attestation_without_proof_still_works_when_zk_verifier_set() {
+    // Backward compatibility: a verifier is wired, but the caller
+    // omits the proof bundle. This must succeed, with `zk_verified=
+    // false` on the response attributes. The proof is an *optional*
+    // enhancement, not a mandatory field.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let verifier = instantiate_zk_stub(&mut app, &admin, false); // stub rejects — proves we never call it
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate_with_zk_verifier(&mut app, &admin, members, &verifier);
+    let proposal_id = create_outcome_ready_for_attestation(&mut app, &contract, &admin, &alice);
+
+    let task_type = "outcome_verify";
+    let data_hash = "zk-data-noproof";
+    let att_hash = compute_attestation_hash(task_type, data_hash);
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::SubmitAttestation {
+            proposal_id,
+            task_type: task_type.to_string(),
+            data_hash: data_hash.to_string(),
+            attestation_hash: att_hash.clone(),
+            proof_base64: None,
+            public_inputs_base64: None,
+        },
+        &[],
+    )
+    .unwrap();
+
+    let att: Option<crate::state::Attestation> = app
+        .wrap()
+        .query_wasm_smart(contract.clone(), &QueryMsg::GetAttestation { proposal_id })
+        .unwrap();
+    assert_eq!(att.unwrap().attestation_hash, att_hash);
+}
+
+#[test]
+fn test_rotate_zk_verifier_admin_only() {
+    // Admin can set, non-admin cannot, and admin can clear.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let stranger = mk(&app, "stranger");
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+
+    // Stranger cannot rotate.
+    let verifier_v1 = mk(&app, "zk-v1");
+    let err = app
+        .execute_contract(
+            stranger.clone(),
+            contract.clone(),
+            &ExecuteMsg::RotateZkVerifier {
+                new_verifier: Some(verifier_v1.to_string()),
+            },
+            &[],
+        )
+        .unwrap_err();
+    assert!(
+        matches!(err.downcast::<ContractError>().unwrap(), ContractError::Unauthorized {}),
+    );
+
+    // Admin sets.
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::RotateZkVerifier {
+            new_verifier: Some(verifier_v1.to_string()),
+        },
+        &[],
+    )
+    .unwrap();
+    let cfg: crate::state::Config = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(cfg.zk_verifier, Some(verifier_v1));
+
+    // Admin clears.
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::RotateZkVerifier { new_verifier: None },
+        &[],
+    )
+    .unwrap();
+    let cfg: crate::state::Config = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(cfg.zk_verifier, None);
 }

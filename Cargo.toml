@@ -16,6 +16,10 @@ exclude = [
     "contracts",
     "wavs",
     "tools/bud-seal",
+    # BN254 precompile workspaces — each has its own [workspace] table so
+    # they must not be discovered by the root crate's workspace resolver.
+    "wasmvm-fork",
+    "devnet",
 ]
 resolver = "2"
 

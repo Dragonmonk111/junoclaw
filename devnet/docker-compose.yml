@@ -1,0 +1,40 @@
+# Single-validator BN254 devnet.
+# Spins up exactly one container — the whole chain, ephemeral.
+# Use `./scripts/run-devnet.sh` to start (it handles tarring the
+# wasmvm-fork build context before passing it to `docker build`).
+
+services:
+  junod:
+    build:
+      context: ..
+      dockerfile: devnet/Dockerfile
+      args:
+        COSMWASM_TAG: v2.2.0
+        WASMVM_TAG: v2.2.0
+        JUNO_TAG: v29.0.0
+        RUST_TAG: 1.78-bookworm
+        GO_TAG: 1.22-bookworm
+    image: junoclaw/junod-bn254:devnet
+    container_name: junoclaw-bn254-devnet
+    ports:
+      - "26657:26657"   # Tendermint RPC
+      - "1317:1317"     # REST API
+      - "9090:9090"     # gRPC
+    volumes:
+      - junod-data:/root/.juno
+    environment:
+      - CHAIN_ID=junoclaw-bn254-1
+      - MONIKER=bn254-validator
+      - KEYRING_BACKEND=test
+    restart: "no"
+    stop_grace_period: 5s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:26657/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  junod-data:
+    driver: local

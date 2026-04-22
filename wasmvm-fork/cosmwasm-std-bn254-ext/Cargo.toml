@@ -1,0 +1,22 @@
+[package]
+name = "cosmwasm-std-bn254-ext"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+description = "Guest-side extension trait for BN254 host functions, usable from CosmWasm contracts without requiring a cosmwasm-std fork."
+license = "Apache-2.0"
+repository = "https://github.com/juno-claw/wasmvm-fork"
+
+[lib]
+name = "cosmwasm_std_bn254_ext"
+path = "src/lib.rs"
+
+[features]
+default = []
+# With "runtime" enabled the extern "C" declarations are compiled in. Turn
+# this off when building for native tests that don't run inside a Wasm host.
+runtime = []
+
+[dependencies]
+
+[workspace]

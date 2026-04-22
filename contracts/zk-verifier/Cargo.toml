@@ -39,3 +39,15 @@ ark-snark = { workspace = true }
 
 [features]
 default = []
+# When enabled, VerifyProof routes the pairing check (and the public-input
+# linear combination) through the BN254 host functions in a wasmvm-fork
+# build. The resulting .wasm will only load on a patched chain — see
+# README_PRECOMPILE.md for the build + deploy recipe. Leaving this off
+# builds the pure-CosmWasm verifier that already runs on Juno uni-7.
+bn254-precompile = ["dep:cosmwasm-std-bn254-ext"]
+
+[dependencies.cosmwasm-std-bn254-ext]
+path = "../../wasmvm-fork/cosmwasm-std-bn254-ext"
+version = "0.1.0"
+features = ["runtime"]
+optional = true

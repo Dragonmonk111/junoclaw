@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     entry_point, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, Event, MessageInfo,
-    Order, QueryRequest, Response, StdError, StdResult, Uint128, WasmMsg, WasmQuery,
+    Order, QueryRequest, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg, WasmQuery,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Bound;
@@ -63,6 +63,10 @@ pub fn instantiate(
         .wavs_operator
         .map(|w| deps.api.addr_validate(&w))
         .transpose()?;
+    let zk_verifier = msg
+        .zk_verifier
+        .map(|v| deps.api.addr_validate(&v))
+        .transpose()?;
     let escrow_contract = deps.api.addr_validate(&msg.escrow_contract)?;
     let agent_registry = deps.api.addr_validate(&msg.agent_registry)?;
     let task_ledger = msg.task_ledger
@@ -109,6 +113,7 @@ pub fn instantiate(
         admin,
         governance,
         wavs_operator,
+        zk_verifier,
         escrow_contract,
         agent_registry,
         task_ledger,
@@ -165,14 +170,32 @@ pub fn execute(
             execute_transfer_admin(deps, info, new_admin),
         ExecuteMsg::RotateWavsOperator { new_operator } =>
             execute_rotate_wavs_operator(deps, info, new_operator),
+        ExecuteMsg::RotateZkVerifier { new_verifier } =>
+            execute_rotate_zk_verifier(deps, info, new_verifier),
         // ── Randomness ──
         ExecuteMsg::NoisReceive { callback } =>
             execute_nois_receive(deps, env, info, callback),
         ExecuteMsg::SubmitRandomness { job_id, randomness_hex, attestation_hash } =>
             execute_submit_randomness(deps, env, info, job_id, randomness_hex, attestation_hash),
         // ── WAVS Attestations ──
-        ExecuteMsg::SubmitAttestation { proposal_id, task_type, data_hash, attestation_hash } =>
-            execute_submit_attestation(deps, env, info, proposal_id, task_type, data_hash, attestation_hash),
+        ExecuteMsg::SubmitAttestation {
+            proposal_id,
+            task_type,
+            data_hash,
+            attestation_hash,
+            proof_base64,
+            public_inputs_base64,
+        } => execute_submit_attestation(
+            deps,
+            env,
+            info,
+            proposal_id,
+            task_type,
+            data_hash,
+            attestation_hash,
+            proof_base64,
+            public_inputs_base64,
+        ),
     }
 }
 
@@ -993,6 +1016,7 @@ fn execute_submit_randomness(
     Ok(response)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn execute_submit_attestation(
     deps: DepsMut,
     env: Env,
@@ -1001,6 +1025,8 @@ fn execute_submit_attestation(
     task_type: String,
     data_hash: String,
     attestation_hash: String,
+    proof_base64: Option<String>,
+    public_inputs_base64: Option<String>,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
 
@@ -1107,12 +1133,73 @@ fn execute_submit_attestation(
     };
     ATTESTATIONS.save(deps.storage, proposal_id, &attestation)?;
 
-    Ok(Response::new()
+    // ── v7 zk-sidecar ──
+    // Atomicity model: a CosmWasm `SubMsg` with default `ReplyOn::Never`
+    // runs in the same tx frame as the parent handler. If the sub-msg
+    // reverts, the whole tx reverts — including the `ATTESTATIONS.save`
+    // above. That's the invariant we want: an attestation that carries
+    // a proof bundle is stored *iff* the proof verified.
+    //
+    // Four cases on (zk_verifier, proof_some, inputs_some):
+    //   (Some, Some, Some)  → fire VerifyProof sub-msg, atomic revert on failure
+    //   (Some, Some, None)  → IncompleteZkProofBundle — reject before side-effects
+    //   (Some, None, Some)  → IncompleteZkProofBundle — reject before side-effects
+    //   (Some, None, None)  → allow hash-only attestation (proof optional)
+    //   (None, Some, _)     → ZkVerifierNotConfigured — fail-closed
+    //   (None, _,    Some)  → ZkVerifierNotConfigured — fail-closed
+    //   (None, None, None)  → unchanged pre-v7 behaviour
+    //
+    // The two fail-closed cases are important: silently dropping a
+    // supplied proof would give the caller a false sense of verification.
+    let proof_some = proof_base64.is_some();
+    let inputs_some = public_inputs_base64.is_some();
+    let mut response = Response::new()
         .add_attribute("action", "submit_attestation")
         .add_attribute("proposal_id", proposal_id.to_string())
         .add_attribute("task_type", task_type)
         .add_attribute("data_hash", data_hash)
-        .add_attribute("attestation_hash", attestation_hash))
+        .add_attribute("attestation_hash", attestation_hash);
+
+    match (&cfg.zk_verifier, proof_some, inputs_some) {
+        (Some(verifier_addr), true, true) => {
+            // Unwraps are safe: we just proved both are `Some`.
+            let proof = proof_base64.unwrap();
+            let inputs = public_inputs_base64.unwrap();
+            #[derive(serde::Serialize)]
+            #[serde(rename_all = "snake_case")]
+            enum ZkVerifierExecute {
+                VerifyProof {
+                    proof_base64: String,
+                    public_inputs_base64: String,
+                },
+            }
+            let verify_msg = WasmMsg::Execute {
+                contract_addr: verifier_addr.to_string(),
+                msg: to_json_binary(&ZkVerifierExecute::VerifyProof {
+                    proof_base64: proof,
+                    public_inputs_base64: inputs,
+                })?,
+                funds: vec![],
+            };
+            response = response
+                .add_submessage(SubMsg::new(verify_msg))
+                .add_attribute("zk_verified", "true");
+        }
+        (Some(_), true, false) | (Some(_), false, true) => {
+            return Err(ContractError::IncompleteZkProofBundle { proof_some, inputs_some });
+        }
+        (Some(_), false, false) => {
+            response = response.add_attribute("zk_verified", "false");
+        }
+        (None, false, false) => {
+            // Pre-v7 behaviour — hash-only attestation, no verifier wired.
+        }
+        (None, _, _) => {
+            return Err(ContractError::ZkVerifierNotConfigured {});
+        }
+    }
+
+    Ok(response)
 }
 
 // ──────────────────────────────────────────────
@@ -1181,6 +1268,29 @@ fn execute_rotate_wavs_operator(
         .add_attribute(
             "new_operator",
             new_operator.unwrap_or_else(|| "<cleared>".to_string()),
+        ))
+}
+
+fn execute_rotate_zk_verifier(
+    deps: DepsMut,
+    info: MessageInfo,
+    new_verifier: Option<String>,
+) -> Result<Response, ContractError> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+    if info.sender != cfg.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let resolved = match &new_verifier {
+        Some(raw) => Some(deps.api.addr_validate(raw)?),
+        None => None,
+    };
+    cfg.zk_verifier = resolved;
+    CONFIG.save(deps.storage, &cfg)?;
+    Ok(Response::new()
+        .add_attribute("action", "rotate_zk_verifier")
+        .add_attribute(
+            "new_verifier",
+            new_verifier.unwrap_or_else(|| "<cleared>".to_string()),
         ))
 }
 

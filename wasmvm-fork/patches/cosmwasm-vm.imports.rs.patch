@@ -1,0 +1,140 @@
+diff --git a/packages/vm/Cargo.toml b/packages/vm/Cargo.toml
+--- a/packages/vm/Cargo.toml
++++ b/packages/vm/Cargo.toml
+@@ -40,6 +40,7 @@ bech32 = "0.11.0"
+ # CosmWasm subcrates.
+ cosmwasm-core = { path = "../core", version = "2.2.0" }
+ cosmwasm-crypto = { path = "../crypto", version = "2.2.0" }
++cosmwasm-crypto-bn254 = { path = "../crypto-bn254", version = "0.1.0" }
+ cosmwasm-std = { path = "../std", version = "2.2.0", default-features = false, features = [
+   "std",
+   "iterator",
+diff --git a/packages/vm/src/imports.rs b/packages/vm/src/imports.rs
+--- a/packages/vm/src/imports.rs
++++ b/packages/vm/src/imports.rs
+@@ -18,6 +18,10 @@ use cosmwasm_crypto::{
+     CryptoError, ED25519_PUBKEY_LEN, ED25519_SIGNATURE_LEN, MESSAGE_HASH_MAX_LEN, MESSAGE_MAX_LEN,
+     SECP256K1_PUBKEY_SIZE, SECP256K1_SIGNATURE_LEN, SECP256R1_PUBKEY_SIZE, SECP256R1_SIGNATURE_LEN,
+ };
++use cosmwasm_crypto_bn254::{
++    bn254_add, bn254_pairing_equality, bn254_scalar_mul, gas::pairing_cost, gas::BN254_ADD_COST,
++    gas::BN254_SCALAR_MUL_COST, Bn254Error, G1_BYTES,
++};
+ use cosmwasm_std::{Addr, CanonicalAddr};
+ 
+ use crate::backend::{BackendApi, BackendError, Querier, Storage};
+@@ -88,6 +92,11 @@ const MAX_LENGTH_EDDSA_MESSAGE: usize = 1024 * 1024; // 1 MiB
+ // Max length for BLS12-381 message sizes
+ const MAX_LENGTH_BLS12_381_MESSAGE: usize = 5 * 1024 * 1024; // 5 MiB
+ 
++// Max pairing pairs we are willing to accept in a single host call. Each
++// pair is 192 bytes; 64 pairs = 12 288 bytes of input, which would cost
++// ~2.2 M SDK gas on its own (over 20% of a typical Juno block gas limit).
++const MAX_BN254_PAIRING_PAIRS: usize = 64;
++
+ /// Keccak256 hash length in bytes
+ const KECCAK256_HASH_LENGTH: usize = 32;
+ const MAX_LENGTH_ABORT: usize = 2 * MiB;
+@@ -612,6 +621,92 @@ pub fn do_bls12_381_pairing_equality<A: BackendApi + 'static, S: Storage + 'stat
+     Ok(result)
+ }
+ 
++/// BN254 ECADD host function. Input: 128 bytes. Output: 64 bytes.
++pub fn do_bn254_add<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'static>(
++    mut env: FunctionEnvMut<Environment<A, S, Q>>,
++    input_ptr: u32,
++) -> VmResult<u32> {
++    let input = read_region(
++        &env.data().memory(&env),
++        input_ptr,
++        2 * G1_BYTES as u32 /* == 128 */ as usize,
++    )?;
++    process_gas_info(&mut env, GasInfo::with_cost(BN254_ADD_COST))?;
++    let result = bn254_add(&input).map_err(bn254_error_to_vm)?;
++    write_to_contract(&mut env, &result)
++}
++
++/// BN254 ECMUL host function. Input: 96 bytes. Output: 64 bytes.
++pub fn do_bn254_scalar_mul<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'static>(
++    mut env: FunctionEnvMut<Environment<A, S, Q>>,
++    input_ptr: u32,
++) -> VmResult<u32> {
++    let input = read_region(&env.data().memory(&env), input_ptr, 96)?;
++    process_gas_info(&mut env, GasInfo::with_cost(BN254_SCALAR_MUL_COST))?;
++    let result = bn254_scalar_mul(&input).map_err(bn254_error_to_vm)?;
++    write_to_contract(&mut env, &result)
++}
++
++/// BN254 ECPAIRING equality host function.
++///
++/// Input: `192 · N` bytes (N ≤ `MAX_BN254_PAIRING_PAIRS`).
++/// Output: 1 byte (0 or 1).
++///
++/// Gas: `BN254_PAIRING_BASE_COST + N · BN254_PAIRING_PER_PAIR_COST`. Charged
++/// before the operation so adversarial callers cannot under-pay by supplying
++/// a malformed prefix of a large input.
++pub fn do_bn254_pairing_equality<
++    A: BackendApi + 'static,
++    S: Storage + 'static,
++    Q: Querier + 'static,
++>(
++    mut env: FunctionEnvMut<Environment<A, S, Q>>,
++    input_ptr: u32,
++) -> VmResult<u32> {
++    // Read the region length first so we can charge gas correctly before
++    // materializing the full input.
++    let region_len = read_region_len(&env.data().memory(&env), input_ptr)?;
++    if region_len % 192 != 0 {
++        return Err(VmError::generic_err(format!(
++            "BN254: pairing input length {region_len} is not a multiple of 192"
++        )));
++    }
++    let n_pairs = region_len / 192;
++    if n_pairs > MAX_BN254_PAIRING_PAIRS {
++        return Err(VmError::generic_err(format!(
++            "BN254: too many pairing pairs ({n_pairs} > {MAX_BN254_PAIRING_PAIRS})"
++        )));
++    }
++    process_gas_info(&mut env, GasInfo::with_cost(pairing_cost(n_pairs)))?;
++    let input = read_region(&env.data().memory(&env), input_ptr, region_len)?;
++    let ok = bn254_pairing_equality(&input).map_err(bn254_error_to_vm)?;
++    write_to_contract(&mut env, &[ok as u8])
++}
++
++fn bn254_error_to_vm(err: Bn254Error) -> VmError {
++    // Map to VmError::generic_err with the prefixed string the guest already
++    // sees for other crypto errors. This keeps contract-side pattern matching
++    // consistent across curves.
++    VmError::generic_err(err.to_string())
++}
++
+ #[cfg(feature = "abort")]
+ pub fn do_abort<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'static>(
+     env: FunctionEnvMut<Environment<A, S, Q>>,
+diff --git a/packages/vm/src/instance.rs b/packages/vm/src/instance.rs
+--- a/packages/vm/src/instance.rs
++++ b/packages/vm/src/instance.rs
+@@ -240,6 +240,21 @@ where
+                     "bls12_381_pairing_equality" => Function::new_typed_with_env(
+                         &mut store,
+                         &fe,
+                         do_bls12_381_pairing_equality,
+                     ),
++                    "bn254_add" => Function::new_typed_with_env(
++                        &mut store,
++                        &fe,
++                        do_bn254_add,
++                    ),
++                    "bn254_scalar_mul" => Function::new_typed_with_env(
++                        &mut store,
++                        &fe,
++                        do_bn254_scalar_mul,
++                    ),
++                    "bn254_pairing_equality" => Function::new_typed_with_env(
++                        &mut store,
++                        &fe,
++                        do_bn254_pairing_equality,
++                    ),
+                     "secp256k1_verify" => Function::new_typed_with_env(
+                         &mut store,
+                         &fe,

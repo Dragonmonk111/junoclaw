@@ -65,6 +65,11 @@ pub struct InstantiateMsg {
     pub governance: Option<String>,
     #[serde(default)]
     pub wavs_operator: Option<String>,
+    /// Optional `zk-verifier` contract address. When set, attestations
+    /// may optionally carry a Groth16 proof bundle that is cross-verified
+    /// atomically. When `None`, attestation flow is unchanged (hash-only).
+    #[serde(default)]
+    pub zk_verifier: Option<String>,
     pub escrow_contract: String,
     pub agent_registry: String,
     /// Optional task-ledger address for WavsPush proposals
@@ -138,6 +143,13 @@ pub enum ExecuteMsg {
     /// is a `ConfigChange` governance proposal with `new_wavs_operator`.
     RotateWavsOperator { new_operator: Option<String> },
 
+    /// Admin-only: rotate the zk-verifier contract address. `new_verifier
+    /// = None` clears it, reverting `SubmitAttestation` to hash-only mode.
+    /// Admin-only for the same reason as `RotateWavsOperator`: a bootstrap
+    /// / emergency knob. Decentralized rotation is a future `ConfigChange`
+    /// extension.
+    RotateZkVerifier { new_verifier: Option<String> },
+
     // ── Randomness ──
 
     /// NOIS proxy callback delivering randomness for a pending sortition
@@ -152,12 +164,25 @@ pub enum ExecuteMsg {
 
     // ── WAVS Attestations ──
 
-    /// WAVS bridge submits a verification attestation for a WavsPush or OutcomeCreate proposal
+    /// WAVS bridge submits a verification attestation for a WavsPush or OutcomeCreate proposal.
+    ///
+    /// When `Config.zk_verifier` is wired, callers MAY additionally supply
+    /// a Groth16 proof bundle (`proof_base64` + `public_inputs_base64`).
+    /// If supplied, the contract fires a sub-message to the zk-verifier
+    /// which re-verifies the proof on-chain; sub-message failure reverts
+    /// the whole attestation atomically. Supplying only one of the two
+    /// proof fields is rejected (`IncompleteZkProofBundle`). Supplying
+    /// proof fields without a configured verifier is rejected
+    /// (`ZkVerifierNotConfigured`) — fail-closed, never silent-drop.
     SubmitAttestation {
         proposal_id: u64,
         task_type: String,
         data_hash: String,
         attestation_hash: String,
+        #[serde(default)]
+        proof_base64: Option<String>,
+        #[serde(default)]
+        public_inputs_base64: Option<String>,
     },
 }
 

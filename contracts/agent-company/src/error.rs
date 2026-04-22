@@ -75,4 +75,12 @@ pub enum ContractError {
 
     #[error("Unauthorized randomness submission")]
     UnauthorizedRandomness {},
+
+    // ── v7 zk-sidecar ──────────────────────────────────────────────
+
+    #[error("zk-sidecar: proof supplied but no zk_verifier is configured. Either omit proof fields or configure a zk_verifier via RotateZkVerifier / ConfigChange.")]
+    ZkVerifierNotConfigured {},
+
+    #[error("zk-sidecar: incomplete proof bundle — proof_base64 and public_inputs_base64 must both be Some or both be None, got proof_some={proof_some} inputs_some={inputs_some}")]
+    IncompleteZkProofBundle { proof_some: bool, inputs_some: bool },
 }

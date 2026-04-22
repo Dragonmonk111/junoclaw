@@ -8,7 +8,10 @@
     "submit-attestation": "tsx src/submit-attestation.ts",
     "submit-randomness": "tsx src/submit-randomness.ts",
     "local-operator": "tsx src/local-operator.ts",
-    "deploy-junoswap": "tsx src/deploy-junoswap.ts"
+    "deploy-junoswap": "tsx src/deploy-junoswap.ts",
+    "deploy-zk-verifier": "tsx src/deploy-zk-verifier.ts",
+    "benchmark-zk-verifier": "tsx src/benchmark-zk-verifier.ts",
+    "benchmark-zk-verifier-devnet": "tsx src/benchmark-zk-verifier-devnet.ts"
   },
   "dependencies": {
     "@cosmjs/cosmwasm-stargate": "^0.32.4",

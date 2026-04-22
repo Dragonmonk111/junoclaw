@@ -1,0 +1,124 @@
+diff --git a/libwasmvm/Cargo.toml b/libwasmvm/Cargo.toml
+--- a/libwasmvm/Cargo.toml
++++ b/libwasmvm/Cargo.toml
+@@ -29,6 +29,7 @@ errno = "0.3"
+ hex = "0.4"
+ serde_json = "1.0"
+ thiserror = "1.0"
++cosmwasm-crypto-bn254 = { path = "../../cosmwasm-bn254/packages/crypto-bn254", version = "0.1.0" }
+ cosmwasm-core = "=2.2.0"
+ cosmwasm-std = { version = "=2.2.0", default-features = false, features = [
+   "iterator",
+diff --git a/libwasmvm/src/lib.rs b/libwasmvm/src/lib.rs
+--- a/libwasmvm/src/lib.rs
++++ b/libwasmvm/src/lib.rs
+@@ -20,6 +20,7 @@ pub mod vtables;
+ 
+ // We only interact with this crate via `extern "C"` interfaces, not those public
+ // exports. There are no guarantees those exports are stable.
++mod bn254_ffi;
+ // We keep them here such that we can access them in our Go code through `cgo`.
+ 
+ pub use api::GoApi_vtable;
+diff --git a/libwasmvm/src/bn254_ffi.rs b/libwasmvm/src/bn254_ffi.rs
+new file mode 100644
+--- /dev/null
++++ b/libwasmvm/src/bn254_ffi.rs
+@@ -0,0 +1,146 @@
++//! C-ABI shims for the three BN254 host functions, callable from Go via cgo.
++//!
++//! These wrappers exist only so that a patched `junod` build can route
++//! `x/wasm` BN254 calls to the native Rust implementation without changing
++//! any higher-level wasmvm surface. They follow the same
++//! out-parameter-plus-UnmanagedVector pattern used by the existing
++//! `libwasmvm` public API.
++
++use cosmwasm_crypto_bn254::{bn254_add, bn254_pairing_equality, bn254_scalar_mul};
++
++use crate::error::{handle_c_error_default, Error};
++use crate::memory::{ByteSliceView, UnmanagedVector};
++
++#[no_mangle]
++pub extern "C" fn bn254_add_ffi(
++    input: ByteSliceView,
++    error_msg: Option<&mut UnmanagedVector>,
++) -> UnmanagedVector {
++    let r: Result<Vec<u8>, Error> = (|| {
++        let bytes = input
++            .read()
++            .ok_or_else(|| Error::unset_arg("bn254_add: input is nil"))?;
++        let out = bn254_add(bytes)
++            .map_err(|e| Error::generic_err(format!("bn254_add: {e}")))?;
++        Ok(out.to_vec())
++    })();
++    let data = handle_c_error_default(r, error_msg);
++    UnmanagedVector::new(Some(data))
++}
++
++#[no_mangle]
++pub extern "C" fn bn254_scalar_mul_ffi(
++    input: ByteSliceView,
++    error_msg: Option<&mut UnmanagedVector>,
++) -> UnmanagedVector {
++    let r: Result<Vec<u8>, Error> = (|| {
++        let bytes = input
++            .read()
++            .ok_or_else(|| Error::unset_arg("bn254_scalar_mul: input is nil"))?;
++        let out = bn254_scalar_mul(bytes)
++            .map_err(|e| Error::generic_err(format!("bn254_scalar_mul: {e}")))?;
++        Ok(out.to_vec())
++    })();
++    let data = handle_c_error_default(r, error_msg);
++    UnmanagedVector::new(Some(data))
++}
++
++#[no_mangle]
++pub extern "C" fn bn254_pairing_equality_ffi(
++    input: ByteSliceView,
++    error_msg: Option<&mut UnmanagedVector>,
++) -> u8 {
++    let r: Result<bool, Error> = (|| {
++        let bytes = input
++            .read()
++            .ok_or_else(|| Error::unset_arg("bn254_pairing_equality: input is nil"))?;
++        bn254_pairing_equality(bytes)
++            .map_err(|e| Error::generic_err(format!("bn254_pairing_equality: {e}")))
++    })();
++    match r {
++        Ok(true) => 1,
++        Ok(false) => 0,
++        Err(err) => {
++            if let Some(slot) = error_msg {
++                *slot = UnmanagedVector::new(Some(err.to_string().into_bytes()));
++            }
++            2 // sentinel distinct from 0/1
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::memory::ByteSliceView;
++
++    #[test]
++    fn add_roundtrip_through_ffi() {
++        // G + O -> G
++        let mut input = [0u8; 128];
++        input[31] = 1; // x = 1
++        input[63] = 2; // y = 2
++        let mut err = UnmanagedVector::default();
++        let out = bn254_add_ffi(ByteSliceView::from_option(Some(&input)), Some(&mut err));
++        let bytes = out.consume().expect("non-empty");
++        assert_eq!(&bytes[..64], &input[..64]);
++        assert!(!err.is_some());
++    }
++
++    #[test]
++    fn pairing_empty_is_true_through_ffi() {
++        let mut err = UnmanagedVector::default();
++        let out =
++            bn254_pairing_equality_ffi(ByteSliceView::from_option(Some(&[])), Some(&mut err));
++        assert_eq!(out, 1);
++    }
++}

@@ -7,9 +7,11 @@ use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, LastVerifyResponse, MigrateMsg, QueryMsg, VkStatusResponse};
 use crate::state::{Config, LastVerification, CONFIG, LAST_VERIFICATION, VK_BYTES};
 
-// Arkworks imports (no_std compatible)
+// Arkworks imports (no_std compatible).
+// `Groth16` and `prepare_verifying_key` moved to `crate::bn254_backend`, which
+// is the single dispatch point for pure-Wasm vs precompile verification.
 use ark_bn254::{Bn254, Fr};
-use ark_groth16::{Groth16, Proof, VerifyingKey};
+use ark_groth16::{Proof, VerifyingKey};
 use ark_ec::pairing::Pairing;
 use ark_serialize::CanonicalDeserialize;
 
@@ -107,13 +109,17 @@ fn execute_verify_proof(
     let public_inputs = deserialize_public_inputs(&inputs_bytes)?;
 
     // ── THE EXPENSIVE PART ──
-    // This is the BN254 pairing computation that would be near-free with a precompile.
-    // In pure Wasm, this consumes millions of gas.
-    let pvk = ark_groth16::prepare_verifying_key(&vk);
-    let valid = Groth16::<Bn254>::verify_proof(&pvk, &proof, &public_inputs)
-        .map_err(|e| ContractError::DeserializationError {
-            reason: format!("verify error: {}", e),
-        })?;
+    //
+    // Delegated to `bn254_backend::verify_groth16`, which dispatches on the
+    // `bn254-precompile` cargo feature:
+    //   - off  : pure arkworks (~371 486 gas on uni-7)
+    //   - on   : 4-pair `bn254_pairing_equality` + host-side lincomb
+    //            (~187 000 gas expected on a wasmvm-fork-patched chain)
+    //
+    // Both paths produce identical accept/reject decisions by design —
+    // differential testing against 1 000 random proofs is documented in
+    // `wasmvm-fork/BUILD_AND_TEST.md`.
+    let valid = crate::bn254_backend::verify_groth16(&vk, &proof, &public_inputs)?;
 
     if !valid {
         return Err(ContractError::ProofInvalid {});

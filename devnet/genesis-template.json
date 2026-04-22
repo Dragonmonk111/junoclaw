@@ -1,0 +1,53 @@
+{
+  "_comment_": "This file is reference-only. The real genesis is produced by scripts/init-genesis.sh inside the container, which calls `junod init` + `junod genesis add-genesis-account` + `junod genesis gentx`. The JSON below documents the shape a reviewer should expect in /root/.juno/config/genesis.json after init completes.",
+  "genesis_time": "<set by junod init>",
+  "chain_id": "junoclaw-bn254-1",
+  "initial_height": "1",
+  "consensus_params": {
+    "block": {
+      "max_bytes": "22020096",
+      "max_gas": "80000000",
+      "time_iota_ms": "1000"
+    },
+    "evidence": {
+      "max_age_num_blocks": "100000",
+      "max_age_duration": "172800000000000",
+      "max_bytes": "1048576"
+    },
+    "validator": {
+      "pub_key_types": ["ed25519"]
+    },
+    "version": {}
+  },
+  "app_hash": "",
+  "app_state": {
+    "wasm": {
+      "params": {
+        "code_upload_access": {
+          "permission": "Everybody"
+        },
+        "instantiate_default_permission": "Everybody"
+      },
+      "_comment_wasm_": "Permissions are wide open because this is an ephemeral devnet. Do NOT copy these parameters into a real chain genesis."
+    },
+    "staking": {
+      "params": {
+        "unbonding_time": "60s",
+        "max_validators": 1,
+        "bond_denom": "ujuno"
+      }
+    },
+    "bank": {
+      "params": {
+        "default_send_enabled": true
+      }
+    },
+    "gov": {
+      "params": {
+        "min_deposit": [{"denom": "ujuno", "amount": "1000000"}],
+        "voting_period": "30s"
+      },
+      "_comment_gov_": "Short voting period so the benchmark loop can also exercise a mock governance proposal in < 1 minute."
+    }
+  }
+}

@@ -166,6 +166,7 @@ fn deploy_full_stack(app: &mut App) -> Deployment {
                 admin: Some(admin.to_string()),
                 governance: None,
                 wavs_operator: None,
+                zk_verifier: None,
                 escrow_contract: escrow_addr.to_string(),
                 agent_registry: agent_registry_addr.to_string(),
                 task_ledger: Some(task_ledger_addr.to_string()),
@@ -433,6 +434,8 @@ fn wavs_push_full_lifecycle_settles_via_proposal_id() {
             task_type,
             data_hash,
             attestation_hash,
+            proof_base64: None,
+            public_inputs_base64: None,
         },
         &[],
     )
@@ -498,6 +501,8 @@ fn attestation_rejects_while_task_still_running() {
                 task_type,
                 data_hash,
                 attestation_hash,
+                proof_base64: None,
+                public_inputs_base64: None,
             },
             &[],
         )
