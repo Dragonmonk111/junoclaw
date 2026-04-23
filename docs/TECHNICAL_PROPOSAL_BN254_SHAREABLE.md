@@ -1,6 +1,6 @@
 # BN254 Precompile for CosmWasm — Shareable Technical Proposal
 
-> Copy-paste version for Juno Commonwealth, Discord, Telegram, HackMD. Long-form on-chain text: [`JUNO_GOVERNANCE_PROPOSAL_BN254.md`](./JUNO_GOVERNANCE_PROPOSAL_BN254.md). Post-#373 synthesis: [`MEDIUM_ARTICLE_AFTER_THE_VOTE.md`](./MEDIUM_ARTICLE_AFTER_THE_VOTE.md).
+> Copy-paste version for Juno Commonwealth, Discord, Telegram, HackMD. Long-form on-chain text: <https://github.com/Dragonmonk111/junoclaw/blob/main/docs/JUNO_GOVERNANCE_PROPOSAL_BN254.md>. Post-#373 synthesis: <https://medium.com/@tj.yamlajatt/hardening-after-a-91-71-yes-on-proposal-373-b46d2939461f>.
 
 ![Hand-painted brass balance — left pan 187,000, right pan 371,486. Oil on panel, Turner + Constable + Ghibli melange.](images/bn254_balance.png)
 
@@ -127,15 +127,15 @@ Typical CosmWasm projects ship at 30–50 % test-to-code; 90 % is unusual, and i
 
 ## Links
 
-- 📄 Long-form on-chain text — [`JUNO_GOVERNANCE_PROPOSAL_BN254.md`](./JUNO_GOVERNANCE_PROPOSAL_BN254.md)
-- 📄 Upstream PR body — [`WASMVM_BN254_PR_DESCRIPTION.md`](./WASMVM_BN254_PR_DESCRIPTION.md)
-- 📄 Post-#373 synthesis — [`MEDIUM_ARTICLE_AFTER_THE_VOTE.md`](./MEDIUM_ARTICLE_AFTER_THE_VOTE.md)
-- 📄 Gas analysis — [`BN254_PRECOMPILE_CASE.md`](./BN254_PRECOMPILE_CASE.md)
-- 📄 Precompile index — [`BN254_PRECOMPILE_INDEX.md`](./BN254_PRECOMPILE_INDEX.md)
-- 🧪 Reference impl — [`wasmvm-fork/`](../wasmvm-fork/)
-- 🧪 Devnet — [`devnet/`](../devnet/)
-- 🏛️ Prop #373 — <https://ping.pub/juno/gov/373> · hackmd <https://hackmd.io/s/HyZu6qv5Zl>
-- 🐙 Source — <https://github.com/Dragonmonk111/junoclaw>
+- � Source repository — <https://github.com/Dragonmonk111/junoclaw>
+- �� Long-form on-chain text — <https://github.com/Dragonmonk111/junoclaw/blob/main/docs/JUNO_GOVERNANCE_PROPOSAL_BN254.md>
+- 📄 Upstream PR body — <https://github.com/Dragonmonk111/junoclaw/blob/main/docs/WASMVM_BN254_PR_DESCRIPTION.md>
+- 📄 Gas analysis — <https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_PRECOMPILE_CASE.md>
+- 📄 Precompile index — <https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_PRECOMPILE_INDEX.md>
+- 🧪 Reference implementation — <https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork>
+- 🧪 Devnet — <https://github.com/Dragonmonk111/junoclaw/tree/main/devnet>
+- ✍️ Post-#373 synthesis (Medium) — <https://medium.com/@tj.yamlajatt/hardening-after-a-91-71-yes-on-proposal-373-b46d2939461f>
+- 🏛️ Prop #373 — <https://ping.pub/juno/gov/373> · HackMD <https://hackmd.io/s/HyZu6qv5Zl>
 
 ## Cosignature *(to be filled on HackMD publish)*
 

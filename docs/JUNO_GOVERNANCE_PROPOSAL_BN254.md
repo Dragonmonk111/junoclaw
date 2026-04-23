@@ -21,8 +21,8 @@ A full reference implementation, a reproducible devnet, and a benchmark demonstr
 
 - Host crate: [`wasmvm-fork/cosmwasm-crypto-bn254/`](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/cosmwasm-crypto-bn254)
 - Upstream patches: [`wasmvm-fork/patches/`](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/patches)
-- Benchmarks: [`docs/BN254_BENCHMARK_RESULTS.md`](./BN254_BENCHMARK_RESULTS.md)
-- Design note: [`docs/BN254_PRECOMPILE_CASE.md`](./BN254_PRECOMPILE_CASE.md)
+- Benchmarks: [`docs/BN254_BENCHMARK_RESULTS.md`](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_RESULTS.md)
+- Design note: [`docs/BN254_PRECOMPILE_CASE.md`](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_PRECOMPILE_CASE.md)
 
 ## The gap
 
@@ -96,7 +96,7 @@ Most CosmWasm contracts audit at 30–50 % test-to-code by LoC. 90 % test-and-do
 
 **Proposal #373** (19–24 March 2026, **91.71 % YES** on **59.56 %** turnout) recognised JunoClaw as Juno ecosystem infrastructure and endorsed the verifiable-agent / Junoswap-revival / validator-sidecar roadmap. **This proposal is the next concrete step on that same roadmap's ZK verification track** — no new funding asked, just a direction signal for the upstream PR.
 
-The live contract suite (`agent-registry`, `task-ledger`, `escrow`, `agent-company`, `junoswap-factory / -pair`, `builder-grant`, `zk-verifier`) went through four tagged iterations — v5, v6.0, v6.1, v7/Tier-1.5 — since #373. Honest breakdown: three real security fixes (v5 supermajority arithmetic, v6 identity hygiene, v6.1 value-flow holes), two self-corrections of v4 overreach (registry wiring, weight-guardrail retraction), one capability expansion (Tier-1-slim constraint vocabulary). **155 / 155** workspace tests green as of 2026-04-20. Details: [`MEDIUM_ARTICLE_AFTER_THE_VOTE.md`](./MEDIUM_ARTICLE_AFTER_THE_VOTE.md).
+The live contract suite (`agent-registry`, `task-ledger`, `escrow`, `agent-company`, `junoswap-factory / -pair`, `builder-grant`, `zk-verifier`) went through four tagged iterations — v5, v6.0, v6.1, v7/Tier-1.5 — since #373. Honest breakdown: three real security fixes (v5 supermajority arithmetic, v6 identity hygiene, v6.1 value-flow holes), two self-corrections of v4 overreach (registry wiring, weight-guardrail retraction), one capability expansion (Tier-1-slim constraint vocabulary). **155 / 155** workspace tests green as of 2026-04-20. Details in the [post-#373 synthesis article on Medium](https://medium.com/@tj.yamlajatt/hardening-after-a-91-71-yes-on-proposal-373-b46d2939461f) (archival copy on [GitHub](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/MEDIUM_ARTICLE_AFTER_THE_VOTE.md)).
 
 ## Deliverables
 
@@ -118,14 +118,15 @@ The live contract suite (`agent-registry`, `task-ledger`, `escrow`, `agent-compa
 
 ## Links
 
-- Upstream PR text — [`WASMVM_BN254_PR_DESCRIPTION.md`](./WASMVM_BN254_PR_DESCRIPTION.md)
-- Gas analysis — [`BN254_PRECOMPILE_CASE.md`](./BN254_PRECOMPILE_CASE.md)
-- Reference implementation — [`wasmvm-fork/`](../wasmvm-fork/)
-- Devnet — [`devnet/`](../devnet/)
-- Benchmark results — [`BN254_BENCHMARK_RESULTS.md`](./BN254_BENCHMARK_RESULTS.md)
-- Post-#373 summary — [`MEDIUM_ARTICLE_AFTER_THE_VOTE.md`](./MEDIUM_ARTICLE_AFTER_THE_VOTE.md)
+- Source repository — <https://github.com/Dragonmonk111/junoclaw>
+- Upstream PR text — <https://github.com/Dragonmonk111/junoclaw/blob/main/docs/WASMVM_BN254_PR_DESCRIPTION.md>
+- Gas analysis — <https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_PRECOMPILE_CASE.md>
+- Benchmark results — <https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_RESULTS.md>
+- Reference implementation — <https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork>
+- Devnet — <https://github.com/Dragonmonk111/junoclaw/tree/main/devnet>
+- Post-#373 synthesis (Medium) — <https://medium.com/@tj.yamlajatt/hardening-after-a-91-71-yes-on-proposal-373-b46d2939461f>
 - Prop #373 on-chain — <https://ping.pub/juno/gov/373>
-- Prop #373 hackmd — <https://hackmd.io/s/HyZu6qv5Zl>
+- Prop #373 HackMD — <https://hackmd.io/s/HyZu6qv5Zl>
 
 ---
 
