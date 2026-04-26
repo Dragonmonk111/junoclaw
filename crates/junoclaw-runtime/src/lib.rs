@@ -64,7 +64,12 @@ impl Runtime {
             sessions: Arc::new(RwLock::new(sessions)),
             tasks: Arc::new(RwLock::new(Vec::new())),
             llm: Arc::new(RwLock::new(llm_registry)),
-            shell: Arc::new(ShellPlugin::new(true)),
+            // sandbox_mode = false: per post-Ffern design, the Cargo `unsafe-shell`
+            // feature is the primary gate. With feature off (default), run_command /
+            // run_python compile to error stubs regardless of this value. With feature
+            // on, sandbox_mode acts as the runtime kill-switch (operator flips to true
+            // at runtime via config to halt execution without a redeploy).
+            shell: Arc::new(ShellPlugin::new(false)),
             pending_approvals: Arc::new(RwLock::new(HashMap::new())),
             data_dir,
         };

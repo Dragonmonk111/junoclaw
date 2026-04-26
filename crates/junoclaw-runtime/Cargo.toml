@@ -4,6 +4,13 @@ version = "0.1.0"
 edition = "2021"
 description = "JunoClaw agent execution runtime"
 
+[features]
+default = []
+# Forwards `unsafe-shell` to plugin-shell. Off by default; enabling adds the
+# shell + Python execution code paths to the binary. See plugin-shell's
+# Cargo.toml and SECURITY.md for the full opt-in semantics.
+unsafe-shell = ["plugin-shell/unsafe-shell"]
+
 [dependencies]
 junoclaw-core = { path = "../junoclaw-core" }
 plugin-llm = { path = "../../plugins/plugin-llm" }

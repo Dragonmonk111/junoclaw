@@ -2,7 +2,16 @@
 name = "plugin-shell"
 version = "0.1.0"
 edition = "2021"
-description = "JunoClaw sandboxed shell execution plugin"
+description = "JunoClaw shell-execution plugin (off-chain, opt-in via `unsafe-shell` feature)"
+
+[features]
+# Default builds contain NO shell or Python execution code. The `unsafe-shell`
+# feature pulls in the unsafe execution paths plus their dependencies.
+# An operator opting into this feature MUST also configure `allowed_commands`
+# (default empty) and accept `sandbox_mode = false` at runtime for any
+# execution to occur. See SECURITY.md and docs/HACKMD_BN254_PROPOSAL.md.
+default = []
+unsafe-shell = ["dep:shell-words", "dep:tempfile"]
 
 [dependencies]
 junoclaw-core = { path = "../../crates/junoclaw-core" }
@@ -12,3 +21,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
+
+# Optional deps — only pulled in when `unsafe-shell` is enabled.
+shell-words = { version = "1.1", optional = true }
+tempfile = { version = "3.10", optional = true }
