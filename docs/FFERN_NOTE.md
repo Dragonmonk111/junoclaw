@@ -13,8 +13,17 @@ Quick note: the audit response landed on `main`.
 
 - `v0.x.y-security-1` — five walls (C-1, C-2, C-3, C-4, H-3), tagged on `main`
 - `v0.x.y-security-2` — first lever (`signing_paused` runtime kill-switch), tagged on `main`
+- `v0.x.y-security-3` — admin RPC + `egress_paused` (loopback levers + hot-flip), tagged on `main`
 
-Full prose in `CHANGELOG.md` and `SECURITY.md` (`Walls` and `Levers` sections). Five GHSAs are drafted locally and *not* on `main` (caveat: detailed exploit narratives, kept off the public tree until you've had a look). I'll add you as a Security Advisory collaborator on the repo — once you accept, the drafts become visible to you privately under the Security tab and you can review/edit/sign off in-place. CVEs auto-mint on publish.
+Full prose in `CHANGELOG.md` and `SECURITY.md` (`Walls` and `Levers` sections). **Five GHSAs are now published on the repo** — minimal text only (titles, severity, CVSS, CWE, affected/patched versions, commit SHAs, pointer back to `CHANGELOG.md` at the security tag). The full exploit narrative is held back deliberately and will appear in a post-audit retrospective (Medium + mirrored to `docs/`). This is a disclosure-hygiene choice: shipping minimal GHSAs gets CVE numbers into the downstream defender ecosystem quickly while holding back attacker-useful narrative against unpatched operators. CVE numbers are being assigned by GitHub's CNA (async — usually minutes to hours; visible on the advisory pages once minted). The five advisories:
+
+- **C-1** `plugin-shell` shell-injection bypass — <https://github.com/Dragonmonk111/junoclaw/security/advisories/GHSA-fvq5-79h6-952c> (CVSS 8.4 high)
+- **C-2** `plugin-shell` shell-metacharacter injection — <https://github.com/Dragonmonk111/junoclaw/security/advisories/GHSA-gpvm-3chf-2649> (CVSS 8.4 high)
+- **C-3** MCP write tools exposed BIP-39 mnemonic — <https://github.com/Dragonmonk111/junoclaw/security/advisories/GHSA-j75q-8xvm-6c48> (CVSS 9.8 critical)
+- **C-4** `upload_wasm` arbitrary filesystem paths — <https://github.com/Dragonmonk111/junoclaw/security/advisories/GHSA-rw59-34hw-pmwp> (CVSS 8.5 high)
+- **H-3** SSRF in WAVS `computeDataVerify` — <https://github.com/Dragonmonk111/junoclaw/security/advisories/GHSA-q545-mvjf-q9pg> (CVSS 8.2 high)
+
+If the minimal text reads wrong on any finding — wrong class label, wrong CWE, wrong vulnerable/patched range, severity off — I can `PATCH` any field on a published advisory at any time. The retrospective will be drafted at our pace; you'll be on the thank-you list there with the option to redact.
 
 **One question that actually matters**: does the response fit the box you had in mind? i.e., did I understand each finding correctly and close it at the right layer, or is anything off — wrong primitive, wrong scope, missing case, weaker than the bug deserves? No rush, whenever you have a moment. If everything fits, a one-line "looks fine" is enough; if anything's off, even a hint at which finding and which direction will let me iterate.
 
