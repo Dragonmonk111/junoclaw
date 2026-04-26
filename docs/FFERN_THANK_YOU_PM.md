@@ -90,9 +90,9 @@ We have chosen disclosure **Track B with explicit Ffern verification before BN25
 When you have a window after the patches land — target: `<DATE — five working days from this message>` — would you do a focused re-audit of:
 
 - `plugins/plugin-shell/src/lib.rs` — full diff against the version you audited.
-- `mcp/src/tools/tx-builder.ts`, `mcp/src/utils/cosmos-client.ts`, `mcp/src/index.ts`, plus the new wallet-registry crate (path TBD, likely `crates/junoclaw-wallet-registry/`).
+- `mcp/src/tools/tx-builder.ts`, `mcp/src/utils/cosmos-client.ts`, `mcp/src/index.ts`, plus the new wallet registry at `mcp/src/wallet/` (TypeScript module: `store.ts`, `crypto.ts`, `key-store.ts`, `keychain-store.ts`, `cli.ts`, and the two test files).
 - `wavs/bridge/src/local-compute.ts` — `computeDataVerify` and any neighbour function that takes a URL.
-- The new prose files: `SECURITY.md`, `NOTICE`, `CONTRIBUTORS.md`, `docs/FFERN_AUDIT_RESPONSE.md`. Pure prose review, but the public-trust framing matters.
+- The new prose files: `SECURITY.md`, `CHANGELOG.md`, `docs/FFERN_THANK_YOU_PM.md` (this message). Pure prose review, but the public-trust framing matters.
 
 Scope is narrow: roughly **600 LoC of changed code plus four small docs**. We expect this is a half-day pass for you, not a re-audit of the full repo. Anything you would flag as still-not-quite-right, even if not strictly a finding, we will treat as blocking on the BN254 submission.
 
@@ -101,8 +101,15 @@ Scope is narrow: roughly **600 LoC of changed code plus four small docs**. We ex
 ## Practicalities
 
 - **Repo:** <https://github.com/Dragonmonk111/junoclaw>
-- **Security release tag:** `v0.x.y-security-1` on `main` at `<MAIN_HEAD_SHA_TO_BE_INSERTED>`. Per the JunoClaw repo's existing workflow, security releases live on `main` and are identified by tag rather than by long-lived release branches. The tag is signed (or annotated, depending on the available key material at tag time).
-- **Per-finding commit SHAs:** I will send the individual commit SHAs in a follow-up once the tag is pushed. The commit history splits cleanly: one commit per finding (C-1/C-2 plugin-shell, C-3 wallet registry, C-4 path-guard, H-3 SSRF guard) plus a docs commit (`SECURITY.md`, `CHANGELOG.md`, audit-response prose) and the `CHANGELOG.md` finalisation.
+- **Security release tag:** `v0.x.y-security-1` on `main` at commit `6b56230bd3cdf3cad2fdc6a3e2172131d59d1551`. Per the JunoClaw repo's existing workflow, security releases live on `main` and are identified by tag rather than by long-lived release branches. The tag is annotated with the release summary; GPG signing can be added retroactively if useful.
+- **Per-finding commit SHAs** (chronological, oldest first; all on `main`):
+  - `2bc54f6` — `security(plugin-shell): C-1/C-2 unsafe-shell Cargo gate + allowlist-only`
+  - `a7886cd` — `security(mcp): C-4 upload_wasm path-guard (allow-root + symlink + size + magic)`
+  - `a168608` — `security(wavs): H-3 computeDataVerify SSRF guard`
+  - `339701e` — `security(mcp): C-3 wallet registry — wallet handles, passphrase + keychain backends`
+  - `7d17fd1` — `docs: SECURITY.md + Ffern audit response + BN254 governance text`
+  - `6b56230` — `chore: CHANGELOG.md for v0.x.y-security-1` (tag points here)
+- **Follow-on release `v0.x.y-security-2`.** Between drafting and sending this message, the first lever from the `-security-1` roadmap also landed on `main` and was tagged: `v0.x.y-security-2` ships the `signing_paused` runtime kill-switch (env-var-armed boolean gate on `WalletStore.signFor()`, raising `SigningPausedError`). Tiny scope: ~50 lines of production code in `mcp/src/wallet/store.ts`, 12 unit tests in `mcp/src/wallet/signing-pause-test.ts` (all passing on Windows), and an on-chain proof on `uni-7` (TX `346CC7FF418019A4FBA68D7847112954E2D8D9ECE3E27B314357408E8AE42B6A` for the disarmed phase; the armed phase produces no TX by design). The originally-bundled admin RPC and `egress_paused` were deliberately split out to `v0.x.y-security-3` because the admin RPC introduces a new network listener in a signing-sensitive process and deserves its own threat-model review window. If a single re-check pass against both tags is convenient for you, please cover both; otherwise treat them independently and the BN254 submission gates only on `-security-1`. Full prose in `CHANGELOG.md` under `[v0.x.y-security-2]`, design rationale in `SECURITY.md` *Levers* section, operator-facing docs in `mcp/README.md` *Runtime kill-switch* section.
 - **Compensation.** The earlier BN254 proposal line was *"$15–25k, 1–2 weeks for an external audit, post-mainnet, via DAO treasury."* After re-reading the realistic scope through your engagement, the proposal's audit-cost section has been revised to **$30–45k, 3–5 weeks**, with separate line items for multi-platform validation, differential-test review, fork-integration, and re-audit. If a Ffern engagement on either the original BN254 audit or this re-check fits your shop's commercial frame, please let me know on what terms — funding is via DAO treasury post-mainnet, per the #373 plan, but that does not preclude bridge funding now.
 - **Public credit.** With your permission the BN254 HackMD names Ffern Institute in two places (the *Audit response* section and the cosignature). If you would prefer the credit deferred until you have signed off on the fixes, I will redact and re-publish; tell me what you want.
 - **PGP / signed messages.** Happy to switch to encrypted comms if you would like; my key fingerprint is `<TO_BE_INSERTED>` and you can find me on `keys.openpgp.org`. Until then this PM is the channel.
