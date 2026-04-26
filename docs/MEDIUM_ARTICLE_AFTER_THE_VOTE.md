@@ -89,6 +89,8 @@ Neither lock is sufficient alone for agents with real-world power:
 
 Sitting on top of both locks, and already live on `uni-7`, is a **third, declarative witness**: the v7 Tier-1.5 constraint vocabulary. Seven enum variants (`AgentTrustAtLeast`, `BalanceAtLeast`, `PairReservesPositive`, `TaskStatusIs`, `TimeAfter`, `BlockHeightAtLeast`, `EscrowObligationConfirmed`) bound *which tasks the agent is even allowed to attempt*. Each is audit-readable at a glance. Each further narrows the trust surface without demanding trust in the operator.
 
+**A fourth, operational witness — added in April 2026 in the wake of an independent operator-side audit by Ffern Institute** — completes the arrangement: **verifiable controllability**. Compile-time Cargo features (`unsafe-shell` today, `unsafe-egress` and `unsafe-fs-write` planned) keep code that should not run out of the binary entirely — the bytes are not present, so they cannot be reached. Runtime kill-switches (`sandbox_mode` today, `signing_paused` and `egress_paused` planned) let a fleet operator pause specific capabilities in seconds, without a redeploy, in response to an incident or community alert. And a planned read-only admin RPC publishes the *current* state of every gate, so any client can verify which capabilities the agent in front of them has armed *before* sending the task. The first three witnesses answer *who ran*, *what was computed*, and *within what bounds it was even allowed to attempt*. The fourth answers *and is the operator still meaningfully in control of the fleet, observably from outside?* For real-world consequential agent work — long-running data pipelines, robotic delivery, client-paying-for-attestation tasks — this is what separates *autonomy* from *abdication*. The Ffern audit is what pointed at the gap; the verifiable-controllability layer is the response, and will be the subject of a separate future Juno governance proposal once the operator-side hardening pass lands.
+
 **Threat model, explicit:**
 
 | Adversary capability | Blocked by |
@@ -96,11 +98,12 @@ Sitting on top of both locks, and already live on `uni-7`, is a **third, declara
 | Compromises operator wallet, not enclave | TEE attestation quote fails to verify |
 | Compromises enclave, cannot produce valid ZK proof | zk-verifier rejects; parent tx reverts atomically |
 | Produces forged attestation + valid ZK proof for an *out-of-policy* task | Tier-1.5 constraint enum rejects at `Running → Completed` |
-| Has real enclave + valid proof + in-vocabulary task | **Behaving within policy by construction — which is the goal** |
+| Compromises an operator-side helper (off-chain RCE, key exfil, SSRF) | Cargo feature flags keep the dangerous code paths out of the binary entirely; runtime kill-switches halt specific capabilities without redeploy; published kill-switch state lets clients refuse to send tasks to an agent whose operator has dropped meaningful control |
+| Has real enclave + valid proof + in-vocabulary task + observably-controlled fleet | **Behaving within policy by construction — which is the goal** |
 
 The whole point of making BN254 a **native precompile** rather than a Wasm library is economic: at 371 486 gas per verify (3.7 % of a block), the ZK lock is too expensive to require on every attestation. At ~187 000, it can run on *every high-value step*, not just the flagship one. **Cheap enough to be mandatory is the security property; "2× faster" is its shadow.**
 
-Agentic safety, in this framing, is not a promise about the agent. It is an arrangement of *witnesses around the agent* — hardware, mathematics, and a narrow grammar of permitted tasks — such that any step the chain acts on has been seen by all three. That arrangement is the thing #373 endorsed the first piece of. Completing it is what this proposal is for.
+Agentic safety, in this framing, is not a promise about the agent. It is an arrangement of *witnesses around the agent* — hardware, mathematics, a narrow grammar of permitted tasks, and an externally-observable operator control plane — such that any step the chain acts on has been seen by all four. #373 endorsed the first piece. This proposal completes the second. The third is already live on `uni-7`. The fourth is the post-Ffern-audit hardening pass and will be the subject of a separate proposal once shipped.
 
 ---
 
