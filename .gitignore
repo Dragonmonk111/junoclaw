@@ -17,6 +17,12 @@ parliament-state.json
 *-secrets.toml
 !secrets-template.toml
 
+# Pre-publication security artefacts — local-only until formal disclosure
+# (caveat 3 from the v0.x.y-security-2 post-release review: draft advisories
+# describe exploit narratives in detail; keep off `main` until GHSAs publish)
+docs/GHSA_DRAFT.md
+docs/GHSA_DRAFT_*.md
+
 # IDE
 .vscode/
 .idea/
