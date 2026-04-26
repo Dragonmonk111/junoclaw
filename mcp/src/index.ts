@@ -17,7 +17,12 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import {
+  AdminRpcHandle,
+  startAdminRpcServer,
+} from "./admin/rpc-server.js";
 import { CHAIN_REGISTRY, listChains, listTestnets, getChain } from "./resources/chains.js";
+import { getDefaultWalletStore } from "./wallet/store.js";
 import { runWalletCli } from "./wallet/cli.js";
 import {
   queryBalance,
@@ -487,6 +492,65 @@ server.prompt(
 );
 
 // ════════════════════════════════════════════════════
+//  ADMIN RPC startup helper (v0.x.y-security-3)
+// ════════════════════════════════════════════════════
+
+/**
+ * Conditionally start the admin RPC listener if both
+ * JUNOCLAW_ADMIN_RPC=1 and JUNOCLAW_ADMIN_TOKEN are set. Returns the
+ * handle on success, or null if the env-var pair is incomplete (the
+ * default — admin RPC is opt-in and off-by-default).
+ *
+ * If JUNOCLAW_ADMIN_RPC=1 is set but the token is missing or shorter
+ * than 32 bytes, this function throws and the caller aborts startup.
+ * Failing loud is intentional: a half-configured admin RPC is worse
+ * than no admin RPC.
+ *
+ * Optional knobs:
+ *   JUNOCLAW_ADMIN_RPC_PORT  — bind port (default 0 = OS-assigned)
+ *   JUNOCLAW_ADMIN_RPC_HOST  — bind host (default 127.0.0.1)
+ */
+async function maybeStartAdminRpc(): Promise<AdminRpcHandle | null> {
+  const enabled = process.env.JUNOCLAW_ADMIN_RPC === "1";
+  if (!enabled) return null;
+
+  const token = process.env.JUNOCLAW_ADMIN_TOKEN ?? "";
+  if (token.length === 0) {
+    throw new Error(
+      "JUNOCLAW_ADMIN_RPC=1 set but JUNOCLAW_ADMIN_TOKEN is empty. " +
+        "Set a ≥32-byte bearer token (e.g. `openssl rand -hex 32`) or unset " +
+        "JUNOCLAW_ADMIN_RPC to disable the admin listener."
+    );
+  }
+
+  const portRaw = process.env.JUNOCLAW_ADMIN_RPC_PORT;
+  const port = portRaw ? Number.parseInt(portRaw, 10) : 0;
+  if (portRaw && (!Number.isFinite(port) || port < 0 || port > 65535)) {
+    throw new Error(
+      `JUNOCLAW_ADMIN_RPC_PORT must be a number 0-65535, got "${portRaw}"`
+    );
+  }
+  const host = process.env.JUNOCLAW_ADMIN_RPC_HOST ?? "127.0.0.1";
+
+  // Reuse the cached default store so the admin RPC sees the same
+  // signing_paused state as signFor().
+  const store = getDefaultWalletStore();
+
+  const handle = await startAdminRpcServer({
+    token,
+    port,
+    host,
+    processName: "mcp",
+    controller: store,
+  });
+  console.error(
+    `[admin-rpc] listening on ${handle.url} (token from JUNOCLAW_ADMIN_TOKEN, ` +
+      `${token.length}-byte; ${process.env.JUNOCLAW_ADMIN_RPC_HOST ? "custom host" : "loopback only"})`
+  );
+  return handle;
+}
+
+// ════════════════════════════════════════════════════
 //  START
 // ════════════════════════════════════════════════════
 
@@ -503,9 +567,34 @@ async function main() {
     }
   }
 
+  // v0.x.y-security-3: optional admin RPC for hot-flipping the
+  // signing_paused kill-switch. Off-by-default; opt in by setting
+  // JUNOCLAW_ADMIN_RPC=1 and JUNOCLAW_ADMIN_TOKEN. Started BEFORE
+  // the MCP transport so a graceful shutdown can close it cleanly.
+  const adminRpc = await maybeStartAdminRpc();
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("🌌 Cosmos MCP server running — serving any chain, signing only by registered wallet_id");
+
+  // Graceful shutdown: close the admin RPC listener on SIGINT/SIGTERM.
+  // The MCP stdio transport is closed automatically on stdin EOF;
+  // the admin RPC needs an explicit close so its in-flight requests
+  // settle and the port releases.
+  if (adminRpc) {
+    const shutdown = async (signal: string): Promise<void> => {
+      console.error(`[admin-rpc] received ${signal}, closing listener`);
+      try {
+        await adminRpc.close();
+        console.error("[admin-rpc] closed");
+      } catch (e) {
+        console.error(`[admin-rpc] close error: ${(e as Error).message}`);
+      }
+      process.exit(0);
+    };
+    process.on("SIGINT", () => void shutdown("SIGINT"));
+    process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  }
 }
 
 main().catch((err) => {

@@ -7,6 +7,213 @@ JunoClaw is pre-`v1.0`; per-component versions (in `mcp/package.json`,
 `wavs/bridge/package.json`, `Cargo.toml` files) move independently of
 project-level security tags such as `v0.x.y-security-1`.
 
+## [v0.x.y-security-3] — 2026-04-26
+
+The remaining runtime levers. Verifiable controllability is now
+operationally complete: hot-flip on both kill-switches, single-curl
+mean-time-to-halt, downstream-pollable policy state. Closes out the
+post-Ffern hardening track that began with `v0.x.y-security-1`.
+
+### Phase breakdown
+
+The release shipped in four primitive commits plus an integration
+commit that wires both admin RPCs into their respective process
+entry points:
+
+- **Phase 3a** (`security(wavs):` 39a163e) — `egress_paused` runtime
+  kill-switch on the WAVS bridge. Mirrors `signing_paused` from
+  `v0.x.y-security-2` but applied to the SSRF-guarded fetcher.
+- **Phase 3b** (`security(mcp):` a644eee) — admin RPC primitive on
+  the MCP side. Localhost-only HTTP listener with bearer-token auth,
+  Host/Origin defenses, rate limit, audit log. Hot-flips
+  `signing_paused`.
+- **Phase 3c** (`security(mcp):` 7dab878) — `GET /policy` read-only
+  roll-up endpoint extending the MCP admin RPC. Lets downstream
+  verifiers and dashboards poll the live kill-switch state.
+- **Phase 3d** (`security(wavs):` b7d50c6) — admin RPC primitive on
+  the WAVS bridge side. Mirrors Phase 3b for hot-flipping
+  `egress_paused`. Headline assertion: in the smoke, the same process
+  that received `POST /egress/pause` then refuses `safeFetch()` with
+  `EgressPausedError`, end-to-end.
+- **Wiring + docs** (this commit) — `mcp/src/index.ts` and
+  `wavs/bridge/src/bridge.ts` start the admin RPC when both
+  `JUNOCLAW_ADMIN_RPC=1` and `JUNOCLAW_ADMIN_TOKEN` are set; SIGINT/
+  SIGTERM handlers close the listener gracefully; `SECURITY.md`
+  *Levers* section retitled with operator runbook; this CHANGELOG
+  entry; `mcp/README.md` admin-RPC subsection.
+
+### Added
+
+#### `egress_paused` kill-switch (Phase 3a)
+
+- `EgressPausedError` — new exported error class from
+  `wavs/bridge/src/utils/ssrf-guard.ts`. Carries the URL that was
+  refused so operators can see in the log exactly what was blocked.
+- `setEgressPaused(paused, source)` / `getEgressPaused()` /
+  `getEgressPausedSource()` — module-level setters and getters with
+  argument validation. `source` is a free-text label logged on
+  every state change.
+- `parseEgressPausedEnv(raw)` — fail-closed parser. Any non-empty
+  value other than `"0"` / `"false"` / `"no"` / `"off"`
+  (case-insensitive) arms the gate. Typos like `"flase"` arm rather
+  than silently fail open.
+- `safeFetch()` checks the gate **first**, before any URL parsing,
+  DNS lookup, or fetch attempt. Refused requests incur zero side
+  effects (verified by an explicit counter-based test).
+- `JUNOCLAW_EGRESS_PAUSED` env var read at module load with a
+  startup warning to stderr when armed.
+- 15 unit tests (`wavs/bridge/src/utils/egress-pause-test.ts`) and a
+  two-phase live smoke against `https://example.com/`
+  (`wavs/bridge/src/egress-pause-smoke.ts`).
+- `npm run egress-pause-test` and `npm run egress-pause-smoke`
+  scripts in `wavs/bridge/package.json`.
+
+#### Admin RPC primitive — MCP side (Phase 3b)
+
+- New file `mcp/src/admin/rpc-server.ts`. Localhost-only HTTP
+  listener (`127.0.0.1` bind enforced; constructor refuses
+  `0.0.0.0` / `::1` / `::`), bearer-token auth (≥32-byte token,
+  constant-time comparison via `crypto.timingSafeEqual`), Host
+  header check, Origin header rejection, in-memory rate limit
+  (default 10 req/60 s — fires before auth check so token-spamming
+  cannot bypass the limit), audit log to stderr that never records
+  the token. Zero new runtime dependencies (Node built-in `http` +
+  `crypto`).
+- Endpoints: `GET /health`, `GET /signing/status`, `POST /signing/pause`,
+  `POST /signing/unpause`. All token-required. `/policy` added in
+  Phase 3c.
+- `SigningPausedController` interface — minimal contract the admin
+  RPC needs from `WalletStore`. `WalletStore` satisfies it natively;
+  tests inject a fake.
+- 31 unit tests + 10-phase live smoke (real loopback HTTP listener
+  on a fresh OS-assigned port).
+- `npm run admin-rpc-test` and `npm run admin-rpc-smoke` scripts in
+  `mcp/package.json`.
+
+#### Read-only `/policy` endpoint (Phase 3c)
+
+- `GET /policy` added to the MCP admin RPC. Returns
+  `{process, version, tag, kill_switches: {signing_paused: {...}}, reported_at}`.
+  Read-only, never mutates state.
+- `processName?` option added to `AdminRpcServerOptions` (default
+  `"mcp"`). Surfaces verbatim in the response so downstream tools
+  can tell which process they're talking to.
+- 5 additional unit tests + 1 additional live smoke phase. Combined
+  MCP test count after Phase 3c: 36 passed, 0 failed.
+
+#### Admin RPC primitive — WAVS bridge side (Phase 3d)
+
+- New file `wavs/bridge/src/admin/rpc-server.ts`. Same threat model,
+  defense layers, and wire format as the MCP admin RPC, with three
+  intentional differences: (a) controls `egress_paused` instead of
+  `signing_paused`; (b) exposes `/egress/{status,pause,unpause}`
+  instead of `/signing/*`; (c) `processName` defaults to
+  `"wavs-bridge"`.
+- `EgressPausedController` interface and `defaultEgressController`
+  adapter that wraps the module-level setters/getters from
+  `ssrf-guard.ts` so the admin RPC and direct `safeFetch()` share
+  state.
+- 36 unit tests + 13-phase live smoke. The smoke's headline
+  assertion (Phases 3, 5, 7) verifies the end-to-end coupling:
+  `safeFetch()` succeeds while disarmed, `POST /egress/pause` flips
+  module state, `safeFetch()` then refuses with `EgressPausedError`
+  in the same process, and `POST /egress/unpause` restores fetch
+  capability.
+
+#### Entry-point wiring (this commit)
+
+- `mcp/src/index.ts` — new `maybeStartAdminRpc()` helper reads the
+  env-var contract, starts the listener, prints the URL to stderr,
+  and registers SIGINT/SIGTERM handlers for graceful close. The
+  wallet store passed to the listener is the cached singleton from
+  `getDefaultWalletStore()`, so `signFor()` and the admin RPC see
+  the same `signing_paused` state.
+- `wavs/bridge/src/bridge.ts` — same helper pattern, with
+  `defaultEgressController` as the controller. Top-level await is
+  used (target ES2022, module ESNext).
+- Both helpers fail loud if `JUNOCLAW_ADMIN_RPC=1` is set but
+  `JUNOCLAW_ADMIN_TOKEN` is empty: a half-configured admin RPC is
+  worse than no admin RPC.
+
+### Env-var contract
+
+| Variable | Process(es) | Required to enable admin RPC | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `JUNOCLAW_ADMIN_RPC` | both | yes (`=1`) | unset (admin RPC off) | Off-by-default master switch. |
+| `JUNOCLAW_ADMIN_TOKEN` | both | yes | unset | ≥32 bytes. Generate with `openssl rand -hex 32`. |
+| `JUNOCLAW_ADMIN_RPC_PORT` | both | no | `0` (OS-assigned) | Bind port. The listener prints the actual URL on stderr at startup. |
+| `JUNOCLAW_ADMIN_RPC_HOST` | both | no | `127.0.0.1` | Only `127.0.0.1` and `localhost` are accepted. |
+| `JUNOCLAW_SIGNING_PAUSED` | mcp | n/a | unset | Startup-time arm of the kill-switch. Independent of the admin RPC. |
+| `JUNOCLAW_EGRESS_PAUSED` | wavs | n/a | unset | Same shape, for the bridge. |
+
+### Test additions
+
+- **MCP side:** `mcp/src/admin/admin-rpc-test.ts` (36 cases) +
+  `mcp/src/admin-rpc-smoke.ts` (11 phases live).
+- **WAVS side:** `wavs/bridge/src/admin/admin-rpc-test.ts` (36 cases) +
+  `wavs/bridge/src/admin-rpc-smoke.ts` (13 phases live, includes
+  end-to-end coupling) + `wavs/bridge/src/utils/egress-pause-test.ts`
+  (15 cases) + `wavs/bridge/src/egress-pause-smoke.ts` (2 phases).
+- Combined v0.x.y-security-3 test surface: **132 unit cases passing**
+  (36 + 36 + 15 + 45 ssrf-guard regression). All five live smokes
+  pass (egress-pause-smoke, signing-pause-smoke, admin-rpc-smoke ×2,
+  ssrf-guard-test as smoke-equivalent).
+
+### Changed
+
+- `SECURITY.md` *Levers* section retitled with the four primitives
+  marked as shipped, and an operator runbook added (token
+  generation, start-up env vars, incident-response curl commands,
+  policy poll, resume after investigation).
+- `SECURITY.md` Roadmap entry for `v0.x.y-security-3` flipped from
+  *planned* to *this release*.
+- `mcp/src/index.ts` `main()` — admin RPC startup hook before
+  `server.connect`, SIGINT/SIGTERM handlers after.
+- `wavs/bridge/src/bridge.ts` — admin RPC startup hook before
+  `runLoop()`, SIGINT/SIGTERM handlers after.
+
+### Security
+
+The admin RPC introduces a **new network listener** in two
+signing-sensitive processes. The listener is hardened against the
+threats it could plausibly face on a single-operator deployment:
+
+- **Local malicious process under the same user** — bearer token,
+  ≥32 bytes, constant-time comparison, never logged.
+- **Other users on the same multi-tenant box** — bind to
+  `127.0.0.1` only; non-loopback hosts are rejected at constructor
+  time.
+- **Browser DNS-rebinding** — `Host:` header check against the
+  bound socket; any `Origin:` header is rejected with 400.
+- **Token brute-force** — in-memory rate limit (10 req/60 s by
+  default), fires before the auth check.
+- **Secrets in audit log** — token never appears in any
+  `AuditEntry` field; verified by a test that JSON-stringifies the
+  entry list and asserts the token does not appear.
+- **Off-by-default** — both `JUNOCLAW_ADMIN_RPC=1` and
+  `JUNOCLAW_ADMIN_TOKEN` must be set; missing token while
+  `JUNOCLAW_ADMIN_RPC=1` causes startup failure.
+
+The admin RPC has no privileged operations beyond hot-flipping
+kill-switches that an operator could already flip via env-var +
+restart in `v0.x.y-security-2`. The new attack surface buys
+mean-time-to-halt at roughly 0 seconds in exchange for one extra
+local listener; the threat-model trade-off is documented in the
+Phase 3b commit message.
+
+The five Ffern findings closed in `v0.x.y-security-1` remain scoped
+to that release. This release is **preventive hardening, not
+CVE-bearing**.
+
+### Roadmap
+
+- **`v0.x.y-security-4+`** — chain-layer integration: `x/authz`
+  delegations bound to `wallet_id` so a compromised MCP can only
+  drain delegated message types within chain-enforced expiry. See
+  the *Phase 3 roadmap* section in `SECURITY.md` for scope.
+
+---
+
 ## [v0.x.y-security-2] — 2026-04-26
 
 The `signing_paused` runtime kill-switch. The first lever to complement

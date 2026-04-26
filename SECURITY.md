@@ -51,10 +51,63 @@ Lock 4 is split into two complementary kinds of primitive: **walls** that preven
 
 ### Levers
 
-- **`signing_paused` runtime kill-switch — shipped in `v0.x.y-security-2`.** Boolean gate on `WalletStore.signFor()`. When armed, the gate refuses with a specific `SigningPausedError` while query tools, `wallet list`, and `verifyAddress` keep working. Armed via the `JUNOCLAW_SIGNING_PAUSED` env var at process start (canonical value `1`); fail-closed on any non-empty, non-`0` value. Mean-time-to-halt for `v0.x.y-security-2` is process-supervisor restart (5–30 s); hot-flip arrives with the admin RPC in `v0.x.y-security-3`.
-- **`egress_paused` runtime kill-switch — planned for `v0.x.y-security-3`.** The same pattern applied to the SSRF-guarded fetcher in the WAVS bridge.
-- **Published policy-state admin RPC — planned for `v0.x.y-security-3`.** Read-only RPC exposing the live values of every kill-switch + allowlist. Lets a downstream client (a delegator, a counterparty, a verifier) confirm operator intent before sending a task. This is the load-bearing part of *verifiable* in *verifiable controllability*. Deliberately deferred to its own release because it introduces a new network listener in a signing-sensitive process and therefore deserves its own threat-model review and Ffern re-check.
-- **Admin-RPC hot-reload — planned for `v0.x.y-security-3`.** Replaces env-var-only flipping with an admin call so kill-switches can be flipped without restarting the process. For high-value deployments in the `v0.x.y-security-2` window, the documented incident-response procedure is `JUNOCLAW_SIGNING_PAUSED=1` + process-supervisor restart (systemd / PM2 / NSSM / launchd), which also leaves a clean OS-level forensic trail.
+- **`signing_paused` runtime kill-switch — shipped in `v0.x.y-security-2`, hot-flip added in `v0.x.y-security-3`.** Boolean gate on `WalletStore.signFor()`. When armed, the gate refuses with a specific `SigningPausedError` while query tools, `wallet list`, and `verifyAddress` keep working. Armed via the `JUNOCLAW_SIGNING_PAUSED` env var at process start (canonical value `1`); fail-closed on any non-empty, non-`0` value. Mean-time-to-halt drops from process-supervisor restart (5–30 s) to a single localhost `curl` command after the admin RPC is wired in `v0.x.y-security-3`.
+- **`egress_paused` runtime kill-switch — shipped in `v0.x.y-security-3` (Phase 3a).** The same pattern applied to the SSRF-guarded fetcher in the WAVS bridge. When armed, every `safeFetch()` call throws `EgressPausedError` at the very top of the function — no DNS lookup, no fetch, no side effects. Armed via `JUNOCLAW_EGRESS_PAUSED` at startup (fail-closed parsing) or via `setEgressPaused(true|false, source)` at runtime. Hot-flip available via the WAVS-side admin RPC (Phase 3d). See `wavs/bridge/src/utils/ssrf-guard.ts`.
+- **Published policy-state admin RPC — shipped in `v0.x.y-security-3` (Phase 3c).** Read-only `GET /policy` endpoint on the localhost admin listener exposing the live values of every kill-switch this process owns. Lets a downstream client (a delegator, a counterparty, a verifier) confirm operator intent before sending a task. This is the load-bearing part of *verifiable* in *verifiable controllability*. The MCP side reports `signing_paused`; the WAVS-bridge side reports `egress_paused`; downstream tools poll both endpoints to assemble the cross-process picture.
+- **Admin-RPC hot-reload — shipped in `v0.x.y-security-3` (Phases 3b & 3d).** Localhost-only HTTP listener (binds to `127.0.0.1` only; constructor refuses `0.0.0.0` / `::1` / `::`), bearer-token auth (≥32-byte token, constant-time comparison via `crypto.timingSafeEqual`), Host-header check + Origin-header rejection (DNS-rebinding defense), in-memory rate limit (10 req/60 s, fires before auth), audit log to stderr that never records the token. Off-by-default; opt in by setting `JUNOCLAW_ADMIN_RPC=1` AND `JUNOCLAW_ADMIN_TOKEN=<≥32-byte-token>`. Zero new runtime dependencies (Node built-in `http` + `crypto`). MCP listener at `mcp/src/admin/rpc-server.ts` exposes `/health`, `/policy`, `/signing/{status,pause,unpause}`. WAVS-bridge listener at `wavs/bridge/src/admin/rpc-server.ts` exposes `/health`, `/policy`, `/egress/{status,pause,unpause}`. Both wired into their respective entry points (`mcp/src/index.ts`, `wavs/bridge/src/bridge.ts`) with SIGINT/SIGTERM graceful shutdown.
+
+#### Operator runbook (post-`v0.x.y-security-3`)
+
+Generate a 32-byte hex token once per deployment and put it in your secrets manager:
+
+```bash
+openssl rand -hex 32
+```
+
+Start the MCP / bridge with the admin RPC enabled:
+
+```bash
+export JUNOCLAW_ADMIN_RPC=1
+export JUNOCLAW_ADMIN_TOKEN=<token>
+export JUNOCLAW_ADMIN_RPC_PORT=51731   # optional; default 0 = OS-assigned
+# the MCP / bridge prints the listener URL on stderr at startup
+```
+
+During an incident, halt signing:
+
+```bash
+curl -X POST -H "Authorization: Bearer $JUNOCLAW_ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"source":"incident-2026-04-26"}' \
+     http://127.0.0.1:51731/signing/pause
+```
+
+Halt outbound HTTP from the bridge:
+
+```bash
+curl -X POST -H "Authorization: Bearer $JUNOCLAW_ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"source":"incident-2026-04-26"}' \
+     http://127.0.0.1:<bridge-port>/egress/pause
+```
+
+Poll policy state from a separate verifier or dashboard:
+
+```bash
+curl -H "Authorization: Bearer $JUNOCLAW_ADMIN_TOKEN" \
+     http://127.0.0.1:51731/policy
+```
+
+Resume after investigation:
+
+```bash
+curl -X POST -H "Authorization: Bearer $JUNOCLAW_ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"source":"incident-2026-04-26-resolved"}' \
+     http://127.0.0.1:51731/signing/unpause
+```
+
+For deployments that prefer the env-var path — unset the env var and bounce the process via systemd / PM2 / NSSM / launchd. The kill-switches respect both control surfaces, and the OS supervisor leaves a clean forensic trail.
 
 ## Chain-layer adjacency — blast-radius primitives (Phase 3 roadmap)
 
@@ -69,7 +122,7 @@ The chain layer **does** offer adjacent primitives that limit *blast radius* onc
 
 These are *complementary*, not substitutes, for the off-chain primitives shipped in `v0.x.y-security-1`. They bound damage *after* a compromise; the off-chain primitives prevent the compromise itself.
 
-**Phase 3** integrates `x/authz` into the wallet registry: each `wallet_id` becomes an authz delegation from a separate cold key the MCP process never touches. A compromised MCP process can drain only the authz-delegated message types within the chain-enforced expiry, not the cold key. This is the natural Lock 4 primitive at the chain layer; it composes with the off-chain primitives shipped in `v0.x.y-security-1` and the runtime levers planned for `v0.x.y-security-2`. Scope and interface are sketched in the `v0.x.y-security-3+` roadmap entry below; full design lands as a separate proposal once `v0.x.y-security-2` is tagged.
+**Phase 3** integrates `x/authz` into the wallet registry: each `wallet_id` becomes an authz delegation from a separate cold key the MCP process never touches. A compromised MCP process can drain only the authz-delegated message types within the chain-enforced expiry, not the cold key. This is the natural Lock 4 primitive at the chain layer; it composes with the off-chain primitives shipped in `v0.x.y-security-1`, the `signing_paused` lever shipped in `v0.x.y-security-2`, and the admin-RPC + `egress_paused` levers shipped in `v0.x.y-security-3`. Scope and interface are sketched in the `v0.x.y-security-4+` roadmap entry below; full design lands as a separate proposal.
 
 ## Recommended deployment-time isolation
 
@@ -90,7 +143,7 @@ If you compile with `--features unsafe-shell` and run *without* an external sand
 
 - **`v0.x.y-security-1` (this release)** — closes the four critical and one high-severity Ffern findings: `unsafe-shell` Cargo gate (C-1/C-2), wallet handle registry with passphrase + keychain backends (C-3), `upload_wasm` path guard (C-4), `computeDataVerify` SSRF guard (H-3); plus the startup-only `sandbox_mode` kill-switch on `plugin-shell`. The five walls of Lock 4.
 - **`v0.x.y-security-2` (next)** — `signing_paused` runtime kill-switch: env-var-armed boolean gate on `WalletStore.signFor()`, raising `SigningPausedError`. Shipped alone rather than bundled with the admin RPC because the admin RPC introduces a new network listener in a signing-sensitive process and deserves a dedicated review window. See the *Levers* section above.
-- **`v0.x.y-security-3`** — the remaining runtime levers: `egress_paused` on the WAVS SSRF-guarded fetcher, the published policy-state admin RPC (localhost-only, token-gated, off-by-default, no third-party deps, constant-time token comparison, rate-limited, audit-logged), and admin-RPC hot-reload of all kill-switches. Verifiable controllability becomes operationally complete.
+- **`v0.x.y-security-3` (this release)** — the remaining runtime levers: `egress_paused` on the WAVS SSRF-guarded fetcher (Phase 3a), the localhost-only token-gated admin RPC on both processes (Phases 3b for MCP, 3d for WAVS bridge — zero third-party deps, constant-time token comparison, rate-limited, audit-logged, DNS-rebinding-resistant), and the read-only `/policy` roll-up endpoint (Phase 3c). Verifiable controllability is operationally complete: hot-flip on both kill-switches, single-curl mean-time-to-halt, downstream-pollable policy state. See the *Levers* section for the operator runbook.
 - **`v0.x.y-security-4+` (chain-layer integration)** — `x/authz` integration as a Phase 3 chain-layer Lock 4 primitive: wallet handles bind to authz delegations from a separate cold key the MCP process never touches. Composes with the off-chain primitives in `-security-1`, `-security-2`, and `-security-3`. Full design as a separate proposal.
 - **Pre-mainnet** — third-party audit of the BN254 precompile crate per `docs/HACKMD_BN254_PROPOSAL.md` revised cost envelope ($30–45k, 3–5 weeks). Re-audit by Ffern of the operator-side fixes is the explicit gate on the upstream CosmWasm PR step.
 - **Post-mainnet** — annual external audit cadence funded via DAO treasury; rolling fuzzing and differential-testing in CI.

@@ -22,6 +22,11 @@
 
 import { config, validateConfig } from "./config.js";
 import { submitAttestation, submitRandomness } from "./client.js";
+import {
+  AdminRpcHandle,
+  defaultEgressController,
+  startAdminRpcServer,
+} from "./admin/rpc-server.js";
 
 interface WavsResult {
   workflow_id: string;
@@ -244,8 +249,92 @@ async function runLoop(): Promise<void> {
   }
 }
 
+// ══════════════════════════════════════════════════
+//  ADMIN RPC startup helper (v0.x.y-security-3 Phase 3d)
+// ══════════════════════════════════════════════════
+
+/**
+ * Conditionally start the WAVS-side admin RPC if both
+ * JUNOCLAW_ADMIN_RPC=1 and JUNOCLAW_ADMIN_TOKEN are set. Mirrors the
+ * MCP-side helper (mcp/src/index.ts) so both processes follow the
+ * same env-var contract.
+ *
+ * Off-by-default. If JUNOCLAW_ADMIN_RPC=1 is set but the token is
+ * missing or too short, this function throws and the bridge aborts
+ * startup -- fail-loud rather than start a half-configured listener.
+ *
+ * Optional knobs:
+ *   JUNOCLAW_ADMIN_RPC_PORT  -- bind port (default 0 = OS-assigned)
+ *   JUNOCLAW_ADMIN_RPC_HOST  -- bind host (default 127.0.0.1)
+ */
+async function maybeStartAdminRpc(): Promise<AdminRpcHandle | null> {
+  const enabled = process.env.JUNOCLAW_ADMIN_RPC === "1";
+  if (!enabled) return null;
+
+  const token = process.env.JUNOCLAW_ADMIN_TOKEN ?? "";
+  if (token.length === 0) {
+    throw new Error(
+      "JUNOCLAW_ADMIN_RPC=1 set but JUNOCLAW_ADMIN_TOKEN is empty. " +
+        "Set a >=32-byte bearer token (e.g. `openssl rand -hex 32`) or unset " +
+        "JUNOCLAW_ADMIN_RPC to disable the admin listener."
+    );
+  }
+
+  const portRaw = process.env.JUNOCLAW_ADMIN_RPC_PORT;
+  const port = portRaw ? Number.parseInt(portRaw, 10) : 0;
+  if (portRaw && (!Number.isFinite(port) || port < 0 || port > 65535)) {
+    throw new Error(
+      `JUNOCLAW_ADMIN_RPC_PORT must be a number 0-65535, got "${portRaw}"`
+    );
+  }
+  const host = process.env.JUNOCLAW_ADMIN_RPC_HOST ?? "127.0.0.1";
+
+  const handle = await startAdminRpcServer({
+    token,
+    port,
+    host,
+    processName: "wavs-bridge",
+    controller: defaultEgressController,
+  });
+  console.error(
+    `[admin-rpc] listening on ${handle.url} (token from JUNOCLAW_ADMIN_TOKEN, ` +
+      `${token.length}-byte; ${process.env.JUNOCLAW_ADMIN_RPC_HOST ? "custom host" : "loopback only"})`
+  );
+  return handle;
+}
+
 // Main
 validateConfig();
+
+// v0.x.y-security-3 Phase 3d: optional admin RPC for hot-flipping
+// the egress_paused kill-switch in this same process. The listener
+// is started before runLoop() so a SIGINT during normal operation
+// closes it cleanly before the daemon exits. Top-level await is
+// supported here (target ES2022, module ESNext).
+let adminRpcHandle: AdminRpcHandle | null;
+try {
+  adminRpcHandle = await maybeStartAdminRpc();
+} catch (e) {
+  console.error(`[bridge] admin RPC startup failed: ${(e as Error).message}`);
+  process.exit(1);
+}
+
+if (adminRpcHandle !== null) {
+  const handle: AdminRpcHandle = adminRpcHandle;
+  const shutdown = async (signal: string): Promise<void> => {
+    console.error(`[admin-rpc] received ${signal}, closing listener`);
+    try {
+      await handle.close();
+      console.error("[admin-rpc] closed");
+    } catch (e) {
+      console.error(`[admin-rpc] close error: ${(e as Error).message}`);
+    }
+    process.exit(0);
+  };
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+}
+
 runLoop().catch((err) => {
   console.error("[bridge] Fatal:", err.message || err);
   process.exit(1);

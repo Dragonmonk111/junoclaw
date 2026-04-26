@@ -421,10 +421,10 @@ At startup the MCP logs the kill-switch state and its source:
 - All query tools (`query_balance`, `query_contract`, `list_chains`, etc.) continue to work.
 - `cosmos-mcp wallet add | list | rm` and `WalletStore.verifyAddress()` continue to work (registry management is signing-independent).
 
-**Incident-response procedure (v0.x.y-security-2 window):**
+**Incident-response procedure (env-var path; available since `v0.x.y-security-2`):**
 
 1. `export JUNOCLAW_SIGNING_PAUSED=1` in the supervisor environment (systemd `Environment=`, PM2 `env:`, NSSM `AppEnvironmentExtra`, launchd `EnvironmentVariables`).
-2. Restart the MCP process via the supervisor. Process-supervisor restart (5–30 s) is the mean-time-to-halt ceiling in `v0.x.y-security-2`; the admin RPC planned for `v0.x.y-security-3` drops it to ~200 ms.
+2. Restart the MCP process via the supervisor. Process-supervisor restart (5–30 s) is the env-var-only mean-time-to-halt; the admin RPC shipped in `v0.x.y-security-3` drops it to ~200 ms (one localhost `curl`).
 3. Confirm the startup log line shows `source: env:JUNOCLAW_SIGNING_PAUSED`.
 4. Investigate; rotate keys if mnemonic exposure is suspected.
 5. Unset the env var and restart to resume.
@@ -437,6 +437,99 @@ npm run signing-pause-smoke     # two-phase on-chain proof on uni-7 (arm → ref
 ```
 
 The smoke reuses the `signing-smoke-uni7` wallet enrolled by `npm run smoke` and exercises the gate in the exact same `sendTokens → tx-builder → WalletStore.signFor` code path as a real production write.
+
+### Admin RPC (`v0.x.y-security-3`)
+
+Shipped in `v0.x.y-security-3` to drop mean-time-to-halt from process-restart (5–30 s) to a single localhost `curl` (~200 ms). The admin RPC is a **localhost-only HTTP listener** with bearer-token auth, Host-header check, Origin-rejection, in-memory rate limit, and audit log to stderr. Off-by-default. Zero new runtime dependencies.
+
+**Enable at startup (off-by-default):**
+
+```bash
+# Generate a 32-byte hex token once per deployment; store in your secrets manager.
+TOKEN=$(openssl rand -hex 32)
+
+export JUNOCLAW_ADMIN_RPC=1
+export JUNOCLAW_ADMIN_TOKEN=$TOKEN
+export JUNOCLAW_ADMIN_RPC_PORT=51731   # optional; default 0 = OS-assigned
+cosmos-mcp                              # the listener URL is printed on stderr
+```
+
+PowerShell:
+
+```powershell
+$env:JUNOCLAW_ADMIN_RPC = "1"
+$env:JUNOCLAW_ADMIN_TOKEN = "<32-byte-hex>"
+$env:JUNOCLAW_ADMIN_RPC_PORT = "51731"
+cosmos-mcp
+```
+
+If `JUNOCLAW_ADMIN_RPC=1` is set but `JUNOCLAW_ADMIN_TOKEN` is empty or missing, startup fails loudly. A half-configured admin RPC is worse than no admin RPC.
+
+**Endpoints (all token-required):**
+
+| Method | Path | Body | Returns |
+| --- | --- | --- | --- |
+| GET | `/health` | — | `{ok, version, tag}` |
+| GET | `/policy` | — | `{process, version, kill_switches: {signing_paused: {...}}, reported_at}` |
+| GET | `/signing/status` | — | `{paused, source}` |
+| POST | `/signing/pause` | `{source: string}` | `{paused: true, source}` |
+| POST | `/signing/unpause` | `{source: string}` | `{paused: false, source}` |
+
+**Operator runbook:**
+
+```bash
+# Halt signing during an incident:
+curl -X POST -H "Authorization: Bearer $JUNOCLAW_ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"source":"incident-2026-04-26"}' \
+     http://127.0.0.1:51731/signing/pause
+
+# Confirm state:
+curl -H "Authorization: Bearer $JUNOCLAW_ADMIN_TOKEN" \
+     http://127.0.0.1:51731/signing/status
+
+# Poll the policy roll-up from a separate verifier:
+curl -H "Authorization: Bearer $JUNOCLAW_ADMIN_TOKEN" \
+     http://127.0.0.1:51731/policy
+
+# Resume after investigation:
+curl -X POST -H "Authorization: Bearer $JUNOCLAW_ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"source":"incident-2026-04-26-resolved"}' \
+     http://127.0.0.1:51731/signing/unpause
+```
+
+The audit log on stderr records every request:
+
+```
+[admin-rpc] {"ts":"2026-04-26T21:33:53.244Z","method":"GET","path":"/health","status":200,"outcome":"ok"}
+[admin-rpc] {"ts":"2026-04-26T21:33:53.264Z","method":"POST","path":"/signing/pause","status":200,"outcome":"ok","source":"incident-2026-04-26","message":"paused=true source=incident-2026-04-26"}
+```
+
+Pipe stderr to a file for forensics: `cosmos-mcp 2>>/var/log/cosmos-mcp.log`.
+
+**Defenses (in evaluation order):**
+
+1. **Host header check** — must equal `127.0.0.1:<port>` or `localhost:<port>`. Defends against DNS rebinding.
+2. **Origin rejection** — any non-empty `Origin:` header (browsers always set it) is rejected with 400.
+3. **Rate limit** — default 10 req/60 s, fires *before* auth so token-spamming cannot bypass the limit. Returns 429 with `Retry-After`.
+4. **Bearer token** — constant-time comparison via `crypto.timingSafeEqual`; tokens shorter than 32 bytes are rejected at constructor time.
+5. **Body size cap** — 64 KiB; oversized bodies destroy the stream.
+6. **Schema check** — body.source must be a non-empty string ≤256 chars.
+7. **Route dispatch** — unknown path → 404; wrong method on known path → 405 with `Allow:`.
+
+The token never appears in any audit-log field (verified by an explicit test).
+
+**SIGINT/SIGTERM** close the listener gracefully and release the port before process exit.
+
+**Tests:**
+
+```bash
+npm run admin-rpc-test          # 36 unit tests (constructor validation, all endpoints, every defense layer)
+npm run admin-rpc-smoke         # 11-phase live smoke against a real loopback HTTP listener
+```
+
+The same admin RPC primitive is wired on the WAVS-bridge side under `wavs/bridge/src/admin/rpc-server.ts` to hot-flip the `egress_paused` kill-switch via `/egress/{status,pause,unpause}`. Both processes report their kill-switch state under a unified `/policy` schema; downstream verifiers poll both endpoints to assemble the full picture.
 
 **Reporting:** see [`SECURITY.md`](../SECURITY.md) at the repo root.
 
