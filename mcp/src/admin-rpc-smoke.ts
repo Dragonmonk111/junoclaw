@@ -68,6 +68,7 @@ async function main(): Promise<void> {
   log("Equivalent operator curl commands (copy with the token if you re-run):");
   log("");
   log(`  curl -H 'Authorization: Bearer <TOKEN>' ${handle.url}/health`);
+  log(`  curl -H 'Authorization: Bearer <TOKEN>' ${handle.url}/policy`);
   log(`  curl -H 'Authorization: Bearer <TOKEN>' ${handle.url}/signing/status`);
   log(
     `  curl -X POST -H 'Authorization: Bearer <TOKEN>' -H 'Content-Type: application/json' ` +
@@ -162,9 +163,33 @@ async function main(): Promise<void> {
     }
 
     // ──────────────────────────────────────────────
-    // 6. Auth defense: missing token -> 401
+    // 6. /policy roll-up (Phase 3c)
     // ──────────────────────────────────────────────
-    log("Phase 6: GET /health without token (expect 401)");
+    log("Phase 6: GET /policy (expect process='mcp', signing_paused=false)");
+    {
+      const r = await fetch(`${handle.url}/policy`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (r.status !== 200) fail(`/policy expected 200, got ${r.status}`);
+      const body = (await r.json()) as {
+        process: string;
+        version: string;
+        kill_switches: { signing_paused: { paused: boolean; source: string | null } };
+        reported_at: string;
+      };
+      if (body.process !== "mcp") fail(`expected process='mcp', got ${body.process}`);
+      if (body.kill_switches.signing_paused.paused !== false) {
+        fail(`expected signing_paused.paused=false, got ${body.kill_switches.signing_paused.paused}`);
+      }
+      log(`  -> process=${body.process} version=${body.version}`);
+      log(`     kill_switches.signing_paused = ${JSON.stringify(body.kill_switches.signing_paused)}`);
+      log(`     reported_at = ${body.reported_at}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // 7. Auth defense: missing token -> 401
+    // ──────────────────────────────────────────────
+    log("Phase 7: GET /health without token (expect 401)");
     {
       const r = await fetch(`${handle.url}/health`);
       if (r.status !== 401) fail(`expected 401, got ${r.status}`);
@@ -172,9 +197,9 @@ async function main(): Promise<void> {
     }
 
     // ──────────────────────────────────────────────
-    // 7. Auth defense: wrong token -> 401
+    // 8. Auth defense: wrong token -> 401
     // ──────────────────────────────────────────────
-    log("Phase 7: GET /health with wrong token (expect 401)");
+    log("Phase 8: GET /health with wrong token (expect 401)");
     {
       const r = await fetch(`${handle.url}/health`, {
         headers: { authorization: `Bearer ${"x".repeat(64)}` },
@@ -184,9 +209,9 @@ async function main(): Promise<void> {
     }
 
     // ──────────────────────────────────────────────
-    // 8. Routing defense: unknown path -> 404
+    // 9. Routing defense: unknown path -> 404
     // ──────────────────────────────────────────────
-    log("Phase 8: GET /unknown (expect 404)");
+    log("Phase 9: GET /unknown (expect 404)");
     {
       const r = await fetch(`${handle.url}/unknown`, {
         headers: { authorization: `Bearer ${token}` },
@@ -196,9 +221,9 @@ async function main(): Promise<void> {
     }
 
     // ──────────────────────────────────────────────
-    // 9. Routing defense: wrong method -> 405
+    // 10. Routing defense: wrong method -> 405
     // ──────────────────────────────────────────────
-    log("Phase 9: POST /signing/status (expect 405)");
+    log("Phase 10: POST /signing/status (expect 405)");
     {
       const r = await fetch(`${handle.url}/signing/status`, {
         method: "POST",
@@ -209,9 +234,9 @@ async function main(): Promise<void> {
     }
 
     // ──────────────────────────────────────────────
-    // 10. Origin defense: browser-like Origin header -> 400
+    // 11. Origin defense: browser-like Origin header -> 400
     // ──────────────────────────────────────────────
-    log("Phase 10: GET /health with Origin header (expect 400)");
+    log("Phase 11: GET /health with Origin header (expect 400)");
     {
       const r = await fetch(`${handle.url}/health`, {
         headers: {
@@ -228,6 +253,7 @@ async function main(): Promise<void> {
     log("");
     log("Verified end-to-end against a real loopback HTTP listener:");
     log("  * /health, /signing/status, /signing/pause, /signing/unpause all OK");
+    log("  * /policy returns the read-only kill-switch roll-up (Phase 3c)");
     log("  * 401 on missing or wrong bearer token");
     log("  * 400 on browser-style Origin header (DNS-rebinding defense)");
     log("  * 404 / 405 on unknown path / wrong method");

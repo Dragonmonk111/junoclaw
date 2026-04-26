@@ -46,13 +46,16 @@
  * the server with a token shorter than 32 bytes throws.
  *
  * Endpoints (token required on all):
- *   GET  /health              -> { ok: true, version }
+ *   GET  /health              -> { ok: true, version, tag }
+ *   GET  /policy              -> { process, version, kill_switches, reported_at }
+ *                                Read-only roll-up of every kill-switch this
+ *                                process owns. Downstream verifiers and ops
+ *                                dashboards poll this; it never mutates state.
  *   GET  /signing/status      -> { paused: boolean, source: string|null }
  *   POST /signing/pause       -> { paused: true,  source: string }   body: { source: string }
  *   POST /signing/unpause     -> { paused: false, source: string }   body: { source: string }
  *
- * Future endpoints (Phase 3c, 3d):
- *   GET  /policy              — full kill-switch state across modules (planned 3c)
+ * Future endpoints (Phase 3d):
  *   POST /egress/pause        — bridge-side egress kill-switch hot-flip (planned 3d)
  */
 
@@ -98,6 +101,12 @@ export interface AdminRpcServerOptions {
   port?: number;
   /** Bind host. Default "127.0.0.1". Reject anything else. */
   host?: string;
+  /**
+   * Identifier for this process surface. Surfaces verbatim in the
+   * GET /policy response so downstream tools can tell which process
+   * they are talking to. Default "mcp".
+   */
+  processName?: string;
   /** Max requests per window. Default 10. */
   rateLimitMax?: number;
   /** Window duration in ms. Default 60000. */
@@ -251,6 +260,7 @@ export async function startAdminRpcServer(
 
   const host = opts.host ?? "127.0.0.1";
   const port = opts.port ?? 0;
+  const processName = opts.processName ?? "mcp";
   const audit = opts.auditLog ?? defaultAudit;
   const rateLimit = new RateLimiter(
     opts.rateLimitMax ?? DEFAULT_RATE_LIMIT_MAX,
@@ -354,6 +364,29 @@ export async function startAdminRpcServer(
         return;
       }
 
+      if (method === "GET" && path === "/policy") {
+        // Phase 3c: read-only roll-up of every kill-switch owned by
+        // this process. The MCP side reports signing_paused; the
+        // WAVS bridge side reports egress_paused. Downstream tools
+        // hit both endpoints to assemble the cross-process picture.
+        const signing = opts.controller.getSigningPaused();
+        const policy = {
+          process: processName,
+          version: VERSION,
+          tag: ADMIN_RPC_VERSION_TAG,
+          kill_switches: {
+            signing_paused: {
+              paused: signing.paused,
+              source: signing.source,
+            },
+          },
+          reported_at: nowIso(),
+        };
+        log(200, "ok", `policy reported (signing_paused=${signing.paused})`);
+        jsonResponse(res, 200, policy);
+        return;
+      }
+
       if (method === "POST" && path === "/signing/pause") {
         let body: unknown;
         try {
@@ -416,9 +449,11 @@ export async function startAdminRpcServer(
 
       // Unknown route.
       // Distinguish wrong-method on a known path from wrong-path.
-      const knownPaths = ["/health", "/signing/status", "/signing/pause", "/signing/unpause"];
+      const knownPaths = ["/health", "/policy", "/signing/status", "/signing/pause", "/signing/unpause"];
       if (knownPaths.includes(path)) {
-        res.setHeader("Allow", path === "/health" || path === "/signing/status" ? "GET" : "POST");
+        const isGetPath =
+          path === "/health" || path === "/policy" || path === "/signing/status";
+        res.setHeader("Allow", isGetPath ? "GET" : "POST");
         log(405, "method_not_allowed", `${method} ${path}`);
         errorResponse(res, 405, "ERR_METHOD_NOT_ALLOWED", `${method} not allowed on ${path}`);
         return;

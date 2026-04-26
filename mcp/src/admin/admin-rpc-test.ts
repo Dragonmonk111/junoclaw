@@ -443,6 +443,106 @@ async function runTests(): Promise<void> {
     }
   });
 
+  // --- Endpoint: /policy (Phase 3c) ---
+
+  await test("/policy: returns roll-up with process='mcp' default", async () => {
+    const { handle } = await startServer();
+    try {
+      const r = await jsonFetch(`${handle.url}/policy`, {
+        headers: { authorization: `Bearer ${TOKEN_OK}` },
+      });
+      assertEqual(r.status, 200, "status");
+      const body = r.json as {
+        process: string;
+        version: string;
+        tag: string;
+        kill_switches: { signing_paused: { paused: boolean; source: string | null } };
+        reported_at: string;
+      };
+      assertEqual(body.process, "mcp", "process default");
+      assertTrue(typeof body.version === "string", "version string");
+      assertTrue(typeof body.tag === "string", "tag string");
+      assertEqual(body.kill_switches.signing_paused.paused, false, "signing_paused initial");
+      assertEqual(body.kill_switches.signing_paused.source, null, "source initial null");
+      // ISO timestamp format check
+      assertTrue(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(body.reported_at),
+        "reported_at is ISO"
+      );
+    } finally {
+      await handle.close();
+    }
+  });
+
+  await test("/policy: respects custom processName option", async () => {
+    const { handle } = await startServer({ processName: "wavs-bridge" });
+    try {
+      const r = await jsonFetch(`${handle.url}/policy`, {
+        headers: { authorization: `Bearer ${TOKEN_OK}` },
+      });
+      assertEqual(r.status, 200, "status");
+      const body = r.json as { process: string };
+      assertEqual(body.process, "wavs-bridge", "process custom");
+    } finally {
+      await handle.close();
+    }
+  });
+
+  await test("/policy: reflects state after /signing/pause", async () => {
+    const { handle } = await startServer();
+    try {
+      // Arm via /signing/pause
+      await jsonFetch(`${handle.url}/signing/pause`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${TOKEN_OK}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ source: "policy-test:armed" }),
+      });
+      // Hit /policy
+      const r = await jsonFetch(`${handle.url}/policy`, {
+        headers: { authorization: `Bearer ${TOKEN_OK}` },
+      });
+      assertEqual(r.status, 200, "status");
+      const body = r.json as {
+        kill_switches: { signing_paused: { paused: boolean; source: string | null } };
+      };
+      assertEqual(body.kill_switches.signing_paused.paused, true, "armed");
+      assertEqual(
+        body.kill_switches.signing_paused.source,
+        "policy-test:armed",
+        "source recorded"
+      );
+    } finally {
+      await handle.close();
+    }
+  });
+
+  await test("/policy: requires bearer token", async () => {
+    const { handle } = await startServer();
+    try {
+      const r = await jsonFetch(`${handle.url}/policy`);
+      assertEqual(r.status, 401, "status");
+    } finally {
+      await handle.close();
+    }
+  });
+
+  await test("/policy: POST -> 405 (read-only)", async () => {
+    const { handle } = await startServer();
+    try {
+      const r = await jsonFetch(`${handle.url}/policy`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${TOKEN_OK}` },
+      });
+      assertEqual(r.status, 405, "status");
+      assertEqual(r.headers.get("Allow"), "GET", "Allow header");
+    } finally {
+      await handle.close();
+    }
+  });
+
   // --- Routing errors ---
 
   await test("unknown path -> 404", async () => {
