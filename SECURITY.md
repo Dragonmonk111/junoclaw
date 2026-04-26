@@ -47,14 +47,14 @@ Lock 4 is split into two complementary kinds of primitive: **walls** that preven
   - **Phase 2 — keychain backend.** OS credential manager (Windows DPAPI / macOS Keychain Services / Linux libsecret) holds a fresh random 32-byte DEK per wallet, indexed by `(service="junoclaw-cosmos-mcp", account=walletId)`. The wallet file is encrypted with AES-256-GCM under that keychain-stored DEK. No long-lived passphrase to manage; the DEK is bound to the OS user session. Native binding via the optional `@napi-rs/keyring` dependency; an in-memory test driver gives full mock-keychain coverage.
   
   See [`mcp/README.md`](mcp/README.md#wallet-registry-ffern-c-3--mnemonic--wallet_id) for the operator-facing CLI and migration guide.
-- **Startup-only kill-switch.** `sandbox_mode` on `plugin-shell` halts execution at runtime even with the `unsafe-shell` feature compiled in. Today this is settable only at process start; runtime hot-reload lands in `v0.x.y-security-2`.
+- **Startup-only kill-switch.** `sandbox_mode` on `plugin-shell` halts execution at runtime even with the `unsafe-shell` feature compiled in. Today this is settable only at process start; runtime hot-reload via admin RPC lands in `v0.x.y-security-3`.
 
-### Levers (planned for `v0.x.y-security-2`)
+### Levers
 
-- **`signing_paused` runtime kill-switch.** Boolean gate on `WalletStore.signFor()`. When armed, the gate refuses with a specific `SigningPausedError` while query tools, `wallet list`, and `verifyAddress` keep working. Mean-time-to-halt drops from "SIGKILL the MCP process" to "set an env var and SIGHUP" without breaking in-flight read traffic.
-- **`egress_paused` runtime kill-switch.** The same pattern applied to the SSRF-guarded fetcher in the WAVS bridge.
-- **Published policy-state admin RPC.** Read-only RPC exposing the live values of every kill-switch + allowlist. Lets a downstream client (a delegator, a counterparty, a verifier) confirm operator intent before sending a task. This is the load-bearing part of *verifiable* in *verifiable controllability*.
-- **SIGHUP / admin-RPC hot-reload.** Replaces env-var-only flipping with an admin call so kill-switches can be flipped without restarting the process.
+- **`signing_paused` runtime kill-switch — shipped in `v0.x.y-security-2`.** Boolean gate on `WalletStore.signFor()`. When armed, the gate refuses with a specific `SigningPausedError` while query tools, `wallet list`, and `verifyAddress` keep working. Armed via the `JUNOCLAW_SIGNING_PAUSED` env var at process start (canonical value `1`); fail-closed on any non-empty, non-`0` value. Mean-time-to-halt for `v0.x.y-security-2` is process-supervisor restart (5–30 s); hot-flip arrives with the admin RPC in `v0.x.y-security-3`.
+- **`egress_paused` runtime kill-switch — planned for `v0.x.y-security-3`.** The same pattern applied to the SSRF-guarded fetcher in the WAVS bridge.
+- **Published policy-state admin RPC — planned for `v0.x.y-security-3`.** Read-only RPC exposing the live values of every kill-switch + allowlist. Lets a downstream client (a delegator, a counterparty, a verifier) confirm operator intent before sending a task. This is the load-bearing part of *verifiable* in *verifiable controllability*. Deliberately deferred to its own release because it introduces a new network listener in a signing-sensitive process and therefore deserves its own threat-model review and Ffern re-check.
+- **Admin-RPC hot-reload — planned for `v0.x.y-security-3`.** Replaces env-var-only flipping with an admin call so kill-switches can be flipped without restarting the process. For high-value deployments in the `v0.x.y-security-2` window, the documented incident-response procedure is `JUNOCLAW_SIGNING_PAUSED=1` + process-supervisor restart (systemd / PM2 / NSSM / launchd), which also leaves a clean OS-level forensic trail.
 
 ## Chain-layer adjacency — blast-radius primitives (Phase 3 roadmap)
 
@@ -89,8 +89,9 @@ If you compile with `--features unsafe-shell` and run *without* an external sand
 ## Roadmap
 
 - **`v0.x.y-security-1` (this release)** — closes the four critical and one high-severity Ffern findings: `unsafe-shell` Cargo gate (C-1/C-2), wallet handle registry with passphrase + keychain backends (C-3), `upload_wasm` path guard (C-4), `computeDataVerify` SSRF guard (H-3); plus the startup-only `sandbox_mode` kill-switch on `plugin-shell`. The five walls of Lock 4.
-- **`v0.x.y-security-2` (next)** — the runtime levers: `signing_paused` and `egress_paused` runtime kill-switches; published policy-state admin RPC; SIGHUP / admin-RPC hot-reload of all kill-switches. Verifiable controllability becomes operationally complete.
-- **`v0.x.y-security-3+` (chain-layer integration)** — `x/authz` integration as a Phase 3 chain-layer Lock 4 primitive: wallet handles bind to authz delegations from a separate cold key the MCP process never touches. Composes with the off-chain primitives in `-security-1` and the runtime levers in `-security-2`. Full design as a separate proposal.
+- **`v0.x.y-security-2` (next)** — `signing_paused` runtime kill-switch: env-var-armed boolean gate on `WalletStore.signFor()`, raising `SigningPausedError`. Shipped alone rather than bundled with the admin RPC because the admin RPC introduces a new network listener in a signing-sensitive process and deserves a dedicated review window. See the *Levers* section above.
+- **`v0.x.y-security-3`** — the remaining runtime levers: `egress_paused` on the WAVS SSRF-guarded fetcher, the published policy-state admin RPC (localhost-only, token-gated, off-by-default, no third-party deps, constant-time token comparison, rate-limited, audit-logged), and admin-RPC hot-reload of all kill-switches. Verifiable controllability becomes operationally complete.
+- **`v0.x.y-security-4+` (chain-layer integration)** — `x/authz` integration as a Phase 3 chain-layer Lock 4 primitive: wallet handles bind to authz delegations from a separate cold key the MCP process never touches. Composes with the off-chain primitives in `-security-1`, `-security-2`, and `-security-3`. Full design as a separate proposal.
 - **Pre-mainnet** — third-party audit of the BN254 precompile crate per `docs/HACKMD_BN254_PROPOSAL.md` revised cost envelope ($30–45k, 3–5 weeks). Re-audit by Ffern of the operator-side fixes is the explicit gate on the upstream CosmWasm PR step.
 - **Post-mainnet** — annual external audit cadence funded via DAO treasury; rolling fuzzing and differential-testing in CI.
 

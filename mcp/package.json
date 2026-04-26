@@ -15,6 +15,8 @@
     "path-guard-test": "tsx src/utils/path-guard-test.ts",
     "wallet-store-test": "tsx src/wallet/store-test.ts",
     "keychain-store-test": "tsx src/wallet/keychain-store-test.ts",
+    "signing-pause-test": "tsx src/wallet/signing-pause-test.ts",
+    "signing-pause-smoke": "tsx src/signing-pause-smoke.ts",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

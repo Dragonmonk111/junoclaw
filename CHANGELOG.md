@@ -7,6 +7,113 @@ JunoClaw is pre-`v1.0`; per-component versions (in `mcp/package.json`,
 `wavs/bridge/package.json`, `Cargo.toml` files) move independently of
 project-level security tags such as `v0.x.y-security-1`.
 
+## [v0.x.y-security-2] — 2026-04-26
+
+The `signing_paused` runtime kill-switch. The first lever to complement
+`v0.x.y-security-1`'s five walls.
+
+### Scope split rationale
+
+The `v0.x.y-security-1` roadmap entry listed four items for the `-security-2`
+cycle: `signing_paused`, `egress_paused`, the published policy-state admin
+RPC, and admin-RPC hot-reload. That bundle has been split. Only
+`signing_paused` ships in this release; the other three move to
+`v0.x.y-security-3`. The reason is targeted at high-value deployments: an
+admin RPC is a new network listener in a signing-sensitive process, and
+bundling it with the kill-switch primitive would (a) enlarge the attack
+surface shipping with the primitive, (b) enlarge the Ffern re-check scope
+against the same tag, and (c) weaken the modular-update framing the
+`-security-1` release established (one commit per primitive, one tag).
+Shipping the env-var-armed gate first, with the admin RPC to follow under
+its own threat-model review, preserves the safer ordering.
+
+During the `v0.x.y-security-2` window, the documented incident-response
+procedure for high-value deployments is `JUNOCLAW_SIGNING_PAUSED=1` plus a
+process-supervisor restart (systemd / PM2 / NSSM / launchd), which also
+leaves a clean OS-level forensic trail.
+
+### Added
+
+- `SigningPausedError` — new exported error class from `mcp/src/wallet/store.ts`.
+  Carries `walletId` and `chainId` so a downstream task scheduler can
+  pattern-match on `instanceof SigningPausedError` and treat it as "operator
+  halt, retry later" rather than a hard failure.
+- `WalletStore.setSigningPaused(paused, source)` — public instance mutator.
+  `source` is a free-text label logged on every state transition for operator
+  forensics (e.g. `env:JUNOCLAW_SIGNING_PAUSED`, `admin-rpc:127.0.0.1` once
+  `-security-3` ships, `test`).
+- `WalletStore.getSigningPaused()` — public read method returning
+  `{paused, source}`. For tests, metrics, and the future admin RPC.
+- `WalletStore.signFor()` now checks the kill-switch **first**, before any
+  file read or backend access. A paused signer therefore refuses for
+  non-existent wallet IDs too — no wallet-enumeration signal via
+  differentiated "paused" vs "not found" errors.
+- `parseSigningPausedEnv()` helper (module-internal). Fail-closed on typos:
+  any non-empty, non-`"0"` value of `JUNOCLAW_SIGNING_PAUSED` is treated as
+  paused. Canonical value is `"1"`.
+- `WalletStore.defaultStore()` now applies the startup-time kill-switch
+  automatically, logging the state transition and a forensic tip.
+- `mcp/src/wallet/signing-pause-test.ts` — 12-test regression suite covering
+  the state machine, gate ordering (including the no-enumeration-leak
+  property), the `SigningPausedError` shape, and the fact that `add` / `list`
+  / `verifyAddress` / `remove` remain functional while paused (registry
+  management is signing-independent).
+- `mcp/src/signing-pause-smoke.ts` — two-phase on-chain proof: Phase A arms
+  the kill-switch and expects `SigningPausedError`; Phase B disarms and
+  expects a successful broadcast on `uni-7`. Reuses the `signing-smoke-uni7`
+  wallet from the existing smoke test.
+- `npm run signing-pause-test` and `npm run signing-pause-smoke` scripts in
+  `mcp/package.json`.
+
+### Changed
+
+- `SECURITY.md` — *Levers* section retitled and reorganised to mark
+  `signing_paused` as shipped in this release and the other three levers
+  as planned for `v0.x.y-security-3`. Roadmap section reflects the same
+  split; the original `v0.x.y-security-2` bundle is now split across
+  `-security-2` and `-security-3` with the rationale documented in the
+  *Levers* prose.
+
+### Security
+
+No new attack surface. The change is a defensive primitive that can
+only **prevent** signing calls, never force them. The env var is read
+once at startup by `defaultStore()` and does not create a persistent
+configuration file, remote endpoint, or unauthenticated control plane.
+The `setSigningPaused` method is an instance method with no external
+exposure; the future admin RPC (which *is* a new attack surface) is
+deliberately deferred to `v0.x.y-security-3`.
+
+### On-chain proof
+
+Phase A + Phase B both exercised against `uni-7` (Juno testnet) via
+`npm run signing-pause-smoke`:
+
+- **Phase A (armed) — `SigningPausedError` raised as expected.** No on-chain
+  TX; the gate refuses before the signing client is even constructed
+  (instance state: `paused=true, source=smoke:phase-A`).
+- **Phase B (disarmed, source flipped to null) — successful broadcast.**
+  - TX hash: `346CC7FF418019A4FBA68D7847112954E2D8D9ECE3E27B314357408E8AE42B6A`
+  - Signer: `juno1t08k74tqwukkxjyq5cwqrguzs7ktv4y7jfr4d6`
+  - Gas used: 72,581
+  - Explorer: <https://testnet.mintscan.io/juno-testnet/tx/346CC7FF418019A4FBA68D7847112954E2D8D9ECE3E27B314357408E8AE42B6A>
+
+The smoke exercises the gate inside the same `sendTokens → tx-builder.ts →
+WalletStore.signFor()` code path used by every production write tool;
+no test-specific scaffolding bypasses the production path.
+
+### Roadmap
+
+- **`v0.x.y-security-3`** — the remaining levers deferred from the
+  originally-scoped `-security-2` bundle: `egress_paused` on the WAVS
+  SSRF-guarded fetcher, the published policy-state admin RPC (localhost-only,
+  token-gated, off-by-default, no third-party deps, constant-time token
+  comparison, rate-limited, audit-logged), and admin-RPC hot-reload of all
+  kill-switches. Mean-time-to-halt drops from process-supervisor restart
+  (5–30 s) to ~200 ms. Designed for its own Ffern re-check.
+
+---
+
 ## [v0.x.y-security-1] — 2026-04-26
 
 The post-Ffern operator-side hardening release. Closes the four critical
@@ -238,3 +345,4 @@ Phase 3 in `SECURITY.md`.
   the BN254 precompile signaling proposal both gate on the re-check outcome.
 
 [v0.x.y-security-1]: https://github.com/Dragonmonk111/junoclaw/releases/tag/v0.x.y-security-1
+[v0.x.y-security-2]: https://github.com/Dragonmonk111/junoclaw/releases/tag/v0.x.y-security-2

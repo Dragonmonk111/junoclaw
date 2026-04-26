@@ -79,6 +79,46 @@ interface WalletFile {
 const DEFAULT_HD_PATH = "m/44'/118'/0'/0/0";
 const WALLET_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
+// ────────────────────────────────
+// SigningPausedError (v0.x.y-security-2)
+// ────────────────────────────────
+
+/**
+ * Thrown by WalletStore.signFor() when the operator-armed
+ * `signing_paused` kill-switch is set.
+ *
+ * Designed to be distinguishable from other errors via
+ * `instanceof SigningPausedError` so a downstream task scheduler
+ * can treat this as "operator halt, retry later" rather than a
+ * hard failure. Emitting the walletId and chainId is intentional
+ * for operator forensics; both are operator-chosen identifiers,
+ * not secrets.
+ */
+export class SigningPausedError extends Error {
+  constructor(
+    public readonly walletId: string,
+    public readonly chainId: string
+  ) {
+    super(
+      `signing is paused (operator-armed kill-switch). ` +
+        `Refused to sign for wallet "${walletId}" on chain "${chainId}". ` +
+        `Unset JUNOCLAW_SIGNING_PAUSED and restart the MCP process to resume.`
+    );
+    this.name = "SigningPausedError";
+  }
+}
+
+/**
+ * Parse JUNOCLAW_SIGNING_PAUSED from env. Fail-closed on typos:
+ * any non-empty, non-"0" value is treated as paused. Canonical
+ * value is "1". Unset, empty, or "0" means not paused.
+ */
+function parseSigningPausedEnv(): boolean {
+  const val = process.env.JUNOCLAW_SIGNING_PAUSED;
+  if (val === undefined || val === "" || val === "0") return false;
+  return true;
+}
+
 // ──────────────────────────────────────────────
 // WalletStore
 // ──────────────────────────────────────────────
@@ -87,6 +127,13 @@ export class WalletStore {
   private readonly backends: Map<string, KeyStore>;
   private readonly defaultBackend: string;
 
+  // v0.x.y-security-2: signing_paused kill-switch state. Mutated
+  // via setSigningPaused(); read in signFor(). The instance-field
+  // placement is intentional so tests can construct independent
+  // stores with independent pause state.
+  private signingPaused: boolean = false;
+  private pauseSource: string | null = null;
+
   /**
    * Construct a `WalletStore`. The first form takes a single
    * `KeyStore` and uses its `backendName` as the default backend;
@@ -94,6 +141,12 @@ export class WalletStore {
    * explicit default. Phase 1 callers and tests use the first form
    * (passphrase only); Phase 2 uses the second to register both
    * `passphrase` and `keychain` simultaneously.
+   *
+   * The `signing_paused` kill-switch is always initialised OFF.
+   * Callers that need to pause at construction time should call
+   * `setSigningPaused(true, "<source>")` immediately after. The
+   * `defaultStore()` factory does this automatically from the
+   * `JUNOCLAW_SIGNING_PAUSED` env var.
    */
   constructor(
     private readonly walletsDir: string,
@@ -159,12 +212,58 @@ export class WalletStore {
       dflt = "passphrase";
     }
 
-    return new WalletStore(root, backends, dflt);
+    const store = new WalletStore(root, backends, dflt);
+
+    // v0.x.y-security-2: apply startup-time kill-switch from env.
+    // The setSigningPaused() call logs the state transition for
+    // forensics; the extra error line below is an operator tip.
+    if (parseSigningPausedEnv()) {
+      store.setSigningPaused(true, "env:JUNOCLAW_SIGNING_PAUSED");
+      console.error(
+        "[junoclaw] signing_paused=true at startup; signFor() will refuse " +
+          "with SigningPausedError until JUNOCLAW_SIGNING_PAUSED is unset " +
+          "(or set to '0') and the process is restarted."
+      );
+    }
+
+    return store;
   }
 
   /** List the registered backend names (e.g. ["passphrase", "keychain"]). */
   listBackends(): string[] {
     return Array.from(this.backends.keys());
+  }
+
+  /**
+   * Arm or disarm the `signing_paused` kill-switch (v0.x.y-security-2).
+   * When armed, `signFor()` refuses with `SigningPausedError`; `add`,
+   * `list`, `remove`, and `verifyAddress` keep working so the operator
+   * can still manage the registry during an incident.
+   *
+   * `source` is a free-text label describing who or what flipped the
+   * switch (e.g. `"env:JUNOCLAW_SIGNING_PAUSED"`,
+   * `"admin-rpc:127.0.0.1"` (planned in v0.x.y-security-3), `"test"`).
+   * It is logged on every state change for operator forensics; do
+   * NOT put secrets in it.
+   */
+  setSigningPaused(paused: boolean, source: string): void {
+    const prev = this.signingPaused;
+    this.signingPaused = paused;
+    this.pauseSource = paused ? source : null;
+    if (prev !== paused) {
+      console.error(
+        `[junoclaw] signing_paused: ${prev} -> ${paused} (source: ${source})`
+      );
+    }
+  }
+
+  /**
+   * Read the current `signing_paused` state. For tests, metrics,
+   * and the admin RPC planned in v0.x.y-security-3. `source` is
+   * null when not paused.
+   */
+  getSigningPaused(): { paused: boolean; source: string | null } {
+    return { paused: this.signingPaused, source: this.pauseSource };
   }
 
   private getBackend(name: string): KeyStore {
@@ -446,6 +545,17 @@ export class WalletStore {
     walletId: string,
     chain: ChainConfig
   ): Promise<SigningContext> {
+    // v0.x.y-security-2: signing_paused kill-switch. Checked first,
+    // before any file read or backend access, so a paused signer
+    // (a) refuses for non-existent wallet IDs too — no enumeration
+    //     signal via differentiated "paused" vs "not found" errors;
+    // (b) pays no decryption or I/O cost on refused attempts;
+    // (c) surfaces a clean `SigningPausedError` a downstream task
+    //     scheduler can pattern-match on.
+    if (this.signingPaused) {
+      throw new SigningPausedError(walletId, chain.chainId);
+    }
+
     const file = await this.readWalletFile(walletId);
 
     if (file.metadata.bech32Prefix !== chain.bech32Prefix) {

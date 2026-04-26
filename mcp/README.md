@@ -375,10 +375,68 @@ The chain registry includes IBC channel metadata for cross-chain transfers:
 The MCP server is the most-exposed surface in the JunoClaw stack — it brokers between an LLM's tool calls and signed Cosmos transactions. We document each defense honestly.
 
 - **Wallet handles, not raw mnemonics (Ffern C-3).** Every write tool takes a `wallet_id`. Mnemonics are enrolled out-of-band via the `cosmos-mcp wallet ...` CLI and encrypted at rest under a backend-specific 32-byte DEK — either an OS-keychain entry (Phase 2: DPAPI / macOS Keychain / libsecret) or a scrypt-derived master key (Phase 1: passphrase). See *Wallet registry* above.
+- **`signing_paused` runtime kill-switch (v0.x.y-security-2).** `WalletStore.signFor()` refuses with a dedicated `SigningPausedError` when armed; `wallet list`, `verifyAddress`, `add`, `remove`, and every read tool keep working so the operator can still investigate during an incident. Arm by setting `JUNOCLAW_SIGNING_PAUSED=1` and restarting the MCP process (fail-closed on typos: any non-empty, non-`0` value arms the gate). Disarm by unsetting the env var and restarting. See *Runtime kill-switch* below.
 - **Path-guarded `upload_wasm` (Ffern C-4).** Allow-root, symlink reject, 8 MiB cap, magic-byte check. See *`upload_wasm` security* above.
 - **Read operations require no wallet.** Query tools take only addresses and chain ids; no key material is touched.
 - **No persistent process state.** The MCP server holds no in-memory key beyond a single `signFor()` call; the decrypted mnemonic buffer is zeroed in `finally{}` after one signing client is built.
 - **Out-of-process secret material.** The DEK source is always external to the Node process — either `JUNOCLAW_WALLET_PASSPHRASE` (or `_PASSPHRASE_FILE`) for the passphrase backend, or an OS-credential-manager entry for the keychain backend. The MCP server cannot decrypt anything without the appropriate operator-supplied input.
+
+### Runtime kill-switch (`signing_paused`, v0.x.y-security-2)
+
+Shipped in `v0.x.y-security-2` as the first *lever* to complement the five *walls* of `v0.x.y-security-1`. Purpose: halt all signing without halting the MCP process itself, so query tools, wallet-registry management (`list` / `verifyAddress`), and out-of-band forensics stay available while an incident is in progress.
+
+**Arm / disarm (env var, v0.x.y-security-2 interface):**
+
+```bash
+# Arm before startup (fail-closed: any non-empty, non-'0' value arms):
+export JUNOCLAW_SIGNING_PAUSED=1
+cosmos-mcp       # or: node dist/index.js
+
+# Disarm:
+unset JUNOCLAW_SIGNING_PAUSED
+cosmos-mcp       # restart the process
+```
+
+Windows PowerShell:
+
+```powershell
+$env:JUNOCLAW_SIGNING_PAUSED = "1"
+cosmos-mcp
+# Disarm:
+Remove-Item Env:JUNOCLAW_SIGNING_PAUSED
+cosmos-mcp
+```
+
+At startup the MCP logs the kill-switch state and its source:
+
+```
+[junoclaw] signing_paused: false -> true (source: env:JUNOCLAW_SIGNING_PAUSED)
+[junoclaw] signing_paused=true at startup; signFor() will refuse with SigningPausedError until JUNOCLAW_SIGNING_PAUSED is unset (or set to '0') and the process is restarted.
+```
+
+**Behaviour while armed:**
+
+- `send_tokens`, `execute_contract`, `instantiate_contract`, `upload_wasm`, `ibc_transfer`, `submit_blob`, and any other tool that calls `WalletStore.signFor()` → throws `SigningPausedError` (distinguishable via `instanceof SigningPausedError`, carries `.walletId` and `.chainId`).
+- Gate is checked **before** any wallet file read or backend access, so a paused signer refuses identically for registered and non-existent wallet IDs — no enumeration signal via differentiated error messages.
+- All query tools (`query_balance`, `query_contract`, `list_chains`, etc.) continue to work.
+- `cosmos-mcp wallet add | list | rm` and `WalletStore.verifyAddress()` continue to work (registry management is signing-independent).
+
+**Incident-response procedure (v0.x.y-security-2 window):**
+
+1. `export JUNOCLAW_SIGNING_PAUSED=1` in the supervisor environment (systemd `Environment=`, PM2 `env:`, NSSM `AppEnvironmentExtra`, launchd `EnvironmentVariables`).
+2. Restart the MCP process via the supervisor. Process-supervisor restart (5–30 s) is the mean-time-to-halt ceiling in `v0.x.y-security-2`; the admin RPC planned for `v0.x.y-security-3` drops it to ~200 ms.
+3. Confirm the startup log line shows `source: env:JUNOCLAW_SIGNING_PAUSED`.
+4. Investigate; rotate keys if mnemonic exposure is suspected.
+5. Unset the env var and restart to resume.
+
+**Test and on-chain proof:**
+
+```bash
+npm run signing-pause-test      # 12 unit tests (state machine, gate ordering, error shape, registry-while-paused)
+npm run signing-pause-smoke     # two-phase on-chain proof on uni-7 (arm → refused, disarm → broadcast)
+```
+
+The smoke reuses the `signing-smoke-uni7` wallet enrolled by `npm run smoke` and exercises the gate in the exact same `sendTokens → tx-builder → WalletStore.signFor` code path as a real production write.
 
 **Reporting:** see [`SECURITY.md`](../SECURITY.md) at the repo root.
 
