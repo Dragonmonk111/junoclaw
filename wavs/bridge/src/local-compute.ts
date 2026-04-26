@@ -11,6 +11,7 @@
  */
 
 import { createHash } from "crypto";
+import { safeFetch } from "./utils/ssrf-guard.js";
 
 // Must match: wavs/src/lib.rs → compute_attestation_hash()
 const COMPONENT_ID = "junoclaw-wavs-v0.1.0";
@@ -96,14 +97,22 @@ export async function computeDataVerify(
   for (let i = 0; i < dataSources.length; i++) {
     const url = dataSources[i];
     try {
-      const resp = await fetch(url);
-      const text = await resp.text();
+      // safeFetch enforces scheme/port allowlists, blocks private IPs
+      // (cloud metadata, RFC 1918, loopback), applies a 5s timeout,
+      // and caps the body at 1 MiB. See utils/ssrf-guard.ts.
+      const resp = await safeFetch(url);
+      const text = resp.text;
       hasher.update(Buffer.from(text, "utf-8"));
 
       const srcHash = createHash("sha256")
         .update(Buffer.from(text, "utf-8"))
         .digest("hex");
-      sourceDetails.push({ url, bytes: text.length, hash: srcHash });
+      sourceDetails.push({
+        url,
+        bytes: text.length,
+        hash: srcHash,
+        status: resp.status,
+      });
     } catch (err: any) {
       sourceDetails.push({ url, error: err.message });
     }
@@ -140,8 +149,11 @@ export async function computeDrandRandomness(
     ? `${DRAND_URL}/public/${drandRound}`
     : `${DRAND_URL}/public/latest`;
 
-  const resp = await fetch(url);
-  const beacon = (await resp.json()) as {
+  // Defense-in-depth: drand is a public API, but safeFetch ensures
+  // DNS hijacks / misconfigured /etc/hosts can't route this request
+  // to a private IP. Also enforces the 5s timeout and 1 MiB body cap.
+  const resp = await safeFetch(url);
+  const beacon = JSON.parse(resp.text) as {
     round: number;
     randomness: string;
   };

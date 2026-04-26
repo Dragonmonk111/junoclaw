@@ -22,6 +22,25 @@ On-chain Event (agent-company contract on uni-7)
 | sortition-randomness | `wasm-sortition_request` | `drand_randomness` | `SubmitRandomness` |
 | outcome-verify | `wasm-outcome_create` | `outcome_verify` | `SubmitAttestation` |
 
+### `data_verify` SSRF defenses (Ffern H-3)
+
+The `data_verify` workflow fetches arbitrary URLs supplied by agents. Since the bridge runs with operator credentials and network access, every outbound HTTP is routed through `bridge/src/utils/ssrf-guard.ts` which enforces:
+
+- **Scheme allowlist** — `http` and `https` only. `file://`, `ftp://`, `gopher://`, etc. are rejected.
+- **Port allowlist** — `80` and `443` by default. Databases (Redis `6379`, Postgres `5432`), admin RPCs (Cosmos `26657`), SSH `22`, and the rest are blocked.
+- **DNS private-IP block** — every resolved address is checked against IPv4 private ranges (`10/8`, `172.16/12`, `192.168/16`, `127/8`, `169.254/16`, CGNAT `100.64/10`, multicast, benchmark, TEST-NETs) and IPv6 private ranges (`::1`, `fc00::/7`, `fe80::/10`, `ff00::/8`, plus IPv4-mapped forms). A request is blocked if **any** resolved address is private.
+- **Timeout** — 5 seconds per request via `AbortController`.
+- **Body cap** — 1 MiB, enforced via streaming read with mid-stream abort.
+
+Deployment overrides (comma-separated env vars):
+
+- `JUNOCLAW_SSRF_ALLOWED_SCHEMES` — default `http,https`
+- `JUNOCLAW_SSRF_ALLOWED_PORTS` — default `80,443`
+- `JUNOCLAW_SSRF_TIMEOUT_MS` — default `5000`
+- `JUNOCLAW_SSRF_MAX_BYTES` — default `1048576` (1 MiB)
+
+Run `npm run ssrf-guard-test` from `bridge/` to exercise the defenses against a battery of SSRF payloads (AWS/GCP metadata endpoints, RFC 1918 ranges, IPv6 literals, IPv4-mapped IPv6, DNS rebinding via mock resolver).
+
 ## Prerequisites
 
 - Rust (nightly recommended)

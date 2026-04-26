@@ -11,7 +11,8 @@
     "deploy-junoswap": "tsx src/deploy-junoswap.ts",
     "deploy-zk-verifier": "tsx src/deploy-zk-verifier.ts",
     "benchmark-zk-verifier": "tsx src/benchmark-zk-verifier.ts",
-    "benchmark-zk-verifier-devnet": "tsx src/benchmark-zk-verifier-devnet.ts"
+    "benchmark-zk-verifier-devnet": "tsx src/benchmark-zk-verifier-devnet.ts",
+    "ssrf-guard-test": "tsx src/utils/ssrf-guard-test.ts"
   },
   "dependencies": {
     "@cosmjs/cosmwasm-stargate": "^0.32.4",
