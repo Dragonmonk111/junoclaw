@@ -40,6 +40,110 @@ import { promises as dnsPromises } from "dns";
 import { isIPv4, isIPv6 } from "net";
 
 // ──────────────────────────────────────────────
+// Runtime kill-switch: egress_paused
+// ──────────────────────────────────────────────
+// Mirrors the WalletStore.signing_paused primitive shipped in
+// v0.x.y-security-2, applied on the WAVS-bridge side. When armed,
+// every safeFetch() call refuses with EgressPausedError at the
+// very top of the function — no DNS lookup, no connection attempt,
+// no option parsing side effect. Armed state is module-local
+// (per-process) and can be set three ways:
+//   - at import time, via the JUNOCLAW_EGRESS_PAUSED env var
+//     (fail-closed: any non-empty value other than "0" / "false" /
+//     "no" / "off" arms the gate; typos therefore stay armed)
+//   - at runtime, via setEgressPaused(true | false, source)
+//   - (future, v0.x.y-security-3 Phase 3d admin RPC) via hot-flip
+//     from a localhost-only token-gated HTTP listener
+//
+// Shipped in v0.x.y-security-3 Phase 3a. See SECURITY.md Levers
+// section and CHANGELOG.md [v0.x.y-security-3].
+
+export class EgressPausedError extends Error {
+  public readonly url: string;
+  constructor(url: string) {
+    super(
+      `egress_paused: outbound fetch refused for ${url}. ` +
+        `Unset JUNOCLAW_EGRESS_PAUSED (or call setEgressPaused(false, source)) ` +
+        `and retry when ready.`
+    );
+    this.name = "EgressPausedError";
+    this.url = url;
+  }
+}
+
+let egressPaused = false;
+let egressPausedSource: string | undefined = undefined;
+
+/**
+ * Parse a raw env-var value into a boolean.
+ *
+ * Fail-closed: any non-empty value other than "0", "false", "no",
+ * or "off" (case-insensitive, trimmed) arms the gate. This protects
+ * against typos that silently disable the kill-switch — a value
+ * like "flase" or "yep" arms rather than fails open.
+ */
+export function parseEgressPausedEnv(raw: string | undefined): boolean {
+  if (raw === undefined || raw === null) return false;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return false;
+  const lower = trimmed.toLowerCase();
+  if (lower === "0" || lower === "false" || lower === "no" || lower === "off") {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Get the current egress_paused state. Cheap; reads a module-local
+ * boolean. Intended for use by safeFetch() and by operator / admin
+ * read-only queries.
+ */
+export function getEgressPaused(): boolean {
+  return egressPaused;
+}
+
+/**
+ * Get the label of whoever last flipped the gate. Useful for audit
+ * logging and for the future policy-state RPC in v0.x.y-security-3
+ * Phase 3c.
+ */
+export function getEgressPausedSource(): string | undefined {
+  return egressPausedSource;
+}
+
+/**
+ * Set the egress_paused state programmatically. The `source`
+ * argument is retained for audit logging and surfaces via
+ * getEgressPausedSource() so an operator can tell where the flip
+ * came from (e.g. "cli", "admin-rpc", "test").
+ */
+export function setEgressPaused(paused: boolean, source: string): void {
+  if (typeof paused !== "boolean") {
+    throw new Error("setEgressPaused: paused must be a boolean");
+  }
+  if (typeof source !== "string" || source.length === 0) {
+    throw new Error("setEgressPaused: source must be a non-empty string");
+  }
+  egressPaused = paused;
+  egressPausedSource = source;
+}
+
+// Read the env var at module load time (fail-closed).
+{
+  const envArmed = parseEgressPausedEnv(process.env.JUNOCLAW_EGRESS_PAUSED);
+  if (envArmed) {
+    egressPaused = true;
+    egressPausedSource = "env:JUNOCLAW_EGRESS_PAUSED";
+    // Startup warning so operators know the kill-switch is armed
+    // even when stderr is the only channel they're watching.
+    console.warn(
+      "[ssrf-guard] egress_paused ARMED via JUNOCLAW_EGRESS_PAUSED env var; " +
+        "safeFetch() will refuse all requests until disarmed."
+    );
+  }
+}
+
+// ──────────────────────────────────────────────
 // Defaults and env-var parsing
 // ──────────────────────────────────────────────
 
@@ -212,6 +316,14 @@ export async function safeFetch(
   rawUrl: string,
   options: SafeFetchOptions = {}
 ): Promise<SafeFetchResult> {
+  // Gate-first: refuse if egress_paused is armed. Runs BEFORE any
+  // option parsing, URL parsing, DNS lookup, or fetch call, so that
+  // refused requests incur zero side effects. The error names the
+  // raw URL so operators can tell from the log what was blocked.
+  if (egressPaused) {
+    throw new EgressPausedError(rawUrl);
+  }
+
   const allowedSchemes =
     options.allowedSchemes ??
     parseEnvList(process.env.JUNOCLAW_SSRF_ALLOWED_SCHEMES)?.map((s) =>
@@ -402,4 +514,12 @@ export const _internal = {
   isPrivateIPv4,
   isPrivateIPv6,
   isPrivateIp,
+  /**
+   * Reset egress_paused state to disarmed. Used by tests to ensure
+   * a clean slate between cases. Never call from production code.
+   */
+  _resetEgressPaused: (): void => {
+    egressPaused = false;
+    egressPausedSource = undefined;
+  },
 };
