@@ -1,17 +1,21 @@
 /**
- * Transaction Builder Tools — write operations, require mnemonic
+ * Transaction Builder Tools — write operations, addressed by wallet_id
  *
- * Every write tool requires the caller to pass a mnemonic.
- * The MCP server never stores it. The key lives for one call and dies.
+ * Every write tool takes an opaque `wallet_id` (registered once via
+ * `cosmos-mcp wallet add ...`). The mnemonic is decrypted from disk
+ * inside `WalletStore.signFor`, used to construct one signing client,
+ * and scrubbed from memory in the same call. It never crosses this
+ * file's API boundary.
  *
- * This is the difference between custody and service.
- * VairagyaNode validates your TX. It doesn't hold your coins.
- * The MCP builds your TX. It doesn't hold your keys.
+ * Per Ffern C-3 (April 2026): the `mnemonic` parameter is gone. The
+ * model never sees the mnemonic; the MCP transport never carries it;
+ * conversation logs cannot leak it. See `mcp/src/wallet/` and the
+ * `cosmos-mcp wallet ...` CLI for enrollment.
  */
 
-import { readFileSync } from "fs";
-import { getSigningClient } from "../utils/cosmos-client.js";
+import { validateWasmPath } from "../utils/path-guard.js";
 import { getChain, getIbcChannel, type ChainConfig } from "../resources/chains.js";
+import { getDefaultWalletStore } from "../wallet/store.js";
 
 function requireChain(chainId: string): ChainConfig {
   const chain = getChain(chainId);
@@ -39,14 +43,14 @@ function formatResult(chain: ChainConfig, raw: { transactionHash: string; height
 
 export async function sendTokens(
   chainId: string,
-  mnemonic: string,
+  walletId: string,
   recipient: string,
   amount: string,
   denom?: string,
   memo?: string
 ): Promise<TxResult> {
   const chain = requireChain(chainId);
-  const { client, address } = await getSigningClient(chain, mnemonic);
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
   const d = denom || chain.denom;
 
   const result = await client.sendTokens(
@@ -62,14 +66,14 @@ export async function sendTokens(
 
 export async function executeContract(
   chainId: string,
-  mnemonic: string,
+  walletId: string,
   contractAddress: string,
   msg: Record<string, unknown>,
   funds?: Array<{ denom: string; amount: string }>,
   memo?: string
 ): Promise<TxResult> {
   const chain = requireChain(chainId);
-  const { client, address } = await getSigningClient(chain, mnemonic);
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
 
   const result = await client.execute(
     address,
@@ -85,14 +89,18 @@ export async function executeContract(
 
 export async function uploadWasm(
   chainId: string,
-  mnemonic: string,
+  walletId: string,
   wasmPath: string,
   memo?: string
 ): Promise<TxResult & { codeId: number }> {
   const chain = requireChain(chainId);
-  const { client, address } = await getSigningClient(chain, mnemonic);
 
-  const wasmBytes = readFileSync(wasmPath);
+  // Path-guard FIRST (Ffern C-4): allow-root, symlink reject, size cap, magic
+  // bytes. Failing here returns a clear error without ever decrypting the
+  // wallet — pure input validation, no key material touched.
+  const { bytes: wasmBytes } = validateWasmPath(wasmPath);
+
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
   const result = await client.upload(address, wasmBytes, "auto", memo || "cosmos-mcp upload");
 
   return {
@@ -103,7 +111,7 @@ export async function uploadWasm(
 
 export async function instantiateContract(
   chainId: string,
-  mnemonic: string,
+  walletId: string,
   codeId: number,
   msg: Record<string, unknown>,
   label: string,
@@ -112,7 +120,7 @@ export async function instantiateContract(
   memo?: string
 ): Promise<TxResult & { contractAddress: string }> {
   const chain = requireChain(chainId);
-  const { client, address } = await getSigningClient(chain, mnemonic);
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
 
   const result = await client.instantiate(
     address,
@@ -135,14 +143,14 @@ export async function instantiateContract(
 
 export async function migrateContract(
   chainId: string,
-  mnemonic: string,
+  walletId: string,
   contractAddress: string,
   newCodeId: number,
   migrateMsg: Record<string, unknown>,
   memo?: string
 ): Promise<TxResult> {
   const chain = requireChain(chainId);
-  const { client, address } = await getSigningClient(chain, mnemonic);
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
 
   const result = await client.migrate(
     address,
@@ -181,7 +189,7 @@ export interface BlobResult extends TxResult {
 
 export async function submitBlob(
   chainId: string,
-  mnemonic: string,
+  walletId: string,
   namespaceHex: string,
   data: string,
   memo?: string
@@ -191,7 +199,7 @@ export async function submitBlob(
     throw new Error(`submit_blob only works on Celestia chains, got ${chainId}`);
   }
 
-  const { client, address } = await getSigningClient(chain, mnemonic);
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
 
   // Encode data to bytes
   const dataBytes = Buffer.from(data, "utf-8");
@@ -246,7 +254,7 @@ export async function submitBlob(
 export async function ibcTransfer(
   sourceChainId: string,
   destChainId: string,
-  mnemonic: string,
+  walletId: string,
   receiver: string,
   amount: string,
   denom?: string,
@@ -264,7 +272,7 @@ export async function ibcTransfer(
     );
   }
 
-  const { client, address } = await getSigningClient(sourceChain, mnemonic);
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, sourceChain);
   const d = denom || sourceChain.denom;
   const timeout = (timeoutMinutes || 10) * 60; // seconds
 

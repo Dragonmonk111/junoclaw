@@ -192,16 +192,124 @@ mcphost --config mcp_config.json --api-base http://localhost:11434/v1
 | `query_mesh_security` | **NEW** Query mesh-security contracts ([osmosis-labs/mesh-security](https://github.com/osmosis-labs/mesh-security), Apache 2.0). Auto-detects provider vs consumer. |
 | `list_chains` | List all supported Cosmos chains (now includes IBC channel metadata) |
 
-### Transaction Tools (require mnemonic)
+### Transaction Tools (require a registered `wallet_id` — see *Wallet registry* below)
 | Tool | Description |
 |------|-------------|
 | `send_tokens` | Send tokens to an address |
 | `execute_contract` | Execute a message on a CosmWasm contract |
-| `upload_wasm` | Upload a WASM binary to a chain |
+| `upload_wasm` | Upload a WASM binary to a chain (see *`upload_wasm` security* below) |
 | `instantiate_contract` | Instantiate a contract from a code ID |
 | `migrate_contract` | Migrate a contract to a new code ID |
 | `ibc_transfer` | Transfer tokens across Cosmos chains via IBC — the first cross-chain primitive for AI agents |
-| `submit_blob` | **NEW** Submit data blobs to Celestia DA layer ([celestiaorg/celestia-app](https://github.com/celestiaorg/celestia-app), Apache 2.0). Sovereign rollup data availability. |
+| `submit_blob` | Submit data blobs to Celestia DA layer ([celestiaorg/celestia-app](https://github.com/celestiaorg/celestia-app), Apache 2.0). Sovereign rollup data availability. |
+
+#### Wallet registry (Ffern C-3 — mnemonic → `wallet_id`)
+
+In the post-Ffern security release, every write tool takes an opaque `wallet_id` instead of a raw `mnemonic` parameter. The mnemonic itself never crosses the MCP transport, never appears in the model's tool-call JSON, and never lands in conversation logs.
+
+**Two backends ship out of the box:**
+
+| Backend | Where the per-wallet DEK lives | Operator setup |
+|---------|-------------------------------|---------------|
+| `passphrase` | Derived from `JUNOCLAW_WALLET_PASSPHRASE` via scrypt | Set the env var; portable across machines |
+| `keychain` | OS credential manager (DPAPI / Keychain / libsecret) holds a random 32-byte DEK per wallet | No passphrase to manage; DEK bound to OS user session |
+
+The keychain backend uses the optional native dependency [`@napi-rs/keyring`](https://www.npmjs.com/package/@napi-rs/keyring), installed by default with `npm install`. Use `npm install --no-optional` (or `--omit=optional`) to skip it; the passphrase backend keeps working in that case.
+
+**Enrolment is one-time and out-of-band:**
+
+```bash
+# ── Option A: keychain backend (preferred when @napi-rs/keyring is available)
+# No passphrase to set; the OS credential manager holds the DEK.
+cosmos-mcp wallet add neo --chain juno-1 --backend keychain --mnemonic-stdin
+
+# ── Option B: passphrase backend (portable across machines)
+export JUNOCLAW_WALLET_PASSPHRASE='choose-a-strong-passphrase'
+echo "<your 12 or 24 words>" | cosmos-mcp wallet add neo --chain juno-1 --backend passphrase
+
+# ── Backend default (no --backend flag)
+#   1. JUNOCLAW_WALLET_DEFAULT_BACKEND if set
+#   2. keychain if no JUNOCLAW_WALLET_PASSPHRASE is set
+#   3. otherwise passphrase
+echo "<words>" | cosmos-mcp wallet add neo --chain juno-1   # uses default
+
+# ── Either backend: pull mnemonic from an existing env var
+cosmos-mcp wallet add wavs-op --chain uni-7 --mnemonic-env WAVS_OPERATOR_MNEMONIC
+
+# List registered wallets (metadata + which backend protects each)
+cosmos-mcp wallet list
+# 2 wallet(s) (backends loaded: passphrase, keychain):
+#   neo                       juno1...    prefix=juno  backend=keychain     created=2026-04-26T...
+#   wavs-op                   juno1...    prefix=juno  backend=passphrase   created=2026-04-26T...
+
+# Remove a wallet (clears both the .enc file and any keychain entry)
+cosmos-mcp wallet rm neo
+```
+
+**MCP write tools then reference the wallet by id:**
+
+```jsonc
+// AI tool call (model never sees the mnemonic)
+{
+  "tool": "send_tokens",
+  "chain_id": "juno-1",
+  "wallet_id": "neo",
+  "recipient": "juno1...",
+  "amount": "1000000"
+}
+```
+
+**On-disk layout** (default `~/.junoclaw/wallets/`, override with `JUNOCLAW_WALLET_ROOT`):
+
+```
+.keystore.json    — KDF parameters for the passphrase backend
+                    (scrypt N=2^17 r=8 p=1, fresh 32-byte salt; absent for keychain-only stores)
+<id>.enc          — per-wallet AES-256-GCM envelope, records `backend`,
+                    fresh 12-byte IV per encrypt
+```
+
+Every wallet file records the backend that protects its DEK (`backend: "passphrase" | "keychain"`). The `WalletStore` dispatches to the right backend on decrypt, so a single store can hold a mix of both. Phase 1 files (no `backend` field) are read as `passphrase` for backward compatibility.
+
+Every encrypt operation uses a fresh random IV, so two wallets with the same mnemonic still have distinct ciphertexts. Tampering with a `.enc` file, supplying the wrong passphrase, or revoking the keychain entry all raise a clear *decryption failed* error — GCM's authentication tag catches the mismatch.
+
+**Environment:**
+
+- `JUNOCLAW_WALLET_ROOT` — storage directory (default `~/.junoclaw/wallets`).
+- `JUNOCLAW_WALLET_PASSPHRASE` — passphrase for the *passphrase* backend.
+- `JUNOCLAW_WALLET_PASSPHRASE_FILE` — read passphrase from a file (no trailing newline).
+- `JUNOCLAW_WALLET_DEFAULT_BACKEND` — `passphrase` or `keychain` to override the auto-selected default for `wallet add`.
+
+**Threat model.** The keychain backend binds the DEK to the OS user session: on Windows, DPAPI prevents another user on the same machine from reading the entry; on macOS, Keychain Services prompts to authorise other apps. The passphrase backend instead trusts the operator to protect a long-lived passphrase. Pick whichever model fits your deployment.
+
+Run the regression suites from `mcp/`:
+
+```bash
+npm run wallet-store-test       # 19 Phase 1 (passphrase) tests
+npm run keychain-store-test     # 21 Phase 2 (keychain) tests, incl. real DPAPI/Keychain round-trip
+```
+
+Covers: round-trip add/list/remove, tamper detection, wrong-passphrase / revoked-keychain-entry rejection, path-traversal id rejection, invalid-mnemonic refusal, IV freshness, POSIX `0600` file mode, multi-backend dispatch, Phase 1 backward compatibility, and a real on-OS keychain round-trip (skipped on platforms without `@napi-rs/keyring`).
+
+##### Migration from the pre-Ffern API
+
+If you previously called the MCP write tools with a `mnemonic` parameter, those calls now fail schema validation. Two-step migration:
+
+1. Export your existing mnemonic from wherever it lives today (env var, `.env`, password manager).
+2. `cosmos-mcp wallet add <id> --chain <chainId>` to enrol it once.
+3. Replace `mnemonic` with `wallet_id` in your prompts / agent configurations.
+
+The deleted `getSigningClient(chain, mnemonic)` helper in `src/utils/cosmos-client.ts` is the canonical signal that the unsafe path is gone — there is no public API in `mcp/` that takes a raw mnemonic anymore.
+
+#### `upload_wasm` security (Ffern C-4)
+
+The `upload_wasm` tool takes a local `wasm_path` argument. To prevent path-traversal and symlink-exfiltration attacks (where a malicious or careless agent uploads the contents of `~/.ssh/id_rsa` on-chain as "wasm"), every path is validated before the signing wallet is even constructed:
+
+- **Allow-root** — the file must live under `JUNOCLAW_WASM_ROOT` (default `~/.junoclaw/wasm`). Set `JUNOCLAW_WASM_ROOT=/path/to/your/wasm/dir` to relocate.
+- **Symlink reject** — neither the file nor any parent directory may be a symlink; the check uses `lstat` on the leaf and `realpath` on the full path.
+- **Size cap** — 8 MiB maximum (the practical ceiling for an optimised CosmWasm contract).
+- **Magic bytes** — the file must start with `\0asm` (the wasm v1 magic `0x00 0x61 0x73 0x6d`).
+
+If any check fails, the tool returns a clear error naming the cause. No bytes are read beyond what the size cap allows; no wallet is derived from the mnemonic if validation fails. Run `npm run path-guard-test` from `mcp/` to exercise the defenses against a sandbox fixture.
 
 ### Scaffold Tools (juno.new)
 | Tool | Description |
@@ -264,10 +372,15 @@ The chain registry includes IBC channel metadata for cross-chain transfers:
 
 ## Security
 
-- **The MCP server never stores keys.** Mnemonics are passed per-call and discarded.
-- Read operations require no wallet.
-- Write operations require an explicit mnemonic parameter.
-- The server holds no state between calls.
+The MCP server is the most-exposed surface in the JunoClaw stack — it brokers between an LLM's tool calls and signed Cosmos transactions. We document each defense honestly.
+
+- **Wallet handles, not raw mnemonics (Ffern C-3).** Every write tool takes a `wallet_id`. Mnemonics are enrolled out-of-band via the `cosmos-mcp wallet ...` CLI and encrypted at rest under a backend-specific 32-byte DEK — either an OS-keychain entry (Phase 2: DPAPI / macOS Keychain / libsecret) or a scrypt-derived master key (Phase 1: passphrase). See *Wallet registry* above.
+- **Path-guarded `upload_wasm` (Ffern C-4).** Allow-root, symlink reject, 8 MiB cap, magic-byte check. See *`upload_wasm` security* above.
+- **Read operations require no wallet.** Query tools take only addresses and chain ids; no key material is touched.
+- **No persistent process state.** The MCP server holds no in-memory key beyond a single `signFor()` call; the decrypted mnemonic buffer is zeroed in `finally{}` after one signing client is built.
+- **Out-of-process secret material.** The DEK source is always external to the Node process — either `JUNOCLAW_WALLET_PASSPHRASE` (or `_PASSPHRASE_FILE`) for the passphrase backend, or an OS-credential-manager entry for the keychain backend. The MCP server cannot decrypt anything without the appropriate operator-supplied input.
+
+**Reporting:** see [`SECURITY.md`](../SECURITY.md) at the repo root.
 
 ## License
 

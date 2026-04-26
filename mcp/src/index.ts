@@ -18,6 +18,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 import { CHAIN_REGISTRY, listChains, listTestnets, getChain } from "./resources/chains.js";
+import { runWalletCli } from "./wallet/cli.js";
 import {
   queryBalance,
   queryAllBalances,
@@ -233,67 +234,80 @@ server.tool(
   }
 );
 
-// ════════════════════════════════════════════════════
-//  TRANSACTION TOOLS — write operations, need mnemonic
-// ════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+//  TRANSACTION TOOLS — write operations, addressed by wallet_id
+//  Mnemonics are enrolled out-of-band via `cosmos-mcp wallet add`
+//  and never appear in the model's tool-call JSON or the MCP
+//  transport. (Ffern C-3, April 2026)
+// ══════════════════════════════════════════════════
+
+const WALLET_ID_DESC =
+  "Opaque wallet handle previously registered via `cosmos-mcp wallet add <id>`. " +
+  "The mnemonic itself is encrypted at rest and never crosses this API boundary.";
 
 server.tool(
   "send_tokens",
-  "Send tokens to an address. Requires mnemonic.",
+  "Send tokens to an address. Requires a registered wallet_id (see `cosmos-mcp wallet add`).",
   {
     chain_id: z.string().describe("Chain ID"),
-    mnemonic: z.string().describe("Sender wallet mnemonic (never stored)"),
+    wallet_id: z.string().describe(WALLET_ID_DESC),
     recipient: z.string().describe("Recipient bech32 address"),
     amount: z.string().describe("Amount in base denom (e.g. '1000000' for 1 JUNO)"),
     denom: z.string().optional().describe("Token denom (defaults to chain native)"),
     memo: z.string().optional().describe("TX memo"),
   },
-  async ({ chain_id, mnemonic, recipient, amount, denom, memo }) => {
-    const result = await sendTokens(chain_id, mnemonic, recipient, amount, denom, memo);
+  async ({ chain_id, wallet_id, recipient, amount, denom, memo }) => {
+    const result = await sendTokens(chain_id, wallet_id, recipient, amount, denom, memo);
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
 
 server.tool(
   "execute_contract",
-  "Execute a message on a CosmWasm contract. Requires mnemonic.",
+  "Execute a message on a CosmWasm contract. Requires a registered wallet_id.",
   {
     chain_id: z.string().describe("Chain ID"),
-    mnemonic: z.string().describe("Sender wallet mnemonic"),
+    wallet_id: z.string().describe(WALLET_ID_DESC),
     contract_address: z.string().describe("Contract bech32 address"),
     msg: z.string().describe("JSON execute message"),
     funds: z.string().optional().describe("JSON array of coins to send with msg"),
     memo: z.string().optional().describe("TX memo"),
   },
-  async ({ chain_id, mnemonic, contract_address, msg, funds, memo }) => {
+  async ({ chain_id, wallet_id, contract_address, msg, funds, memo }) => {
     const parsedMsg = JSON.parse(msg);
     const parsedFunds = funds ? JSON.parse(funds) : undefined;
-    const result = await executeContract(chain_id, mnemonic, contract_address, parsedMsg, parsedFunds, memo);
+    const result = await executeContract(chain_id, wallet_id, contract_address, parsedMsg, parsedFunds, memo);
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
 
 server.tool(
   "upload_wasm",
-  "Upload a WASM binary to a Cosmos chain. Requires mnemonic.",
+  "Upload a WASM binary to a Cosmos chain. Requires a registered wallet_id. The wasm_path must live under JUNOCLAW_WASM_ROOT (default ~/.junoclaw/wasm), must be a regular file (no symlinks), must be <= 8 MiB, and must start with the wasm magic bytes \\0asm.",
   {
     chain_id: z.string().describe("Chain ID"),
-    mnemonic: z.string().describe("Uploader wallet mnemonic"),
-    wasm_path: z.string().describe("Absolute path to .wasm file"),
+    wallet_id: z.string().describe(WALLET_ID_DESC),
+    wasm_path: z
+      .string()
+      .describe(
+        "Absolute path to .wasm file. MUST be inside JUNOCLAW_WASM_ROOT " +
+          "(default ~/.junoclaw/wasm). Symlinks are rejected. Max 8 MiB. " +
+          "The file must begin with the wasm magic bytes 0x00 0x61 0x73 0x6d."
+      ),
     memo: z.string().optional().describe("TX memo"),
   },
-  async ({ chain_id, mnemonic, wasm_path, memo }) => {
-    const result = await uploadWasm(chain_id, mnemonic, wasm_path, memo);
+  async ({ chain_id, wallet_id, wasm_path, memo }) => {
+    const result = await uploadWasm(chain_id, wallet_id, wasm_path, memo);
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
 
 server.tool(
   "instantiate_contract",
-  "Instantiate a contract from an uploaded code ID. Requires mnemonic.",
+  "Instantiate a contract from an uploaded code ID. Requires a registered wallet_id.",
   {
     chain_id: z.string().describe("Chain ID"),
-    mnemonic: z.string().describe("Instantiator wallet mnemonic"),
+    wallet_id: z.string().describe(WALLET_ID_DESC),
     code_id: z.number().describe("Code ID of uploaded WASM"),
     msg: z.string().describe("JSON instantiate message"),
     label: z.string().describe("Human-readable contract label"),
@@ -301,63 +315,63 @@ server.tool(
     funds: z.string().optional().describe("JSON array of coins to send"),
     memo: z.string().optional().describe("TX memo"),
   },
-  async ({ chain_id, mnemonic, code_id, msg, label, admin, funds, memo }) => {
+  async ({ chain_id, wallet_id, code_id, msg, label, admin, funds, memo }) => {
     const parsedMsg = JSON.parse(msg);
     const parsedFunds = funds ? JSON.parse(funds) : undefined;
-    const result = await instantiateContract(chain_id, mnemonic, code_id, parsedMsg, label, admin, parsedFunds, memo);
+    const result = await instantiateContract(chain_id, wallet_id, code_id, parsedMsg, label, admin, parsedFunds, memo);
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
 
 server.tool(
   "migrate_contract",
-  "Migrate a contract to a new code ID. Requires admin mnemonic.",
+  "Migrate a contract to a new code ID. The wallet_id must be the contract admin.",
   {
     chain_id: z.string().describe("Chain ID"),
-    mnemonic: z.string().describe("Admin wallet mnemonic"),
+    wallet_id: z.string().describe(WALLET_ID_DESC + " Must be the contract admin."),
     contract_address: z.string().describe("Contract to migrate"),
     new_code_id: z.number().describe("New code ID"),
     migrate_msg: z.string().describe("JSON migrate message"),
     memo: z.string().optional().describe("TX memo"),
   },
-  async ({ chain_id, mnemonic, contract_address, new_code_id, migrate_msg, memo }) => {
+  async ({ chain_id, wallet_id, contract_address, new_code_id, migrate_msg, memo }) => {
     const parsedMsg = JSON.parse(migrate_msg);
-    const result = await migrateContract(chain_id, mnemonic, contract_address, new_code_id, parsedMsg, memo);
+    const result = await migrateContract(chain_id, wallet_id, contract_address, new_code_id, parsedMsg, memo);
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
 
 server.tool(
   "submit_blob",
-  "Submit a data blob to Celestia DA layer (celestiaorg/celestia-app, Apache 2.0). Used by sovereign rollup chains for data availability. Requires mnemonic.",
+  "Submit a data blob to Celestia DA layer (celestiaorg/celestia-app, Apache 2.0). Used by sovereign rollup chains for data availability. Requires a registered wallet_id with bech32 prefix 'celestia'.",
   {
     chain_id: z.string().describe("Celestia chain ID ('celestia' or 'mocha-4')"),
-    mnemonic: z.string().describe("Sender wallet mnemonic (never stored)"),
+    wallet_id: z.string().describe(WALLET_ID_DESC + " Must have bech32 prefix 'celestia'."),
     namespace_hex: z.string().describe("Namespace hex ID for the blob (e.g. '6a756e6f636c6177' for 'junoclaw')"),
     data: z.string().describe("UTF-8 data to submit as blob"),
     memo: z.string().optional().describe("TX memo"),
   },
-  async ({ chain_id, mnemonic, namespace_hex, data, memo }) => {
-    const result = await submitBlob(chain_id, mnemonic, namespace_hex, data, memo);
+  async ({ chain_id, wallet_id, namespace_hex, data, memo }) => {
+    const result = await submitBlob(chain_id, wallet_id, namespace_hex, data, memo);
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
 
 server.tool(
   "ibc_transfer",
-  "Transfer tokens across Cosmos chains via IBC. The first cross-chain primitive for AI agents. Requires mnemonic.",
+  "Transfer tokens across Cosmos chains via IBC. The first cross-chain primitive for AI agents. Requires a registered wallet_id whose bech32 prefix matches the source chain.",
   {
     source_chain_id: z.string().describe("Source chain ID (e.g. 'juno-1')"),
     dest_chain_id: z.string().describe("Destination chain ID (e.g. 'osmosis-1')"),
-    mnemonic: z.string().describe("Sender wallet mnemonic (never stored)"),
+    wallet_id: z.string().describe(WALLET_ID_DESC + " Bech32 prefix must match source_chain_id."),
     receiver: z.string().describe("Receiver bech32 address on destination chain"),
     amount: z.string().describe("Amount in base denom (e.g. '1000000' for 1 token)"),
     denom: z.string().optional().describe("Token denom (defaults to source chain native)"),
     memo: z.string().optional().describe("IBC transfer memo"),
     timeout_minutes: z.number().optional().describe("Timeout in minutes (default 10)"),
   },
-  async ({ source_chain_id, dest_chain_id, mnemonic, receiver, amount, denom, memo, timeout_minutes }) => {
-    const result = await ibcTransfer(source_chain_id, dest_chain_id, mnemonic, receiver, amount, denom, memo, timeout_minutes);
+  async ({ source_chain_id, dest_chain_id, wallet_id, receiver, amount, denom, memo, timeout_minutes }) => {
+    const result = await ibcTransfer(source_chain_id, dest_chain_id, wallet_id, receiver, amount, denom, memo, timeout_minutes);
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
@@ -477,9 +491,21 @@ server.prompt(
 // ════════════════════════════════════════════════════
 
 async function main() {
+  // CLI mode: `cosmos-mcp wallet ...` runs the wallet-registry CLI
+  // and exits without starting the MCP server.
+  if (process.argv[2] === "wallet") {
+    try {
+      await runWalletCli(process.argv.slice(3));
+      process.exit(0);
+    } catch (e) {
+      console.error(`error: ${(e as Error).message}`);
+      process.exit(1);
+    }
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("🌌 Cosmos MCP server running — serving any chain, holding no keys");
+  console.error("🌌 Cosmos MCP server running — serving any chain, signing only by registered wallet_id");
 }
 
 main().catch((err) => {

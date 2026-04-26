@@ -1,17 +1,19 @@
 /**
  * CosmJS Client Factory
  *
- * Two modes:
- *   1. Query-only (no wallet) — for reads, anyone can use
- *   2. Signing (with mnemonic) — for writes, explicit per-call
+ * Read path: `getQueryClient(chain)` — anyone can use, no wallet.
+ * Write path: `WalletStore.signFor(walletId, chain)` — see
+ *             `../wallet/store.ts`.
  *
- * The MCP server never persists keys. The mnemonic is passed in,
- * used for one session, and discarded. Detachment from custody.
+ * Per Ffern C-3 (April 2026), this module no longer exposes a
+ * mnemonic-taking `getSigningClient`. All signing flows go through
+ * the encrypted wallet registry by `wallet_id`; the mnemonic is
+ * decrypted in-process for one signing-client construction and
+ * scrubbed from memory immediately afterwards. See
+ * `mcp/src/wallet/store.ts` for the replacement.
  */
 
 import { CosmWasmClient, SigningCosmWasmClient } from "@cosmjs/cosmwasm-stargate";
-import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
-import { GasPrice } from "@cosmjs/stargate";
 import { type ChainConfig } from "../resources/chains.js";
 
 // Cache query clients by chainId to avoid reconnecting
@@ -29,24 +31,6 @@ export async function getQueryClient(chain: ChainConfig): Promise<CosmWasmClient
 export interface SigningContext {
   client: SigningCosmWasmClient;
   address: string;
-}
-
-export async function getSigningClient(
-  chain: ChainConfig,
-  mnemonic: string
-): Promise<SigningContext> {
-  const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
-    prefix: chain.bech32Prefix,
-  });
-  const [account] = await wallet.getAccounts();
-
-  const client = await SigningCosmWasmClient.connectWithSigner(
-    chain.rpcEndpoint,
-    wallet,
-    { gasPrice: GasPrice.fromString(chain.gasPrice) }
-  );
-
-  return { client, address: account.address };
 }
 
 export function clearClientCache(): void {

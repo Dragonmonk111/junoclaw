@@ -12,9 +12,21 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "smoke": "tsx src/smoke-test.ts",
+    "path-guard-test": "tsx src/utils/path-guard-test.ts",
+    "wallet-store-test": "tsx src/wallet/store-test.ts",
+    "keychain-store-test": "tsx src/wallet/keychain-store-test.ts",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["cosmos", "mcp", "cosmwasm", "juno", "ai", "ibc", "zk", "groth16"],
+  "keywords": [
+    "cosmos",
+    "mcp",
+    "cosmwasm",
+    "juno",
+    "ai",
+    "ibc",
+    "zk",
+    "groth16"
+  ],
   "author": "JunoClaw (VairagyaNode)",
   "license": "Apache-2.0",
   "repository": {
@@ -32,6 +44,9 @@
     "@cosmjs/proto-signing": "^0.32.4",
     "@cosmjs/stargate": "^0.32.4",
     "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "optionalDependencies": {
+    "@napi-rs/keyring": "^1.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
