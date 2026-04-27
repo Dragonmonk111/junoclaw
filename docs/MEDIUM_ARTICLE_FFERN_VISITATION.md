@@ -2,6 +2,10 @@
 
 ## How an independent audit landed on the right week, changed the shape of a single-operator project, and taught a small coastal monastery to install bells it can ring from a single rope.
 
+> **Published on Medium (27 April 2026):** <https://medium.com/@tj.yamlajatt/when-the-abbot-came-5dda4f22a5b1>
+>
+> *This file is the source-of-truth archival copy, including the full eleven-prompt Midjourney appendix (omitted from the Medium version for narrative flow). Medium readers who want the prompts are pointed here from the closing colophon of the Medium piece.*
+
 [IMAGE 1 — THE ABBOT AT THE GATE]
 
 ---
