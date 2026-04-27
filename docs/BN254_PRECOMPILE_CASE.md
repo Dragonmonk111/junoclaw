@@ -5,15 +5,20 @@
 
 ---
 
+> **Calibration note (April 2026, post-deployment).** The pre-deployment **5–10M SDK gas** projection in §1 below was a worst-case estimate based on naive Wasm-instruction metering. The deployed `zk-verifier` on `uni-7` (code_id 64, contract `juno1ydxksvr…lse7ekem`) measured **371,486 SDK gas** in tx `F6D5774EE2073E2DD011399A7E96889BA026ED67C6A510D208FD5C575080F4DA` (block 12,673,217). That is ~3.7 % of a Juno block, not 50–100 %. The case for the precompile shifts from *"pure-Wasm barely fits"* to *"pure-Wasm fits comfortably; the precompile makes the cost cheap enough to require by default rather than reserve for high-value attestations."* The ~2× reduction (371 K → ~187 K) and the unlocking of mature Ethereum ZK toolchains remain the right framing. The original estimate is preserved below as historical prep context; please read §*The deployed reality* (after §1) for the measurement-grounded numbers.
+
+---
+
 ## 1. Gas Cost Analysis
 
-### The Three Scenarios
+### The Three Scenarios *(pre-deployment estimates; see calibration note above)*
 
 | Scenario | Gas Cost | Fits Juno? | Notes |
 |----------|----------|------------|-------|
 | **Current** (store hash only) | ~200K SDK gas | Easy | No verification, trust-the-operator |
-| **Groth16 in pure CosmWasm** | ~5–10M SDK gas | Borderline | Soft limit ~10M per tx on Juno |
-| **Groth16 via BN254 precompile** | ~187K SDK gas | Trivial | Same cost as storing a hash |
+| **Groth16 in pure CosmWasm** *(estimated)* | ~5–10M SDK gas | Borderline (estimate) | Naive Wasm-metering projection — superseded by measurement, see §*The deployed reality* |
+| **Groth16 in pure CosmWasm** *(measured uni-7)* | **371,486 SDK gas** | Comfortable | ~3.7 % of a Juno block — the actual deployed number |
+| **Groth16 via BN254 precompile** | ~187K SDK gas | Trivial | Same cost as storing a hash; ~2× reduction vs measured pure-Wasm |
 
 ### How the numbers work
 
@@ -49,16 +54,47 @@ Rough estimate for a full BN254 pairing in Wasm:
 - With optimized Rust (e.g. `ark-bn254`): ~500M–1B Wasm gas → **5–10M SDK gas**
 - Juno block gas limit: ~10M per transaction (soft), ~40M per block
 
-**Verdict**: Pure CosmWasm Groth16 *barely* fits in a single transaction and would consume a significant chunk of block gas. A precompile makes it 50× cheaper.
+**Verdict (pre-deployment)**: Pure CosmWasm Groth16 *barely* fits in a single transaction and would consume a significant chunk of block gas. A precompile makes it 50× cheaper.
 
-### Visual comparison
+### Visual comparison *(pre-deployment estimate)*
 
 ```
 Current (store hash):     ████░░░░░░░░░░░░░░░░  200K  (2% of limit)
 Groth16 + precompile:     ████░░░░░░░░░░░░░░░░  187K  (2% of limit)
-Groth16 pure CosmWasm:    ██████████████████████ 5-10M (50-100% of limit)
+Groth16 pure CosmWasm:    ██████████████████████ 5-10M (50-100% of limit)  ← estimate, not measurement
                           ────────────────────── 10M SDK gas limit
 ```
+
+---
+
+## 1b. The deployed reality *(April 2026, post-`uni-7` deployment)*
+
+The pre-deployment numbers above were superseded by an actual deployment. The `zk-verifier` contract was uploaded to `uni-7` as code_id 64 and instantiated at `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem`. A full Groth16 BN254 verification (4 pairs) was executed as tx `F6D5774EE2073E2DD011399A7E96889BA026ED67C6A510D208FD5C575080F4DA` at block 12,673,217.
+
+### Measured numbers
+
+| Operation | SDK gas | % of Juno block (10M soft cap) |
+|---|---:|---:|
+| Store SHA-256 hash only (baseline) | ~200,000 | 2 % |
+| **Groth16 BN254 verify, pure CosmWasm (`ark-bn254 0.5`)** | **371,486** | **3.7 %** |
+| Groth16 BN254 verify, with precompile *(target, EIP-1108 parity)* | ~187,000 | 1.9 % |
+
+### Visual comparison *(measured)*
+
+```
+Current (store hash):       ████░░░░░░░░░░░░░░░░  200K  (2% of block)
+Groth16 + precompile:       ████░░░░░░░░░░░░░░░░  187K  (1.9% of block)  ← target
+Groth16 pure CosmWasm:      ███████░░░░░░░░░░░░░  371K  (3.7% of block)  ← measured
+                            ──────────────────── 10M SDK gas (block soft cap)
+```
+
+### What the measurement changes about the case
+
+The `5–10M` projection was conservative by roughly 15×. `arkworks` is well-optimised; CosmWasm's Wasm executor handles tight finite-field loops more efficiently than a naive instruction-count model suggests. The precompile case therefore is not *"the only way to make Groth16 fit"* — pure-Wasm fits comfortably today. The precompile case is:
+
+1. **Cheap enough to require by default.** At 371 K, on-chain Groth16 verify is reserved for high-value attestations. At ~187 K, it can be a default for every attestation. *Cheap enough to be mandatory is the security property; "2× faster" is its shadow.*
+2. **Toolchain bridge.** Every production Groth16 circuit (`snarkjs`, `circom`, `gnark`, `ark-groth16`) targets BN254. A precompile means an Ethereum-trained team can deploy on Juno without re-running their trusted-setup ceremony or re-targeting their proving stack.
+3. **Composes with bridges.** When Juno bridges to Base / Ethereum (the live community discussion), the bridge can verify each transfer with a Groth16 proof on the Juno side, instead of trusting a small set of signers. Cheap BN254 is what makes the secure bridge model affordable.
 
 ---
 

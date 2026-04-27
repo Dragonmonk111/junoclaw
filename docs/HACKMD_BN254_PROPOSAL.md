@@ -194,12 +194,20 @@ While this proposal was being prepared for on-chain submission, **Ffern Institut
 - **Path validation in `upload_wasm`** — a developer wasm-upload helper accepted unbounded local file paths with no allow-root, symlink check, size cap, or magic-byte verification.
 - **SSRF in off-chain compute (`computeDataVerify`)** — a data-verification helper fetched arbitrary URLs with no scheme filter, no private-IP block, and no port restriction.
 
-**Status as of 25 April 2026.** Patches are in progress against `release/v0.x.y-security-1`. The on-chain code (BN254 precompile, `agent-company` v3 at code_id 63 on uni-7, the live `zk-verifier` at `juno1ydxksvr…`) is **not affected** by any of the findings. A GitHub Security Advisory will publish concurrent with the security release. Final remediation will be re-verified by Ffern Institute *before* any `MsgSoftwareUpgrade` proposal carrying the BN254 precompile reaches mainnet — that is the explicit gate this proposal commits to.
+**Status as of 27 April 2026.** **Remediation shipped** across three security releases tagged on `main`:
+
+- `v0.x.y-security-1` — the five walls (C-1 and C-2 `unsafe-shell` Cargo gate; C-3 wallet-handle registry with passphrase + keychain backends; C-4 `upload_wasm` path guard; H-3 `computeDataVerify` SSRF guard), plus a startup-only `sandbox_mode` switch on `plugin-shell`.
+- `v0.x.y-security-2` — the first runtime kill-switch (`signing_paused`).
+- `v0.x.y-security-3` — the remaining runtime levers: `egress_paused` on the WAVS SSRF-guarded fetcher, the localhost-only token-gated admin RPC on both processes (with constant-time token compare, rate-limit, audit log, DNS-rebinding-resistant `Host`-header check), and the read-only `/policy` roll-up endpoint. Hot-flip on both kill-switches; pollable kill-switch state for downstream verifiers.
+
+Five **Security Advisories** are published on the repo Security tab as of 26 April 2026 23:11 UTC — `GHSA-fvq5-79h6-952c` (C-1), `GHSA-gpvm-3chf-2649` (C-2), `GHSA-j75q-8xvm-6c48` (C-3, **CVSS 9.8 critical** after re-scoring with `UI:N`), `GHSA-rw59-34hw-pmwp` (C-4), `GHSA-q545-mvjf-q9pg` (H-3) — with deliberately minimal text and an explicit pointer to the post-audit retrospective ([`docs/MEDIUM_ARTICLE_FFERN_VISITATION.md`](./MEDIUM_ARTICLE_FFERN_VISITATION.md)) for the full narrative. CVE numbers are being assigned by GitHub's CNA asynchronously and will appear on each advisory page when minted.
+
+The on-chain code (BN254 precompile, `agent-company` v3 at code_id 63 on uni-7, the live `zk-verifier` at `juno1ydxksvr…`) is **not affected** by any of the findings. The Ffern re-check of the shipped operator-side fixes remains the explicit pre-condition on any `MsgSoftwareUpgrade` proposal carrying the BN254 precompile to mainnet — that is the explicit gate this proposal commits to.
 
 **Why this disclosure is in the BN254 proposal text:**
 
 1. **Honest engineering culture is part of the mandate.** Voters ratifying #373 endorsed a project that responds to findings publicly and quickly. This is the same engineering-culture signal, in a moment that asked for it.
-2. **The two tracks are sequenced, not parallel.** A YES on this proposal triggers the upstream CosmWasm PR step. That step does not run until the four operator-side fixes are merged *and* Ffern has re-checked them. The vote is for *the direction*; the merge waits on *the response*.
+2. **The two tracks are sequenced, not parallel.** A YES on this proposal triggers the upstream CosmWasm PR step. The five operator-side fixes are merged and tagged across three security releases on `main`; the upstream CosmWasm PR step remains gated only on Ffern's re-check of those fixes. The vote is for *the direction*; the upstream-PR step waits on *the re-check*.
 
 **With thanks to Ffern Institute** — the audit landed at exactly the right week, with the right shape of disclosure (private, ahead of public promotion, with reproducible vectors), and the only honest reaction is gratitude plus a public acknowledgement.
 
@@ -215,7 +223,7 @@ The twin-lock above (TEE + ZK) is what *this* proposal completes. Beyond the two
 
 The third lock answers a question neither TEE nor ZK can: ***does the operator retain meaningful, externally-verifiable control of the agent fleet at runtime?***
 
-For agent-companies running real-world consequential work (long-running data pipelines, robotic delivery, client-paying-for-attestation tasks), this layer is what separates *autonomy* from *abdication*. It is being introduced in JunoClaw as the post-Ffern hardening pass (April–May 2026) and will be the subject of **a separate future proposal**, not this one. Mentioned here so voters can see the full direction the architecture is travelling in.
+For agent-companies running real-world consequential work (long-running data pipelines, robotic delivery, client-paying-for-attestation tasks), this layer is what separates *autonomy* from *abdication*. It has been **shipped** in JunoClaw as the post-Ffern hardening pass (April 2026), across `v0.x.y-security-1`/`-2`/`-3` on `main`, with the runtime levers and admin-RPC primitive operationally complete (single-`curl` mean-time-to-halt; downstream-pollable policy state via the `/policy` endpoint). The architectural primitive itself — *verifiable controllability as a chain-aware specification* — will be the subject of **a separate future proposal**, not this one (tentatively `v0.x.y-security-4+`, integrating `x/authz` as a Phase 3 chain-layer Lock 4 primitive). Mentioned here so voters can see the full direction the architecture is travelling in.
 
 ---
 
@@ -237,7 +245,7 @@ For agent-companies running real-world consequential work (long-running data pip
 - **Author** — VairagyaNodes. Juno staker since December 2021; validator candidate (unbonded).
 - **Coding collaborator** — Cascade, the pair-programming AI agent that wrote the reference implementation, patches, tests, and documentation at the author's direction.
 - **Governance cosignature** — *pending — Jake Hartnell invited, per #373 precedent. This HackMD is collaboratively editable; framing revisions welcome before on-chain submission.*
-- **Independent third-party review (operator-side)** — **Ffern Institute**, April 2026. Audit of off-chain helper code surfaced four critical and one high-severity findings in `plugins/plugin-shell/`, `mcp/`, and `wavs/bridge/`; remediation in progress on `release/v0.x.y-security-1`; Ffern re-check is the explicit pre-condition on the upstream CosmWasm PR step. **With thanks.**
+- **Independent third-party review (operator-side)** — **Ffern Institute**, April 2026. Audit of off-chain helper code surfaced four critical and one high-severity findings in `plugins/plugin-shell/`, `mcp/`, and `wavs/bridge/`. **Remediation shipped** across three security releases on `main` (`v0.x.y-security-1` walls, `v0.x.y-security-2` and `-3` runtime kill-switches and admin RPC), with five Security Advisories published on the repo on 26 April 2026 (CVE numbers being assigned by GitHub's CNA asynchronously). A Ffern re-check of the operator-side fixes is the explicit pre-condition on the upstream CosmWasm PR step that follows a YES vote. Full narrative in [`docs/MEDIUM_ARTICLE_FFERN_VISITATION.md`](./MEDIUM_ARTICLE_FFERN_VISITATION.md). **With thanks.**
 - **Independent third-party audit (precompile)** — *not yet commissioned.* Planned post-mainnet via DAO treasury, per #373's plan and the revised cost envelope above. The tests + devnet are evidence *of work*, not a substitute *for* audit.
 - **License** — Apache-2.0 throughout. AI-assisted contributions are reviewed, edited, and committed under human direction; see `NOTICE` and `CONTRIBUTORS.md` at the repo root for the full statement.
 
@@ -251,6 +259,8 @@ For agent-companies running real-world consequential work (long-running data pip
 - 📄 Benchmark results — <https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_RESULTS.md>
 - 📄 Long-form governance proposal — <https://github.com/Dragonmonk111/junoclaw/blob/main/docs/JUNO_GOVERNANCE_PROPOSAL_BN254.md>
 - 📄 Precompile index — <https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_PRECOMPILE_INDEX.md>
+- 🔒 Post-Ffern retrospective (When the Abbot Came) — <https://github.com/Dragonmonk111/junoclaw/blob/main/docs/MEDIUM_ARTICLE_FFERN_VISITATION.md>
+- 🔒 Repo Security Advisories — <https://github.com/Dragonmonk111/junoclaw/security/advisories>
 - 🧪 Reference implementation — <https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork>
 - 🧪 Devnet — <https://github.com/Dragonmonk111/junoclaw/tree/main/devnet>
 - ✍️ Post-#373 synthesis (Medium) — <https://medium.com/@tj.yamlajatt/hardening-after-a-91-71-yes-on-proposal-373-b46d2939461f>

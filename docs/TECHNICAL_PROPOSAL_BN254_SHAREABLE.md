@@ -110,7 +110,7 @@ For context — recent CosmWasm audit ballparks (public figures):
 
 Typical CosmWasm projects ship at 30–50 % test-to-code; 90 % is unusual, and it shortens the audit's *"understand the intent"* phase — the intent is spelled out in the tests plus the EIP reference.
 
-**BN254 precompile rough estimate: $15–25k, 1–2 weeks** with Oak Security, Halborn, or Informal Systems. Funded via DAO treasury post-mainnet, per #373's plan.
+**BN254 precompile realistic estimate: $30–45k, 3–5 weeks** with Oak Security, Halborn, or Informal Systems. (An earlier $15–25k / 1–2 wk line under-estimated multi-platform validation, differential-test review, fork-integration testing, and the re-audit after the parallel operator-side hardening track. Fuller breakdown in the long-form HackMD.) Funded via DAO treasury post-mainnet, per #373's plan.
 
 ## Relation to Prop #373
 
@@ -142,7 +142,8 @@ Typical CosmWasm projects ship at 30–50 % test-to-code; 90 % is unusual, and i
 - **Author** — VairagyaNodes (Juno staker since Dec 2021; validator candidate, unbonded pos. 6; JunoClaw maintainer).
 - **Coding collaborator** — Cascade, the pair-programming AI agent that wrote the reference implementation, patches, tests, and docs at the author's direction.
 - **Governance cosignature** — *[Jake Hartnell — per #373 precedent, framing review]*
-- **Independent third-party audit** — *not yet commissioned.* Planned post-mainnet via DAO treasury (per #373). The tests + devnet are evidence *of work*, not a substitute *for* audit.
+- **Independent third-party review (operator-side)** — **Ffern Institute**, April 2026. Audit of the off-chain operator codebase (separate scope from the BN254 precompile). Five findings remediated across three security releases on `main` (`v0.x.y-security-1`/`-2`/`-3`), five Security Advisories published. Ffern re-check is the explicit pre-condition on the upstream CosmWasm PR step that follows a YES vote. Full narrative: [`docs/MEDIUM_ARTICLE_FFERN_VISITATION.md`](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/MEDIUM_ARTICLE_FFERN_VISITATION.md). With thanks.
+- **Independent third-party audit (precompile)** — *not yet commissioned.* Planned post-mainnet via DAO treasury (per #373). The tests + devnet are evidence *of work*, not a substitute *for* audit.
 - **License** — Apache-2.0 throughout.
 
 ---

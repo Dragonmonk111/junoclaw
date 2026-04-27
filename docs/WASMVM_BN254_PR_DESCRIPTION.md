@@ -3,7 +3,7 @@
 > **Upstream target:** `CosmWasm/cosmwasm` + `CosmWasm/wasmvm`
 > **Version addressed:** `v2.2.0` (also drafted against `main`)
 > **Issue reference:** `CosmWasm/cosmwasm#751` (Crypto API meta)
-> **Draft author:** JunoClaw contributors (<https://github.com/juno-claw/junoclaw>)
+> **Draft author:** JunoClaw contributors (<https://github.com/Dragonmonk111/junoclaw>)
 
 ## Summary
 
@@ -164,7 +164,7 @@ The gas analysis that motivated the work is in
 [`docs/BN254_PRECOMPILE_CASE.md`][case] on the JunoClaw repo; the
 governance-track companion is [`docs/JUNO_GOVERNANCE_PROPOSAL_BN254.md`][prop].
 
-[case]: https://github.com/juno-claw/junoclaw/blob/main/docs/BN254_PRECOMPILE_CASE.md
-[prop]: https://github.com/juno-claw/junoclaw/blob/main/docs/JUNO_GOVERNANCE_PROPOSAL_BN254.md
+[case]: https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_PRECOMPILE_CASE.md
+[prop]: https://github.com/Dragonmonk111/junoclaw/blob/main/docs/JUNO_GOVERNANCE_PROPOSAL_BN254.md
 
 cc @ethanfrey @webmaster128 (CosmWasm), @Reecepbcups @jakehartnell (Juno)

@@ -126,7 +126,7 @@ BN254 has 12+ years of cryptanalysis, is the curve every Ethereum zk-rollup and 
 
 **Audit**
 
-Effective audit surface is small by design: ~400 lines (host-function glue + upstream patches). The reference crate is ~90 % tests and documentation. The cryptographic library beneath (`ark-bn254`) is audited upstream. Rough audit estimate: **$15–25k, 1–2 weeks** with Oak Security, Halborn, or Informal Systems. To be funded via DAO treasury post-mainnet, per #373's plan.
+Effective audit surface is small by design: ~400 lines (host-function glue + upstream patches). The reference crate is ~90 % tests and documentation. The cryptographic library beneath (`ark-bn254`) is audited upstream. Realistic audit estimate: **$30–45k, 3–5 weeks** with Oak Security, Halborn, or Informal Systems (revised up from an earlier $15–25k pre-Ffern line; multi-platform validation, differential-test review, and re-audit-after-operator-hardening were the missing line items). To be funded via DAO treasury post-mainnet, per #373's plan.
 
 ---
 

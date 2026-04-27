@@ -79,7 +79,7 @@ For context — ballpark public figures from recent CosmWasm audits:
 
 Most CosmWasm contracts audit at 30–50 % test-to-code by LoC. 90 % test-and-docs coverage is unusual, and it cuts straight through the usual *"first understand the intent"* phase of an audit — the intent is already spelled out in the tests and the EIP reference.
 
-**Rough estimate for the BN254 precompile: $15–25k, 1–2 weeks** with Oak Security, Halborn, or Informal Systems — all three have CosmWasm + crypto-primitive experience. Funded via DAO treasury post-mainnet, per the plan articulated in #373. This is evidence *of work*, not a substitute *for* audit.
+**Realistic estimate for the BN254 precompile: $30–45k, 3–5 weeks** with Oak Security, Halborn, or Informal Systems — all three have CosmWasm + crypto-primitive experience. (An earlier pre-Ffern $15–25k / 1–2 wk line under-estimated four contingencies that the operator-side audit made concrete: multi-platform validation, differential-test review, fork-integration testing, and re-audit after the operator-side hardening shipped. The fuller breakdown is in the [HackMD](#).) Funded via DAO treasury post-mainnet, per the plan articulated in #373. This is evidence *of work*, not a substitute *for* audit.
 
 ---
 
@@ -97,6 +97,8 @@ Most CosmWasm contracts audit at 30–50 % test-to-code by LoC. 90 % test-and-do
 **Proposal #373** (19–24 March 2026, **91.71 % YES** on **59.56 %** turnout) recognised JunoClaw as Juno ecosystem infrastructure and endorsed the verifiable-agent / Junoswap-revival / validator-sidecar roadmap. **This proposal is the next concrete step on that same roadmap's ZK verification track** — no new funding asked, just a direction signal for the upstream PR.
 
 The live contract suite (`agent-registry`, `task-ledger`, `escrow`, `agent-company`, `junoswap-factory / -pair`, `builder-grant`, `zk-verifier`) went through four tagged iterations — v5, v6.0, v6.1, v7/Tier-1.5 — since #373. Honest breakdown: three real security fixes (v5 supermajority arithmetic, v6 identity hygiene, v6.1 value-flow holes), two self-corrections of v4 overreach (registry wiring, weight-guardrail retraction), one capability expansion (Tier-1-slim constraint vocabulary). **155 / 155** workspace tests green as of 2026-04-20. Details in the [post-#373 synthesis article on Medium](https://medium.com/@tj.yamlajatt/hardening-after-a-91-71-yes-on-proposal-373-b46d2939461f) (archival copy on [GitHub](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/MEDIUM_ARTICLE_AFTER_THE_VOTE.md)).
+
+Independently, the off-chain operator-side codebase went through an external audit by **Ffern Institute** in April 2026. Five findings (four critical, one high) were remediated across three further security releases on `main` (`v0.x.y-security-1` walls; `v0.x.y-security-2` and `-3` runtime kill-switches and admin RPC), with five Security Advisories published on the repo. The on-chain code, the BN254 precompile crate, and the live `zk-verifier` were not affected. A Ffern re-check of the operator-side fixes is the explicit pre-condition on any `MsgSoftwareUpgrade` proposal carrying this precompile to mainnet. Full retrospective: [`docs/MEDIUM_ARTICLE_FFERN_VISITATION.md`](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/MEDIUM_ARTICLE_FFERN_VISITATION.md).
 
 ## Deliverables
 
