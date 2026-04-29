@@ -34,9 +34,9 @@
  * as the headline reduction factor.
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, statSync, realpathSync } from "fs";
 import { tmpdir } from "os";
-import { resolve, dirname } from "path";
+import { resolve, dirname, sep, isAbsolute } from "path";
 import { fileURLToPath } from "url";
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
 import { SigningCosmWasmClient } from "@cosmjs/cosmwasm-stargate";
@@ -65,7 +65,50 @@ const ADMIN_ADDR = flag("admin");
 const PURE_ADDR = flag("pure-addr");
 const PRECOMPILE_ADDR = flag("precompile-addr");
 const SAMPLES = Math.max(1, Math.floor(Number(flag("samples", "10"))));
-const OUT = flag("out", resolve(REPO_ROOT, "docs", "BN254_BENCHMARK_RESULTS.md"));
+const OUT = canonicaliseOutputPath(
+  flag("out", resolve(REPO_ROOT, "docs", "BN254_BENCHMARK_RESULTS.md")),
+);
+
+// ── Path discipline (post-Ffern v0.x.y-security-1 hardening pattern) ──────
+//
+// The benchmark harness is a developer tool, not a production-deployed
+// surface — but it does (a) read a proof bundle from a path the operator
+// can override and (b) write a results markdown to a path that lands in
+// the repo. The Ffern audit established a project-wide rule that any tool
+// handling filesystem paths must canonicalise, allow-root, and (for
+// inputs) cap the size before parsing. This block applies that rule here.
+
+/** Maximum size of a proof JSON we will ever read. 1 MiB is generous —
+ *  a realistic Groth16 bundle is well under 10 KiB. The cap keeps a
+ *  malformed or symlinked input from blowing up V8's heap. */
+const MAX_PROOF_BYTES = 1 * 1024 * 1024;
+
+/** Allow-roots for `--out`: the repo root and the system tmpdir. */
+function canonicaliseOutputPath(raw: string): string {
+  const abs = isAbsolute(raw) ? raw : resolve(process.cwd(), raw);
+  const repoCanon = realpathSync(REPO_ROOT) + sep;
+  const tmpCanon = realpathSync(tmpdir()) + sep;
+  // The output file may not exist yet, so canonicalise its parent dir.
+  let parent: string;
+  try {
+    parent = realpathSync(dirname(abs));
+  } catch {
+    // Parent doesn't exist yet — create it under the repo root if the
+    // requested path is inside the repo, otherwise refuse.
+    parent = dirname(abs);
+  }
+  const parentWithSep = parent.endsWith(sep) ? parent : parent + sep;
+  if (
+    !parentWithSep.startsWith(repoCanon) &&
+    !parentWithSep.startsWith(tmpCanon)
+  ) {
+    throw new Error(
+      `--out ${raw} resolves outside the repo root (${REPO_ROOT}) and the tmpdir (${tmpdir()}). ` +
+        `Refusing to write a benchmark result to an arbitrary location.`,
+    );
+  }
+  return abs;
+}
 
 // ── Proof loader (shared convention with benchmark-zk-verifier.ts) ─────────
 
@@ -76,12 +119,37 @@ type ProofBundle = {
 };
 
 function loadProof(): ProofBundle {
-  const path = process.env.ZK_PROOF_PATH || resolve(tmpdir(), "groth16_proof.json");
-  const raw = readFileSync(path, "utf-8");
+  const requested =
+    process.env.ZK_PROOF_PATH || resolve(tmpdir(), "groth16_proof.json");
+  const abs = isAbsolute(requested)
+    ? requested
+    : resolve(process.cwd(), requested);
+  // Canonicalise (resolves symlinks) and allow-root: the proof must come
+  // from inside the repo or from the system tmpdir. This mirrors the
+  // UploadGuard pattern from `mcp/`'s upload_wasm post-Ffern fix.
+  const canon = realpathSync(abs);
+  const repoCanon = realpathSync(REPO_ROOT) + sep;
+  const tmpCanon = realpathSync(tmpdir()) + sep;
+  if (!canon.startsWith(repoCanon) && !canon.startsWith(tmpCanon)) {
+    throw new Error(
+      `ZK_PROOF_PATH ${requested} resolves outside the repo and the tmpdir. ` +
+        `Refusing to load a proof bundle from an arbitrary location.`,
+    );
+  }
+  const stat = statSync(canon);
+  if (!stat.isFile()) {
+    throw new Error(`ZK_PROOF_PATH ${canon} is not a regular file`);
+  }
+  if (stat.size > MAX_PROOF_BYTES) {
+    throw new Error(
+      `ZK_PROOF_PATH ${canon} is ${stat.size} bytes; exceeds ${MAX_PROOF_BYTES}-byte cap`,
+    );
+  }
+  const raw = readFileSync(canon, "utf-8");
   const parsed = JSON.parse(raw) as Partial<ProofBundle>;
   if (!parsed.vk_base64 || !parsed.proof_base64 || !parsed.public_inputs_base64) {
     throw new Error(
-      `proof bundle ${path} missing fields (vk_base64, proof_base64, public_inputs_base64)`,
+      `proof bundle ${canon} missing fields (vk_base64, proof_base64, public_inputs_base64)`,
     );
   }
   return parsed as ProofBundle;

@@ -42,11 +42,13 @@ This proposal asks Juno governance to signal support for adding a small piece of
 
 **Why this matters, beyond the numbers**
 
-Cheap on-chain zero-knowledge verification is a precondition for two directions the Juno community is actively discussing:
+Cheap on-chain zero-knowledge verification is a precondition for three directions the Juno community is actively discussing:
 
 1. **Secure cross-chain bridges.** If JUNO tokens flow to Base and Ethereum — as the recently proposed 10M JUNO liquidity incentive envisages — the bridges securing those flows are either multi-signature (historically fragile: Ronin, Wormhole, and Nomad together lost over a billion dollars) or zero-knowledge-verified (provably secure). Cheap BN254 makes the secure option affordable. Without it, Juno defaults to the fragile kind.
 
 2. **AI agents that can prove what they did without leaking data.** Today, agent attestation is all-or-nothing: publish prompts, model weights, and outputs — or trust the operator. With cheap ZK verification, an agent can prove on-chain that its output complies with policy, without revealing the private inputs that produced it.
+
+3. **The agent-company suite — deterministic agents with pre-intent tools.** JunoClaw is building a full agent-company stack on top of CosmWasm and DAODAO: task ledgers, escrow, registries, and a zk-verifier — all governed by on-chain DAOs. When an agent moves with a pre-defined intent (route a swap, verify a credential, triage a service request), it carries that intent as a deterministic, auditable program. BN254 is the piece that makes the *proof of correct execution* cheap enough to require on every task, not just sampled ones. The agent's TEE workbox produces the attestation; the chain's BN254 precompile verifies it. Together they guarantee that every agentic action — every meaningful service exchange between a person and a machine — is auditable, true, and fair. Compute is preserved because the agent doesn't re-execute on-chain; it proves it already executed correctly off-chain, and the chain checks the proof in a fraction of the time. That is the scalability unlock: verifiable deterministic agents doing real work, with the full composability of CosmWasm and the governance scaffolding of DAODAO as home base for expansion.
 
 At 371,486 gas today, zero-knowledge verification on Juno consumes about 3.7 % of a whole block. That is too expensive to require on every important action. At ~187,000 gas it becomes affordable to require on every one. Cheap enough to be mandatory is the security property; the 2× speed-up is its shadow.
 
@@ -65,10 +67,11 @@ Proposal #373 (91.71 % YES, 24 March 2026) recognised JunoClaw as Juno ecosystem
 | Path | Gas per proof verification |
 |---|---|
 | Pure-CosmWasm (live on uni-7 today) | **371 486 gas** (tx F6D5774E…5080F4DA) |
-| BN254 precompile (Ethereum EIP-1108 schedule) | **~187 000 gas** |
-| Reduction | **~1.99×** |
+| BN254 precompile — 3-pair canonical (EIP-1108) | **~187 000 gas** |
+| BN254 precompile — 4-pair (as coded, projected) | **~223 300 gas** |
+| Reduction | **~1.66–1.99×** |
 
-Measured against the live `zk-verifier` contract at `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem` (code_id 64). Reproducible from a clean checkout with the benchmark harness in the source repository.
+Pure-Wasm baseline measured against the live `zk-verifier` contract at `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem` (code_id 64). Precompile projection grounded in the EIP-1108 gas schedule + 30k SDK contract-overhead ceiling; on-chain devnet measurement in flight (see `BN254_BENCHMARK_PROJECTED.md` for the algebra). Reproducible from a clean checkout with the benchmark harness in the source repository.
 
 ---
 
@@ -84,14 +87,17 @@ BN254 has 12+ years of cryptanalysis, is the curve every Ethereum zk-rollup and 
 
 ---
 
-**What is already shipped (origin/main, commit 6d92067, 22 April 2026)**
+**What is already shipped (origin/main, commit ffa6545, 29 April 2026)**
 
 - Host-function crate in Rust — 22 of 22 tests passing (unit + EIP-196/197 conformance vectors).
 - Guest-side shim so contracts can call the host functions without a cosmwasm-std fork.
 - Five unified diffs against CosmWasm/cosmwasm v2.2.0 and wasmvm v2.2.0, feature-gated behind a new `cosmwasm_2_3` flag — no major version bump, existing contracts compile unchanged.
 - Feature-gated variant of the live zk-verifier contract (code_id 64) for A/B comparison.
 - Ephemeral single-validator devnet (Dockerfile) that applies the patches and builds junod v29.
-- Reproducible benchmark harness writing to `docs/BN254_BENCHMARK_RESULTS.md`.
+- Reproducible benchmark harness writing to `docs/BN254_BENCHMARK_RESULTS.md` — hardened post-Ffern with path canonicalisation, allow-roots, and proof-size caps.
+- Standalone gas-projection tool (`cargo run --example gas_projection`) producing `docs/BN254_BENCHMARK_PROJECTED.md` — interim projection while devnet measurement is in flight.
+- Devnet image-transfer helper (`devnet/scripts/transfer-image-from-windows.sh`) — bypasses patch-corruption issues when building from source on non-Windows hosts.
+- Independent operator-side audit by Ffern Institute (April 2026): five findings, five advisories, all remediated in v0.x.y-security-1.
 - Upstream PR body drafted and ready at `docs/WASMVM_BN254_PR_DESCRIPTION.md`.
 
 ---

@@ -19,9 +19,13 @@
 
 ## TL;DR
 
-Add three BN254 host functions — `bn254_add`, `bn254_scalar_mul`, `bn254_pairing_equality` — to `cosmwasm` + `wasmvm`, mirroring Ethereum's `0x06` / `0x07` / `0x08` precompiles. A Groth16 verify on Juno drops from **371 486 gas** (measured on `uni-7`) to **~187 000** (EIP-1108 parity). **~2× cheaper.** Bridges every existing Ethereum ZK toolchain — `snarkjs`, `circom`, `gnark`, `ark-groth16` — to Juno natively, no EVM wrapper.
+Add three BN254 host functions — `bn254_add`, `bn254_scalar_mul`, `bn254_pairing_equality` — to `cosmwasm` + `wasmvm`, mirroring Ethereum’s `0x06` / `0x07` / `0x08` precompiles. A Groth16 verify on Juno drops from **371 486 gas** (measured on `uni-7`) to **~187–223K** (EIP-1108 schedule, depending on pairing form). **~1.7–2× cheaper.** Bridges every existing Ethereum ZK toolchain — `snarkjs`, `circom`, `gnark`, `ark-groth16` — to Juno natively, no EVM wrapper.
 
 **Signaling only.** No funding ask, no on-chain code change in this proposal. The upstream PR and the eventual `MsgSoftwareUpgrade` are separate, sequential steps.
+
+## The agent-company context
+
+BN254 is the verification layer for JunoClaw's **agent-company suite** — a stack combining CosmWasm contracts (task ledgers, escrow, registries, zk-verifier), DAODAO governance, and TEE-attested off-chain agents. Agents execute tasks with **pre-defined intent** (DeFi routing, credential verification, service arbitration) inside a TEE workbox that can only produce truthful attestations. The chain's job is to check the resulting Groth16 proof — not to re-execute the computation. This **compute preservation** model is what makes scalable, deterministic agents economically viable: meaningful service exchange between people and machines, where every interaction is auditable, true, and fair. BN254 makes verification cheap enough to be mandatory on every task, not just sampled ones.
 
 ## Why BN254
 
@@ -42,10 +46,11 @@ bn254_add                      0x06             150
 bn254_scalar_mul               0x07             6 000
 bn254_pairing_equality         0x08             45 000 + 34 000·N
 
-Groth16 verify (4 pairs)       ≈ 187 000 gas on patched chain
+Groth16 verify (3-pair canon.) ≈ 187 000 gas on patched chain
+Groth16 verify (4-pair coded)  ≈ 223 300 gas (projected, gas.rs + 30k overhead)
 vs. pure-CosmWasm today:       371 486 gas (measured, uni-7)
                                ──────────────────────────────
-                               ~2× reduction
+                               ~1.7–2× reduction
 ```
 
 Measured in tx `F6D5774EE2073E2DD011399A7E96889BA026ED67C6A510D208FD5C575080F4DA` against `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem` (code_id 64). Reproducible with `npm run benchmark-zk-verifier`.
@@ -59,7 +64,10 @@ All on `main` of <https://github.com/Dragonmonk111/junoclaw>:
 - ✅ **Upstream patches** — `wasmvm-fork/patches/`, five unified diffs vs `CosmWasm/cosmwasm` v2.2.0 + `wasmvm` v2.2.0, gated on a new `cosmwasm_2_3` feature; no major version bump
 - ✅ **Feature-gated contract** — `contracts/zk-verifier/` with `--features bn254-precompile`; default build unchanged (9 / 9 tests green)
 - ✅ **Ephemeral devnet** — `devnet/Dockerfile` applies the patches and builds `junod` v29 (~12 min cold, ~90 s warm)
-- ✅ **Benchmark harness** — `wavs/bridge/src/benchmark-zk-verifier-devnet.ts` runs N samples across both variants, writes `docs/BN254_BENCHMARK_RESULTS.md`
+- ✅ **Benchmark harness** — `wavs/bridge/src/benchmark-zk-verifier-devnet.ts` runs N samples across both variants, writes `docs/BN254_BENCHMARK_RESULTS.md` — post-Ffern hardened (path canonicalisation, allow-roots, 1 MiB proof cap)
+- ✅ **Gas projection** — `cargo run --example gas_projection` outputs `docs/BN254_BENCHMARK_PROJECTED.md` (interim projection while devnet measurement is in flight)
+- ✅ **Devnet transfer helper** — `devnet/scripts/transfer-image-from-windows.sh` loads a pre-built Docker image onto the validator VM without re-running patches
+- ✅ **Ffern operator audit** — five findings, five advisories, all remediated in v0.x.y-security-1 (April 2026)
 - ✅ **Upstream PR body** — `docs/WASMVM_BN254_PR_DESCRIPTION.md`
 - ✅ **Long-form governance proposal** — `docs/JUNO_GOVERNANCE_PROPOSAL_BN254.md`
 - ⏳ Upstream PR opened — *gated on this vote*
@@ -75,6 +83,7 @@ cargo test -p zk-verifier --lib                                  # 9 / 9
 cargo test --manifest-path wasmvm-fork/cosmwasm-crypto-bn254/Cargo.toml    # 22 / 22
 cargo test --manifest-path wasmvm-fork/cosmwasm-std-bn254-ext/Cargo.toml   # 2 / 2
 cargo check -p zk-verifier --features bn254-precompile            # exit 0
+cargo run --release -p cosmwasm-crypto-bn254 --example gas_projection     # interim projection
 cd devnet && ./scripts/run-devnet.sh \
           && ./scripts/deploy-zk-verifier.sh \
           && ./scripts/benchmark.sh                               # writes BN254_BENCHMARK_RESULTS.md

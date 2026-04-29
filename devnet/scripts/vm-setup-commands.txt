@@ -1,0 +1,37 @@
+# Run these commands ONE BY ONE on your VirtualBox VM:
+
+# 1. Go to the directory
+mkdir -p /mnt/extdrive/junoclaw-devnet
+cd /mnt/extdrive/junoclaw-devnet
+
+# 2. Check Docker is installed
+docker --version
+
+# If Docker not installed, run:
+sudo apt update && sudo apt install -y docker.io
+
+# 3. Pull the devnet image (takes a few minutes)
+docker pull junoclaw/junod-bn254:devnet
+
+# 4. Create the data directory
+mkdir -p /mnt/extdrive/junoclaw-devnet/juno-data
+
+# 5. Run the devnet container
+docker run -d \
+    --name junoclaw-devnet-ext \
+    -v /mnt/extdrive/junoclaw-devnet/juno-data:/root/.juno \
+    -p 127.0.0.1:36657:26657 \
+    -p 127.0.0.1:36656:26656 \
+    -p 127.0.0.1:11317:1317 \
+    junoclaw/junod-bn254:devnet
+
+# 6. Wait for it to start
+sleep 15
+
+# 7. Check if it's running
+docker ps | grep junoclaw-devnet-ext
+
+# 8. Check RPC is responding
+curl -s http://localhost:36657/status | head -c 100
+
+# If you see output like {"jsonrpc":"2.0"... - it's working!
