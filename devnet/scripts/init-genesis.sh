@@ -10,21 +10,16 @@ MONIKER=${MONIKER:-bn254-validator}
 KEYRING=${KEYRING_BACKEND:-test}
 HOME_DIR=${HOME_DIR:-/root/.juno}
 
-# Deterministic mnemonics — safe because the chain is ephemeral and the
-# keyring is the `test` backend (plaintext, in-container only).
-ADMIN_MNEMONIC="afford uphold crystal depart pluck myth fancy demand vague legend swamp decline couple pond motion speak bless swallow warrior above grid emerge spider donkey"
-BENCH_MNEMONIC="brief clog liberty decline camp rain unlock jaguar narrow hawk trend inner fossil reform cinnamon minute frozen stomach tornado glory afraid toward hotel angry"
-VALIDATOR_MNEMONIC="cement robust hollow hammer gossip heart clown fly kiwi absent nerve cash equal voyage ill rare tank cabbage bulb arctic squirrel banana empty quote"
-
 if [ ! -f "${HOME_DIR}/config/genesis.json" ]; then
   echo "[init-genesis] Fresh node — generating genesis…"
 
   junod init "${MONIKER}" --chain-id "${CHAIN_ID}" --home "${HOME_DIR}" --overwrite
 
-  # Keys.
-  echo "${ADMIN_MNEMONIC}"     | junod keys add admin     --keyring-backend "${KEYRING}" --home "${HOME_DIR}" --recover
-  echo "${BENCH_MNEMONIC}"     | junod keys add verifier  --keyring-backend "${KEYRING}" --home "${HOME_DIR}" --recover
-  echo "${VALIDATOR_MNEMONIC}" | junod keys add validator --keyring-backend "${KEYRING}" --home "${HOME_DIR}" --recover
+  # Keys: auto-generated, headless (--no-backup suppresses the mnemonic
+  # display/prompt; --keyring-backend test needs no passphrase).
+  junod keys add admin     --keyring-backend "${KEYRING}" --home "${HOME_DIR}" --no-backup
+  junod keys add verifier  --keyring-backend "${KEYRING}" --home "${HOME_DIR}" --no-backup
+  junod keys add validator --keyring-backend "${KEYRING}" --home "${HOME_DIR}" --no-backup
 
   ADMIN_ADDR=$(junod keys show admin     -a --keyring-backend "${KEYRING}" --home "${HOME_DIR}")
   BENCH_ADDR=$(junod keys show verifier  -a --keyring-backend "${KEYRING}" --home "${HOME_DIR}")
@@ -44,13 +39,8 @@ if [ ! -f "${HOME_DIR}/config/genesis.json" ]; then
   junod genesis validate-genesis --home "${HOME_DIR}"
 
   # Bump block gas limit so VerifyProof (pure-Wasm) fits comfortably.
-  python3 - <<PY
-import json, pathlib
-p = pathlib.Path("${HOME_DIR}/config/genesis.json")
-g = json.loads(p.read_text())
-g["consensus_params"]["block"]["max_gas"] = "80000000"
-p.write_text(json.dumps(g, indent=2))
-PY
+  # sed is used instead of jq/python3 — neither is in debian:bookworm-slim.
+  sed -i 's/"max_gas": "-1"/"max_gas": "80000000"/' "${HOME_DIR}/config/genesis.json"
 
   # Permissive CORS + broadcast.
   sed -i 's/cors_allowed_origins = \[\]/cors_allowed_origins = ["*"]/' "${HOME_DIR}/config/config.toml"
@@ -63,4 +53,6 @@ else
   echo "[init-genesis] Existing node — skipping genesis creation."
 fi
 
-exec junod "$@" --home "${HOME_DIR}"
+# --wasm.skip_wasmvm_version_check: wasmvm is linked via go mod replace so
+# Go reports its version as "(devel)"; this bypasses the equality check.
+exec junod "$@" --home "${HOME_DIR}" --wasm.skip_wasmvm_version_check
