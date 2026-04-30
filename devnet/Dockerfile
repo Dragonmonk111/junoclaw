@@ -122,7 +122,9 @@ RUN ln -s /usr/local/lib/libwasmvm.so /usr/local/lib/libwasmvm.x86_64.so && \
 
 COPY devnet/scripts/init-genesis.sh /opt/juno/init-genesis.sh
 COPY devnet/genesis-template.json /opt/juno/genesis-template.json
-RUN sed -i 's/\r$//' /opt/juno/init-genesis.sh && chmod +x /opt/juno/init-genesis.sh
+RUN tr -d '\r' < /opt/juno/init-genesis.sh > /opt/juno/init-genesis.sh.clean \
+    && mv /opt/juno/init-genesis.sh.clean /opt/juno/init-genesis.sh \
+    && chmod +x /opt/juno/init-genesis.sh
 
 EXPOSE 26656 26657 1317 9090
 ENV HOME=/root
