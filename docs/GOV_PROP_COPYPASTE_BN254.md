@@ -62,16 +62,16 @@ Proposal #373 (91.71 % YES, 24 March 2026) recognised JunoClaw as Juno ecosystem
 
 ---
 
-**The measured gas delta**
+**The gas delta — measured baseline, projected precompile**
 
-| Path | Gas per proof verification |
-|---|---|
-| Pure-CosmWasm (live on uni-7 today) | **371 486 gas** (tx F6D5774E…5080F4DA) |
-| BN254 precompile — 3-pair canonical (EIP-1108) | **~187 000 gas** |
-| BN254 precompile — 4-pair (as coded, projected) | **~223 300 gas** |
-| Reduction | **~1.66–1.99×** |
+| Path | Gas per proof verification | Source |
+|---|---|---|
+| Pure-CosmWasm (live on uni-7 today) | **371 486 gas** | MEASURED (tx F6D5774E…5080F4DA, block 12 673 217, code_id 64) |
+| BN254 precompile — 3-pair canonical (EIP-1108) | **~187 000 gas** | PROJECTED (EIP-1108 schedule) |
+| BN254 precompile — 4-pair (as coded) | **~223 300 gas** | PROJECTED (`BN254_BENCHMARK_PROJECTED.md`) |
+| Reduction | **~1.66–1.99×** | — |
 
-Pure-Wasm baseline measured against the live `zk-verifier` contract at `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem` (code_id 64). Precompile projection grounded in the EIP-1108 gas schedule + 30k SDK contract-overhead ceiling; on-chain devnet measurement in flight (see `BN254_BENCHMARK_PROJECTED.md` for the algebra). Reproducible from a clean checkout with the benchmark harness in the source repository.
+Pure-Wasm baseline is measured on `uni-7` against `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem`. Precompile projection is grounded in the EIP-1108 gas schedule plus a 30k SDK contract-overhead ceiling; the per-primitive wall-clock sanity check shows 3.4× – 13.5× headroom between scheduled and observed gas (see `BN254_BENCHMARK_PROJECTED.md` for the algebra). An air-gapped devnet is running on the validator VM as of 2026-04-29; the pure contract is live there too, and on-chain precompile re-measurement is pending a patch-regeneration pass (build-hygiene fix only — no BN254 code change; tracked in `BN254_TRAJECTORY_UPDATE.md` §4). Every number above reproduces from a clean checkout with the benchmark harness in the source repository.
 
 ---
 

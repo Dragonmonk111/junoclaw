@@ -20,10 +20,18 @@
   projection in `BN254_BENCHMARK_PROJECTED.md` shows ~223,300 SDK gas for
   the 4-pair Groth16 form (or ~187,000 for the canonical 3-pair form
   with precomputed α·β). **Reduction ≈ 1.66× to 1.99×** depending on form.
-* **Devnet measurement is in flight.** The devnet image was built on a
-  Windows host; a transfer-and-launch helper is now in
-  `devnet/scripts/transfer-image-from-windows.sh` so the validator VM can
-  consume the pre-built tarball without re-running the patched build.
+* **Devnet is up on the validator VM; precompile measurement pending an
+  image rebuild.** The pre-built `junoclaw/junod-bn254:devnet` image was
+  transferred into an air-gapped VirtualBox VM and started successfully
+  on `2026-04-29`; the chain `junoclaw-bn254-1` is producing blocks on
+  `localhost:36657`. The pure-Wasm `zk-verifier` deployed and instantiated
+  cleanly. The precompile variant uploaded as `code_id 2` but fails
+  instantiation silently — the transferred image turned out to be linked
+  against a stock `libwasmvm` without the BN254 host imports, and the
+  in-VM rebuild tripped on a blank-line separator missing between two
+  `diff --git` hunks inside `cosmwasm-vm.imports.rs.patch`. The fix is
+  a clean patch-regeneration step (`git diff` on a manually-applied
+  checkout), tracked in §4 below; no BN254 code change is required.
 
 ---
 
@@ -103,7 +111,65 @@ data directory under `/mnt/extdrive/junoclaw-devnet/juno-data`, binds
 the RPC/REST/P2P ports to `127.0.0.1`, and waits for the chain to come
 up before declaring the devnet healthy.
 
-### 4. Hardening review beyond Ffern
+### 4. Devnet launch attempt on validator VM (2026-04-29)
+
+The first end-to-end devnet run against a pre-built image landed the
+chain itself, reproduced the pure-Wasm contract deployment, and
+narrowed the remaining on-chain-measurement gate to a single patch
+format issue. Concretely:
+
+| Step | Result |
+|---|---|
+| Load pre-built image (`docker load`) | ✅ `junoclaw/junod-bn254:devnet` present |
+| Start container (`junod-bn254-devnet`) | ✅ block height advancing, `localhost:36657` bound |
+| Upload `zk_verifier_pure.wasm` (code_id 1) | ✅ stored, hash `F76CA06F…A646B` |
+| Instantiate pure contract | ✅ `juno14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9skjuwg8` |
+| `vk_status {}` query against pure contract | ✅ `{ data: { has_vk: false, vk_size_bytes: 0 } }` — the contract runs |
+| Upload `zk_verifier_precompile.wasm` (code_id 2) | ✅ stored, hash `310D474A…F8FC9` |
+| Instantiate precompile contract | ❌ silent failure — the loaded image lacks `bn254_add` / `bn254_scalar_mul` / `bn254_pairing_equality` host imports |
+| In-VM rebuild to produce a BN254-linked image | ❌ `git apply` rejects `cosmwasm-vm.imports.rs.patch` at line 112 |
+
+Root-cause of the in-VM rebuild failure (inspected in this session):
+
+* The patch file concatenates three `diff --git` hunks — one against
+  `packages/vm/Cargo.toml`, one against `packages/vm/src/imports.rs`,
+  and one against `packages/vm/src/instance.rs`.
+* The third hunk's header sits directly against the end of the second
+  hunk with no separating blank line. `git apply` reads that as a
+  continuation of the `imports.rs` hunk, which then has content that
+  doesn't match at the declared offset, and it aborts with
+  `corrupt patch at line 112`.
+* Reproducing the same failure against a fresh clone of
+  `CosmWasm/cosmwasm` at tag `v2.2.0` (not the devnet build tree)
+  confirms the issue is inside the patch file, not inside the build
+  context.
+
+The repair plan — not executed in this session, but scheduled next —
+is to stop hand-editing the patch and regenerate it cleanly:
+
+1. Clone `v2.2.0` fresh, copy `wasmvm-fork/cosmwasm-crypto-bn254` into
+   `packages/crypto-bn254/`, and *manually* apply each targeted change
+   to `Cargo.toml`, `imports.rs`, and `instance.rs` (the same changes
+   the broken patch attempts, already documented in
+   `wasmvm-fork/README.md`).
+2. `git diff` the working tree to produce a single well-formed patch,
+   which by construction carries correct hunk separators.
+3. Replace `wasmvm-fork/patches/cosmwasm-vm.imports.rs.patch` with the
+   regenerated file and run `git apply --check` against a second fresh
+   `v2.2.0` clone to confirm it applies.
+4. Rebuild the Docker image, `docker save`, transfer, restart the
+   devnet.
+
+Once that lands, `devnet/scripts/benchmark.sh` produces the measured
+`VerifyProof` gas for both variants and `BN254_BENCHMARK_RESULTS.md`
+supersedes `BN254_BENCHMARK_PROJECTED.md` as the headline citation.
+
+The proposal does not wait on this. The schedule-based projection is
+exactly what EIP-1108 and every other BN254-adopting chain has cited
+since 2019. The devnet measurement is a nice-to-have tightening, not a
+gate.
+
+### 5. Hardening review beyond Ffern
 
 A pass over the BN254 code paths confirms no new attack surface beyond
 what Ffern walked in April 2026:
@@ -146,7 +212,7 @@ them:
 | HackMD published with stable URL | ⏳ pending publish |
 | Upstream CosmWasm PR opened | ⏳ pending |
 | Cosign resolved (Jake or solo-after-7-days) | ⏳ pending |
-| Devnet measurement run (replaces the projection) | ⏳ in flight (transfer helper now in place) |
+| Devnet measurement run (replaces the projection) | ⏳ pending patch regeneration (see §4) — devnet itself is up |
 | Forum thread seeded on Commonwealth | ⏳ pending |
 | Proposer wallet funded ≥ 5 000 JUNO | ⏳ pending |
 

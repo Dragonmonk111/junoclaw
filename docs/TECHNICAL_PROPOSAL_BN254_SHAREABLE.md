@@ -65,8 +65,10 @@ All on `main` of <https://github.com/Dragonmonk111/junoclaw>:
 - ✅ **Feature-gated contract** — `contracts/zk-verifier/` with `--features bn254-precompile`; default build unchanged (9 / 9 tests green)
 - ✅ **Ephemeral devnet** — `devnet/Dockerfile` applies the patches and builds `junod` v29 (~12 min cold, ~90 s warm)
 - ✅ **Benchmark harness** — `wavs/bridge/src/benchmark-zk-verifier-devnet.ts` runs N samples across both variants, writes `docs/BN254_BENCHMARK_RESULTS.md` — post-Ffern hardened (path canonicalisation, allow-roots, 1 MiB proof cap)
-- ✅ **Gas projection** — `cargo run --example gas_projection` outputs `docs/BN254_BENCHMARK_PROJECTED.md` (interim projection while devnet measurement is in flight)
+- ✅ **Gas projection** — `cargo run --example gas_projection` outputs `docs/BN254_BENCHMARK_PROJECTED.md` (schedule-based projection + per-primitive wall-clock sanity check; the headline projection the proposal cites until on-chain re-measurement lands)
 - ✅ **Devnet transfer helper** — `devnet/scripts/transfer-image-from-windows.sh` loads a pre-built Docker image onto the validator VM without re-running patches
+- ✅ **Devnet running on validator VM** — air-gapped `junoclaw-bn254-1` at `localhost:36657` as of 2026-04-29; pure-Wasm contract deployed + responding to queries
+- ⏳ **Precompile on-chain re-measurement** — pending a patch-regeneration pass for the `cosmwasm-vm` imports patch (build-hygiene only, no BN254 code change; tracked in `docs/BN254_TRAJECTORY_UPDATE.md` §4)
 - ✅ **Ffern operator audit** — five findings, five advisories, all remediated in v0.x.y-security-1 (April 2026)
 - ✅ **Upstream PR body** — `docs/WASMVM_BN254_PR_DESCRIPTION.md`
 - ✅ **Long-form governance proposal** — `docs/JUNO_GOVERNANCE_PROPOSAL_BN254.md`

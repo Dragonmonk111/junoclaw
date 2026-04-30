@@ -73,7 +73,7 @@ Every production Groth16 circuit — identity, privacy, zk-rollup verifiers — 
 
 ---
 
-## The gas delta — measured, not projected
+## The gas delta — measured baseline, projected precompile
 
 ```
 Operation                      EVM precompile   Gas (EIP-1108)
@@ -82,13 +82,18 @@ bn254_add                      0x06             150
 bn254_scalar_mul               0x07             6 000
 bn254_pairing_equality         0x08             45 000 + 34 000·N
 
-Groth16 verify (4 pairs)       ≈ 187 000 gas on patched chain
-vs. pure-CosmWasm today:       371 486 gas (measured, uni-7)
-                               ──────────────────────────────
-                               ~1.99× reduction
+Pure-CosmWasm today:           371 486 gas   (MEASURED, uni-7)
+Groth16 via precompile:        ~187 000 gas  (3-pair canonical,  PROJECTED)
+Groth16 via precompile:        ~223 300 gas  (4-pair as coded,   PROJECTED)
+                               ──────────────────────────────────────────
+                               ~1.66× – 1.99× reduction
 ```
 
-Measured against `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem` (code_id 64) in tx `F6D5774EE2073E2DD011399A7E96889BA026ED67C6A510D208FD5C575080F4DA`. Reproducible with the benchmark harness in the source repo.
+**Pure-Wasm baseline is measured** against `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem` (code_id 64) in tx `F6D5774EE2073E2DD011399A7E96889BA026ED67C6A510D208FD5C575080F4DA` on `uni-7` block 12 673 217. Reproducible with the benchmark harness in the source repo.
+
+**Precompile numbers are projected**, grounded in the EIP-1108 schedule plus a 30 k SDK contract-overhead ceiling — the algebra, the wall-clock per-primitive sanity check, and the headroom analysis are all in [`docs/BN254_BENCHMARK_PROJECTED.md`](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_PROJECTED.md). This is the same posture every prior BN254-adopting chain (Ethereum EIP-1108, Sui `sui::groth16`) took when first landing the primitive.
+
+**On-chain devnet status (2026-04-29).** An air-gapped devnet is running on the validator VM; the pure-Wasm contract is deployed and responds to queries on `localhost:36657`. The precompile contract's code is stored but can't instantiate yet because the currently-loaded image was linked against a stock `libwasmvm` without BN254 host imports; re-linking is pending a patch-regeneration fix (build-hygiene only, no BN254 code change). See `docs/BN254_TRAJECTORY_UPDATE.md` §4 for the full log and repair plan. The projection headline above is unchanged regardless.
 
 ---
 

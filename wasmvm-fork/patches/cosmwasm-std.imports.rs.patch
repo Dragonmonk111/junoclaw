@@ -1,95 +1,128 @@
+diff --git a/packages/std/Cargo.toml b/packages/std/Cargo.toml
+index 516e400..dd7546c 100644
+--- a/packages/std/Cargo.toml
++++ b/packages/std/Cargo.toml
+@@ -51,6 +51,7 @@ cosmwasm_2_1 = ["cosmwasm_2_0"]
+ # This enables functionality that is only available on 2.2 chains.
+ # It adds `IbcMsg::PayPacketFee` and `IbcMsg::PayPacketFeeAsync`.
+ cosmwasm_2_2 = ["cosmwasm_2_1"]
++cosmwasm_2_3 = ["cosmwasm_2_2", "dep:cosmwasm-crypto-bn254"]
+ 
+ [dependencies]
+ base64 = "0.22.0"
+@@ -74,6 +75,7 @@ rmp-serde = "1.3.0"
+ [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ bech32 = "0.11.0"
+ cosmwasm-crypto = { version = "2.2.0", path = "../crypto" }
++cosmwasm-crypto-bn254 = { version = "0.1.0", path = "../crypto-bn254", optional = true }
+ rand_core = { version = "0.6.4", features = ["getrandom"] }
+ 
+ [dev-dependencies]
 diff --git a/packages/std/src/imports.rs b/packages/std/src/imports.rs
+index 1ac223a..60d8b99 100644
 --- a/packages/std/src/imports.rs
 +++ b/packages/std/src/imports.rs
-@@ -64,6 +64,14 @@ extern "C" {
-     #[cfg(feature = "cosmwasm_2_1")]
-     fn bls12_381_pairing_equality(ps_ptr: u32, qs_ptr: u32, r_ptr: u32, s_ptr: u32) -> u32;
+@@ -101,6 +101,22 @@ extern "C" {
+     /// greater than 1 in case of error.
+     fn ed25519_batch_verify(messages_ptr: u32, signatures_ptr: u32, public_keys_ptr: u32) -> u32;
  
-+    // BN254 (alt_bn128) host functions. Added by wasmvm-fork /
-+    // cosmwasm-crypto-bn254 in cosmwasm_2_3. Absence on pre-cosmwasm_2_3
-+    // chains surfaces as a "missing import" VM error at contract load time,
-+    // which is the intended behaviour for feature-gated capabilities.
++    // ── BN254 (alt_bn128) host functions ────────────────────────────────
++    //
++    // Mirror the EIP-196/EIP-197 precompiles. Calling on a chain that
++    // does not enable `cosmwasm_2_3` surfaces as a "missing import" error
++    // at contract load time — the desired behaviour for capability gating.
++    //
++    // Convention: `input_ptr` is a Region; `out_ptr` (where present) is a
++    // pre-allocated Region of the exact output size. Return value is a
++    // u32 status code defined alongside `do_bn254_*` in cosmwasm-vm.
 +    #[cfg(feature = "cosmwasm_2_3")]
-+    fn bn254_add(input_ptr: u32) -> u32;
++    fn bn254_add(input_ptr: u32, out_ptr: u32) -> u32;
 +    #[cfg(feature = "cosmwasm_2_3")]
-+    fn bn254_scalar_mul(input_ptr: u32) -> u32;
++    fn bn254_scalar_mul(input_ptr: u32, out_ptr: u32) -> u32;
 +    #[cfg(feature = "cosmwasm_2_3")]
 +    fn bn254_pairing_equality(input_ptr: u32) -> u32;
 +
-     fn secp256k1_verify(message_hash_ptr: u32, signature_ptr: u32, public_key_ptr: u32) -> u32;
-     fn secp256k1_recover_pubkey(
-         message_hash_ptr: u32,
-@@ -345,6 +353,71 @@ impl Api for ExternalApi {
-             _ => Err(BLS12_381_InvalidPoint.into()),
+     /// Writes a debug message (UFT-8 encoded) to the host for debugging purposes.
+     /// The host is free to log or process this in any way it considers appropriate.
+     /// In production environments it is expected that those messages are discarded.
+@@ -531,6 +547,63 @@ impl Api for ExternalApi {
          }
      }
  
++
 +    #[cfg(feature = "cosmwasm_2_3")]
-+    fn bn254_add(&self, input: &[u8]) -> Result<Vec<u8>, CryptoError> {
++    fn bn254_add(&self, input: &[u8]) -> Result<[u8; 64], VerificationError> {
 +        if input.len() != 128 {
-+            return Err(CryptoError::generic_err("bn254_add: input must be 128 bytes"));
++            return Err(VerificationError::generic_err(
++                "bn254_add: input must be 128 bytes",
++            ));
 +        }
-+        let input_region = build_region(input);
-+        let input_region_ptr = &*input_region as *const Region<'_> as u32;
-+        let result = unsafe { bn254_add(input_region_ptr) };
++        let send_input = Region::from_slice(input);
++        let out: [u8; 64] = [0; 64];
++        let recv_out = Region::from_slice(&out);
++
++        let result = unsafe {
++            bn254_add(send_input.as_ptr() as u32, recv_out.as_ptr() as u32)
++        };
 +        match result {
-+            0 => {
-+                let data = unsafe { consume_region(result as *mut Region<'_>) };
-+                Ok(data)
-+            }
-+            _ => {
-+                let err_region = unsafe { Region::from_raw(result as *mut u8, 0, 0) };
-+                let msg = unsafe { consume_region(result as *mut Region<'_>) };
-+                let msg_string = String::from_utf8_lossy(&msg).into_owned();
-+                Err(CryptoError::generic_err(msg_string))
-+            }
++            0 => Ok(out),
++            code => Err(bn254_error_from_code(code)),
 +        }
 +    }
 +
 +    #[cfg(feature = "cosmwasm_2_3")]
-+    fn bn254_scalar_mul(&self, input: &[u8]) -> Result<Vec<u8>, CryptoError> {
++    fn bn254_scalar_mul(&self, input: &[u8]) -> Result<[u8; 64], VerificationError> {
 +        if input.len() != 96 {
-+            return Err(CryptoError::generic_err(
++            return Err(VerificationError::generic_err(
 +                "bn254_scalar_mul: input must be 96 bytes",
 +            ));
 +        }
-+        let input_region = build_region(input);
-+        let input_region_ptr = &*input_region as *const Region<'_> as u32;
-+        let result = unsafe { bn254_scalar_mul(input_region_ptr) };
++        let send_input = Region::from_slice(input);
++        let out: [u8; 64] = [0; 64];
++        let recv_out = Region::from_slice(&out);
++
++        let result = unsafe {
++            bn254_scalar_mul(send_input.as_ptr() as u32, recv_out.as_ptr() as u32)
++        };
 +        match result {
-+            0 => {
-+                let data = unsafe { consume_region(result as *mut Region<'_>) };
-+                Ok(data)
-+            }
-+            _ => {
-+                let msg = unsafe { consume_region(result as *mut Region<'_>) };
-+                let msg_string = String::from_utf8_lossy(&msg).into_owned();
-+                Err(CryptoError::generic_err(msg_string))
-+            }
++            0 => Ok(out),
++            code => Err(bn254_error_from_code(code)),
 +        }
 +    }
 +
 +    #[cfg(feature = "cosmwasm_2_3")]
-+    fn bn254_pairing_equality(&self, input: &[u8]) -> Result<bool, CryptoError> {
++    fn bn254_pairing_equality(&self, input: &[u8]) -> Result<bool, VerificationError> {
 +        if input.len() % 192 != 0 {
-+            return Err(CryptoError::generic_err(format!(
++            return Err(VerificationError::generic_err(format!(
 +                "bn254_pairing_equality: input length {} is not a multiple of 192",
 +                input.len()
 +            )));
 +        }
-+        let input_region = build_region(input);
-+        let input_region_ptr = &*input_region as *const Region<'_> as u32;
-+        let result = unsafe { bn254_pairing_equality(input_region_ptr) };
-+        let data = unsafe { consume_region(result as *mut Region<'_>) };
-+        match data.as_slice() {
-+            [0u8] => Ok(false),
-+            [1u8] => Ok(true),
-+            _ => Err(CryptoError::generic_err(
-+                "bn254_pairing_equality: host returned invalid discriminant",
-+            )),
++        let send_input = Region::from_slice(input);
++        let result = unsafe { bn254_pairing_equality(send_input.as_ptr() as u32) };
++        match result {
++            0 => Ok(true),
++            1 => Ok(false),
++            code => Err(bn254_error_from_code(code)),
 +        }
 +    }
-+
      fn secp256k1_verify(
          &self,
          message_hash: &[u8],
+@@ -750,3 +823,16 @@ pub fn handle_panic(message: &str) {
+     let region_ptr = region.as_ptr() as u32;
+     unsafe { abort(region_ptr) };
+ }
++
++#[cfg(feature = "cosmwasm_2_3")]
++fn bn254_error_from_code(code: u32) -> VerificationError {
++    match code {
++        2 => VerificationError::generic_err("bn254: invalid input length"),
++        3 => VerificationError::generic_err("bn254: point not on curve"),
++        4 => VerificationError::generic_err("bn254: G2 point not in subgroup"),
++        5 => VerificationError::generic_err("bn254: invalid field element (>= p)"),
++        6 => VerificationError::generic_err("bn254: backend error"),
++        7 => VerificationError::generic_err("bn254: too many pairing pairs"),
++        c => VerificationError::generic_err(format!("bn254: unknown error code {c}")),
++    }
++}

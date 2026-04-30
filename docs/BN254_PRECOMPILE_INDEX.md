@@ -120,7 +120,11 @@ a reviewer should read them.
 | Upstream PR description                         | ✅ complete   |
 | Hand-painted art prompts (5 scenes)             | ✅ complete   |
 | Authorship attribution corrected                | ✅ complete   |
-| Devnet measurement run (precompile gas)         | ⏳ in flight (pending devnet launch on validator VM) |
+| Devnet stood up on validator VM (blocks producing) | ✅ complete (2026-04-29, air-gapped, `junoclaw-bn254-1`, `localhost:36657`) |
+| Pure-Wasm contract deployed on devnet           | ✅ complete (code_id 1 stored + instantiated at `juno14hj2…fvw9skjuwg8`; `vk_status` query succeeds. Full `VerifyProof` gas re-measurement pending a benchmark run — the `uni-7` number `371 486 SDK gas` still stands as the measured baseline.) |
+| Precompile contract stored on devnet            | ⚠️ partial (code_id 2 uploaded; instantiation silently fails because the devnet Docker image was built against stock `libwasmvm` without the BN254 host imports) |
+| Custom `junod-bn254` Docker image build         | ⏳ blocked (build-hygiene, not algebra: `cosmwasm-vm.imports.rs.patch` has a missing blank-line separator between its three `diff --git` hunks → `git apply` rejects it as "corrupt patch at line 112". Fix is to regenerate the patch cleanly via `git diff` on a patched v2.2.0 checkout, not to change any BN254 code.) |
+| Devnet measurement run (precompile gas)         | ⏳ pending the image rebuild above. The gas schedule in `gas.rs` and the projection in `BN254_BENCHMARK_PROJECTED.md` stand on their own; the devnet run converts `~223 300 projected` to `~223 300 ± 5 % measured`. |
 | HackMD published + Jake cosign                  | ⏳ pending    |
 | Upstream PR opened                              | ⏳ pending    |
 | Juno signaling vote                             | ⏳ pending    |

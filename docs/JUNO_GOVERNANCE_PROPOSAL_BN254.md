@@ -57,15 +57,17 @@ CosmWasm provides the composable contract layer — task ledgers, escrow, regist
 - ~200 lines of Go FFI
 - Gated behind a new `cosmwasm_2_3` feature — zero behaviour change for chains that don't opt in.
 
-**Benchmarks** (single-validator devnet `junoclaw-bn254-1`, 10 samples per variant):
+**Gas delta** — measured baseline (live `uni-7` contract) vs. projected precompile (EIP-1108 schedule + 30 k SDK overhead ceiling):
 
-| Variant              | Gas (median) | Ratio |
-|----------------------|-------------:|------:|
-| Pure-Wasm (today)    | 371 486      | 1.00× |
-| BN254 precompile (3-pair canonical) | ~187 000 | 1.99× cheaper |
-| **BN254 precompile (4-pair, as coded)** | **~223 300** | **1.66× cheaper** |
+| Variant              | SDK gas | Source | Ratio |
+|----------------------|--------:|--------|------:|
+| Pure-Wasm (today)    | **371 486** | MEASURED — `uni-7` tx `F6D5774E…5080F4DA`, block 12 673 217, code_id 64 | 1.00× |
+| BN254 precompile (3-pair canonical) | ~187 000 | PROJECTED — EIP-1108 parity algebra | 1.99× cheaper |
+| **BN254 precompile (4-pair, as coded)** | **~223 300** | PROJECTED — `BN254_BENCHMARK_PROJECTED.md` algebra | **1.66× cheaper** |
 
-Projection grounded in the EIP-1108 gas schedule + 30 k SDK overhead ceiling. On-chain devnet measurement in flight; see [`docs/BN254_BENCHMARK_PROJECTED.md`](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_PROJECTED.md) for the algebra. Reproduce: `./devnet/scripts/run-devnet.sh && ./devnet/scripts/benchmark.sh` regenerates `docs/BN254_BENCHMARK_RESULTS.md`.
+See [`docs/BN254_BENCHMARK_PROJECTED.md`](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_PROJECTED.md) for the per-primitive wall-clock sanity check and headroom analysis (3.4× – 13.5× margin between wall-clock and scheduled gas).
+
+**Devnet status (2026-04-29).** An air-gapped single-validator devnet (`junoclaw-bn254-1`) is running on the validator VM; the pure-Wasm `zk-verifier` is deployed and serves queries. The precompile variant's code is stored but can't instantiate yet because the loaded image was linked against a stock `libwasmvm`; re-linking is pending a patch-regeneration fix (build-hygiene only — no BN254 code change; tracked in [`docs/BN254_TRAJECTORY_UPDATE.md`](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_TRAJECTORY_UPDATE.md) §4). Once the image relinks, `./devnet/scripts/benchmark.sh` produces the measured median and `docs/BN254_BENCHMARK_RESULTS.md` supersedes the projection above.
 
 **Prior art:** EIP-196/197/1108 (Ethereum, 2017–19); `sui::groth16` (Sui, 2023); CosmWasm 2.1 `bls12_381_pairing_equality` (precedent plumbing from *within* this codebase — the BN254 patch uses the same host-function layout).
 

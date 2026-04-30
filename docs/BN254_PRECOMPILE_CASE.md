@@ -59,9 +59,9 @@ Rough estimate for a full BN254 pairing in Wasm:
 ### Visual comparison *(pre-deployment estimate)*
 
 ```
-Current (store hash):     ████░░░░░░░░░░░░░░░░  200K  (2% of limit)
-Groth16 + precompile:     ████░░░░░░░░░░░░░░░░  187K  (2% of limit)
-Groth16 pure CosmWasm:    ██████████████████████ 5-10M (50-100% of limit)  ← estimate, not measurement
+Current (store hash):     ████░░░░░░░░░░░░░░░░  200K   (2% of limit)
+Groth16 + precompile:     ████░░░░░░░░░░░░░░░░  ~187K  (2% of limit, projected, 3-pair canonical)
+Groth16 pure CosmWasm:    ██████████████████████ 5-10M (50-100% of limit)  ← pre-deployment estimate, not measurement
                           ────────────────────── 10M SDK gas limit
 ```
 
@@ -71,20 +71,22 @@ Groth16 pure CosmWasm:    ██████████████████
 
 The pre-deployment numbers above were superseded by an actual deployment. The `zk-verifier` contract was uploaded to `uni-7` as code_id 64 and instantiated at `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem`. A full Groth16 BN254 verification (4 pairs) was executed as tx `F6D5774EE2073E2DD011399A7E96889BA026ED67C6A510D208FD5C575080F4DA` at block 12,673,217.
 
-### Measured numbers
+### Numbers — measured baseline vs. projected precompile
 
-| Operation | SDK gas | % of Juno block (10M soft cap) |
-|---|---:|---:|
-| Store SHA-256 hash only (baseline) | ~200,000 | 2 % |
-| **Groth16 BN254 verify, pure CosmWasm (`ark-bn254 0.5`)** | **371,486** | **3.7 %** |
-| Groth16 BN254 verify, with precompile *(target, EIP-1108 parity)* | ~187,000 | 1.9 % |
+| Operation | SDK gas | % of Juno block (10M soft cap) | Source |
+|---|---:|---:|---|
+| Store SHA-256 hash only (baseline) | ~200,000 | 2 % | Reference |
+| **Groth16 BN254 verify, pure CosmWasm (`ark-bn254 0.5`)** | **371,486** | **3.7 %** | MEASURED on `uni-7` |
+| Groth16 BN254 verify, precompile — 3-pair canonical (EIP-1108 parity) | ~187,000 | 1.9 % | PROJECTED — EIP-1108 schedule |
+| Groth16 BN254 verify, precompile — 4-pair as coded (`bn254_backend.rs`) | ~223,300 | 2.2 % | PROJECTED — `BN254_BENCHMARK_PROJECTED.md` |
 
-### Visual comparison *(measured)*
+### Visual comparison *(measured baseline, projected precompile)*
 
 ```
-Current (store hash):       ████░░░░░░░░░░░░░░░░  200K  (2% of block)
-Groth16 + precompile:       ████░░░░░░░░░░░░░░░░  187K  (1.9% of block)  ← target
-Groth16 pure CosmWasm:      ███████░░░░░░░░░░░░░  371K  (3.7% of block)  ← measured
+Current (store hash):       ████░░░░░░░░░░░░░░░░  200K    (2.0% of block)   baseline
+Groth16 + precompile (3p):  ████░░░░░░░░░░░░░░░░  ~187K   (1.9% of block)   PROJECTED
+Groth16 + precompile (4p):  █████░░░░░░░░░░░░░░░  ~223K   (2.2% of block)   PROJECTED (as coded)
+Groth16 pure CosmWasm:      ███████░░░░░░░░░░░░░   371K   (3.7% of block)   MEASURED (uni-7)
                             ──────────────────── 10M SDK gas (block soft cap)
 ```
 
@@ -92,9 +94,13 @@ Groth16 pure CosmWasm:      ███████░░░░░░░░░░�
 
 The `5–10M` projection was conservative by roughly 15×. `arkworks` is well-optimised; CosmWasm's Wasm executor handles tight finite-field loops more efficiently than a naive instruction-count model suggests. The precompile case therefore is not *"the only way to make Groth16 fit"* — pure-Wasm fits comfortably today. The precompile case is:
 
-1. **Cheap enough to require by default.** At 371 K, on-chain Groth16 verify is reserved for high-value attestations. At ~187 K, it can be a default for every attestation. *Cheap enough to be mandatory is the security property; "2× faster" is its shadow.*
+1. **Cheap enough to require by default.** At 371 K, on-chain Groth16 verify is reserved for high-value attestations. At ~187–223 K, it can be a default for every attestation. *Cheap enough to be mandatory is the security property; "1.7–2× faster" is its shadow.*
 2. **Toolchain bridge.** Every production Groth16 circuit (`snarkjs`, `circom`, `gnark`, `ark-groth16`) targets BN254. A precompile means an Ethereum-trained team can deploy on Juno without re-running their trusted-setup ceremony or re-targeting their proving stack.
 3. **Composes with bridges.** When Juno bridges to Base / Ethereum (the live community discussion), the bridge can verify each transfer with a Groth16 proof on the Juno side, instead of trusting a small set of signers. Cheap BN254 is what makes the secure bridge model affordable.
+
+### On-chain precompile re-measurement status
+
+The precompile numbers above are projected from the EIP-1108 schedule plus a 30 k SDK contract-overhead ceiling; the per-primitive wall-clock sanity check in `BN254_BENCHMARK_PROJECTED.md` shows 3.4× – 13.5× headroom between scheduled and observed gas. An air-gapped single-validator devnet (`junoclaw-bn254-1`) is running on the validator VM as of 2026-04-29 and the pure-Wasm `zk-verifier` is deployed to it; the precompile variant's `VerifyProof` re-measurement is pending a patch-regeneration pass for `wasmvm-fork/patches/cosmwasm-vm.imports.rs.patch` (build-hygiene fix only — no BN254 code change; tracked in `BN254_TRAJECTORY_UPDATE.md` §4). The projection above stands on its own for the proposal; the measurement converts `~223 300 projected` to `~223 300 ± 5 % measured` when the rebuild lands.
 
 ---
 
