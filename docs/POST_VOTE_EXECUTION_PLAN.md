@@ -119,7 +119,17 @@ The **wasmvm** side is intentionally *not* clone-and-build in this script. Inspe
 
 ---
 
-### 0.2 — Pull canonical EIP-1108 test vectors
+### 0.2 — Pull canonical EIP-1108 test vectors  — 🟡 **IN PROGRESS** (5/24 vectors landed, seed commit pending)
+
+> **Status (2026-05-06).** Test file [`wasmvm-fork/cosmwasm-crypto-bn254/tests/eip1108_vectors.rs`](../wasmvm-fork/cosmwasm-crypto-bn254/tests/eip1108_vectors.rs) created with 5 hard-coded vectors drawn from EIP-196 / EIP-197 spec text:
+>
+> - `eip196_ecadd_identity_plus_identity` — O + O = O
+> - `eip196_ecadd_g1_plus_neg_g1_is_identity` — G + (-G) = O (encodes p-2)
+> - `eip196_ecmul_zero_scalar_is_identity` — 0·G = O
+> - `eip197_ecpairing_empty_input_returns_true` — empty input → true (EIP-197 ¶spec)
+> - `ecadd_rejects_short_input` — length-check negative case (junoclaw-side, not EIP-derived)
+>
+> All 5 green via `cargo test --test eip1108_vectors`; the existing 9 algebraic vectors in `vectors.rs` also still green. Remaining 19 vectors come from a follow-up commit lifting from `go-ethereum/core/vm/contracts_test.go` (the canonical EVM reference impl).
 
 Current `tests/vectors.rs` in `cosmwasm-crypto-bn254` has 9 conformance tests. We supplement with the **canonical Ethereum Foundation test suite** so reviewers can see we match Ethereum bit-for-bit.
 
