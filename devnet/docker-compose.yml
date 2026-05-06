@@ -9,11 +9,15 @@ services:
       context: ..
       dockerfile: devnet/Dockerfile
       args:
-        COSMWASM_TAG: v2.2.0
-        WASMVM_TAG: v2.2.0
+        # COSMWASM_TAG matches the rev pinned by wasmvm v2.2.4's
+        # libwasmvm/Cargo.toml (`cosmwasm-{std,vm} = { git = ..., rev = "v2.2.2" }`).
+        # Our Phase 0.1 patches in wasmvm-fork/patches/v2.2.2/ are captured
+        # against that baseline.
+        COSMWASM_TAG: v2.2.2
+        WASMVM_TAG: v2.2.4
         JUNO_TAG: v29.0.0
         RUST_TAG: 1.78-bookworm
-        GO_TAG: 1.22-bookworm
+        GO_TAG: 1.24-bookworm
     image: junoclaw/junod-bn254:devnet
     container_name: junoclaw-bn254-devnet
     ports:

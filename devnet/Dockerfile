@@ -7,7 +7,7 @@
 #   2. go-builder   → builds junod against that libwasmvm
 #   3. runtime      → slim debian with junod + entrypoint script
 
-ARG COSMWASM_TAG=v2.2.0
+ARG COSMWASM_TAG=v2.2.2
 ARG WASMVM_TAG=v2.2.4
 ARG JUNO_TAG=v29.0.0
 ARG RUST_TAG=1.78-bookworm
@@ -33,29 +33,36 @@ WORKDIR /src
 COPY wasmvm-fork/ /src/wasmvm-fork/
 
 # ── Clone + patch CosmWasm/cosmwasm ─────────────────────────────────────
+# Applies the Phase 0.1 patch set at wasmvm-fork/patches/v2.2.2/ in
+# numeric order (00 → 09). Patch 09 creates the new packages/crypto-bn254/
+# crate from scratch as a workspace member, so we do not need the previous
+# manual `cp -r` of the standalone crate or the [workspace] strip — the
+# patch encodes the workspace-member form directly.
+#
+# Patch 00 (rust-toolchain.toml) is a no-op inside the rust:1.78-bookworm
+# image since the default toolchain already matches; it is applied for
+# parity with the host-side rebase-track-a.sh harness.
 RUN git clone --branch ${COSMWASM_TAG} --depth 1 \
         https://github.com/CosmWasm/cosmwasm /src/cosmwasm && \
-    cp -r /src/wasmvm-fork/cosmwasm-crypto-bn254 /src/cosmwasm/packages/crypto-bn254 && \
-    # cosmwasm-crypto-bn254/Cargo.toml declares `[workspace]` so the crate
-    # is standalone when developed inside the junoclaw repo. Once it lives
-    # *inside* the cosmwasm workspace we have to drop that declaration so
-    # cargo does not see two competing workspace roots.
-    sed -i '/^# Standalone workspace/,/^\[workspace\]/d' \
-        /src/cosmwasm/packages/crypto-bn254/Cargo.toml && \
     cd /src/cosmwasm && \
-    find /src/wasmvm-fork/patches -name "*.patch" -exec sed -i 's/\r$//' {} + && \
-    git apply /src/wasmvm-fork/patches/cosmwasm-vm.imports.rs.patch && \
-    git apply /src/wasmvm-fork/patches/cosmwasm-std.imports.rs.patch && \
-    git apply /src/wasmvm-fork/patches/cosmwasm-std.traits.rs.patch && \
+    find /src/wasmvm-fork/patches/v2.2.2 -name "*.patch" \
+        -exec sed -i 's/\r$//' {} + && \
+    for p in /src/wasmvm-fork/patches/v2.2.2/*.patch; do \
+        echo "applying $(basename "$p")..."; \
+        git apply "$p" || { echo "FAILED: $p"; exit 1; }; \
+    done && \
     cargo build --release -p cosmwasm-vm
 
 # ── Clone CosmWasm/wasmvm (no patching needed) ──────────────────────────
 # Rationale: BN254 host functions are wired entirely on the cosmwasm-vm
 # side (do_bn254_* + env_imports.insert in instance.rs). libwasmvm just
-# re-exports cosmwasm-vm via `cosmwasm-vm = { git = ... rev = v2.2.0 }`,
+# re-exports cosmwasm-vm via `cosmwasm-vm = { git = ... rev = v2.2.x }`,
 # so it transitively picks up our patched cosmwasm-vm with the BN254
 # additions. We override the git ref to point at our patched local clone
 # of cosmwasm so the resolved cosmwasm-vm is the patched one, not pristine.
+# The host-side equivalent of this redirect is the [patch] block injected
+# by wasmvm-fork/patches/build-wasmvm-track-a.sh — same outcome, different
+# mechanism (sed substitution here vs Cargo `[patch]` upstream).
 RUN git clone --branch ${WASMVM_TAG} --depth 1 \
         https://github.com/CosmWasm/wasmvm /src/wasmvm && \
     cd /src/wasmvm/libwasmvm && \
