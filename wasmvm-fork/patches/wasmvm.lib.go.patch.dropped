@@ -6,7 +6,7 @@ diff --git a/lib_libwasmvm.go b/lib_libwasmvm.go
  //go:build cgo && !nolink_libwasmvm
  
  package cosmwasm
-@@ -450,3 +451,32 @@ func Bls12381PairingEquality(ps, qs, r, s []byte) (bool, error) {
+@@ -450,2 +451,30 @@ func Bls12381PairingEquality(ps, qs, r, s []byte) (bool, error) {
  	return api.Bls12381PairingEquality(ps, qs, r, s)
  }
 +
@@ -40,7 +40,7 @@ diff --git a/lib_libwasmvm.go b/lib_libwasmvm.go
 diff --git a/internal/api/bindings.h b/internal/api/bindings.h
 --- a/internal/api/bindings.h
 +++ b/internal/api/bindings.h
-@@ -430,3 +430,17 @@ UnmanagedVector bls12_381_pairing_equality(ByteSliceView ps,
+@@ -430,4 +430,16 @@ UnmanagedVector bls12_381_pairing_equality(ByteSliceView ps,
                                             ByteSliceView qs,
                                             ByteSliceView r,
                                             ByteSliceView s,

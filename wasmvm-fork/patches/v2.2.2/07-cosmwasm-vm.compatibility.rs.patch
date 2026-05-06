@@ -1,0 +1,14 @@
+diff --git a/packages/vm/src/compatibility.rs b/packages/vm/src/compatibility.rs
+index c77e09e58..e6d015a88 100644
+--- a/packages/vm/src/compatibility.rs
++++ b/packages/vm/src/compatibility.rs
+@@ -26,6 +26,9 @@ const SUPPORTED_IMPORTS: &[&str] = &[
+     "env.bls12_381_pairing_equality",
+     "env.bls12_381_hash_to_g1",
+     "env.bls12_381_hash_to_g2",
++    "env.bn254_add",
++    "env.bn254_scalar_mul",
++    "env.bn254_pairing_equality",
+     "env.secp256k1_verify",
+     "env.secp256k1_recover_pubkey",
+     "env.secp256r1_verify",

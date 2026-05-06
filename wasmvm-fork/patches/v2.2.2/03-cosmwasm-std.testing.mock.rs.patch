@@ -1,0 +1,29 @@
+diff --git a/packages/std/src/testing/mock.rs b/packages/std/src/testing/mock.rs
+index 0d1c35565..2127b10be 100644
+--- a/packages/std/src/testing/mock.rs
++++ b/packages/std/src/testing/mock.rs
+@@ -270,6 +270,24 @@ impl Api for MockApi {
+         )?)
+     }
+ 
++
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_add(&self, input: &[u8]) -> Result<[u8; 64], VerificationError> {
++        cosmwasm_crypto_bn254::bn254_add(input)
++            .map_err(|e| VerificationError::generic_err(e.to_string()))
++    }
++
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_scalar_mul(&self, input: &[u8]) -> Result<[u8; 64], VerificationError> {
++        cosmwasm_crypto_bn254::bn254_scalar_mul(input)
++            .map_err(|e| VerificationError::generic_err(e.to_string()))
++    }
++
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_pairing_equality(&self, input: &[u8]) -> Result<bool, VerificationError> {
++        cosmwasm_crypto_bn254::bn254_pairing_equality(input)
++            .map_err(|e| VerificationError::generic_err(e.to_string()))
++    }
+     fn debug(&self, #[allow(unused)] message: &str) {
+         println!("{message}");
+     }

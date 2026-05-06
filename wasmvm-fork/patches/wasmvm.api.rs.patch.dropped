@@ -24,7 +24,7 @@ diff --git a/libwasmvm/src/bn254_ffi.rs b/libwasmvm/src/bn254_ffi.rs
 new file mode 100644
 --- /dev/null
 +++ b/libwasmvm/src/bn254_ffi.rs
-@@ -0,0 +1,146 @@
+@@ -0,0 +1,97 @@
 +//! C-ABI shims for the three BN254 host functions, callable from Go via cgo.
 +//!
 +//! These wrappers exist only so that a patched `junod` build can route
