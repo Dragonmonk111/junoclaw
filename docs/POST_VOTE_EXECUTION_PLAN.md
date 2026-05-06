@@ -158,20 +158,35 @@ Minimum coverage:
 
 ---
 
-### 0.3 — Measure precompile gas on devnet (replace projection with measurement)
+### 0.3 — Measure precompile gas on devnet (replace projection with measurement) — 🟡 **IN PROGRESS** (libwasmvm step done)
+
+> **Status (2026-05-06).** Step 1 of the procedure below — building a patched `libwasmvm.so` linked against our BN254-modified `cosmwasm` v2.2.2 — is complete and reproducible via [`wasmvm-fork/patches/build-wasmvm-track-a.sh`](../wasmvm-fork/patches/build-wasmvm-track-a.sh). The script clones `wasmvm` v2.2.4 fresh, idempotently appends a `[patch."https://github.com/CosmWasm/cosmwasm.git"]` block to `libwasmvm/Cargo.toml` redirecting `cosmwasm-std` and `cosmwasm-vm` to our patched local copy, builds with `cargo +1.78.0 build --release`, and verifies all six BN254 entry-point symbols are linked into the resulting 8.6 MB `.so`:
+>
+> ```
+> ok  cosmwasm_vm::imports::do_bn254_add
+> ok  cosmwasm_vm::imports::do_bn254_scalar_mul
+> ok  cosmwasm_vm::imports::do_bn254_pairing_equality
+> ok  cosmwasm_crypto_bn254::bn254::bn254_add
+> ok  cosmwasm_crypto_bn254::bn254::bn254_scalar_mul
+> ok  cosmwasm_crypto_bn254::bn254::bn254_pairing_equality
+> ```
+>
+> First-build cold time: ~1m 30s on the dev laptop (most cosmwasm-vm + wasmer crates were cached from the Phase 0.1 test runs). Incremental rebuilds are ~40s. The artifact is staged into `internal/api/libwasmvm.x86_64.so` so a downstream `make build-go` (step 2) can pick it up via cgo without further configuration.
+>
+> Steps 2 (junod build), 3 (devnet boot), 4 (deploy precompile-variant zk-verifier), 5 (benchmark), 6 (write results) remain. Steps 2-3 require Juno chain source + Go 1.22 (now installed, see Phase 0.1 wrap-up).
 
 Today: `BN254_BENCHMARK_PROJECTED.md` says ~223,300 SDK gas for the precompile path (algebraic projection from EIP-1108 + 30k overhead). We need to replace this with a **measured** number from a devnet running the patched chain binary.
 
 **Procedure:**
 
 ```bash
-# 1. Build a junod binary against the patched wasmvm
-cd ~/junoclaw-build/wasmvm-bn254
-make build-rust && make build-go
+# 1. Build the patched libwasmvm.so. ✅ done — see status note above.
+bash wasmvm-fork/patches/rebase-track-a.sh         # produces patched cosmwasm
+bash wasmvm-fork/patches/build-wasmvm-track-a.sh   # produces libwasmvm.so
 
-# 2. Drop into the Juno chain build, point at this wasmvm
+# 2. Drop into the Juno chain build, point at our patched wasmvm
 cd ~/junoclaw-build/juno-v29.1
-go.mod replace: github.com/CosmWasm/wasmvm => ../wasmvm-bn254
+# go.mod replace: github.com/CosmWasm/wasmvm => ../wasmvm-bn254
 go build ./cmd/junod
 
 # 3. Boot the existing devnet harness with the new junod
@@ -195,7 +210,8 @@ sudo ./scripts/run-devnet.sh
 
 **Deliverable:** `BN254_BENCHMARK_RESULTS.md` updated with a new section "Precompile measurement (v30 build)" containing the median, std dev, and 5 sample tx hashes.
 
-- [ ] Patched junod builds clean
+- [x] Patched `libwasmvm.so` builds clean and exports the 6 BN254 symbols (script: `build-wasmvm-track-a.sh`)
+- [ ] Patched junod builds clean (links against the .so above)
 - [ ] Devnet boots without validator interference
 - [ ] Precompile-variant zk-verifier deployed
 - [ ] 50 VerifyProof txs executed; gas captured
