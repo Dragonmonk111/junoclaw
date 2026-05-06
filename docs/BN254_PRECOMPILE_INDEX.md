@@ -23,10 +23,17 @@ a reviewer should read them.
 - [`../wasmvm-fork/cosmwasm-std-bn254-ext/`](../wasmvm-fork/cosmwasm-std-bn254-ext/) —
   guest-side extension trait used by contracts until `cosmwasm-std`
   absorbs `Api::bn254_*`.
+- [`../wasmvm-fork/patches/v2.2.2/`](../wasmvm-fork/patches/v2.2.2/) —
+  **the live patch set** (Phase 0.1, May 2026): 10 numbered patches
+  rebased onto `CosmWasm/cosmwasm` v2.2.2 (the version `wasmvm` v2.2.4 /
+  Juno mainnet pins). Apply order is encoded in filenames; see the
+  [README](../wasmvm-fork/patches/v2.2.2/README.md) for a per-patch
+  manifest and the toolchain pin rationale.
 - [`../wasmvm-fork/patches/`](../wasmvm-fork/patches/) —
-  unified-diff patches against `CosmWasm/cosmwasm` v2.2.0 and
-  `CosmWasm/wasmvm` v2.2.0 that register the imports, expose the
-  guest-side API, and plumb the Go FFI.
+  the original v2.2.0 patches kept as historical artefacts; the
+  `wasmvm.*.patch.dropped` files preserve the Go-wrapper attempts that
+  were deferred to Track B (cosmwasm/wasmvm v3.x) after we discovered
+  v2.2.4 has no Go-side BLS12-381 wrappers to mirror.
 
 ## 3. The contract change
 
@@ -91,7 +98,37 @@ a reviewer should read them.
   the upstream PR body, ready to paste into a
   `CosmWasm/cosmwasm` + `CosmWasm/wasmvm` PR.
 
-## 7. The prior articles (context)
+## 7. Post-vote execution (#374 PASSED, May 2026)
+
+Now that the on-chain signal is in (~80% Yes, 22% Abstain, 0.003%
+No-with-Veto, 44% turnout), the next ~6 weeks turn signal into shipped
+code. These four docs are the canonical workplan:
+
+- [`./POST_VOTE_EXECUTION_PLAN.md`](./POST_VOTE_EXECUTION_PLAN.md) —
+  **single source of truth.** 5-phase plan from patch rebase to
+  juno-1 mainnet upgrade. Tracks every step with checkboxes.
+- [`./UPSTREAM_ISSUE_DRAFTS.md`](./UPSTREAM_ISSUE_DRAFTS.md) —
+  the two GitHub issues we publish on `CosmWasm/cosmwasm` and
+  `CosmWasm/wasmvm` BEFORE any PR. Issues invite shaping; PRs invite
+  acceptance/rejection. We open issues first.
+- [`./ADR-001-BN254-PRECOMPILE.md`](./ADR-001-BN254-PRECOMPILE.md) —
+  architecture decision record. The single short doc maintainers
+  read before engaging with the issue or PR.
+- [`./V30_UPGRADE_HANDLER_DESIGN.md`](./V30_UPGRADE_HANDLER_DESIGN.md) —
+  the brief we hand to Dimi when asking for v30 co-author sign-off.
+  Includes the ~20-line handler design, rehearsal plan, rollback story.
+- [`./DIMI_PREBRIEF_TELEGRAM.md`](./DIMI_PREBRIEF_TELEGRAM.md) —
+  the short Telegram message we send Dimi after Phase 0 to keep him
+  in the loop without making an ask.
+- [`../wasmvm-fork/patches/rebase-track-a.sh`](../wasmvm-fork/patches/rebase-track-a.sh) —
+  the **verification harness** for the v2.2.2 patch set. Clones a
+  fresh cosmwasm v2.2.2, applies the 10 patches in order, pins Rust
+  1.78.0 via rustup, and runs `cargo test` on `cosmwasm-crypto-bn254`
+  + `cosmwasm-vm`. Idempotent — anyone (you, a maintainer reviewing
+  the upstream PR, future-you on a new machine) can run it from the
+  junoclaw root and get a green/red answer in ~2 minutes.
+
+## 8. The prior articles (context)
 
 - [`../ZK_PRECOMPILE_ARTICLE.md`](../ZK_PRECOMPILE_ARTICLE.md) —
   the long-form article that set up the PoC.
@@ -123,13 +160,18 @@ a reviewer should read them.
 | Devnet stood up on validator VM (blocks producing) | ✅ complete (2026-04-29, air-gapped, `junoclaw-bn254-1`, `localhost:36657`) |
 | Pure-Wasm contract deployed on devnet           | ✅ complete (code_id 1 stored + instantiated at `juno14hj2…fvw9skjuwg8`; `vk_status` query succeeds. Full `VerifyProof` gas re-measurement pending a benchmark run — the `uni-7` number `371 486 SDK gas` still stands as the measured baseline.) |
 | Precompile contract stored on devnet            | ⚠️ partial (code_id 2 uploaded; instantiation silently fails because the devnet Docker image was built against stock `libwasmvm` without the BN254 host imports) |
-| Custom `junod-bn254` Docker image build         | ⏳ blocked (build-hygiene, not algebra: `cosmwasm-vm.imports.rs.patch` has a missing blank-line separator between its three `diff --git` hunks → `git apply` rejects it as "corrupt patch at line 112". Fix is to regenerate the patch cleanly via `git diff` on a patched v2.2.0 checkout, not to change any BN254 code.) |
-| Devnet measurement run (precompile gas)         | ⏳ pending the image rebuild above. The gas schedule in `gas.rs` and the projection in `BN254_BENCHMARK_PROJECTED.md` stand on their own; the devnet run converts `~223 300 projected` to `~223 300 ± 5 % measured`. |
-| HackMD published + Jake cosign                  | ⏳ pending    |
-| Upstream PR opened                              | ⏳ pending    |
-| Juno signaling vote                             | ⏳ pending    |
-| Juno `MsgSoftwareUpgrade` proposal              | ⏳ pending    |
-| Post-upgrade zk-verifier migration              | ⏳ pending    |
+| Custom `junod-bn254` Docker image build         | ⏳ pending Phase 0.2 — Track A rebase complete (commit `d60c497`), so the build is now unblocked. Need to wire the patched `cosmwasm` into `wasmvm` v2.2.4's build, link `libwasmvm.so`, and re-bake the Dockerfile. |
+| HackMD published + Jake cosign                  | ✅ complete   |
+| Juno signaling vote (#374)                      | ✅ **PASSED** (~80% Yes, 22% Abstain, 0.003% No-with-Veto, 44.05% turnout, 2026-05-05) |
+| Post-vote execution plan + upstream-issue drafts | ✅ complete (`POST_VOTE_EXECUTION_PLAN.md`, `UPSTREAM_ISSUE_DRAFTS.md`, `ADR-001-BN254-PRECOMPILE.md`) |
+| v30 upgrade handler design (Dimi handoff brief) | ✅ complete (`V30_UPGRADE_HANDLER_DESIGN.md`) |
+| Track A patch rebase (`v2.2.0` → `cosmwasm v2.2.2`) | ✅ **complete** (commit `d60c497`, 2026-05-06). Patches at `wasmvm-fork/patches/v2.2.2/00-09`. Verified by `rebase-track-a.sh`: `cosmwasm-crypto-bn254` 22/22, `cosmwasm-vm --lib` 311/311 on Rust 1.78.0. |
+| Devnet measurement run (precompile gas)         | ⏳ pending Phase 0.2/0.3 image rebuild. Converts `~223 300 projected` to `~223 300 ± 5 % measured`. Rebase is no longer the blocker — the patched `cosmwasm` is green. |
+| Upstream issues opened (cosmwasm + wasmvm)      | ⏳ pending Phase 0 completion |
+| Upstream PRs opened                             | ⏳ pending issue feedback (Phase 1 → 3) |
+| uni-7 testnet `MsgSoftwareUpgrade`              | ⏳ pending Phase 4 |
+| Juno `MsgSoftwareUpgrade` proposal              | ⏳ pending Phase 5 |
+| Post-upgrade zk-verifier migration              | ⏳ pending mainnet upgrade |
 
 "Complete" above means the code + docs are checked in to this repo.
 "Pending" means the work is ready to push to the external surface
