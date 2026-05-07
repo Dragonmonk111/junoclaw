@@ -158,9 +158,9 @@ Minimum coverage:
 
 ---
 
-### 0.3 — Measure precompile gas on devnet (replace projection with measurement) — 🟡 **IN PROGRESS** (libwasmvm step done)
+### 0.3 — Measure precompile gas on devnet (replace projection with measurement) — 🟡 **IN PROGRESS** (libwasmvm + Dockerfile + contracts done; chain image in flight)
 
-> **Status (2026-05-06).** Step 1 of the procedure below — building a patched `libwasmvm.so` linked against our BN254-modified `cosmwasm` v2.2.2 — is complete and reproducible via [`wasmvm-fork/patches/build-wasmvm-track-a.sh`](../wasmvm-fork/patches/build-wasmvm-track-a.sh). The script clones `wasmvm` v2.2.4 fresh, idempotently appends a `[patch."https://github.com/CosmWasm/cosmwasm.git"]` block to `libwasmvm/Cargo.toml` redirecting `cosmwasm-std` and `cosmwasm-vm` to our patched local copy, builds with `cargo +1.78.0 build --release`, and verifies all six BN254 entry-point symbols are linked into the resulting 8.6 MB `.so`:
+> **Status (2026-05-06).** Step 1 — building a patched host-side `libwasmvm.so` linked against our BN254-modified `cosmwasm` v2.2.2 — is complete and reproducible via [`wasmvm-fork/patches/build-wasmvm-track-a.sh`](../wasmvm-fork/patches/build-wasmvm-track-a.sh). The script clones `wasmvm` v2.2.4 fresh, idempotently appends a `[patch."https://github.com/CosmWasm/cosmwasm.git"]` block to `libwasmvm/Cargo.toml` redirecting `cosmwasm-std` and `cosmwasm-vm` to our patched local copy, builds with `cargo +1.78.0 build --release`, and verifies all six BN254 entry-point symbols are linked into the resulting 8.6 MB `.so`:
 >
 > ```
 > ok  cosmwasm_vm::imports::do_bn254_add
@@ -171,35 +171,47 @@ Minimum coverage:
 > ok  cosmwasm_crypto_bn254::bn254::bn254_pairing_equality
 > ```
 >
-> First-build cold time: ~1m 30s on the dev laptop (most cosmwasm-vm + wasmer crates were cached from the Phase 0.1 test runs). Incremental rebuilds are ~40s. The artifact is staged into `internal/api/libwasmvm.x86_64.so` so a downstream `make build-go` (step 2) can pick it up via cgo without further configuration.
+> First-build cold time: ~1m 30s on the dev laptop. Incremental rebuilds are ~40s.
 >
-> Steps 2 (junod build), 3 (devnet boot), 4 (deploy precompile-variant zk-verifier), 5 (benchmark), 6 (write results) remain. Steps 2-3 require Juno chain source + Go 1.22 (now installed, see Phase 0.1 wrap-up).
+> **Status (2026-05-07).** The pipeline downstream of step 1 is fully wired and the chain image is currently building. Three pieces landed today:
+>
+> 1. **Devnet Dockerfile aligned to the v2.2.2 patch set** (commit `18c1ba3`). The previous Stage 1 manually `cp -r`'d the standalone `cosmwasm-crypto-bn254` crate, `sed`-stripped its `[workspace]`, then applied three top-level patches (`cosmwasm-vm.imports.rs.patch`, `cosmwasm-std.imports.rs.patch`, `cosmwasm-std.traits.rs.patch`). That's the *pre*-rebase patch set. The new Stage 1 iterates over `wasmvm-fork/patches/v2.2.2/*.patch` in numeric order (00..09); patch `09` creates the `packages/crypto-bn254/` crate from scratch as a workspace member, so the manual copy + workspace-strip step is no longer needed. `COSMWASM_TAG` bumped from `v2.2.0` → `v2.2.2` in both `Dockerfile` and `docker-compose.yml`. The libwasmvm `sed`-redirect at lines 74-75 still uses regex `rev = "v2.2.[0-9]+"` so it survives further patch-version drift.
+>
+> 2. **Both contract flavours compile clean.** `cargo build --release --target wasm32-unknown-unknown -p zk-verifier` produces the pure-Wasm verifier (1m 48s); the same with `--features bn254-precompile` produces the precompile variant (1m 30s). `Cargo.lock` shows a single `cosmwasm-std v2.3.2` so the two flavours are apples-to-apples for the gas comparison. Rust 1.84.0 toolchain installed alongside 1.78.0 (the contracts pin via `contracts/rust-toolchain.toml`).
+>
+> 3. **Groth16 proof bundle generated** (deterministic seed 42, `SquareCircuit` with `x*x = y`, x=3, y=9). VK 296B, proof 128B, public input 32B. Local arkworks verification: VALID. Saved to `$TMPDIR/groth16_proof.json` for the benchmark harness to consume.
+>
+> The **`docker compose -f devnet/docker-compose.yml build`** is now executing on the dev laptop. Three stages: (a) `rust-builder` clones `cosmwasm` v2.2.2 + applies `v2.2.2/*.patch` + cargo-builds `cosmwasm-vm`, then clones `wasmvm` v2.2.4 + sed-redirects + cargo-builds `libwasmvm.so`; (b) `go-builder` clones `juno` v29.0.0 + go.mod-replaces `wasmvm` → patched-local + builds `junod`; (c) slim runtime stage. Expected wall time: ~25-30 min cold.
+>
+> Steps remaining once the image exists: (3) `run-devnet.sh` — bring up the chain on `localhost:26657`; (4) `deploy-zk-verifier.sh` — store + instantiate both flavours, write `deploy.env`; (5) `benchmark.sh` — call `VerifyProof` N times against both addresses, capture median gas, write `BN254_BENCHMARK_RESULTS.md`; (6) commit + push results.
 
 Today: `BN254_BENCHMARK_PROJECTED.md` says ~223,300 SDK gas for the precompile path (algebraic projection from EIP-1108 + 30k overhead). We need to replace this with a **measured** number from a devnet running the patched chain binary.
 
 **Procedure:**
 
+The orchestration consolidated to a single `docker compose` build during the 2026-05-07 work; steps 2 and 3 of the original plan (manual `go build ./cmd/junod` + ad-hoc devnet) are now folded into one reproducible `devnet/Dockerfile`. The pure-Wasm vs precompile comparison is also single-shot: `deploy-zk-verifier.sh` builds **both** `.wasm` flavours and uploads them side-by-side, so the benchmark gets to call the same proof against both addresses on the same image. Concrete sequence:
+
 ```bash
-# 1. Build the patched libwasmvm.so. ✅ done — see status note above.
+# 1. Patches verified host-side (Phase 0.1) — re-run if the source tree drifted.
 bash wasmvm-fork/patches/rebase-track-a.sh         # produces patched cosmwasm
-bash wasmvm-fork/patches/build-wasmvm-track-a.sh   # produces libwasmvm.so
+bash wasmvm-fork/patches/build-wasmvm-track-a.sh   # produces libwasmvm.so (sanity)
 
-# 2. Drop into the Juno chain build, point at our patched wasmvm
-cd ~/junoclaw-build/juno-v29.1
-# go.mod replace: github.com/CosmWasm/wasmvm => ../wasmvm-bn254
-go build ./cmd/junod
+# 2. Generate a deterministic Groth16 proof bundle for the benchmark harness.
+cargo run --release -p zk-verifier --example generate_proof
+#    → writes $TMPDIR/groth16_proof.json (VK + proof + public inputs as base64)
 
-# 3. Boot the existing devnet harness with the new junod
-cd ~/junoclaw/devnet
-sudo ./scripts/run-devnet.sh
+# 3. Build the chain image: cosmwasm + libwasmvm + junod, all patched in-stage.
+docker compose -f devnet/docker-compose.yml build
 
-# 4. Deploy the precompile-variant zk-verifier (NOT the pure-Wasm one)
-./scripts/deploy-zk-verifier.sh --variant precompile
+# 4. Boot the devnet (waits for RPC + first block).
+bash devnet/scripts/run-devnet.sh
 
-# 5. Run the benchmark — 50 VerifyProof txs
-./scripts/benchmark.sh --output-tag precompile-v30
+# 5. Build, upload, instantiate both zk-verifier flavours; emit deploy.env.
+bash devnet/scripts/deploy-zk-verifier.sh
 
-# 6. Median gas → BN254_BENCHMARK_RESULTS.md
+# 6. Run the benchmark — N VerifyProof txs against both addresses.
+N=50 bash devnet/scripts/benchmark.sh
+#    → writes docs/BN254_BENCHMARK_RESULTS.md (median gas, std dev, sample tx hashes)
 ```
 
 **Memory note:** the validator VM and the devnet must NOT run simultaneously — OOM crash. The validator stays on its VM; the devnet runs on the build machine (or the validator VM with the validator daemon stopped and explicitly NOT restarted until after the measurement).
@@ -210,12 +222,16 @@ sudo ./scripts/run-devnet.sh
 
 **Deliverable:** `BN254_BENCHMARK_RESULTS.md` updated with a new section "Precompile measurement (v30 build)" containing the median, std dev, and 5 sample tx hashes.
 
-- [x] Patched `libwasmvm.so` builds clean and exports the 6 BN254 symbols (script: `build-wasmvm-track-a.sh`)
-- [ ] Patched junod builds clean (links against the .so above)
+- [x] Patched `libwasmvm.so` builds clean and exports the 6 BN254 symbols (script: `build-wasmvm-track-a.sh`, 2026-05-06, commit `f0b6c95`)
+- [x] Devnet `Dockerfile` aligned to the v2.2.2 patch set (2026-05-07, commit `18c1ba3`)
+- [x] Both contract flavours build clean (`zk-verifier` pure-Wasm + `--features bn254-precompile`); `Cargo.lock` confirms a single `cosmwasm-std` v2.3.2 across both
+- [x] Deterministic Groth16 proof bundle generated (`SquareCircuit` x*x=y, x=3 y=9, 685B JSON)
+- [ ] Patched junod image builds via `docker compose build` (3-stage: rust → libwasmvm, go → junod, slim runtime)
 - [ ] Devnet boots without validator interference
-- [ ] Precompile-variant zk-verifier deployed
-- [ ] 50 VerifyProof txs executed; gas captured
-- [ ] Convergence within ±5%
+- [ ] Both zk-verifier flavours deployed; `deploy.env` populated
+- [ ] N=50 VerifyProof txs executed against each address; gas medians captured
+- [ ] Convergence within ±5% of the 223,300 algebraic projection
+- [ ] `BN254_BENCHMARK_RESULTS.md` written and pushed
 - [ ] Article + projection doc updated with measured number
 
 ---
