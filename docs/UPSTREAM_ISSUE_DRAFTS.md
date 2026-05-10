@@ -4,6 +4,18 @@
 **Companion:** [`POST_VOTE_EXECUTION_PLAN.md`](./POST_VOTE_EXECUTION_PLAN.md) Phase 1
 **Targets:** `CosmWasm/cosmwasm`, `CosmWasm/wasmvm`
 
+## Publish sequence (do these in order)
+
+1. **Open Issue 1** (`CosmWasm/cosmwasm`). Copy the body from the fenced ` ```markdown ` block under `## Issue 1` below. Use the title shown there. Do NOT pre-apply labels — let maintainers do that.
+2. **Capture the URL** (e.g. `https://github.com/CosmWasm/cosmwasm/issues/NNNN`). Paste it into `_private/upstream_threads.md` (gitignored) as `Issue 1: <url>`. If `_private/` doesn't exist, just keep the URL in your terminal scrollback for step 3.
+3. **Edit Issue 2's body in this file** before pasting it: replace the placeholder `[CosmWasm/cosmwasm#XXXX](TBD-after-issue-1-published)` (appears once, in the Context section) with `[CosmWasm/cosmwasm#NNNN](https://github.com/CosmWasm/cosmwasm/issues/NNNN)`. Do this edit here, in markdown, then copy — do not edit in the GitHub UI.
+4. **Open Issue 2** (`CosmWasm/wasmvm`). Same procedure as step 1.
+5. **Capture Issue 2's URL** the same way.
+6. **Edit Issue 1 once on GitHub** to add the Issue 2 cross-link as a single appended line at the bottom of the body: `Companion VM-side issue: <issue-2-url>`. This is the only allowed in-browser edit.
+7. **Telegram FYI to Dimi** — see `## After publishing` below for the wording template.
+
+No Twitter / Discord broadcast until at least one substantive maintainer reply on either issue. A silent issue + a public broadcast reads as a stalled project.
+
 ---
 
 ## Why issues, not PRs
@@ -205,7 +217,7 @@ cc @webmaster128 @ethanfrey — happy to adapt the FFI shape to whatever pattern
 
 ---
 
-**Repo (for reference, not a request):** [Dragonmonk111/junoclaw](https://github.com/Dragonmonk111/junoclaw) — the live v2.2.2-rebased patches are at [`wasmvm-fork/patches/v2.2.2/`](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/patches/v2.2.2) (10 numbered patches with a [README manifest](https://github.com/Dragonmonk111/junoclaw/blob/main/wasmvm-fork/patches/v2.2.2/README.md)). The dropped Go-wrapper attempts are kept at `wasmvm-fork/patches/wasmvm.*.patch.dropped` for the audit trail described in Finding 2. The verification harness [`wasmvm-fork/patches/rebase-track-a.sh`](https://github.com/Dragonmonk111/junoclaw/blob/main/wasmvm-fork/patches/rebase-track-a.sh) re-applies and re-tests the patch set from a clean checkout in ~2 minutes.
+**Repo (for reference, not a request):** [Dragonmonk111/junoclaw](https://github.com/Dragonmonk111/junoclaw) — the live patches are at [`wasmvm-fork/patches/v2.2.2/`](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/patches/v2.2.2) (the audit reference, matches `wasmvm` v2.2.4 pin) and [`wasmvm-fork/patches/v2.2.7/`](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/patches/v2.2.7) (forward-port to the latest cosmwasm 2.2.x tag), both 10/10 clean. Each series has its own README manifest. The dropped Go-wrapper attempts are kept at `wasmvm-fork/patches/wasmvm.*.patch.dropped` for the audit trail described in Finding 2. Two verification harnesses are provided: [`check-baseline.sh`](https://github.com/Dragonmonk111/junoclaw/blob/main/wasmvm-fork/patches/check-baseline.sh) (fast `git apply --check` per patch) and [`rebase-track-a.sh`](https://github.com/Dragonmonk111/junoclaw/blob/main/wasmvm-fork/patches/rebase-track-a.sh) (full clone-apply-test loop, ~2 minutes from a warm cache).
 ```
 
 ---
