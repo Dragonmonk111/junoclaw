@@ -62,7 +62,7 @@ Two surprises took longer than they should have. First, the devnet's `globalfee`
 
 **Confidence in the upstream PR.** The cosmwasm/wasmvm review will not have to take an algebraic argument as gospel. The reviewers can run the same `reproduce-benchmark.sh` on their own hardware and get the same number, deterministically. That is the conversation we wanted to be able to have.
 
-**A fact that grounds the AI DAO category.** A separate note (`AI_DAO_FRAMING_AND_MOLTBOOK.md`) sketches where JunoClaw fits in the AI-DAO wave that Jake Hartnell, the netadao creator, and the Cybernetics group named in the May Spaces. That note's premise — *every agent action is verifiable* — depended on this number. The note can now stop hedging.
+**A fact that grounds the AI DAO category.** A separate note (`AI_DAO_FRAMING_AND_MOULTBOOK.md`) sketches where JunoClaw fits in the AI-DAO wave that Jake Hartnell, the netadao creator, and the Cybernetics group named in the May Spaces. That note's premise — *every agent action is verifiable* — depended on this number. The note can now stop hedging.
 
 ## What we are doing next
 
@@ -73,7 +73,7 @@ In order of how much engineering they cost:
 3. **v30 chain-upgrade handler.** Co-authored with Dimi if he has bandwidth; pattern-matched on his v28→v29 work. One-job handler: bump wasmvm, register BN254 imports.
 4. **Mainnet measurement after upgrade lands.** The same script, against `juno-1`, with the actual upgrade height in the runbook. We expect the same 1.823×; if it differs, we publish the difference, not the round number.
 
-Beyond the precompile, the work splits along the lines Jake sketched in the Spaces. JunoClaw the **AI DAO** primitive; the WAVS bridge as **Chainlink-shaped** oracle surface; the Moltbook research thread as the substrate for cross-agent shared knowledge. The Mesh Security audit posture (`MESH_TIABLOB_CONSTRAINTS.md`) keeps us honest about where to stop.
+Beyond the precompile, the work splits along the lines Jake sketched in the Spaces. JunoClaw the **AI DAO** primitive; the WAVS bridge as **Chainlink-shaped** oracle surface; the Moultbook research thread as the substrate for cross-agent shared knowledge. The Mesh Security audit posture (`MESH_TIABLOB_CONSTRAINTS.md`) keeps us honest about where to stop.
 
 ## A short note on attribution
 
@@ -101,4 +101,4 @@ The proposal passed because the chain was willing to vote on an argument. The ar
 - Original projection: `docs/BN254_BENCHMARK_PROJECTED.md`
 - Upstream patch set: `wasmvm-fork/patches/`
 - Audit-aware constraints: `docs/MESH_TIABLOB_CONSTRAINTS.md`
-- AI-DAO framing: `docs/AI_DAO_FRAMING_AND_MOLTBOOK.md`
+- AI-DAO framing: `docs/AI_DAO_FRAMING_AND_MOULTBOOK.md`

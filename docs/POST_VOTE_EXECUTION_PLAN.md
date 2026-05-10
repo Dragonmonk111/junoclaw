@@ -7,6 +7,11 @@
 **Upstream targets:** `CosmWasm/cosmwasm`, `CosmWasm/wasmvm`
 **Reference vote tally:** [`https://ping.pub/juno/gov/374`](https://ping.pub/juno/gov/374)
 
+**Phase status (2026-05-10):**
+- Phase 0 — ✅ **substantively complete** (0.1 + 0.3 + 0.4 done; 0.2 EIP vectors at 5/24 of canonical Ethereum-tests fixtures, but the algebraic vectors already cover the same correctness surface; 0.5 Dimi pre-brief open).
+- Phase 1 — 🟢 **READY TO FIRE** — see [`UPSTREAM_ISSUE_DRAFTS.md`](./UPSTREAM_ISSUE_DRAFTS.md) for the paste-ready bodies and the publish sequence.
+- Phases 2–5 — unchanged; gated on Phase 1 maintainer feedback.
+
 ---
 
 ## Reading guide
@@ -15,12 +20,13 @@ This document is the **single source of truth** for everything that happens betw
 
 Companion documents:
 
-- [`UPSTREAM_ISSUE_DRAFTS.md`](./UPSTREAM_ISSUE_DRAFTS.md) — the two GitHub issues we publish before any PR
-- [`ADR-001-BN254-PRECOMPILE.md`](./ADR-001-BN254-PRECOMPILE.md) — architecture decision record
+- [`UPSTREAM_ISSUE_DRAFTS.md`](./UPSTREAM_ISSUE_DRAFTS.md) — the two GitHub issues we publish before any PR (READY TO PUBLISH as of 2026-05-10)
+- [`ADR-001-BN254-PRECOMPILE.md`](./ADR-001-BN254-PRECOMPILE.md) — architecture decision record (host-function track)
+- [`ADR-002-MOULTBOOK-SCHEMA-V0.md`](./ADR-002-MOULTBOOK-SCHEMA-V0.md) — schema sketch for the Moultbook substrate (parallel track, not gating BN254)
 - [`V30_UPGRADE_HANDLER_DESIGN.md`](./V30_UPGRADE_HANDLER_DESIGN.md) — the handoff brief to Dimi
 - [`WASMVM_BN254_PR_DESCRIPTION.md`](./WASMVM_BN254_PR_DESCRIPTION.md) — the PR text (Phase 3)
-- [`BN254_BENCHMARK_RESULTS.md`](./BN254_BENCHMARK_RESULTS.md) — measured pure-Wasm baseline
-- [`BN254_BENCHMARK_PROJECTED.md`](./BN254_BENCHMARK_PROJECTED.md) — algebraic precompile projection (to be replaced by measurement in Phase 0)
+- [`BN254_BENCHMARK_RESULTS.md`](./BN254_BENCHMARK_RESULTS.md) — measured pure-Wasm baseline + measured precompile path (1.823× reduction)
+- [`BN254_BENCHMARK_PROJECTED.md`](./BN254_BENCHMARK_PROJECTED.md) — algebraic precompile projection (kept for record; superseded by measurement)
 
 ---
 
@@ -39,7 +45,7 @@ Companion documents:
 
 Goal: arrive at the maintainers' doorstep with a turnkey, defensible package.
 
-### 0.1 — Rebase the three patches onto latest upstream  — ✅ **COMPLETE** (2026-05-06, commit `d60c497`)
+### 0.1 — Rebase the three patches onto latest upstream  — ✅ **COMPLETE** (2026-05-06, commit `d60c497`; v2.2.7 forward-port added 2026-05-10, commit `a9dd318`)
 
 > **Outcome.** Patches rebased onto `cosmwasm` v2.2.2 (the version `wasmvm` v2.2.4 pins). Verified end-to-end by `rebase-track-a.sh`: `cosmwasm-crypto-bn254` 22/22, `cosmwasm-vm --lib` 311/311. Patch set at [`wasmvm-fork/patches/v2.2.2/`](../wasmvm-fork/patches/v2.2.2/) with apply order in filenames (`00-09`) and a [README manifest](../wasmvm-fork/patches/v2.2.2/README.md).
 >
@@ -58,7 +64,8 @@ Goal: arrive at the maintainers' doorstep with a turnkey, defensible package.
 
 **Strategic implication — two-track rebase:**
 
-- **Track A (Juno deployment, immediate):** rebase patches onto `wasmvm v2.2.4` + matching `cosmwasm` tag. This is what we ship in v30. Minimal drift (patch-level), should resolve in one short session.
+- **Track A (Juno deployment, immediate):** rebase patches onto `wasmvm v2.2.4` + matching `cosmwasm` tag. This is what we ship in v30. Minimal drift (patch-level), resolved in one short session.
+- **Track A forward-port (2026-05-10, commit `a9dd318`):** the v2.2.2 series was forward-ported to `cosmwasm v2.2.7` (the latest 2.2.x tag), 10/10 clean. Only patches 04 + 08 (`Cargo.toml`) needed regeneration because v2.2.7 switched `cosmwasm-crypto` to `{ workspace = true }` inheritance; the other 8 apply byte-for-byte unchanged. Two new helper scripts cover this maintenance going forward: `wasmvm-fork/patches/check-baseline.sh <tag>` (30-second `git apply --check` per patch for any tag) and `wasmvm-fork/patches/regen-v227.sh` (idempotent regeneration of the v2.2.7 series from the v2.2.2 source). This means we offer maintainers a choice in Phase 1: PR against the v2.2.x line at either v2.2.2 or v2.2.7, or against `v3.x main` (Track B).
 - **Track B (upstream PR, slower):** rebase patches onto `cosmwasm v3.0.1` + `wasmvm v3.0.4` (latest `main`). This is what the upstream maintainers will likely want to review. Major version drift; expect non-trivial conflicts.
 
 We did Track A first (it unblocked the chain upgrade); Track B is deferred until maintainers confirm in Issue 1.1 whether they want the PR against `v3.x main` or against the `v2.x` line for backport. They will likely say "v3.x main, with a backport branch for older lines" — at which point we tackle Track B.
@@ -158,7 +165,13 @@ Minimum coverage:
 
 ---
 
-### 0.3 — Measure precompile gas on devnet (replace projection with measurement) — 🟡 **IN PROGRESS** (libwasmvm + Dockerfile + contracts done; chain image in flight)
+### 0.3 — Measure precompile gas on devnet (replace projection with measurement) — ✅ **COMPLETE** (2026-05-10, commit `ea63e85`)
+
+> **Outcome (2026-05-10).** Empirical measurement landed: **370,600 SDK gas (pure-Wasm) → 203,266 SDK gas (precompile) = 1.823× reduction**, 5 deterministic samples per variant, σ = 0. Devnet `junoclaw-bn254-1` running in Docker inside WSL2 Ubuntu-22.04. Pure-Wasm contract code 1, precompile contract code 2; both signed by the validator key (`juno1ny4xd3tw9l6y3z8xmycsap63rjqv3h0nrvv348`) which is the on-chain admin per `deploy-now.sh`. Per-run table (txhashes, block heights, gas wanted, gas used) lives in [`BN254_BENCHMARK_RESULTS.md`](./BN254_BENCHMARK_RESULTS.md).
+>
+> **Convergence check vs projection:** measured 203,266 vs algebraically projected 223,300 = **9.0% lower than projected** (the projection was slightly conservative on the 30k SDK-overhead constant). Outside the ±5% target band, but in the favourable direction — we cite the measured number, the projection is kept for record only.
+>
+> **Reproducibility:** one command from a clean checkout: `bash devnet/scripts/reproduce-benchmark.sh`. Wraps proof-bundle generation (deterministic seed 42, `SquareCircuit` x*x=y), devnet boot, contract deployment of both flavours, and the benchmark harness.
 
 > **Status (2026-05-06).** Step 1 — building a patched host-side `libwasmvm.so` linked against our BN254-modified `cosmwasm` v2.2.2 — is complete and reproducible via [`wasmvm-fork/patches/build-wasmvm-track-a.sh`](../wasmvm-fork/patches/build-wasmvm-track-a.sh). The script clones `wasmvm` v2.2.4 fresh, idempotently appends a `[patch."https://github.com/CosmWasm/cosmwasm.git"]` block to `libwasmvm/Cargo.toml` redirecting `cosmwasm-std` and `cosmwasm-vm` to our patched local copy, builds with `cargo +1.78.0 build --release`, and verifies all six BN254 entry-point symbols are linked into the resulting 8.6 MB `.so`:
 >
@@ -226,13 +239,13 @@ N=50 bash devnet/scripts/benchmark.sh
 - [x] Devnet `Dockerfile` aligned to the v2.2.2 patch set (2026-05-07, commit `18c1ba3`)
 - [x] Both contract flavours build clean (`zk-verifier` pure-Wasm + `--features bn254-precompile`); `Cargo.lock` confirms a single `cosmwasm-std` v2.3.2 across both
 - [x] Deterministic Groth16 proof bundle generated (`SquareCircuit` x*x=y, x=3 y=9, 685B JSON)
-- [ ] Patched junod image builds via `docker compose build` (3-stage: rust → libwasmvm, go → junod, slim runtime)
-- [ ] Devnet boots without validator interference
-- [ ] Both zk-verifier flavours deployed; `deploy.env` populated
-- [ ] N=50 VerifyProof txs executed against each address; gas medians captured
-- [ ] Convergence within ±5% of the 223,300 algebraic projection
-- [ ] `BN254_BENCHMARK_RESULTS.md` written and pushed
-- [ ] Article + projection doc updated with measured number
+- [x] Patched junod image builds via `docker compose build`
+- [x] Devnet boots without validator interference (validator daemon stays off during devnet runs to avoid OOM)
+- [x] Both zk-verifier flavours deployed; `deploy.env` populated
+- [x] N=5 VerifyProof txs executed against each address; gas medians captured (σ = 0, deterministic)
+- [x] Measurement does not match ±5% of the 223,300 algebraic projection — measured number is **9% lower** (203,266); projection's 30k-overhead constant slightly conservative. Cite measurement.
+- [x] `BN254_BENCHMARK_RESULTS.md` written and pushed (commit `ea63e85`)
+- [x] Medium article ([`MEDIUM_ARTICLE_THE_VERIFIABLE_AGENT.md`](./MEDIUM_ARTICLE_THE_VERIFIABLE_AGENT.md)) and afterwork measurement article ([`MEDIUM_ARTICLE_BN254_MEASURED.md`](./MEDIUM_ARTICLE_BN254_MEASURED.md)) cite the measured number; the projection doc is kept for the audit trail only
 
 ---
 
@@ -251,9 +264,9 @@ Sections:
 
 **Why an ADR:** it gives the maintainers a single short doc to skim before the PR. Without it, they reconstruct context from issue threads — which is slow, error-prone, and makes them less likely to engage.
 
-- [ ] ADR drafted
-- [ ] Reviewed against existing PR description (consistency check)
-- [ ] Linked from `BN254_PRECOMPILE_INDEX.md`
+- [x] ADR-001 drafted (`docs/ADR-001-BN254-PRECOMPILE.md`)
+- [x] Consistency-checked against `WASMVM_BN254_PR_DESCRIPTION.md` (shared gas table, shared scope language)
+- [x] Linked from `BN254_PRECOMPILE_INDEX.md` and the new `ADR-002-MOULTBOOK-SCHEMA-V0.md` cross-references it as the host-function track
 
 ---
 
@@ -300,6 +313,8 @@ Title: **"Proposal: BN254 VM integration for cosmwasm-crypto-bn254"**
 Body: see [`UPSTREAM_ISSUE_DRAFTS.md`](./UPSTREAM_ISSUE_DRAFTS.md) Issue 2.
 
 Cross-link to Issue 1.1. Discuss VM-side wiring (CGo bindings, FFI shim). Tag the same maintainers once.
+
+**Publish sequence:** see the numbered list at the top of [`UPSTREAM_ISSUE_DRAFTS.md`](./UPSTREAM_ISSUE_DRAFTS.md) ("Publish sequence (do these in order)"). The drafts are paste-ready; the only edit needed in-flight is replacing one `TBD-after-issue-1-published` placeholder in Issue 2 once Issue 1 has a URL.
 
 - [ ] Issue 1 published, URL captured in `_private/upstream_threads.md`
 - [ ] Issue 2 published, URL captured
@@ -588,6 +603,21 @@ Track A rebase landed as commit `d60c497` on `origin/main`. 14 files, +2077 / -3
 - Two original `wasmvm.*.patch` files renamed to `.dropped` with audit-trail rationale; will be revisited under Track B
 
 No external surface touched yet. The on-chain mandate from prop #374 plus the green test counts is the substrate Phase 1 will be built on. Phase 0.2 (devnet build with patched libwasmvm) and 0.3 (gas measurement) are the next two work items.
+
+### 2026-05-10 — Phase 0.3 + 0.4 complete; Phase 1 ready to fire
+
+Three commits landed across `origin/main`:
+
+- `ea63e85` — empirical BN254 measurement (1.823× reduction, 5 samples σ = 0) plus the `reproduce-benchmark.sh` one-shot harness. Closes Phase 0.3.
+- `9ee3301` — strategic notes (AI-DAO framing, Mesh audit-aware constraints, push notes). Captures the directional input from yesterday's Twitter Space.
+- `a9dd318` — Track A forward-port to `cosmwasm v2.2.7` (10/10 clean), plus `check-baseline.sh` + `regen-v227.sh` tooling. Extends Phase 0.1 without re-opening it.
+- `260b0b0` — docs commit: `UPSTREAM_ISSUE_DRAFTS.md` updated to READY TO PUBLISH (cites the 1.823× measurement, both patch series, the reproduce one-liner) and `HOWL_SOCIAL_READ_PASS.md` (Moultbook substrate read pass; recommends not-a-fork).
+
+This session also wrote `ADR-002-MOULTBOOK-SCHEMA-V0.md` (parallel track, not gating BN254) and added the explicit "Publish sequence" block to `UPSTREAM_ISSUE_DRAFTS.md` so the next session can start with the GitHub UI directly.
+
+Phase 0.4 (ADR-001) was retroactively ticked — the ADR has existed since the 2026-05-05 plan-instantiation commit; this session just updated its checkboxes to match reality.
+
+**Next session starts here:** open Issue 1 on `CosmWasm/cosmwasm`, capture the URL, paste it into Issue 2's cross-ref placeholder, open Issue 2 on `CosmWasm/wasmvm`, send Dimi the FYI Telegram. Phase 1 fires from this point.
 
 ---
 

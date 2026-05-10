@@ -1,7 +1,7 @@
-# Howl Social read-pass — substrate evaluation for Moltbook v0
+# Howl Social read-pass — substrate evaluation for Moultbook v0
 
 **Date:** 2026-05-10.
-**Purpose:** Answer action item #1 from `AI_DAO_FRAMING_AND_MOLTBOOK.md` §7:
+**Purpose:** Answer action item #1 from `AI_DAO_FRAMING_AND_MOULTBOOK.md` §7:
 "Read pass on Howl Social — locate canonical repo, license, contract
 surface, and schema fit." No code yet; this is a decision-input document.
 **Length:** Read time ~5 min.
@@ -14,7 +14,7 @@ April 2023** (most 2022). The documentation site `docs.howl.social` has
 **expired** (redirects to `expireddomains.com`). There is no active
 maintainer channel, no recent release, no CI run in 3+ years.
 
-For the Moltbook question — "can we fork Howl Social's post/stake/follow
+For the Moultbook question — "can we fork Howl Social's post/stake/follow
 contracts as a shared-agent-knowledge substrate?" — the answer is
 **not the code itself**. The code was never audited, depends on a 2022-era
 CosmWasm surface, and ships against trait shapes that have moved. However,
@@ -90,7 +90,7 @@ architecture:
   post-launch. This is a **closed chapter** and contributes nothing to the
   current evaluation.
 
-## 4. What's genuinely relevant to Moltbook
+## 4. What's genuinely relevant to Moultbook
 
 ### 4a. Identity: `whoami` / DENS
 
@@ -99,7 +99,7 @@ upstream**. [`envoylabs/whoami`](https://github.com/envoylabs/whoami) is
 the fork parent; it continues to back DENS today (`dens.sh` domain is
 live), and is the standard identity primitive on Juno.
 
-**For Moltbook:** if we need per-agent identities with a human-readable
+**For Moultbook:** if we need per-agent identities with a human-readable
 handle + profile metadata + transferability, `whoami` is a tested, deployed
 primitive. We do not need to re-implement it. Use it as the **identity
 dependency**, not as the thing we fork.
@@ -112,7 +112,7 @@ treasury." That split pattern (60/20/10/10) is a reasonable starting point
 for a shared-agent-knowledge substrate where contributors publish facts
 and other agents stake attention on them.
 
-**For Moltbook:** the pattern is transferable; the 2022 code is not.
+**For Moultbook:** the pattern is transferable; the 2022 code is not.
 Re-implementing this against the 2026-era CosmWasm surface (post-BN254
 patches, post-Mesh-aware feature flags, the v2.2.7 patch series) is the
 cleaner path.
@@ -120,7 +120,7 @@ cleaner path.
 ### 4c. What's not relevant
 
 - `dao-escrow` — solves a different problem (multisig withdrawal protection).
-- `did-key.rs` — DID method is tangential to the Moltbook primitive; identity
+- `did-key.rs` — DID method is tangential to the Moultbook primitive; identity
   already has a candidate (whoami).
 - `whoami-paths` — useful if we want sub-namespaces under a root DENS
   alias, but not required for v0.
@@ -137,7 +137,7 @@ cleaner path.
    most want to examine — how posts are addressed, committed, and
    retrieved — is exactly the piece that isn't in the repo. Forking gives
    us nothing for that question.
-3. **Opportunity cost.** A clean-slate Moltbook v0 built against our
+3. **Opportunity cost.** A clean-slate Moultbook v0 built against our
    current CosmWasm patch set (v2.2.7, with the BN254 host functions
    available) ships in roughly the same number of engineering sessions as
    a careful fork-audit-rebase of code we'd throw most of away.
@@ -153,12 +153,12 @@ cleaner path.
   cost — confirm via a prototype that two agents can read each other's
   commitments deterministically.
 
-## 6. Next actions (for the Moltbook scoping track, not for this session)
+## 6. Next actions (for the Moultbook scoping track, not for this session)
 
-- **Prototype sketch.** One CW execute message (`SubmitMoltEntry {
-  commitment: Binary, metadata: MoltEntryMeta }`) + one query (`GetEntry {
-  id: String }`). Storage via `Map<String, MoltEntry>`. No tokens yet.
-- **DENS coupling decision.** Should `SubmitMoltEntry` require a valid
+- **Prototype sketch.** One CW execute message (`SubmitMoultEntry {
+  commitment: Binary, metadata: MoultEntryMeta }`) + one query (`GetEntry {
+  id: String }`). Storage via `Map<String, MoultEntry>`. No tokens yet.
+- **DENS coupling decision.** Should `SubmitMoultEntry` require a valid
   DENS alias on the sender's address, or should it be open? Open is simpler
   for v0; gating is easy to add.
 - **Storage-cost budget.** Confirm ~1 KB of on-chain metadata per entry is
@@ -173,6 +173,6 @@ None of the above blocks the current upstream-issue / patch-regen track.
 ## 7. Footnote
 
 This read pass was conducted with read-only tooling; no repos were cloned.
-If the Moltbook track moves past the scoping stage, a follow-up session
+If the Moultbook track moves past the scoping stage, a follow-up session
 should clone `envoylabs/whoami` (the live upstream of DENS) and read the
 contract source directly. The archaeology on `howlsocial/*` is complete.

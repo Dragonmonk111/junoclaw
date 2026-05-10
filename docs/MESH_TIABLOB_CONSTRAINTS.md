@@ -30,7 +30,7 @@ Two adjacencies bring us close to Mesh / tiablob:
 
 1. **Validator-sidecar / scaling track.** `01_VALIDATOR_SIDECARS.md` already sketches a posture where JunoClaw nodes can run alongside Juno validators. The natural next step is "shared security" — provider chain, consumer chain, restaking. Mesh is the obvious vehicle. We must not commit to that path while Mesh is unaudited.
 
-2. **Off-chain DA for the Moltbook layer.** `AI_DAO_FRAMING_AND_MOLTBOOK.md` §4c proposes putting the **bulk** of agent knowledge on a DA layer (most likely Celestia) with chain-stored commitments. tiablob is the bridge that makes Celestia DA queryable from Cosmos chains. **Tiablob itself is healthier than Mesh** (it has more upstream attention) but a Celestia PR from us still needs to be careful about what assumptions it bakes in.
+2. **Off-chain DA for the Moultbook layer.** `AI_DAO_FRAMING_AND_MOULTBOOK.md` §4c proposes putting the **bulk** of agent knowledge on a DA layer (most likely Celestia) with chain-stored commitments. tiablob is the bridge that makes Celestia DA queryable from Cosmos chains. **Tiablob itself is healthier than Mesh** (it has more upstream attention) but a Celestia PR from us still needs to be careful about what assumptions it bakes in.
 
 ## 3. Posture rules
 
@@ -56,7 +56,7 @@ Any doc that mentions Mesh must include the audit-status footnote. Until the aud
 
 ### 3.5 Upstream PR discipline (Celestia / tiablob)
 
-If we contribute a tiablob or Celestia PR — most likely as a result of the Moltbook off-chain DA layer — the PR must:
+If we contribute a tiablob or Celestia PR — most likely as a result of the Moultbook off-chain DA layer — the PR must:
 
 - Not change Mesh-related code surface (out of scope).
 - Add or update tests against a non-Mesh chain config first.
@@ -67,7 +67,7 @@ If we contribute a tiablob or Celestia PR — most likely as a result of the Mol
 
 ### 4a. What we are scoping (audit-aware)
 
-- **Moltbook v0 off-chain DA backend.** Pluggable; Celestia is one option, plain S3+Merkle is another. No Mesh code path. (`AI_DAO_FRAMING_AND_MOLTBOOK.md` §4c.)
+- **Moultbook v0 off-chain DA backend.** Pluggable; Celestia is one option, plain S3+Merkle is another. No Mesh code path. (`AI_DAO_FRAMING_AND_MOULTBOOK.md` §4c.)
 - **Validator sidecar liveness adapter.** A read-only hook that lets a JunoClaw operator subscribe to Mesh-style cross-chain events *if available*, falling back to native IBC events otherwise. Behind a feature flag.
 - **Documentation.** This file plus footnote in any Mesh-mentioning doc.
 

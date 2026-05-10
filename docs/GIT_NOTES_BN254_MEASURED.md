@@ -86,7 +86,7 @@ historical artefact.
 ## Group 3 — Strategic notes from the May Spaces
 
 **Files**
-- `docs/AI_DAO_FRAMING_AND_MOLTBOOK.md` *(new)*
+- `docs/AI_DAO_FRAMING_AND_MOULTBOOK.md` *(new)*
 - `docs/MESH_TIABLOB_CONSTRAINTS.md` *(new)*
 
 **Suggested commit message**
@@ -97,9 +97,9 @@ docs: AI-DAO framing + Mesh/tiablob audit-aware constraints
 Captures two threads from the May 2026 Twitter Spaces with Jake
 Hartnell, the netadao creator, and Cybernetics members.
 
-1. AI_DAO_FRAMING_AND_MOLTBOOK.md — restates the existing nine-
+1. AI_DAO_FRAMING_AND_MOULTBOOK.md — restates the existing nine-
    contract JunoClaw stack as an AI-DAO primitive and scopes a
-   "Moltbook" research thread for shared agent knowledge.
+   "Moultbook" research thread for shared agent knowledge.
    Three substrate candidates listed (Howl Social, generic
    Cosmos message-board patterns, off-chain DA + commitments);
    no commitment to one yet. Concrete next-action list at §7.
