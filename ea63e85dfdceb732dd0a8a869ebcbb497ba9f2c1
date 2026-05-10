@@ -1,0 +1,1 @@
+BN254 precompile measured: 370,600 -> 203,266 gas (1.823x reduction, sigma=0 across 5 samples per variant). Reproducible: bash devnet/scripts/reproduce-benchmark.sh. Devnet: junoclaw-bn254-1. Within ~9% of EIP-1108 projection in docs/BN254_BENCHMARK_PROJECTED.md.
