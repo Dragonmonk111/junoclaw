@@ -38,7 +38,7 @@ import { readFileSync, writeFileSync, mkdirSync, statSync, realpathSync } from "
 import { tmpdir } from "os";
 import { resolve, dirname, sep, isAbsolute } from "path";
 import { fileURLToPath } from "url";
-import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
+import { DirectSecp256k1HdWallet, DirectSecp256k1Wallet } from "@cosmjs/proto-signing";
 import { SigningCosmWasmClient } from "@cosmjs/cosmwasm-stargate";
 import { GasPrice } from "@cosmjs/stargate";
 
@@ -159,18 +159,24 @@ function loadProof(): ProofBundle {
 
 async function signer() {
   const mnemonic = process.env.WAVS_OPERATOR_MNEMONIC;
-  if (!mnemonic) {
+  const privkeyHex = process.env.WAVS_OPERATOR_PRIVKEY;
+  if (!mnemonic && !privkeyHex) {
     throw new Error(
-      "WAVS_OPERATOR_MNEMONIC is required for the devnet benchmark. Set it " +
-        "to the `admin` mnemonic printed by init-genesis.sh.",
+      "WAVS_OPERATOR_MNEMONIC or WAVS_OPERATOR_PRIVKEY is required for the devnet benchmark. " +
+        "Set one of them to the admin credentials from init-genesis.sh.",
     );
   }
-  const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
-    prefix: "juno",
-  });
+  const wallet = privkeyHex
+    ? await DirectSecp256k1Wallet.fromKey(
+        Uint8Array.from(Buffer.from(privkeyHex, "hex")),
+        "juno",
+      )
+    : await DirectSecp256k1HdWallet.fromMnemonic(mnemonic!, {
+        prefix: "juno",
+      });
   const [account] = await wallet.getAccounts();
   const client = await SigningCosmWasmClient.connectWithSigner(NODE, wallet, {
-    gasPrice: GasPrice.fromString("0.025ujuno"),
+    gasPrice: GasPrice.fromString("0.1ujuno"),
   });
   return { client, address: account.address };
 }

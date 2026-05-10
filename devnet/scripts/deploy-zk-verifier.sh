@@ -27,26 +27,74 @@ exec_tx() {
 
 query_ids_from_store() {
   local tx_hash="$1"
-  sleep 4 # wait for inclusion
-  docker exec junoclaw-bn254-devnet junod query tx "${tx_hash}" \
-    --node "${NODE}" --output json | \
-    jq -r '.events[] | select(.type == "store_code") | .attributes[] | select(.key == "code_id") | .value' | head -n1
+  # Poll for inclusion. With ~2 s block time and broadcast-mode=sync, the
+  # tx is usually visible after the second block, but indexer flush can
+  # take an extra block on a busy proposer.
+  local out=""
+  for i in $(seq 1 20); do
+    sleep 1
+    out=$(docker exec junoclaw-bn254-devnet junod query tx "${tx_hash}" \
+            --node "${NODE}" --output json 2>/dev/null || true)
+    if [ -n "${out}" ] && [ "$(echo "${out}" | jq -r '.code // empty')" != "" ]; then
+      break
+    fi
+  done
+  echo "${out}" | jq -r '.events[] | select(.type == "store_code")
+                            | .attributes[]
+                            | select(.key == "code_id")
+                            | .value' | head -n1
+}
+
+query_addr_from_instantiate() {
+  local tx_hash="$1"
+  local out=""
+  for i in $(seq 1 20); do
+    sleep 1
+    out=$(docker exec junoclaw-bn254-devnet junod query tx "${tx_hash}" \
+            --node "${NODE}" --output json 2>/dev/null || true)
+    if [ -n "${out}" ] && [ "$(echo "${out}" | jq -r '.code // empty')" != "" ]; then
+      break
+    fi
+  done
+  echo "${out}" | jq -r '.events[] | select(.type == "instantiate")
+                            | .attributes[]
+                            | select(.key == "_contract_address")
+                            | .value' | head -n1
 }
 
 # ── 1. Build both flavours. ───────────────────────────────────────────────
+#
+# Set BUILD=0 to skip cargo and reuse pre-built ${DEVNET_DIR}/zk_verifier_*.wasm.
+# Useful when cargo lives on the host while this script runs inside WSL, and
+# keeps deploy + benchmark decoupled from the build step in CI.
 
-echo "[deploy] Building zk-verifier (pure-Wasm)…"
-( cd "${REPO_ROOT}/contracts" && \
-    cargo build --release --target wasm32-unknown-unknown -p zk-verifier )
-WASM_PURE="${REPO_ROOT}/contracts/target/wasm32-unknown-unknown/release/zk_verifier.wasm"
-cp "${WASM_PURE}" "${DEVNET_DIR}/zk_verifier_pure.wasm"
+BUILD="${BUILD:-1}"
+WASM_PURE_OUT="${DEVNET_DIR}/zk_verifier_pure.wasm"
+WASM_PREC_OUT="${DEVNET_DIR}/zk_verifier_precompile.wasm"
 
-echo "[deploy] Building zk-verifier (precompile feature)…"
-( cd "${REPO_ROOT}/contracts" && \
-    cargo build --release --target wasm32-unknown-unknown -p zk-verifier \
-        --features bn254-precompile )
-cp "${REPO_ROOT}/contracts/target/wasm32-unknown-unknown/release/zk_verifier.wasm" \
-   "${DEVNET_DIR}/zk_verifier_precompile.wasm"
+if [ "${BUILD}" = "1" ]; then
+  echo "[deploy] Building zk-verifier (pure-Wasm)…"
+  ( cd "${REPO_ROOT}/contracts" && \
+      cargo build --release --target wasm32-unknown-unknown -p zk-verifier )
+  cp "${REPO_ROOT}/contracts/target/wasm32-unknown-unknown/release/zk_verifier.wasm" \
+     "${WASM_PURE_OUT}"
+
+  echo "[deploy] Building zk-verifier (precompile feature)…"
+  ( cd "${REPO_ROOT}/contracts" && \
+      cargo build --release --target wasm32-unknown-unknown -p zk-verifier \
+          --features bn254-precompile )
+  cp "${REPO_ROOT}/contracts/target/wasm32-unknown-unknown/release/zk_verifier.wasm" \
+     "${WASM_PREC_OUT}"
+else
+  echo "[deploy] BUILD=0 — reusing pre-built wasm artefacts"
+  for f in "${WASM_PURE_OUT}" "${WASM_PREC_OUT}"; do
+    if [ ! -f "${f}" ]; then
+      echo "error: ${f} missing. Run with BUILD=1 or produce the artefacts first." >&2
+      exit 3
+    fi
+    printf '  %s  (%s bytes)\n' "${f}" "$(stat -c %s "${f}" 2>/dev/null || wc -c <"${f}")"
+  done
+fi
 
 # ── 2. Copy into the container. ───────────────────────────────────────────
 
@@ -66,19 +114,20 @@ PREC_TX=$(exec_tx wasm store /tmp/zk_verifier_precompile.wasm --from admin | jq 
 PREC_CODE_ID=$(query_ids_from_store "${PREC_TX}")
 
 echo "[deploy] Instantiating both…"
+echo "  pure code_id      = ${PURE_CODE_ID}"
+echo "  precompile code_id = ${PREC_CODE_ID}"
+if [ -z "${PURE_CODE_ID}" ] || [ -z "${PREC_CODE_ID}" ]; then
+  echo "error: one of the store_code txs did not return a code_id" >&2
+  exit 4
+fi
 INIT='{"admin":"'${ADMIN}'"}'
 PURE_INIT_TX=$(exec_tx wasm instantiate "${PURE_CODE_ID}" "${INIT}" \
     --from admin --label "zk-verifier-pure" --no-admin | jq -r '.txhash')
 PREC_INIT_TX=$(exec_tx wasm instantiate "${PREC_CODE_ID}" "${INIT}" \
     --from admin --label "zk-verifier-precompile" --no-admin | jq -r '.txhash')
 
-sleep 5
-PURE_ADDR=$(docker exec junoclaw-bn254-devnet junod query tx "${PURE_INIT_TX}" \
-    --node "${NODE}" --output json | \
-    jq -r '.events[] | select(.type == "instantiate") | .attributes[] | select(.key == "_contract_address") | .value' | head -n1)
-PREC_ADDR=$(docker exec junoclaw-bn254-devnet junod query tx "${PREC_INIT_TX}" \
-    --node "${NODE}" --output json | \
-    jq -r '.events[] | select(.type == "instantiate") | .attributes[] | select(.key == "_contract_address") | .value' | head -n1)
+PURE_ADDR=$(query_addr_from_instantiate "${PURE_INIT_TX}")
+PREC_ADDR=$(query_addr_from_instantiate "${PREC_INIT_TX}")
 
 cat > "${DEVNET_DIR}/deploy.env" <<EOF
 # generated by deploy-zk-verifier.sh — consumed by benchmark.sh

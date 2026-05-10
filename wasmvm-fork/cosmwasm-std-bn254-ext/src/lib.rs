@@ -82,8 +82,8 @@ unsafe fn consume_region(ptr: *mut Region) -> Vec<u8> {
 
 #[cfg(all(feature = "runtime", target_arch = "wasm32"))]
 extern "C" {
-    fn bn254_add(input_ptr: u32) -> u32;
-    fn bn254_scalar_mul(input_ptr: u32) -> u32;
+    fn bn254_add(input_ptr: u32, out_ptr: u32) -> u32;
+    fn bn254_scalar_mul(input_ptr: u32, out_ptr: u32) -> u32;
     fn bn254_pairing_equality(input_ptr: u32) -> u32;
 }
 
@@ -217,22 +217,67 @@ fn call_host_bytes(input: &[u8], which: HostFn) -> Result<Vec<u8>, Bn254ExtError
     {
         let input_region = build_region(input);
         let input_region_ptr = &*input_region as *const Region as u32;
-        let result_ptr = unsafe {
-            match which {
-                HostFn::Add => bn254_add(input_region_ptr),
-                HostFn::ScalarMul => bn254_scalar_mul(input_region_ptr),
-                HostFn::PairingEquality => bn254_pairing_equality(input_region_ptr),
+
+        let status = match which {
+            HostFn::Add => {
+                // Pre-allocate output buffer (64 bytes for G1 point)
+                let out_buf = alloc::vec![0u8; 64];
+                let out_region = build_region(&out_buf);
+                let out_region_ptr = &*out_region as *const Region as u32;
+                let code = unsafe { bn254_add(input_region_ptr, out_region_ptr) };
+                mem::forget(input_region);
+                if code != 0 {
+                    mem::forget(out_region);
+                    mem::forget(out_buf);
+                    return Err(Bn254ExtError::HostError(
+                        alloc::format!("bn254_add host error code: {code}"),
+                    ));
+                }
+                // Read output from the region (host wrote into our buffer)
+                let out_ptr = out_region.offset as *const u8;
+                let len = out_region.length as usize;
+                let data = unsafe { core::slice::from_raw_parts(out_ptr, len) }.to_vec();
+                mem::forget(out_region);
+                mem::forget(out_buf);
+                return Ok(data);
+            }
+            HostFn::ScalarMul => {
+                // Pre-allocate output buffer (64 bytes for G1 point)
+                let out_buf = alloc::vec![0u8; 64];
+                let out_region = build_region(&out_buf);
+                let out_region_ptr = &*out_region as *const Region as u32;
+                let code = unsafe { bn254_scalar_mul(input_region_ptr, out_region_ptr) };
+                mem::forget(input_region);
+                if code != 0 {
+                    mem::forget(out_region);
+                    mem::forget(out_buf);
+                    return Err(Bn254ExtError::HostError(
+                        alloc::format!("bn254_scalar_mul host error code: {code}"),
+                    ));
+                }
+                let out_ptr = out_region.offset as *const u8;
+                let len = out_region.length as usize;
+                let data = unsafe { core::slice::from_raw_parts(out_ptr, len) }.to_vec();
+                mem::forget(out_region);
+                mem::forget(out_buf);
+                return Ok(data);
+            }
+            HostFn::PairingEquality => {
+                // Pairing returns status code only: 0=equal, 1=not-equal, >1=error
+                let code = unsafe { bn254_pairing_equality(input_region_ptr) };
+                mem::forget(input_region);
+                code
             }
         };
-        // Leak the input region via mem::forget — the host consumed it.
-        mem::forget(input_region);
-        if result_ptr == 0 {
-            return Err(Bn254ExtError::HostError(
-                "host returned null pointer".into(),
-            ));
+
+        // Pairing equality: encode result as single byte
+        match status {
+            0 => Ok(alloc::vec![1u8]), // pairing equal → true
+            1 => Ok(alloc::vec![0u8]), // pairing not equal → false
+            code => Err(Bn254ExtError::HostError(
+                alloc::format!("bn254_pairing_equality host error code: {code}"),
+            )),
         }
-        let data = unsafe { consume_region(result_ptr as *mut Region) };
-        Ok(data)
     }
     #[cfg(not(all(feature = "runtime", target_arch = "wasm32")))]
     {

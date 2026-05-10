@@ -30,7 +30,7 @@ services:
       - CHAIN_ID=junoclaw-bn254-1
       - MONIKER=bn254-validator
       - KEYRING_BACKEND=test
-    restart: "no"
+    restart: unless-stopped
     stop_grace_period: 5s
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:26657/status"]

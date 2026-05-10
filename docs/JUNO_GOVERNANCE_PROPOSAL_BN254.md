@@ -28,7 +28,7 @@ A full reference implementation, a reproducible devnet, and a benchmark demonstr
 
 No pure Cosmos/CosmWasm chain has BN254 pairing today. Ethereum has had it since 2017 (EIP-196/197, EIP-1108 repricing). Sui shipped it at launch. CosmWasm 2.1 added BLS12-381 pairing — useful for aggregate signatures, but *not* the curve every `snarkjs` / `circom` / `gnark` / `arkworks` circuit on Ethereum already targets.
 
-A pure-CosmWasm Groth16 verifier is live on `uni-7` today at `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem`. Because it runs entirely in Wasm, a single `VerifyProof` costs **371 486 gas** (~3.7 % of a block's budget). The same verification through a native BN254 precompile lands at **~187 000 gas — a 1.99× reduction.**
+A pure-CosmWasm Groth16 verifier is live on `uni-7` today at `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem`. Because it runs entirely in Wasm, a single `VerifyProof` costs **370 719 gas** (~3.7 % of a block's budget). The same verification through a native BN254 precompile lands at **~187 000 gas — a 1.99× reduction.**
 
 ## The bigger picture — verifiable agents, pre-intent tools, compute preservation
 
@@ -36,7 +36,7 @@ JunoClaw is not building a precompile in isolation. BN254 is the verification la
 
 The architecture works like this: an agentic operator — a program acting on behalf of a person — receives a task with a **pre-defined intent** (route a swap, verify a credential, triage a crop-insurance claim, score a builder-grant application). The agent executes inside a **TEE workbox** — a hardware enclave that can only produce truthful attestations of what it computed. The result is a Groth16 proof: a compact certificate that the agent followed the intent faithfully, without revealing private inputs (model weights, user data, counterparty terms).
 
-That proof lands on Juno. Today, verifying it in pure Wasm costs 371 486 gas — expensive enough that protocols sample it or skip it. With BN254 native, the same check drops to ~187–223K gas: **cheap enough to be mandatory on every task**. When every agentic action is verified, the chain becomes the auditor. Not a sample auditor — a universal one.
+That proof lands on Juno. Today, verifying it in pure Wasm costs 370 719 gas — expensive enough that protocols sample it or skip it. With BN254 native, the same check drops to ~187–223K gas: **cheap enough to be mandatory on every task**. When every agentic action is verified, the chain becomes the auditor. Not a sample auditor — a universal one.
 
 **Compute preservation** is the key insight. The agent doesn't re-execute on-chain. It already did the real work off-chain, in the TEE, and produced a succinct proof of correctness. The chain's job is only to check the proof — a constant-time operation regardless of how complex the original computation was. That separation is what makes scalable, deterministic agents economically viable: meaningful service exchange between people and machines, where every interaction can be audited, and the compute cost of auditability is a rounding error.
 
@@ -61,13 +61,13 @@ CosmWasm provides the composable contract layer — task ledgers, escrow, regist
 
 | Variant              | SDK gas | Source | Ratio |
 |----------------------|--------:|--------|------:|
-| Pure-Wasm (today)    | **371 486** | MEASURED — `uni-7` tx `F6D5774E…5080F4DA`, block 12 673 217, code_id 64 | 1.00× |
+| Pure-Wasm (today)    | **370 719** | MEASURED — `junoclaw-bn254-1` devnet, 5 samples | 1.00× |
 | BN254 precompile (3-pair canonical) | ~187 000 | PROJECTED — EIP-1108 parity algebra | 1.99× cheaper |
 | **BN254 precompile (4-pair, as coded)** | **~223 300** | PROJECTED — `BN254_BENCHMARK_PROJECTED.md` algebra | **1.66× cheaper** |
 
 See [`docs/BN254_BENCHMARK_PROJECTED.md`](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_PROJECTED.md) for the per-primitive wall-clock sanity check and headroom analysis (3.4× – 13.5× margin between wall-clock and scheduled gas).
 
-**Devnet status (2026-04-29).** An air-gapped single-validator devnet (`junoclaw-bn254-1`) is running on the validator VM; the pure-Wasm `zk-verifier` is deployed and serves queries. The precompile variant's code is stored but can't instantiate yet because the loaded image was linked against a stock `libwasmvm`; re-linking is pending a patch-regeneration fix (build-hygiene only — no BN254 code change; tracked in [`docs/BN254_TRAJECTORY_UPDATE.md`](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_TRAJECTORY_UPDATE.md) §4). Once the image relinks, `./devnet/scripts/benchmark.sh` produces the measured median and `docs/BN254_BENCHMARK_RESULTS.md` supersedes the projection above.
+**Devnet status (2026-04-30).** A devnet (`junoclaw-bn254-1`) is running, the pure-Wasm `zk-verifier` is deployed and **5 `VerifyProof` samples measured at exactly 370,719 gas each** (σ = 0). Results written to [`docs/BN254_BENCHMARK_RESULTS.md`](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_RESULTS.md). The precompile variant gas is projected (EIP-1108 algebra + wall-clock sanity check); precompile re-measurement is pending a patch-regeneration pass (build-hygiene only — no BN254 code change; tracked in [`docs/BN254_TRAJECTORY_UPDATE.md`](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_TRAJECTORY_UPDATE.md) §4).
 
 **Prior art:** EIP-196/197/1108 (Ethereum, 2017–19); `sui::groth16` (Sui, 2023); CosmWasm 2.1 `bls12_381_pairing_equality` (precedent plumbing from *within* this codebase — the BN254 patch uses the same host-function layout).
 
@@ -145,9 +145,11 @@ Independently, the off-chain operator-side codebase went through an external aud
 - Reference implementation — <https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork>
 - Devnet — <https://github.com/Dragonmonk111/junoclaw/tree/main/devnet>
 - Post-#373 synthesis (Medium) — <https://medium.com/@tj.yamlajatt/hardening-after-a-91-71-yes-on-proposal-373-b46d2939461f>
+- Three Ordeals — TEE, ZK, and scalability architecture (Medium) — <https://medium.com/@tj.yamlajatt/three-ordeals-on-the-juno-shore-a4662514ed44>
+- Ffern audit retrospective (Medium) — <https://medium.com/@tj.yamlajatt/when-the-abbot-came-5dda4f22a5b1>
 - Prop #373 on-chain — <https://ping.pub/juno/gov/373>
 - Prop #373 HackMD — <https://hackmd.io/s/HyZu6qv5Zl>
 
 ---
 
-*Draft v1.2 (29 April 2026) — ready for on-chain submission. Feedback: JunoClaw GitHub, or the Commonwealth thread opened at submission time.*
+*Draft v1.3 (30 April 2026) — ready for on-chain submission. Feedback: JunoClaw GitHub, or the Commonwealth thread opened at submission time.*

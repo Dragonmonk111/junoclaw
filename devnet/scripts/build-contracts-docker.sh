@@ -39,17 +39,23 @@ docker volume create junoclaw-contracts-target >/dev/null
 
 run_optimizer() {
   local features="$1"
-  local feat_args=()
+  local env_args=()
   if [ -n "${features}" ]; then
-    feat_args=(--features "${features}")
+    # Convert feature names to CARGO_FEATURE_* env vars that cargo
+    # recognises natively (dashes → underscores, uppercased).
+    for feat in ${features//,/ }; do
+      local var="CARGO_FEATURE_$(echo "${feat}" | tr '[:lower:]-' '[:upper:]_')"
+      env_args+=(-e "${var}=1")
+    done
   fi
   # The optimizer expects the workspace at /code, target dir at /target,
-  # and writes to /code/artifacts. We pass extra cargo flags through.
+  # and writes to /code/artifacts. Features are passed via env var.
   docker run --rm \
     -v "${REPO_ROOT}:/code" \
     -v junoclaw-contracts-target:/target \
+    "${env_args[@]}" \
     "${IMAGE}" \
-    "/code/contracts/zk-verifier" "${feat_args[@]}"
+    "/code/contracts/zk-verifier"
 }
 
 echo "── Pass 1/2: pure-Wasm baseline (no features) ──"

@@ -1,0 +1,28 @@
+# Ignore everything by default, then re-include only the paths that
+# devnet/Dockerfile actually COPYs. Without this, `docker compose build`
+# would try to upload the whole ~55k-file repo root (target/, node_modules,
+# frontend builds, etc.) as build context.
+#
+# Keep in sync with devnet/Dockerfile's COPY lines.
+
+*
+
+# Paths the devnet build needs:
+!wasmvm-fork/
+!wasmvm-fork/**
+!devnet/scripts/init-genesis.sh
+!devnet/genesis-template.json
+!devnet/Dockerfile
+
+# Even within the whitelisted dirs, drop junk:
+**/target/
+**/node_modules/
+**/.git/
+**/*.rlib
+**/*.o
+**/*.a
+!wasmvm-fork/**/*.rs
+!wasmvm-fork/**/*.toml
+!wasmvm-fork/**/*.lock
+!wasmvm-fork/**/*.md
+!wasmvm-fork/**/*.patch

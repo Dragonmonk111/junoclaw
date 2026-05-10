@@ -2,11 +2,10 @@
 
 *Signaling Proposal for Juno Network (juno-1) — post-#373*
 
-> **DRAFT — DO NOT SUBMIT until:**
-> 1. HackMD published with stable URL and the URL is pasted into FIELD 2 below (search for `<PASTE_HACKMD_URL_HERE>`).
-> 2. Upstream CosmWasm PR is opened and PR number is inserted below (search for `<PASTE_PR_NUMBER_HERE>`) — *or* a sentence added confirming the PR is being opened in parallel.
-> 3. Cosign decision has resolved — either Jake has reviewed the HackMD, or the 7-day solo clock has expired.
-> 4. Deposit wallet has ≥ 5 000 JUNO + a few JUNO for gas.
+> **READY TO SUBMIT — Solo submission (VairagyaNodes, no cosign required for signaling proposals).**
+> - Copy `JUNO_GOVERNANCE_PROPOSAL_BN254.md` to HackMD, publish, paste URL below in FIELD 2.
+> - Upstream CosmWasm PR being opened in parallel — add PR number to Commonwealth thread post-submission.
+> - Verify deposit wallet has ≥ 5 000 JUNO + gas before submitting.
 
 ---
 
@@ -30,9 +29,13 @@ This proposal asks Juno governance to signal support for adding a small piece of
 
 **No funds are requested. No code executes on-chain from this vote.** This is a signaling proposal only. If it passes, the code change is proposed upstream to CosmWasm — the shared VM used by dozens of Cosmos chains — with a Juno community mandate behind it. A separate future proposal would then ask validators to approve the actual software upgrade that carries it.
 
-**Full technical HackMD (tables, risks, reproduction):** <PASTE_HACKMD_URL_HERE>
+**Full proposal write-up (readable version):** https://hackmd.io/@WHsRy8ndRX6AWEQtE4AQiw/SyHB-GZ0Zl
 
-**Upstream CosmWasm PR:** <PASTE_PR_NUMBER_HERE>
+**Technical deep-dive (cases, risks, reproduction):** https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_PRECOMPILE_CASE.md
+
+**Benchmark results (5 devnet samples):** https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_RESULTS.md
+
+**Upstream CosmWasm PR:** being opened in parallel — see source repo for latest.
 
 **Medium synthesis (post-#373 engineering diary):** https://medium.com/@tj.yamlajatt/hardening-after-a-91-71-yes-on-proposal-373-b46d2939461f
 
@@ -50,7 +53,7 @@ Cheap on-chain zero-knowledge verification is a precondition for three direction
 
 3. **The agent-company suite — deterministic agents with pre-intent tools.** JunoClaw is building a full agent-company stack on top of CosmWasm and DAODAO: task ledgers, escrow, registries, and a zk-verifier — all governed by on-chain DAOs. When an agent moves with a pre-defined intent (route a swap, verify a credential, triage a service request), it carries that intent as a deterministic, auditable program. BN254 is the piece that makes the *proof of correct execution* cheap enough to require on every task, not just sampled ones. The agent's TEE workbox produces the attestation; the chain's BN254 precompile verifies it. Together they guarantee that every agentic action — every meaningful service exchange between a person and a machine — is auditable, true, and fair. Compute is preserved because the agent doesn't re-execute on-chain; it proves it already executed correctly off-chain, and the chain checks the proof in a fraction of the time. That is the scalability unlock: verifiable deterministic agents doing real work, with the full composability of CosmWasm and the governance scaffolding of DAODAO as home base for expansion.
 
-At 371,486 gas today, zero-knowledge verification on Juno consumes about 3.7 % of a whole block. That is too expensive to require on every important action. At ~187,000 gas it becomes affordable to require on every one. Cheap enough to be mandatory is the security property; the 2× speed-up is its shadow.
+At 370,719 gas today, zero-knowledge verification on Juno consumes about 3.7 % of a whole block. That is too expensive to require on every important action. At ~187,000 gas it becomes affordable to require on every one. Cheap enough to be mandatory is the security property; the 2× speed-up is its shadow.
 
 ---
 
@@ -66,12 +69,12 @@ Proposal #373 (91.71 % YES, 24 March 2026) recognised JunoClaw as Juno ecosystem
 
 | Path | Gas per proof verification | Source |
 |---|---|---|
-| Pure-CosmWasm (live on uni-7 today) | **371 486 gas** | MEASURED (tx F6D5774E…5080F4DA, block 12 673 217, code_id 64) |
+| Pure-CosmWasm (live on `junoclaw-bn254-1` devnet) | **370 719 gas** | MEASURED (5 samples, tx 87ECC0…0358488, code_id 1) |
 | BN254 precompile — 3-pair canonical (EIP-1108) | **~187 000 gas** | PROJECTED (EIP-1108 schedule) |
 | BN254 precompile — 4-pair (as coded) | **~223 300 gas** | PROJECTED (`BN254_BENCHMARK_PROJECTED.md`) |
 | Reduction | **~1.66–1.99×** | — |
 
-Pure-Wasm baseline is measured on `uni-7` against `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem`. Precompile projection is grounded in the EIP-1108 gas schedule plus a 30k SDK contract-overhead ceiling; the per-primitive wall-clock sanity check shows 3.4× – 13.5× headroom between scheduled and observed gas (see `BN254_BENCHMARK_PROJECTED.md` for the algebra). An air-gapped devnet is running on the validator VM as of 2026-04-29; the pure contract is live there too, and on-chain precompile re-measurement is pending a patch-regeneration pass (build-hygiene fix only — no BN254 code change; tracked in `BN254_TRAJECTORY_UPDATE.md` §4). Every number above reproduces from a clean checkout with the benchmark harness in the source repository.
+Pure-Wasm baseline is measured on the `junoclaw-bn254-1` devnet (5 identical samples, 2026-04-30) and corroborated by the earlier `uni-7` deployment (371,486 gas, code_id 64). Precompile projection is grounded in the EIP-1108 gas schedule plus a 30k SDK contract-overhead ceiling; the per-primitive wall-clock sanity check shows 3.4× – 13.5× headroom between scheduled and observed gas (see `BN254_BENCHMARK_PROJECTED.md` for the algebra). Every number above reproduces from a clean checkout with the benchmark harness in the source repository.
 
 ---
 
@@ -151,7 +154,7 @@ Effective audit surface is small by design: ~400 lines (host-function glue + ups
 
 Proposed by VairagyaNodes — Juno staker since December 2021, validator candidate (unbonded). Reference implementation, patches, and documentation written by Cascade (pair-programming AI agent) at the proposer's direction.
 
-Cosignature pending per #373 precedent — see the HackMD.
+Solo submission — signaling proposals do not require cosignatories. Jake Hartnell (Juno co-founder, WAVS architect) gave informal direction to pursue this work on 17 March 2026; he is welcome to co-sign on the Commonwealth thread if he chooses.
 
 License — Apache-2.0 throughout.
 
@@ -169,10 +172,11 @@ Same split as #373 is fine if preferred: 1 000 JUNO initial submission + 4 000 J
 
 ## Pre-submission checklist
 
-- [ ] HackMD published at stable `hackmd.io/s/...` URL.
-- [ ] HackMD URL pasted into FIELD 2 above (replace `<PASTE_HACKMD_URL_HERE>`).
-- [ ] Upstream CosmWasm PR opened; PR number / URL pasted into FIELD 2 (replace `<PASTE_PR_NUMBER_HERE>`).
-- [ ] Cosign decision resolved: either Jake's edits landed on the HackMD, or the 7-day solo clock expired with documentation in the HackMD footer.
+- [x] GitHub technical write-up linked in FIELD 2.
+- [x] GitHub benchmark results linked in FIELD 2.
+- [ ] `JUNO_GOVERNANCE_PROPOSAL_BN254.md` copied to HackMD and published; URL pasted into FIELD 2.
+- [ ] Upstream CosmWasm PR opened; add PR URL to Commonwealth thread on opening.
+- [x] Solo submission — no cosign required.
 - [ ] Forum thread seeded at <https://commonwealth.im/juno> (link HackMD at top, one-paragraph summary body).
 - [ ] Discord `#governance` announcement ready (lead paragraph + HackMD link + forum link).
 - [ ] Telegram one-liner ready (headline number + HackMD link).

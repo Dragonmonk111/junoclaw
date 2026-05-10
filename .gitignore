@@ -1,6 +1,27 @@
 # Build artifacts
 target/
 *.wasm
+artifacts/
+
+# Devnet generated state
+devnet/deploy.env
+tmpdir/
+
+# Local diagnostic scripts (leading-underscore = scratch, not for upstream)
+devnet/scripts/_*
+# Local diagnostic helpers at repo root (leading-dot = hidden / scratch)
+/.diag-*.sh
+/.check-and-deploy.sh
+/.fresh-devnet.sh
+/.run-precompile-build.sh
+/.wait-rpc.sh
+
+# wasmvm-fork patch backups + rebase scratch
+wasmvm-fork/patches/*.bak
+wasmvm-fork/patches/*.err
+
+# Downloaded toolchains (don't commit large binaries)
+go*.tar.gz
 
 # Dependencies
 node_modules/
@@ -63,6 +84,8 @@ cv_*.pdf
 *supporting*statement*.txt
 *job*application*.md
 *job*application*.txt
+*APPLICATION.md
+docs/ANAESTHESIA_APPLICATION.md
 cv_*.txt
 *_for_pdf.html
 html_to_pdf.py

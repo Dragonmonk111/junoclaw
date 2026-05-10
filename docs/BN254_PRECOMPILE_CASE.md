@@ -76,7 +76,7 @@ The pre-deployment numbers above were superseded by an actual deployment. The `z
 | Operation | SDK gas | % of Juno block (10M soft cap) | Source |
 |---|---:|---:|---|
 | Store SHA-256 hash only (baseline) | ~200,000 | 2 % | Reference |
-| **Groth16 BN254 verify, pure CosmWasm (`ark-bn254 0.5`)** | **371,486** | **3.7 %** | MEASURED on `uni-7` |
+| **Groth16 BN254 verify, pure CosmWasm (`ark-bn254 0.5`)** | **370,719** | **3.7 %** | MEASURED on `junoclaw-bn254-1` devnet (5 samples) |
 | Groth16 BN254 verify, precompile — 3-pair canonical (EIP-1108 parity) | ~187,000 | 1.9 % | PROJECTED — EIP-1108 schedule |
 | Groth16 BN254 verify, precompile — 4-pair as coded (`bn254_backend.rs`) | ~223,300 | 2.2 % | PROJECTED — `BN254_BENCHMARK_PROJECTED.md` |
 
@@ -86,7 +86,7 @@ The pre-deployment numbers above were superseded by an actual deployment. The `z
 Current (store hash):       ████░░░░░░░░░░░░░░░░  200K    (2.0% of block)   baseline
 Groth16 + precompile (3p):  ████░░░░░░░░░░░░░░░░  ~187K   (1.9% of block)   PROJECTED
 Groth16 + precompile (4p):  █████░░░░░░░░░░░░░░░  ~223K   (2.2% of block)   PROJECTED (as coded)
-Groth16 pure CosmWasm:      ███████░░░░░░░░░░░░░   371K   (3.7% of block)   MEASURED (uni-7)
+Groth16 pure CosmWasm:      ███████░░░░░░░░░░░░░   371K   (3.7% of block)   MEASURED (devnet)
                             ──────────────────── 10M SDK gas (block soft cap)
 ```
 

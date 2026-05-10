@@ -45,8 +45,17 @@ if [ ! -f "${HOME_DIR}/config/genesis.json" ]; then
   # Permissive CORS + broadcast.
   sed -i 's/cors_allowed_origins = \[\]/cors_allowed_origins = ["*"]/' "${HOME_DIR}/config/config.toml"
   sed -i 's/^laddr = "tcp:\/\/127.0.0.1:26657"/laddr = "tcp:\/\/0.0.0.0:26657"/' "${HOME_DIR}/config/config.toml"
-  sed -i 's/^enable = false/enable = true/' "${HOME_DIR}/config/app.toml"
+
+  # Enable REST API (first enable=false in app.toml is usually the API section).
+  sed -i '0,/^enable = false/{s/^enable = false/enable = true/}' "${HOME_DIR}/config/app.toml"
   sed -i 's/^address = "tcp:\/\/localhost:1317"/address = "tcp:\/\/0.0.0.0:1317"/' "${HOME_DIR}/config/app.toml"
+
+  # Enable gRPC (second enable=false is the grpc section).
+  sed -i '0,/^enable = false/{s/^enable = false/enable = true/}' "${HOME_DIR}/config/app.toml"
+  sed -i 's/^address = "0.0.0.0:9090"/address = "0.0.0.0:9090"/' "${HOME_DIR}/config/app.toml"
+
+  # Set minimum gas prices to avoid tx fee rejection.
+  sed -i 's/^minimum-gas-prices = ""/minimum-gas-prices = "0.025ujuno"/' "${HOME_DIR}/config/app.toml"
 
   echo "[init-genesis] Done. admin=${ADMIN_ADDR} verifier=${BENCH_ADDR}"
 else

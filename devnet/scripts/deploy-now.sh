@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# Deploy both zk-verifier variants to the running devnet.
+# Designed to be robust against WSL2 9P issues: all chain interaction
+# is via docker exec (no bind mounts for chain state).
+set -euo pipefail
+
+CONTAINER="junoclaw-bn254-devnet"
+DEVNET_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CHAIN_ID="junoclaw-bn254-1"
+KEYRING="test"
+NODE="http://localhost:26657"
+
+WASM_PURE="${DEVNET_DIR}/zk_verifier_pure.wasm"
+WASM_PREC="${DEVNET_DIR}/zk_verifier_precompile.wasm"
+
+for f in "$WASM_PURE" "$WASM_PREC"; do
+  if [ ! -f "$f" ]; then
+    echo "ERROR: $f not found. Build contracts first." >&2
+    exit 1
+  fi
+done
+
+echo "[deploy] Container: $CONTAINER"
+echo "[deploy] Pure wasm:  $(wc -c < "$WASM_PURE") bytes"
+echo "[deploy] Prec wasm:  $(wc -c < "$WASM_PREC") bytes"
+
+# ── Copy wasm into container ──
+echo "[deploy] Copying wasm into container..."
+docker cp "$WASM_PURE" "${CONTAINER}:/tmp/zk_verifier_pure.wasm"
+docker cp "$WASM_PREC" "${CONTAINER}:/tmp/zk_verifier_precompile.wasm"
+
+# ── Get admin address ──
+ADMIN=$(docker exec "$CONTAINER" junod keys show validator -a --keyring-backend "$KEYRING")
+echo "[deploy] Admin/validator address: $ADMIN"
+
+# ── Helper: submit tx and wait for inclusion, return full tx JSON ──
+wait_tx() {
+  local txhash="$1"
+  for attempt in $(seq 1 30); do
+    sleep 2
+    local QUERY
+    QUERY=$(docker exec "$CONTAINER" junod query tx "$txhash" \
+      --node "$NODE" --output json 2>/dev/null || echo "")
+    if [ -n "$QUERY" ]; then
+      local CODE
+      CODE=$(echo "$QUERY" | jq -r '.code // 0' 2>/dev/null || echo "")
+      if [ "$CODE" = "0" ]; then
+        echo "$QUERY"
+        return 0
+      elif [ -n "$CODE" ] && [ "$CODE" != "" ]; then
+        echo "[deploy]   TX FAILED on-chain: code=$CODE" >&2
+        echo "$QUERY" | jq -r '.raw_log // .logs // empty' >&2
+        return 1
+      fi
+    fi
+  done
+  echo "[deploy]   TIMEOUT waiting for tx $txhash" >&2
+  return 1
+}
+
+# ── Store code ──
+store_wasm() {
+  local wasm_path="$1"
+  local label="$2"
+  echo "[deploy] Storing $label..."
+  local TX_OUT
+  TX_OUT=$(docker exec "$CONTAINER" junod tx wasm store "$wasm_path" \
+    --from validator \
+    --chain-id "$CHAIN_ID" \
+    --keyring-backend "$KEYRING" \
+    --node "$NODE" \
+    --gas auto --gas-adjustment 1.5 --gas-prices 0.1ujuno \
+    --broadcast-mode sync --yes --output json 2>&1)
+
+  local TXHASH
+  TXHASH=$(echo "$TX_OUT" | grep -o '{.*}' | jq -r '.txhash // empty' 2>/dev/null)
+  if [ -z "$TXHASH" ]; then
+    echo "  ERROR: no txhash in output:" >&2
+    echo "  $TX_OUT" >&2
+    return 1
+  fi
+  echo "  broadcast txhash: $TXHASH"
+
+  local TX_RESULT
+  TX_RESULT=$(wait_tx "$TXHASH") || return 1
+
+  local CODE_ID
+  CODE_ID=$(echo "$TX_RESULT" | jq -r '
+    [.events[]? | select(.type == "store_code") |
+    .attributes[]? | select(.key == "code_id") | .value] | first // empty')
+  if [ -z "$CODE_ID" ]; then
+    echo "  ERROR: no code_id in tx events. Events:" >&2
+    echo "$TX_RESULT" | jq '.events[]?.type' >&2
+    return 1
+  fi
+  echo "  code_id: $CODE_ID"
+  # Write result to temp file (avoids stdout capture issues)
+  echo "$CODE_ID" > /tmp/_deploy_result
+}
+
+# ── Instantiate contract ──
+instantiate_contract() {
+  local code_id="$1"
+  local label="$2"
+  local init_msg="{\"admin\":\"${ADMIN}\"}"
+  echo "[deploy] Instantiating $label (code_id=$code_id)..."
+  local TX_OUT
+  TX_OUT=$(docker exec "$CONTAINER" junod tx wasm instantiate "$code_id" "$init_msg" \
+    --from validator \
+    --chain-id "$CHAIN_ID" \
+    --keyring-backend "$KEYRING" \
+    --node "$NODE" \
+    --gas auto --gas-adjustment 1.5 --gas-prices 0.1ujuno \
+    --label "$label" --no-admin \
+    --broadcast-mode sync --yes --output json 2>&1)
+
+  local TXHASH
+  TXHASH=$(echo "$TX_OUT" | grep -o '{.*}' | jq -r '.txhash // empty' 2>/dev/null)
+  if [ -z "$TXHASH" ]; then
+    echo "  ERROR: no txhash:" >&2
+    echo "  $TX_OUT" >&2
+    return 1
+  fi
+  echo "  broadcast txhash: $TXHASH"
+
+  local TX_RESULT
+  TX_RESULT=$(wait_tx "$TXHASH") || return 1
+
+  local ADDR
+  ADDR=$(echo "$TX_RESULT" | jq -r '
+    [.events[]? | select(.type == "instantiate") |
+    .attributes[]? | select(.key == "_contract_address") | .value] | first // empty')
+  if [ -z "$ADDR" ]; then
+    echo "  ERROR: no contract address in tx events. Events:" >&2
+    echo "$TX_RESULT" | jq '.events[]?.type' >&2
+    return 1
+  fi
+  echo "  address: $ADDR"
+  echo "$ADDR" > /tmp/_deploy_result
+}
+
+# ── Store both ──
+store_wasm /tmp/zk_verifier_pure.wasm "pure-Wasm variant"
+PURE_CODE_ID=$(cat /tmp/_deploy_result)
+sleep 3
+
+store_wasm /tmp/zk_verifier_precompile.wasm "precompile variant"
+PREC_CODE_ID=$(cat /tmp/_deploy_result)
+sleep 3
+
+# ── Instantiate both ──
+instantiate_contract "$PURE_CODE_ID" "zk-verifier-pure"
+PURE_ADDR=$(cat /tmp/_deploy_result)
+sleep 3
+
+instantiate_contract "$PREC_CODE_ID" "zk-verifier-precompile"
+PREC_ADDR=$(cat /tmp/_deploy_result)
+
+# ── Write deploy.env ──
+cat > "${DEVNET_DIR}/deploy.env" <<EOF
+# generated by deploy-now.sh — consumed by benchmark.sh
+CHAIN_ID=${CHAIN_ID}
+NODE=${NODE}
+PURE_CODE_ID=${PURE_CODE_ID}
+PURE_ADDR=${PURE_ADDR}
+PRECOMPILE_CODE_ID=${PREC_CODE_ID}
+PRECOMPILE_ADDR=${PREC_ADDR}
+ADMIN_ADDR=${ADMIN}
+EOF
+
+echo ""
+echo "════════════════════════════════════════════════════"
+echo "[deploy] SUCCESS"
+echo "  Pure:       $PURE_ADDR (code_id=$PURE_CODE_ID)"
+echo "  Precompile: $PREC_ADDR (code_id=$PREC_CODE_ID)"
+echo "  Wrote: ${DEVNET_DIR}/deploy.env"
+echo "════════════════════════════════════════════════════"
