@@ -1,0 +1,155 @@
+diff --git a/packages/vm/src/imports.rs b/packages/vm/src/imports.rs
+index b13cf74ac..6a8a9a9c5 100644
+--- a/packages/vm/src/imports.rs
++++ b/packages/vm/src/imports.rs
+@@ -11,6 +11,10 @@ use cosmwasm_crypto::{
+ use cosmwasm_crypto::{
+     ECDSA_PUBKEY_MAX_LEN, ECDSA_SIGNATURE_LEN, EDDSA_PUBKEY_LEN, MESSAGE_HASH_MAX_LEN,
+ };
++use cosmwasm_crypto_bn254::{
++    bn254_add, bn254_pairing_equality, bn254_scalar_mul, gas::pairing_cost,
++    gas::BN254_ADD_COST, gas::BN254_SCALAR_MUL_COST, Bn254Error, FR_BYTES, G1_BYTES,
++};
+ use rand_core::OsRng;
+ 
+ #[cfg(feature = "iterator")]
+@@ -62,6 +66,44 @@ const MAX_LENGTH_DEBUG: usize = 2 * MI;
+ /// Max length for an abort message
+ const MAX_LENGTH_ABORT: usize = 2 * MI;
+ 
++// ── BN254 (alt_bn128) host-function status codes ──────────────────────────
++//
++// Returned in the u32 of `do_bn254_*`'s `VmResult<u32>`. 0 always means
++// "operation completed successfully" for ECADD/ECMUL (output written to
++// the guest-supplied out_ptr). For pairing, 0 = pairings equal, 1 = not
++// equal. Other codes encode `Bn254Error` variants and correspond to a
++// runtime revert in the guest's `cosmwasm_std::Api::bn254_*` wrapper.
++const BN254_OK: u32 = 0;
++const BN254_PAIRING_INVALID: u32 = 1;
++const BN254_ERR_INVALID_INPUT_LENGTH: u32 = 2;
++const BN254_ERR_NOT_ON_CURVE: u32 = 3;
++const BN254_ERR_NOT_IN_SUBGROUP: u32 = 4;
++const BN254_ERR_INVALID_FIELD_ELEMENT: u32 = 5;
++const BN254_ERR_BACKEND: u32 = 6;
++const BN254_ERR_TOO_MANY_PAIRS: u32 = 7;
++
++/// Maximum number of (G1, G2) pairs accepted by `do_bn254_pairing_equality`
++/// in a single call. Each pair is 192 bytes; 64 pairs = 12 288 bytes of
++/// input, which already costs ~2.2M SDK gas. Larger inputs are rejected
++/// before any decoding to bound worst-case host time.
++const MAX_BN254_PAIRING_PAIRS: usize = 64;
++const MAX_BN254_PAIRING_INPUT: usize = MAX_BN254_PAIRING_PAIRS * 192;
++
++#[inline]
++fn bn254_error_code(err: &Bn254Error) -> u32 {
++    match err {
++        Bn254Error::InvalidInputLength { .. } => BN254_ERR_INVALID_INPUT_LENGTH,
++        Bn254Error::InvalidPairingInputLength(_) => BN254_ERR_INVALID_INPUT_LENGTH,
++        Bn254Error::NotOnCurve => BN254_ERR_NOT_ON_CURVE,
++        Bn254Error::NotInSubgroup => BN254_ERR_NOT_IN_SUBGROUP,
++        Bn254Error::InvalidFieldElement => BN254_ERR_INVALID_FIELD_ELEMENT,
++        Bn254Error::BackendError(_) => BN254_ERR_BACKEND,
++        // `Bn254Error` is marked `#[non_exhaustive]`. Map any future variant
++        // to the generic backend code so we never accidentally pass through
++        // a CryptoError silently.
++        _ => BN254_ERR_BACKEND,
++    }
++}
+ #[inline(always)]
+ fn charge_host_call_gas<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'static>(
+     env: &Environment<A, S, Q>,
+@@ -845,6 +887,94 @@ pub fn do_debug<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'sta
+     Ok(())
+ }
+ 
++
++/// BN254 G1 point addition (ECADD `0x06`).
++///
++/// Reads 128 bytes from `input_ptr`, writes 64 bytes of result to `out_ptr`.
++/// Returns 0 on success, non-zero error code on failure. Gas is charged
++/// before the operation.
++pub fn do_bn254_add<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'static>(
++    mut env: FunctionEnvMut<Environment<A, S, Q>>,
++    input_ptr: u32,
++    out_ptr: u32,
++) -> VmResult<u32> {
++    let (data, mut store) = env.data_and_store_mut();
++    let _memory = data.memory(&store);
++
++    let input = read_region(data, &mut store, input_ptr, 2 * G1_BYTES)?;
++    let gas_info = GasInfo::with_cost(BN254_ADD_COST);
++    process_gas_info(data, &mut store, gas_info)?;
++
++    let result = match bn254_add(&input) {
++        Ok(bytes) => bytes,
++        Err(e) => return Ok(bn254_error_code(&e)),
++    };
++    let memory = data.memory(&store);
++    write_region(&memory, out_ptr, &result)?;
++    Ok(BN254_OK)
++}
++
++/// BN254 G1 scalar multiplication (ECMUL `0x07`).
++///
++/// Reads 96 bytes from `input_ptr` (`g1_point || scalar_be`), writes 64 bytes
++/// of result to `out_ptr`. Returns 0 on success, non-zero error code on
++/// failure. Scalars are reduced mod `r` per EIP-196.
++pub fn do_bn254_scalar_mul<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'static>(
++    mut env: FunctionEnvMut<Environment<A, S, Q>>,
++    input_ptr: u32,
++    out_ptr: u32,
++) -> VmResult<u32> {
++    let (data, mut store) = env.data_and_store_mut();
++    let _memory = data.memory(&store);
++
++    let input = read_region(data, &mut store, input_ptr, G1_BYTES + FR_BYTES)?;
++    let gas_info = GasInfo::with_cost(BN254_SCALAR_MUL_COST);
++    process_gas_info(data, &mut store, gas_info)?;
++
++    let result = match bn254_scalar_mul(&input) {
++        Ok(bytes) => bytes,
++        Err(e) => return Ok(bn254_error_code(&e)),
++    };
++    let memory = data.memory(&store);
++    write_region(&memory, out_ptr, &result)?;
++    Ok(BN254_OK)
++}
++
++/// BN254 pairing equality check (ECPAIRING `0x08`).
++///
++/// Reads `192·N` bytes from `input_ptr`. Returns 0 if the pairing product
++/// equals 1 in `Gt`, 1 if it doesn't, and non-zero error codes otherwise.
++/// Gas is charged on the supplied length before any decoding so that
++/// adversarial callers cannot under-pay by malforming the input.
++pub fn do_bn254_pairing_equality<
++    A: BackendApi + 'static,
++    S: Storage + 'static,
++    Q: Querier + 'static,
++>(
++    mut env: FunctionEnvMut<Environment<A, S, Q>>,
++    input_ptr: u32,
++) -> VmResult<u32> {
++    let (data, mut store) = env.data_and_store_mut();
++    let _memory = data.memory(&store);
++
++    let input = read_region(data, &mut store, input_ptr, MAX_BN254_PAIRING_INPUT)?;
++    if input.len() % 192 != 0 {
++        return Ok(BN254_ERR_INVALID_INPUT_LENGTH);
++    }
++    let n_pairs = input.len() / 192;
++    if n_pairs > MAX_BN254_PAIRING_PAIRS {
++        return Ok(BN254_ERR_TOO_MANY_PAIRS);
++    }
++
++    let gas_info = GasInfo::with_cost(pairing_cost(n_pairs));
++    process_gas_info(data, &mut store, gas_info)?;
++
++    match bn254_pairing_equality(&input) {
++        Ok(true) => Ok(BN254_OK),
++        Ok(false) => Ok(BN254_PAIRING_INVALID),
++        Err(e) => Ok(bn254_error_code(&e)),
++    }
++}
+ /// Aborts the contract and shows the given error message
+ pub fn do_abort<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'static>(
+     mut env: FunctionEnvMut<Environment<A, S, Q>>,

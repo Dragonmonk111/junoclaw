@@ -1,0 +1,12 @@
+diff --git a/packages/vm/Cargo.toml b/packages/vm/Cargo.toml
+index 0a9876e4d..b149ccf01 100644
+--- a/packages/vm/Cargo.toml
++++ b/packages/vm/Cargo.toml
+@@ -39,6 +39,7 @@ blake2 = "0.10.6"
+ cosmwasm-core = { workspace = true }
+ cosmwasm-std = { workspace = true, features = ["std"] }
+ cosmwasm-crypto = { workspace = true }
++cosmwasm-crypto-bn254 = { version = "0.1.0", path = "../crypto-bn254" }
+ cosmwasm-vm-derive = { workspace = true }
+ derivative = "2"
+ hex = "0.4"
