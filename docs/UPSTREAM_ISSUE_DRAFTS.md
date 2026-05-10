@@ -1,6 +1,6 @@
 # Upstream GitHub Issue Drafts
 
-**Status:** READY TO PUBLISH after Phase 0 completes (patches rebased + gas measured)
+**Status:** READY TO PUBLISH (2026-05-10). Both prerequisites complete — patches rebased onto `cosmwasm` v2.2.2 and forward-ported to v2.2.7 (10/10 clean on both); gas measured empirically at **1.823× reduction** on devnet.
 **Companion:** [`POST_VOTE_EXECUTION_PLAN.md`](./POST_VOTE_EXECUTION_PLAN.md) Phase 1
 **Targets:** `CosmWasm/cosmwasm`, `CosmWasm/wasmvm`
 
@@ -50,18 +50,30 @@ The new chain capability string is `bn254`. Existing contracts compile unchanged
 
 ## Why this matters concretely
 
-The immediate user is the JunoClaw `zk-verifier` contract running on Juno mainnet today. Pure-Wasm Groth16 verification (arkworks) costs **370,719 SDK gas** per `VerifyProof`, measured on `uni-7` and reproduced on devnet (see [BN254_BENCHMARK_RESULTS.md](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_RESULTS.md)).
+The immediate user is the JunoClaw `zk-verifier` contract running on Juno mainnet today. We've now measured both paths end-to-end on a single-validator devnet running the patched chain binary, 5 samples per variant, σ = 0:
 
-Projected with the precompile path: **~187,000 SDK gas** for a 3-pair circuit, **~223,000** for a 4-pair circuit. That's a ~2× reduction, which is the threshold between "we sample-verify proofs" and "we verify every proof." For an agent-based use case, that's the difference between optional and universal auditing.
+| Path                  | Gas per `VerifyProof` |
+|-----------------------|----------------------:|
+| Pure-Wasm (arkworks)  |               370,600 |
+| BN254 precompile      |           **203,266** |
 
-We will replace the projection with a measured number from a local devnet running the patched chain binary before opening the PR.
+That's a **1.823× reduction** (167,334 SDK gas saved per call), which is the threshold between "we sample-verify proofs" and "we verify every proof." For an agent-based use case, that's the difference between optional and universal auditing.
+
+Full per-run table (txhashes, block heights, gas wanted, gas used) and the original projection it confirms within ~9% are in [BN254_BENCHMARK_RESULTS.md](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_RESULTS.md). The measurement is reproducible from a clean checkout in one command:
+
+```bash
+bash devnet/scripts/reproduce-benchmark.sh
+```
 
 ## What's already written
 
 We have:
 
-- **A standalone `no_std`-friendly crate** (`cosmwasm-crypto-bn254`) using `ark-bn254 0.5`. It includes 9 conformance tests, criterion benchmarks, and a non-default-features build that compiles into the cosmwasm-vm Wasm target.
-- **Three patches** against `cosmwasm` `v2.2.0` ([here](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/patches)) — currently being rebased onto the latest tag.
+- **A standalone `no_std`-friendly crate** (`cosmwasm-crypto-bn254`) using `ark-bn254 0.5`. 22/22 tests pass (13 unit + 9 EIP-196/197/1108 conformance vectors); criterion benchmarks included; non-default-features build compiles into the cosmwasm-vm Wasm target.
+- **Two parallel patch series**, both 10/10 clean:
+  - [`wasmvm-fork/patches/v2.2.2/`](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/patches/v2.2.2) — pinned to the cosmwasm tag that wasmvm v2.2.4 / Juno mainnet consume; tests pass (22/22 crypto-bn254, 311/311 cosmwasm-vm).
+  - [`wasmvm-fork/patches/v2.2.7/`](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/patches/v2.2.7) — forward-port to the latest 2.2.x tag; only 2 `Cargo.toml` patches differ (workspace inheritance).
+- **Verification tooling** in the same directory: [`check-baseline.sh`](https://github.com/Dragonmonk111/junoclaw/blob/main/wasmvm-fork/patches/check-baseline.sh) (fast `git apply --check` per patch), [`rebase-track-a.sh`](https://github.com/Dragonmonk111/junoclaw/blob/main/wasmvm-fork/patches/rebase-track-a.sh) (full clone-apply-test loop).
 - **A separate companion issue** opened on `CosmWasm/wasmvm` for the VM-side wiring: [link to be added].
 - **An ADR** documenting the decision context: [ADR-001-BN254-PRECOMPILE.md](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/ADR-001-BN254-PRECOMPILE.md).
 - **A draft PR description** (the body of the future PR): [WASMVM_BN254_PR_DESCRIPTION.md](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/WASMVM_BN254_PR_DESCRIPTION.md).
@@ -114,7 +126,7 @@ cc @ethanfrey @webmaster128 — happy to take this in any direction you prefer. 
 
 This is the wasmvm-side companion to [CosmWasm/cosmwasm#XXXX](TBD-after-issue-1-published) — a proposal to add BN254 (alt_bn128) host functions to CosmWasm, motivated by Juno governance proposal [#374](https://ping.pub/juno/gov/374) (passed 2026-05-05, ~80% Yes).
 
-The cosmwasm-side issue covers the host-function ABI, the Rust crate, and the gas schedule. This issue covers what we'd add **here** in `wasmvm`: CGo FFI shims, Go-side wrappers, and the surface that `x/wasm` consumers call.
+The cosmwasm-side issue covers the host-function ABI, the Rust crate, the gas schedule, and the **measured 1.823× gas reduction** (370,600 → 203,266 SDK gas per Groth16 verification, 5 samples σ = 0). This issue covers what we'd add **here** in `wasmvm`: CGo FFI shims, Go-side wrappers, and the surface that `x/wasm` consumers call.
 
 ## What we'd add to wasmvm
 
@@ -150,7 +162,7 @@ The wasmvm PR depends on the cosmwasm PR (we'd open the wasmvm PR with a blockin
 
 - `make build-rust` — compile the C shims
 - `make test` — Go FFI sanity checks
-- A reproducible end-to-end gas measurement on a single-validator devnet running the patched binary, comparing to the existing 370,719 SDK gas pure-Wasm baseline (see [BN254_BENCHMARK_RESULTS.md](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_RESULTS.md))
+- A reproducible end-to-end gas measurement on a single-validator devnet running the patched binary: now measured at **203,266 SDK gas** (precompile) vs **370,600 SDK gas** (pure-Wasm) = 1.823× reduction; 5 samples σ = 0. See [BN254_BENCHMARK_RESULTS.md](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_RESULTS.md). Reproduce with `bash devnet/scripts/reproduce-benchmark.sh`.
 
 The differential test (1,000 random Groth16 proofs through both the pure-Wasm verifier and the precompile-backed verifier, assert identical accept/reject) is in the cosmwasm-side PR but is reproducible from this side too via the devnet recipe.
 
@@ -159,7 +171,7 @@ The differential test (1,000 random Groth16 proofs through both the pure-Wasm ve
 1. **Naming.** `bn254_add` / `bn254_scalar_mul` / `bn254_pairing_equality` for the C shim symbols. Match the cosmwasm-side names verbatim. Acceptable?
 2. **CI matrix.** Should the new crate appear in `make test`'s default suite, or behind a feature flag matching cosmwasm-side `cosmwasm_2_3`?
 3. **Gas-cost reporting.** Do you want the wasmvm-side benchmark numbers in the PR description, or only the cosmwasm-side numbers (since gas accounting lives in cosmwasm-vm)?
-4. **Track-target preference.** Our patch set is currently rebased onto `cosmwasm` v2.2.2 (the version `wasmvm` v2.2.4 pins, i.e. the baseline Juno mainnet ships today). Would you prefer the upstream PR against `v3.x main` directly, with a backport branch for the v2.2.x line, or against `v2.2.x` first with a forward-port to `main` afterwards?
+4. **Track-target preference.** We have two parallel patch series ready, both 10/10 clean: `v2.2.2/` (the version `wasmvm` v2.2.4 pins, i.e. the baseline Juno mainnet ships today) and `v2.2.7/` (the latest 2.2.x tag; only the two `Cargo.toml` patches differ from v2.2.2 due to workspace inheritance). Would you prefer the upstream PR against `v3.x main` directly, with a backport branch for the v2.2.x line, or against `v2.2.x` first with a forward-port to `main` afterwards? We can produce either.
 
 ## Side-findings worth flagging (independent of the BN254 work)
 

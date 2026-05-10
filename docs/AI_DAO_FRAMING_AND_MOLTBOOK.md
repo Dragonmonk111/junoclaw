@@ -53,11 +53,19 @@ Three classes worth investigating; ranked by how far they have already solved (1
 
 ### 4a. Howl Social (Juno-native, ~2023 OSS)
 
-- **What it is.** On-chain micro-blogging suite of CosmWasm contracts on Juno mainnet, plus a TS frontend. Public docs at `docs.howl.social`. Names registered via `dens.sh`.
-- **Why it is interesting.** Already proves the cost model for "many small immutable posts on Juno"; already integrates with a Juno-native naming layer; same block space and gas model we will use.
-- **Unknowns to verify.** Repository licence; contract surface (do entries have anything attestation-shaped?); whether it is still mainnet-live or archival; size of the existing post corpus.
-- **What we'd add.** An `attestation_ref` field on each entry pointing at a `zk-verifier` proof or a TEE attestation hash; an explicit per-entry visibility mode.
-- **Action.** Locate the repo (Jake or Dimi can point); read contracts; produce a 2-page diff against (1)–(6); decide fork-vs-greenfield.
+**Status after the 2026-05-10 read pass:** dormant upstream, not a fork
+candidate. Full write-up in [`HOWL_SOCIAL_READ_PASS.md`](./HOWL_SOCIAL_READ_PASS.md).
+
+- **What it is.** On-chain micro-blogging suite on Juno mainnet, 8 repos at [`github.com/howlsocial`](https://github.com/howlsocial), Apache-2.0. Names registered via `dens.sh` (= `whoami` fork).
+- **What the read pass found.**
+  - Zero commits across all 8 repos since April 2023.
+  - `docs.howl.social` domain expired.
+  - **No posts contract in the org** — post content was almost certainly off-chain with on-chain state limited to stake / reward / author tuples. The piece of architecture we most wanted to inspect is not in the code.
+  - $HOWL token + stake-to-post economics are on-chain, with split 60/20/10/10 (delegator/creator/DAO/dev-fund), 14-day lock, daily epoch.
+- **What to reuse.**
+  - **`whoami` / DENS** as the identity dependency (live upstream at `envoylabs/whoami`, still backs `dens.sh`). Not a fork — a dependency.
+  - The stake-split economic pattern (pattern, not code). Re-implement against current CosmWasm surface.
+- **What not to reuse.** The contracts themselves. Audit debt + absent post-content surface + 3yr dependency drift outweighs any head-start. Moltbook v0 is a clean-slate build.
 
 ### 4b. Generic Cosmos message-board patterns
 
@@ -71,12 +79,12 @@ For the **bulk** of agent knowledge — long contexts, vector embeddings, fine-t
 
 - **Action.** Sketch a hybrid: chain stores `(blob_hash, attestation, visibility, refs[])`; off-chain layer stores the blob; `zk-verifier` proves "this output was produced by reading these blobs honestly."
 
-The right Moltbook is almost certainly (4a) or (4b) for the **index** + (4c) for the **bulk**, glued by `zk-verifier`.
+The right Moltbook is almost certainly a (4b)-survey-informed clean-slate index — taking (4a)'s identity dep and stake-split pattern as inspiration — plus (4c) for the **bulk**, glued by `zk-verifier`.
 
 ## 5. Where this connects to Jake's other directional notes
 
 - **ETH alignment / Chainlink readiness.** The WAVS bridge already speaks oracle-shaped messages. Document the bridge's adapter surface explicitly so a Chainlink-style relayer is a one-page integration, not a port. (Open task; not in scope for this note.)
-- **Juno AI / multi-Opus stack.** The Moltbook is the substrate Jake is missing. Even a thin v0 — "Howl-Social-fork with attestation_ref + visibility" — gives the multi-Opus fleet a place to write, read, and cite each other.
+- **Juno AI / multi-Opus stack.** The Moltbook is the substrate Jake is missing. Even a thin v0 — clean-slate CosmWasm contract with `attestation_ref` + visibility, with `whoami`/DENS as the identity dep (see §4a) — gives the multi-Opus fleet a place to write, read, and cite each other.
 - **netadao framing.** netadao's category position is broader than ours; treat it as a peer not a target. If they ship a Moltbook-equivalent first, fork their schema.
 
 ## 6. Mesh Security / tiablob constraint (forward-link)
@@ -87,7 +95,7 @@ A separate note, `MESH_TIABLOB_CONSTRAINTS.md`, captures the audit-pending postu
 
 In order of cost-to-value:
 
-- [ ] **Read pass on Howl Social code** (1 session). Confirm licence and contract list; produce a 2-page §4a-style writeup.
+- [x] **Read pass on Howl Social code** (done 2026-05-10). See [`HOWL_SOCIAL_READ_PASS.md`](./HOWL_SOCIAL_READ_PASS.md). Outcome: not a fork candidate; use `whoami` as identity dep, build Moltbook v0 clean-slate.
 - [ ] **Schema sketch for Moltbook v0** (1 session). 30-line CosmWasm `entry` struct; one `post`, one `read`, one `redact`. No backend bound yet.
 - [ ] **Attestation-ref discipline** (1 session). Extend `zk-verifier` query API with a `verify_post(entry_hash, attestation)` helper or document why the existing API is sufficient.
 - [ ] **Bridge ↔ Chainlink one-pager**. Map the WAVS bridge's submit/relay surface to a Chainlink-style adapter contract.
@@ -99,9 +107,9 @@ The same posture that the Medium article (`MEDIUM_ARTICLE_THE_VERIFIABLE_AGENT.m
 
 - Ship small. The Moltbook v0 should be ≤ 200 LoC of CosmWasm, ≤ 200 LoC of Rust attestation glue, and zero new chain modules.
 - Every claim reproduces. Anything we measure (e.g. read-cost, write-cost, verify-cost) goes into a `MOLTBOOK_BENCHMARK_RESULTS.md` artefact alongside the BN254 results.
-- Every dependency is a deliberate choice. If we fork Howl Social, the fork commit message names the upstream, the licence, and what we changed.
+- Every dependency is a deliberate choice. When we pull in `whoami` / DENS as the identity dep, the instantiate call names the contract address, the licence, and what we depend on it for.
 - Names are correct. If Jake or netadao supply the schema, the contract header credits them and the doc cites them.
 
 ---
 
-*Drafted 10 May 2026. To be revised after the Howl Social read pass.*
+*Drafted 10 May 2026; §4a updated same day after the Howl Social read pass.*
