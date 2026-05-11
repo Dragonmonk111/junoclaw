@@ -381,6 +381,8 @@ Run this rehearsal **3 times**, on 3 different v29.1 heights, to flush out timin
 
 If 14 days pass with no feedback: send a **single** polite ping comment on each issue. Wait another 7 days. If still silent, escalate via the JunoSwap / Layer.xyz Discord (Jake Hartnell can poke Ethan if asked nicely).
 
+> **2026-05-11 update — Juno v30 PR #1202 is open.** Jake Hartnell (via `juno-ai-dev`, the `Co-Authored-By: Claude Opus 4.7` agent operating under his mandate) opened https://github.com/CosmosContracts/juno/pull/1202 on 2026-05-09. The PR description names our work — *"BN254 precompile lands with it (prop #374)"* — and pins `github.com/CosmWasm/wasmvm/v3 v3.0.4` in `go.mod` **with no `replace` directive** pointing at our fork. This makes Track B (wasmvm v3 forward-port) **critical-path** for BN254 to actually land in v30, rather than the patient-wait posture this phase assumed. Full assessment in [`JUNO_V30_PR_ASSESSMENT.md`](./JUNO_V30_PR_ASSESSMENT.md); the action-items in that doc §9 govern Phase 3 sequencing from here. The "Gate" above (substantive maintainer feedback before PR) still holds for the upstream `CosmWasm/cosmwasm` + `CosmWasm/wasmvm` repos; the gate to *Juno* (via the v30 branch) is now Jake's own timeline rather than the upstream maintainers'.
+
 ### 3.1 — PR 1: `CosmWasm/cosmwasm`
 
 - New crate `packages/crypto-bn254/`
