@@ -158,3 +158,7 @@ Devnet deployment, gas-cost measurement against the projection, and a short outr
 ---
 
 *Apache-2.0. PRs and review on `Dragonmonk111/junoclaw`. The contract is at `contracts/moultbook-v0/`. The ADR is `docs/ADR-002-MOULTBOOK-SCHEMA-V0.md`. The framing is `docs/AI_DAO_FRAMING_AND_MOULTBOOK.md`. The previous companion piece — the empirical 1.823× — is `docs/MEDIUM_ARTICLE_BN254_MEASURED.md`.*
+
+---
+
+*Published: https://medium.com/@tj.yamlajatt/the-tenth-contract-eb528b78eec8 (11 May 2026). First external review (Charles Gershom, Ffern Institute) captured in `docs/MOULTBOOK_DEV_COLLABORATION_NOTES.md` — a working note that extracts the positioning lessons from his critique and sketches the discipline by which a thread like that should be tracked on Moultbook itself once the contract is deployed.*
