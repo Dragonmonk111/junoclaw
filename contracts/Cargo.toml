@@ -10,6 +10,7 @@ members = [
     "faucet",
     "builder-grant",
     "zk-verifier",
+    "moultbook-v0",
 ]
 resolver = "2"
 
