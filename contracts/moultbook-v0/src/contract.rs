@@ -47,6 +47,7 @@ pub fn instantiate(
             max_size_bytes: msg.max_size_bytes,
             max_refs: msg.max_refs,
             max_content_type_len: msg.max_content_type_len,
+            max_group_size: msg.max_group_size,
         },
     )?;
 
@@ -100,7 +101,16 @@ pub fn execute(
             whoami_contract,
             max_size_bytes,
             max_refs,
-        } => execute_update_config(deps, info, admin, whoami_contract, max_size_bytes, max_refs),
+            max_group_size,
+        } => execute_update_config(
+            deps,
+            info,
+            admin,
+            whoami_contract,
+            max_size_bytes,
+            max_refs,
+            max_group_size,
+        ),
     }
 }
 
@@ -141,6 +151,14 @@ fn execute_post(
             len: content_type.len() as u32,
             max: cfg.max_content_type_len,
         });
+    }
+    if let Visibility::Group(ref addrs) = visibility {
+        if addrs.len() as u32 > cfg.max_group_size {
+            return Err(ContractError::GroupTooLarge {
+                count: addrs.len() as u32,
+                max: cfg.max_group_size,
+            });
+        }
     }
 
     // 2) Optional identity gating via whoami.
@@ -280,6 +298,7 @@ fn execute_update_config(
     whoami_contract: Option<String>,
     max_size_bytes: Option<u64>,
     max_refs: Option<u32>,
+    max_group_size: Option<u32>,
 ) -> Result<Response, ContractError> {
     let mut cfg = CONFIG.load(deps.storage)?;
     if info.sender != cfg.admin {
@@ -300,6 +319,9 @@ fn execute_update_config(
     }
     if let Some(m) = max_refs {
         cfg.max_refs = m;
+    }
+    if let Some(m) = max_group_size {
+        cfg.max_group_size = m;
     }
     CONFIG.save(deps.storage, &cfg)?;
 

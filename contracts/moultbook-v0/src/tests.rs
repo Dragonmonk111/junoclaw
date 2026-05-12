@@ -9,6 +9,7 @@ use crate::state::{Config, MoultEntry, Stats, Visibility};
 const MAX_SIZE: u64 = 1_048_576;
 const MAX_REFS: u32 = 8;
 const MAX_CONTENT_TYPE: u32 = 64;
+const MAX_GROUP_SIZE: u32 = 50;
 
 fn store_and_instantiate(app: &mut App, admin: &Addr) -> Addr {
     let code = ContractWrapper::new(execute, instantiate, query).with_migrate(migrate);
@@ -22,6 +23,7 @@ fn store_and_instantiate(app: &mut App, admin: &Addr) -> Addr {
             max_size_bytes: MAX_SIZE,
             max_refs: MAX_REFS,
             max_content_type_len: MAX_CONTENT_TYPE,
+            max_group_size: MAX_GROUP_SIZE,
         },
         &[],
         "moultbook-v0",
@@ -414,6 +416,7 @@ fn test_update_config_admin_only() {
                 whoami_contract: None,
                 max_size_bytes: Some(1),
                 max_refs: None,
+                max_group_size: None,
             },
             &[],
         )
@@ -430,6 +433,7 @@ fn test_update_config_admin_only() {
             whoami_contract: None,
             max_size_bytes: Some(2_000_000),
             max_refs: None,
+            max_group_size: None,
         },
         &[],
     )
@@ -440,4 +444,33 @@ fn test_update_config_admin_only() {
         .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
         .unwrap();
     assert_eq!(cfg.max_size_bytes, 2_000_000);
+}
+
+#[test]
+fn group_too_large_rejected() {
+    let mut app = App::default();
+    let admin = app.api().addr_make("admin");
+    let contract = store_and_instantiate(&mut app, &admin);
+
+    let big_group: Vec<Addr> = (0..MAX_GROUP_SIZE + 1)
+        .map(|i| app.api().addr_make(&format!("member{}", i)))
+        .collect();
+
+    let err = app
+        .execute_contract(
+            admin.clone(),
+            contract,
+            &ExecuteMsg::Post {
+                commitment: make_commitment(0xAA),
+                content_type: "text/plain".to_string(),
+                size_bytes: 100,
+                attestation_ref: None,
+                visibility: Visibility::Group(big_group),
+                refs: vec![],
+            },
+            &[],
+        )
+        .unwrap_err();
+    let cerr: ContractError = err.downcast().unwrap();
+    assert!(matches!(cerr, ContractError::GroupTooLarge { .. }));
 }

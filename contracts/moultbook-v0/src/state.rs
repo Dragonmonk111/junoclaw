@@ -9,6 +9,7 @@ pub struct Config {
     pub max_size_bytes: u64,
     pub max_refs: u32,
     pub max_content_type_len: u32,
+    pub max_group_size: u32,
 }
 
 #[cw_serde]

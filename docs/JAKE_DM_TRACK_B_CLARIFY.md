@@ -16,6 +16,20 @@ Happy with any of the three — just want to know which one you're shooting for 
 
 🦦📚
 
+## Updated short version (May 12 — incorporates Telegram context)
+
+Hey Jake — saw the v30 sneak peek in the group. Three things:
+
+1. **Code review posted on PR #1202.** One real bug in `pruneVotingPower` — sparse delegators get their snapshots evicted past the retention boundary, breaks the "latest at-or-before" read semantics your keeper doc-comment promises. Worked example + two-pass fix suggestion included. Happy to send the patch + regression test as a PR to `jakehartnell/v30` if useful — your agent can consume it directly.
+
+2. **BN254 Track B.** v30's `go.mod` pins `wasmvm/v3 v3.0.4` with no `replace` for our fork. For prop #374 to ship with v30 the patches need forward-porting from v2.2.x to v3.0.x. Three readings: (a) we do it (~3-5 days, tooling ready), (b) Juno AI coordinates upstream, (c) BN254 slips to v31. Happy with any — just need to know which so I can start the rebase or stand down.
+
+3. **Junoswap.** Saw it's broken and you mentioned vibecoding a replacement. We have the JunoClaw MCP toolkit + 9 DAO templates + agent infrastructure already on uni-7. If you want an agent-built frontend or integration layer for a new swap UI, we can contribute.
+
+Also — if the Juno AI GitHub account suspension is causing CI problems, happy to help run the e2e suite from our side while that gets resolved.
+
+🦦📚
+
 ---
 
 ## Longer version (if Telegram lets you do paragraphs / if it's an email)

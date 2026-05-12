@@ -38,4 +38,7 @@ pub enum ContractError {
 
     #[error("Invalid ref id: {id}")]
     InvalidRef { id: String },
+
+    #[error("Visibility group too large: {count} > max {max}")]
+    GroupTooLarge { count: u32, max: u32 },
 }

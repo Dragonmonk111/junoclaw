@@ -13,6 +13,7 @@ pub struct InstantiateMsg {
     pub max_size_bytes: u64,
     pub max_refs: u32,
     pub max_content_type_len: u32,
+    pub max_group_size: u32,
 }
 
 #[cw_serde]
@@ -37,6 +38,7 @@ pub enum ExecuteMsg {
         whoami_contract: Option<String>,
         max_size_bytes: Option<u64>,
         max_refs: Option<u32>,
+        max_group_size: Option<u32>,
     },
 }
 

@@ -7,10 +7,26 @@
 **Upstream targets:** `CosmWasm/cosmwasm`, `CosmWasm/wasmvm`
 **Reference vote tally:** [`https://ping.pub/juno/gov/374`](https://ping.pub/juno/gov/374)
 
-**Phase status (2026-05-10):**
+**Phase status (2026-05-12):**
 - Phase 0 — ✅ **substantively complete** (0.1 + 0.3 + 0.4 done; 0.2 EIP vectors at 5/24 of canonical Ethereum-tests fixtures, but the algebraic vectors already cover the same correctness surface; 0.5 Dimi pre-brief open).
 - Phase 1 — 🟢 **READY TO FIRE** — see [`UPSTREAM_ISSUE_DRAFTS.md`](./UPSTREAM_ISSUE_DRAFTS.md) for the paste-ready bodies and the publish sequence.
-- Phases 2–5 — unchanged; gated on Phase 1 maintainer feedback.
+- Phase 3 — ⚡ **ACTIVE via Jake's v30 branch** — PR #1202 is a DRAFT with Juno AI agent iterating until e2e passes. Our code review posted critical findings. Track B is now the primary path.
+- Phases 2, 4, 5 — unchanged; gated on Phase 1 maintainer feedback.
+
+**2026-05-12 situation report:**
+
+1. **Tokens recovered.** Validator VM back online (VirtualBox admin-mode fix). Delegator rewards (~165 JUNO) claimed; validator commission (~2,008 JUNO) claimed via `--node https://juno-rpc.polkachu.com:443` workaround (local node still syncing). Total liquid: ~7,188 JUNO on `juno1qh8rgkdm77wrhlf7un20gz9gmtpxkyaeldt0pg`.
+2. **Jake Telegram (May 11-12):** Built a "Juno AI agent" (Claude Opus 4.7, 1M context) that authored PR #1202. The agent's GitHub account got suspended; Jake is restoring it. Agent iterates autonomously until all v30 e2e tests pass. Junoswap is broken; Jake suggested "vibecoding a new one."
+3. **PR #1202 status:** DRAFT, cannot merge. CI partially passing (9/15 checks). `x/voting-snapshot` backfill + prune logic has our CRITICAL finding (sparse-delegator pruning bug). Agent is actively pushing fixes.
+4. **Moultbook v0:** Contract skeleton complete, 12 tests passing, devnet scripts ready. Awaiting Docker/WSL2 for deployment.
+5. **Deterministic scrutiny benchmark set** (Ffern/Lex Fridman video): all future Rust output to be gas-traced, failure-mode-enumerated, and storage-layout-reasoned at the wasm bytecode level.
+
+**Revised sprint priorities (May 12 forward):**
+- **P0:** Post `pruneVotingPower` bug + LST quorum asymmetry as GitHub review on PR #1202 — this is the highest-leverage move; Jake's agent is actively iterating and will consume the feedback.
+- **P1:** DM Jake (short version from `JAKE_DM_TRACK_B_CLARIFY.md`) — clarify Track B ownership, offer testing help, mention Junoswap opportunity.
+- **P2:** Apply deterministic scrutiny to moultbook-v0 (gas trace, failure modes, storage layout hardening).
+- **P3:** Deploy Moultbook to devnet, measure real gas, post first cross-org anchor entry.
+- **P4:** Draft Junoswap agent-rebuild concept note (Jake's "vibecode" comment = opening).
 
 ---
 
