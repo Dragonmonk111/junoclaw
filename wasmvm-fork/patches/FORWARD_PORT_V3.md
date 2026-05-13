@@ -17,13 +17,15 @@ The wasmvm-side wrapper patches (`wasmvm.api.rs.patch.dropped`, `wasmvm.lib.go.p
 
 ## Status
 
-- [x] **2026-05-13:** Worklog opened. Skeleton `v3.0.x/` directory not yet created.
-- [ ] **Day 1 (today, partial):** Set up `v3.0.x/` skeleton + `check-baseline-v3.sh`. Verify each `v2.2.7/` patch's `git apply --check` outcome against `cosmwasm` v3.0.1.
-- [ ] **Day 1-2:** Bisect which patches need rewriting vs which apply with `git apply --3way`. Target: produce a "diff drift" report — for each of the 10 patches, classify as `clean / 3way / rewrite`.
-- [ ] **Day 2-3:** Rewrite the patches that need it. Most likely candidates for rewrite (based on common upstream movement between 2.2 → 3.0): `05-cosmwasm-vm.imports.rs.patch` (host-fn registration table layout often changes between major versions), `08-cosmwasm-vm.Cargo.toml.patch` (workspace inheritance / feature flags).
-- [ ] **Day 3:** Add wasmvm-side patches (`12-wasmvm.api.rs.patch`, `13-wasmvm.lib.go.patch` mirroring the BLS12-381 path). These were the dropped patches in v2.2.x; v3.x has the analogue.
-- [ ] **Day 4:** Run `cargo test` end-to-end against patched v3.0.1 + `make test` against patched wasmvm v3.0.4. Both must be green.
-- [ ] **Day 5:** Tag `bn254-precompile-v3.0.4` on the `Dragonmonk111/wasmvm` fork. Hand Jake the `replace` directive for v30's `go.mod`:
+- [x] **2026-05-13 (morning):** Worklog opened. Skeleton `v3.0.x/` directory created.
+- [x] **2026-05-13 (afternoon, day 1 baseline check):** Set up `check-baseline-v3.{sh,ps1}`. Cloned cosmwasm v3.0.1 (`74a568d38`) into `~/junoclaw-build/cosmwasm-bn254`. Ran `git apply --check` against all 10 v2.2.7 patches.
+  - **Result: 7 CLEAN / 2 3-way-OK / 1 needs reanchor.**
+  - Drift report: [`DRIFT_REPORT_V3.md`](./DRIFT_REPORT_V3.md).
+  - Headline: drift is **much lower** than the original plan estimated — 1.5-2 working days, not 3-5.
+- [ ] **Day 2 (revised — single session):** Reanchor `01-cosmwasm-std.imports.rs.patch` to v3's new path `packages/std/src/exports/imports.rs` and shifted line numbers. Apply `04` and `08` with `--3way` and regenerate clean patches. Run full `cargo test` against patched v3.0.1.
+  - The originally-feared HIGH-risk patches (`05`, `07`) actually applied **CLEAN** — they don't need any work.
+- [ ] **Day 2-3:** Add wasmvm-side patches (`10-wasmvm.api.rs.patch`, `11-wasmvm.lib.go.patch` mirroring the BLS12-381 path). These were the dropped patches in v2.2.x; v3.x has the analogue. Run a separate `check-baseline-v3-wasmvm.ps1` against `wasmvm` v3.0.4 first.
+- [ ] **Day 3:** Tag `bn254-precompile-v3.0.4` on the `Dragonmonk111/wasmvm` fork. Hand Jake the `replace` directive for v30's `go.mod`:
   ```
   replace github.com/CosmWasm/wasmvm/v3 => github.com/Dragonmonk111/wasmvm/v3 v3.0.4-bn254
   ```
