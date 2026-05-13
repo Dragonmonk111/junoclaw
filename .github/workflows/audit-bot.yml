@@ -1,0 +1,105 @@
+name: Audit Bot
+
+# Runs on every PR that touches a contract's source files. Verifies that the
+# corresponding `DETERMINISTIC_AUDIT.md` exists and was updated in the same PR.
+# This is the lightweight CI version of the "security auditor on every PR"
+# discipline described in `docs/LESSONS_2026_05_13_MORNING.md` §3.
+#
+# Future iteration: invoke an LLM to regenerate the audit doc and post diff
+# as a PR comment. Today we just enforce the human-discipline rule that
+# touching contract source requires touching the audit.
+
+on:
+  pull_request:
+    paths:
+      - 'contracts/**/src/**'
+      - 'contracts/**/Cargo.toml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-audit-touched:
+    name: Audit doc must be updated when contract source changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Identify changed contracts
+        id: changed
+        shell: bash
+        run: |
+          # Get the set of contracts whose src/ or Cargo.toml changed in this PR.
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | \
+            grep -E '^contracts/[^/]+/(src/|Cargo\.toml$)' | \
+            awk -F/ '{ print $2 }' | sort -u)
+          echo "Changed contracts:"
+          echo "$CHANGED"
+          # Save as multi-line output for the next step
+          {
+            echo 'contracts<<EOF'
+            echo "$CHANGED"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify audit doc updated for each changed contract
+        if: steps.changed.outputs.contracts != ''
+        shell: bash
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          MISSING=()
+          UNTOUCHED=()
+          while IFS= read -r contract; do
+            if [ -z "$contract" ]; then continue; fi
+            audit_path="contracts/$contract/DETERMINISTIC_AUDIT.md"
+            if [ ! -f "$audit_path" ]; then
+              MISSING+=("$contract")
+              continue
+            fi
+            if ! git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -qx "$audit_path"; then
+              UNTOUCHED+=("$contract")
+            fi
+          done <<< "${{ steps.changed.outputs.contracts }}"
+
+          fail=0
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "::error::Contracts missing DETERMINISTIC_AUDIT.md (must be created): ${MISSING[*]}"
+            fail=1
+          fi
+          if [ ${#UNTOUCHED[@]} -gt 0 ]; then
+            echo "::error::Contracts whose source changed but audit doc untouched (must be re-anchored): ${UNTOUCHED[*]}"
+            echo "Each audit doc has an 'Anchor commit' line near the top — update it to the new HEAD SHA after re-reading the source."
+            fail=1
+          fi
+          exit $fail
+
+      - name: Comment on PR if audit gate fails
+        if: failure() && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              '### Audit-bot gate: action required',
+              '',
+              'This PR changes contract source files. Per `docs/LESSONS_2026_05_13_MORNING.md` §3, every contract source change must be accompanied by a re-read of the corresponding `DETERMINISTIC_AUDIT.md`:',
+              '',
+              '- If `contracts/<name>/DETERMINISTIC_AUDIT.md` does not exist, create it (template: any of the existing audits, e.g. `contracts/agent-registry/DETERMINISTIC_AUDIT.md`).',
+              '- If it exists, re-read the source and update the `Anchor commit:` line near the top to the current HEAD SHA. Add a brief note in the audit summary if findings changed.',
+              '',
+              'See the failed job logs above for the specific contract(s) that triggered this gate.',
+              '',
+              'This gate is intentional — it scales the security-auditor-on-every-PR discipline as more agent-built code lands. No bypass.'
+            ].join('\n');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });

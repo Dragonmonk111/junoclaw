@@ -269,15 +269,16 @@ I can drive 1-3 sequentially when you give the go-ahead. Step 1 is ~30 minutes (
 
 ---
 
-## 6. Pending decisions for you (parked)
+## 6. Pending decisions for you (parked) — updated post-afternoon-cluster
 
 These are choices I'd like to make explicitly with you when you have a moment:
 
-1. **QMD-shaped memory system.** Do you want me to draft a more concrete proposal (frontmatter + INDEX.md + agent-residue template + optional MCP server)? ~1 day's design + ~half-day's implementation.
+1. **QMD-shaped memory system.** Do you want me to draft a more concrete proposal (frontmatter + INDEX.md + agent-residue template + optional MCP server)? ~1 day's design + ~half-day's implementation. **Validation update (afternoon):** Jake's PR [#929](https://github.com/DA0-DA0/dao-contracts/pull/929) explicitly references `memory/juno-voting-design.md`, `memory/v30-upgrade-plan.md`, `memory/hack-juno-plan-2026-05-12.md` — same convention, different shop. The pattern is converging across the ecosystem. See [`JUNO_DAOCONTRACTS_PR_928_929_ANALYSIS.md`](./JUNO_DAOCONTRACTS_PR_928_929_ANALYSIS.md) §3.3.
 2. **LavaMoat for the new Junoswap UI.** When we start the React UI for Jake, ship with LavaMoat from commit 1? (Recommend yes — much cheaper than retrofitting.)
 3. **Monorepo sweep.** Move `wasmvm-fork/` out of `junoclaw/` and into a sibling repo, OR fully embrace monorepo and pull the `cosmwasm-bn254` standalone crate INTO `junoclaw/contracts/`? The current shape is half-and-half.
-4. **Open Issue 1 on `CosmWasm/cosmwasm` today.** Low-risk; the issue is ready. A "yes" from you and I'll prep the exact paste-block.
-5. **Set up the audit-bot CI workflow.** Auto-regenerate `DETERMINISTIC_AUDIT.md` for any contract whose source files change in a PR, and post findings as PR comments. ~1 hour. Permanent.
+4. **Open Issue 1 on `CosmWasm/cosmwasm` today.** ✅ **Paste-block ready** at [`CMW_ISSUE1_PASTE.md`](./CMW_ISSUE1_PASTE.md). Click `https://github.com/CosmWasm/cosmwasm/issues/new`, paste the title and body verbatim, click Submit. After-posting checklist included in the file.
+5. **Audit-bot CI workflow.** ✅ **Landed** at `@/c:/cosmos-node/node-data/config/CascadeProjects/windsurf-project/junoclaw/.github/workflows/audit-bot.yml`. Lighter-weight than originally scoped: enforces "if you change `contracts/<name>/src/**`, you must touch `contracts/<name>/DETERMINISTIC_AUDIT.md` in the same PR." The LLM-regenerates-audit version is a v2; today's version is the discipline gate.
+6. **Track B (BN254 v3 forward-port).** ✅ **Skeleton + worklog landed** at [`../wasmvm-fork/patches/FORWARD_PORT_V3.md`](../wasmvm-fork/patches/FORWARD_PORT_V3.md) and [`../wasmvm-fork/patches/v3.0.x/README.md`](../wasmvm-fork/patches/v3.0.x/README.md). 5-day plan with per-patch risk grading. **Awaiting your go-ahead** before starting day-1 baseline check (~30 min for discovery, then 3-5 days of substantive rewrite).
 
 ---
 
@@ -293,3 +294,52 @@ What this morning's conversation taught me about my own operation:
 ---
 
 *Apache-2.0. This document is part of the JunoClaw structured-memory corpus and is written so QMD-shaped indexers (or my future-self running `code_search`) can recover the morning's reasoning. Cross-references: [`STRATEGIC_NOTES_2026_05_12.md`](./STRATEGIC_NOTES_2026_05_12.md), [`JUNO_V30_PR_ASSESSMENT.md`](./JUNO_V30_PR_ASSESSMENT.md), [`UPSTREAM_ISSUE_DRAFTS.md`](./UPSTREAM_ISSUE_DRAFTS.md), [`ADR-003-DEX-MIRROR-V0.md`](./ADR-003-DEX-MIRROR-V0.md).*
+
+---
+
+## 8. Afternoon update (2026-05-13, ~10:30 UTC) — three signals
+
+After the morning notes were written, three new signals arrived in fast succession. Captured here in chronological order.
+
+### 8.1 Juno Communications (Highlander) is back active
+
+The [@JunoCommsDept](https://x.com/JunoCommsDept) X account posted at 10:02 UTC. The account is the official Juno comms vehicle, run by the contributor known as **Highlander**. It had been quiet for some time before this morning's post.
+
+The post amplified Jake's two same-day PRs (#928 + #929 on `DA0-DA0/dao-contracts`, see §8.2) and **linked our authored Medium article ["The Verifiable Agent"](./MEDIUM_ARTICLE_THE_VERIFIABLE_AGENT.md)** as the proof-card. Local source confirms our authorship (May 3, 2026, 207 lines, written as proposal #374 was crossing quorum).
+
+**Implication.** The official Juno narrative for "verifiable AI agents" is now amplifying our work without a coordination ask. Two follow-ups worth considering:
+
+- Open a coordination channel with Highlander — we have content, they have distribution.
+- Plan the next article in the series ("Historical Snapshot Voting and Why It Mattered" citing PR #929) for the same comms loop.
+
+### 8.2 Jake shipped two `DA0-DA0/dao-contracts` PRs (different repo than #1202)
+
+The PRs the comms post referenced — **#928 (Gauges)** and **#929 (dao-voting-juno-staked)** — are on `DA0-DA0/dao-contracts`, not `CosmosContracts/juno`. Detailed analysis at [`JUNO_DAOCONTRACTS_PR_928_929_ANALYSIS.md`](./JUNO_DAOCONTRACTS_PR_928_929_ANALYSIS.md).
+
+Three observations from those PRs:
+
+1. **PR #929 directly answers our open questions from PR #1202.** The custom-query binding (`JunoQuery`), at-or-before snapshot semantics, and the cw-hooks sudo-intake design pattern are all spelled out in the PR body. We can update our PR-1202 follow-up comment with concrete acknowledgement.
+2. **#929 is the prerequisite for #928.** Gauges read voting power via the dao-voting-juno-staked module #929 introduces. Two-PR sequence: voting first, then gauges.
+3. **Jake uses a structured-memory `.md` corpus.** PR #929 explicitly cross-references `memory/juno-voting-design.md`, `memory/v30-upgrade-plan.md`, `memory/hack-juno-plan-2026-05-12.md` in its description. Independent convergence on the same convention we discussed in §2.
+
+### 8.3 Today's session output
+
+Per §6, four parked decisions were acted on this afternoon:
+
+| # | Decision | Output |
+|---|----------|--------|
+| 1 | Continue audit sweep — escrow next | [`@/c:/cosmos-node/node-data/config/CascadeProjects/windsurf-project/junoclaw/contracts/escrow/DETERMINISTIC_AUDIT.md`](../contracts/escrow/DETERMINISTIC_AUDIT.md). 9 findings; headline F8 (timeout_blocks dead + unit mismatch with created_at, MEDIUM). Notable: escrow does **not** have the Vec-index bug class predicted in task-ledger F3 — the architectural surprise is that escrow is **non-custodial** (payment-ledger journal, no funds held). |
+| 2 | Issue 1 on `CosmWasm/cosmwasm` paste-block | [`CMW_ISSUE1_PASTE.md`](./CMW_ISSUE1_PASTE.md). Title + body ready; click-once paste vehicle. |
+| 3 | Audit-bot CI workflow | `@/c:/cosmos-node/node-data/config/CascadeProjects/windsurf-project/junoclaw/.github/workflows/audit-bot.yml`. Lighter-weight than originally scoped (gate, not regenerate); blocks PRs that change contract source without touching the audit doc. |
+| 4 | Track B (BN254 v3 forward-port) skeleton | [`../wasmvm-fork/patches/FORWARD_PORT_V3.md`](../wasmvm-fork/patches/FORWARD_PORT_V3.md) + [`../wasmvm-fork/patches/v3.0.x/README.md`](../wasmvm-fork/patches/v3.0.x/README.md). 5-day plan, per-patch risk graded. Awaiting go-ahead before day-1 baseline check. |
+
+### 8.4 What did NOT happen this afternoon (intentionally)
+
+- **PR #929 substantive review** — deferred to next session. Read the diff carefully, audit the sudo handler (high-leverage: any bug there breaks every DAO using this voting module). Optional: publish as a Moultbook entry once Moultbook v0 is on devnet.
+- **PR-1202 follow-up comment** — the substantive draft ("PR #929 answers our Q1 and Q2; Moultbook review of #1202 stands") is mentally drafted, not posted. Recommend posting after PR #929 review lands.
+- **Issue 1 actually opening on GitHub** — the paste-block is ready; the *click* is the user's action, not mine. I don't have the auth credentials and shouldn't.
+- **Track B day-1 baseline check** — skeleton is in place; the actual `git apply --check` work waits for explicit go-ahead. Discovery is ~30 min, but the rewrite work that follows is 3-5 days and shouldn't start without sprint-level commitment.
+
+---
+
+*Apache-2.0. §8 added 2026-05-13 afternoon. The session-residue is now structured for the next agent (or my next instance) to pick up cleanly.*
