@@ -1,0 +1,108 @@
+diff --git a/packages/std/src/exports/imports.rs b/packages/std/src/exports/imports.rs
+index 43c67f8aa..ee7ba1aa0 100644
+--- a/packages/std/src/exports/imports.rs
++++ b/packages/std/src/exports/imports.rs
+@@ -101,6 +101,22 @@ extern "C" {
+     /// greater than 1 in case of error.
+     fn ed25519_batch_verify(messages_ptr: u32, signatures_ptr: u32, public_keys_ptr: u32) -> u32;
+ 
++    // -- BN254 (alt_bn128) host functions ----------------------------------
++    //
++    // Mirror the EIP-196/EIP-197 precompiles. Calling on a chain that
++    // does not enable `cosmwasm_2_3` surfaces as a "missing import" error
++    // at contract load time -- the desired behaviour for capability gating.
++    //
++    // Convention: `input_ptr` is a Region; `out_ptr` (where present) is a
++    // pre-allocated Region of the exact output size. Return value is a
++    // u32 status code defined alongside `do_bn254_*` in cosmwasm-vm.
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_add(input_ptr: u32, out_ptr: u32) -> u32;
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_scalar_mul(input_ptr: u32, out_ptr: u32) -> u32;
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_pairing_equality(input_ptr: u32) -> u32;
++
+     /// Writes a debug message (UFT-8 encoded) to the host for debugging purposes.
+     /// The host is free to log or process this in any way it considers appropriate.
+     /// In production environments it is expected that those messages are discarded.
+@@ -707,6 +723,63 @@ impl Api for ExternalApi {
+         }
+     }
+ 
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_add(&self, input: &[u8]) -> Result<[u8; 64], VerificationError> {
++        if input.len() != 128 {
++            return Err(VerificationError::generic_err(
++                "bn254_add: input must be 128 bytes",
++            ));
++        }
++        let send_input = Region::from_slice(input);
++        let out: [u8; 64] = [0; 64];
++        let recv_out = Region::from_slice(&out);
++
++        let result = unsafe {
++            bn254_add(send_input.as_ptr() as u32, recv_out.as_ptr() as u32)
++        };
++        match result {
++            0 => Ok(out),
++            code => Err(bn254_error_from_code(code)),
++        }
++    }
++
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_scalar_mul(&self, input: &[u8]) -> Result<[u8; 64], VerificationError> {
++        if input.len() != 96 {
++            return Err(VerificationError::generic_err(
++                "bn254_scalar_mul: input must be 96 bytes",
++            ));
++        }
++        let send_input = Region::from_slice(input);
++        let out: [u8; 64] = [0; 64];
++        let recv_out = Region::from_slice(&out);
++
++        let result = unsafe {
++            bn254_scalar_mul(send_input.as_ptr() as u32, recv_out.as_ptr() as u32)
++        };
++        match result {
++            0 => Ok(out),
++            code => Err(bn254_error_from_code(code)),
++        }
++    }
++
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn bn254_pairing_equality(&self, input: &[u8]) -> Result<bool, VerificationError> {
++        if input.len() % 192 != 0 {
++            return Err(VerificationError::generic_err(format!(
++                "bn254_pairing_equality: input length {} is not a multiple of 192",
++                input.len()
++            )));
++        }
++        let send_input = Region::from_slice(input);
++        let result = unsafe { bn254_pairing_equality(send_input.as_ptr() as u32) };
++        match result {
++            0 => Ok(true),
++            1 => Ok(false),
++            code => Err(bn254_error_from_code(code)),
++        }
++    }
++
+     fn debug(&self, message: &str) {
+         // keep the boxes in scope, so we free it at the end (don't cast to pointers same line as Region::from_slice)
+         let region = Region::from_slice(message.as_bytes());
+@@ -757,3 +830,16 @@ pub fn handle_panic(message: &str) {
+     let region_ptr = region.as_ptr() as u32;
+     unsafe { abort(region_ptr) };
+ }
++
++#[cfg(feature = "cosmwasm_2_3")]
++fn bn254_error_from_code(code: u32) -> VerificationError {
++    match code {
++        2 => VerificationError::generic_err("bn254: invalid input length"),
++        3 => VerificationError::generic_err("bn254: point not on curve"),
++        4 => VerificationError::generic_err("bn254: G2 point not in subgroup"),
++        5 => VerificationError::generic_err("bn254: invalid field element (>= p)"),
++        6 => VerificationError::generic_err("bn254: backend error"),
++        7 => VerificationError::generic_err("bn254: too many pairing pairs"),
++        c => VerificationError::generic_err(format!("bn254: unknown error code {c}")),
++    }
++}

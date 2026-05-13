@@ -2,36 +2,70 @@
 
 *Forward-port of [`v2.2.7/`](../v2.2.7/README.md) onto the v3.x stack consumed by Juno v30 (per [`CosmosContracts/juno#1202`](https://github.com/CosmosContracts/juno/pull/1202) which pins `wasmvm/v3 v3.0.4` directly).*
 
-**Status:** SKELETON — no patches yet. Worklog at [`../FORWARD_PORT_V3.md`](../FORWARD_PORT_V3.md). Baseline-discovery script and rewrites land in subsequent commits.
+**Status (2026-05-13 PM, day-2 forward-port complete):** **10/10 patches verify CLEAN against `cosmwasm` v3.0.1 (`74a568d38`).** Worklog: [`../FORWARD_PORT_V3.md`](../FORWARD_PORT_V3.md). Drift report: [`../DRIFT_REPORT_V3.md`](../DRIFT_REPORT_V3.md).
 
 ---
 
-## Target tags
+## Manifest
 
-| Repo                    | Pinned tag              | Source-of-pin                                  |
-|-------------------------|-------------------------|------------------------------------------------|
-| `CosmWasm/cosmwasm`     | `v3.0.1` (transitive)   | wasmvm v3.0.4's `Cargo.toml`                   |
-| `CosmWasm/wasmvm`       | `v3.0.4`                | Juno v30 PR #1202's `go.mod`                   |
+All 10 patches apply with `git apply --check` against `cosmwasm` v3.0.1.
 
-`v3.0.1` is the cosmwasm tag pinned by wasmvm v3.0.4. Confirm by checking `wasmvm/Cargo.lock` after `cd /tmp/wasmvm-v3 && go mod download`.
+| #  | Patch                                              | Day-1 result on v3 | Provenance |
+|----|----------------------------------------------------|--------------------|------------|
+| 00 | `00-rust-toolchain.toml.patch`                     | CLEAN              | copied verbatim from `v2.2.7/` |
+| 01 | `01-cosmwasm-std.imports.rs.patch`                 | rewritten          | `regen-patch-01-v3.ps1` (path move + reanchored against v3 line numbers; BN254 Api impl placed before `fn debug` in `impl Api for ExternalApi`) |
+| 02 | `02-cosmwasm-std.traits.rs.patch`                  | CLEAN              | copied verbatim |
+| 03 | `03-cosmwasm-std.testing.mock.rs.patch`            | CLEAN              | copied verbatim |
+| 04 | `04-cosmwasm-std.Cargo.toml.patch`                 | regenerated        | `regen-patches-cargo-v3.ps1` (anchored against v3's non-workspace dependency style) |
+| 05 | `05-cosmwasm-vm.imports.rs.patch`                  | CLEAN              | copied verbatim |
+| 06 | `06-cosmwasm-vm.instance.rs.patch`                 | CLEAN              | copied verbatim |
+| 07 | `07-cosmwasm-vm.compatibility.rs.patch`            | CLEAN              | copied verbatim |
+| 08 | `08-cosmwasm-vm.Cargo.toml.patch`                  | regenerated        | `regen-patches-cargo-v3.ps1` (same shape as 04) |
+| 09 | `09-cosmwasm-crypto-bn254-new-crate.patch`         | CLEAN              | copied verbatim |
 
-## Difference from `v2.2.7/`
+The `wasmvm`-side wrapper patches (`10-wasmvm.api.rs.patch`, `11-wasmvm.lib.go.patch`) are **not yet in this directory**. They become live on v3 (v3.x has the BLS12-381 Go-wrapper analogue we mirror, which v2.2.x lacked) and land in a follow-up commit.
 
-The v3 series is **not** a drop-in of the v2.2.7 series. Three categories of change expected:
+## Reproduce
 
-1. **Surface rewrites.** Patches `05-cosmwasm-vm.imports.rs.patch` and `07-cosmwasm-vm.compatibility.rs.patch` likely need substantial rewrites — the host-fn registration table and capability vocabulary commonly move between major versions. See [`../FORWARD_PORT_V3.md`](../FORWARD_PORT_V3.md) for the per-patch risk grading.
+```powershell
+# from junoclaw repo root
+powershell -ExecutionPolicy Bypass -File wasmvm-fork\patches\check-baseline-v3.ps1 -PatchDir wasmvm-fork\patches\v3.0.x
+```
 
-2. **Cargo workspace migration.** Patches `04-cosmwasm-std.Cargo.toml.patch` and `08-cosmwasm-vm.Cargo.toml.patch` will need to follow whatever workspace-inheritance shape v3 uses (which typically tightens further from one major to the next).
+```bash
+bash wasmvm-fork/patches/check-baseline-v3.sh
+PATCH_DIR=$PWD/wasmvm-fork/patches/v3.0.x bash wasmvm-fork/patches/check-baseline-v3.sh
+```
 
-3. **wasmvm-side patches return.** The two `*.dropped` patches in `v2.2.x` (Go wrappers for the BN254 host fns) become live again because v3.x has the BLS12-381 Go-wrapper analogue we were mirroring. They're added as patches `10-wasmvm.api.rs.patch` and `11-wasmvm.lib.go.patch`.
+Expected output: `summary: 10 clean / 0 3-way-ok / 0 conflicts (target=v3.0.1)`.
 
-## Verification protocol (when patches land here)
+## Difference from `v2.2.7/` (post-day-2 measurement)
 
-1. `bash ../check-baseline-v3.sh` — fast `git apply --check` per patch against v3.0.1 / v3.0.4. Must be 12/12 clean (10 cosmwasm-side + 2 wasmvm-side).
-2. `bash ../rebase-track-b.sh` — full clone-apply-test loop. Targets:
-   - `cargo +stable test` in `cosmwasm-bn254/` (the patched cosmwasm checkout): must pass 22/22 crypto-bn254 + ≥311/311 cosmwasm-vm.
-   - `make build && make test` in `wasmvm-bn254/` (the patched wasmvm checkout): must build the C shims and pass the Go FFI sanity tests.
-3. `bash ../../devnet/scripts/reproduce-benchmark.sh` against the patched binary on a single-validator devnet: must reproduce the 1.823× gas reduction (203,266 SDK gas / proof) within ±5%.
+The original `FORWARD_PORT_V3.md` plan predicted three categories of substantial change. **Two of those predictions did not pan out**:
+
+1. **"Surface rewrites of `05` and `07`"** — predicted HIGH risk. **Outcome: both CLEAN.** v3's `cosmwasm-vm` host-fn registration table and capability vocabulary did not restructure between 2.2 and 3.0. The deepest internals stayed stable.
+
+2. **"Cargo workspace migration in `04` and `08`"** — predicted MEDIUM risk. **Outcome: regenerated by hand.** v3 abandoned `workspace = true` for explicit `version + path`. The 3 deltas (one in `04` for the `cosmwasm_2_3` feature, one in `04` for the `[target.cfg(...)]` dep, one in `08` for the vm dep) were trivial in v3 syntax and applied via direct text insertion + `git diff`.
+
+3. **"`01-cosmwasm-std.imports.rs.patch` rewrite due to file move"** — predicted MEDIUM risk. **Outcome: confirmed.** Upstream commit `7f63657e7` ("Group imports and exports in exports module") moved `packages/std/src/imports.rs` to `packages/std/src/exports/imports.rs`, and v2.3 added inline BLS12-381 host fns. Reanchored: extern `"C"` block insertion at line 102 (after `ed25519_batch_verify` decl), `Api` impl insertion at line 710 (just before `fn debug` impl), helper appended at end of file. `regen-patch-01-v3.ps1` makes this regeneration reproducible.
+
+## Helper scripts (this directory)
+
+- [`../check-baseline-v3.{sh,ps1}`](../check-baseline-v3.ps1) — fast baseline check.
+- [`../regen-patch-01-v3.ps1`](../regen-patch-01-v3.ps1) — reanchor `01` against v3 file layout. Idempotent.
+- [`../regen-patches-cargo-v3.ps1`](../regen-patches-cargo-v3.ps1) — regenerate `04` and `08` against v3 Cargo.toml syntax. Idempotent.
+- [`../finalize-v3-series.ps1`](../finalize-v3-series.ps1) — top-level orchestrator: copies clean patches verbatim, calls the regenerators, runs the baseline check.
+- [`../apply-and-test-v3.ps1`](../apply-and-test-v3.ps1) — applies all 10 patches to a clean v3.0.1 checkout and runs `cargo test -p cosmwasm-crypto-bn254` + `-p cosmwasm-vm`.
+
+## Pending day-2 / day-3 work
+
+- [ ] **`cargo test` against patched v3.0.1** — `apply-and-test-v3.ps1` runs both suites. Targets: 22/22 `cosmwasm-crypto-bn254` (no-default-features) + 311+ `cosmwasm-vm`. Test logs land in `${BuildDir}/cargo-test-{crypto-bn254,vm}-v3.log`.
+- [ ] **`wasmvm`-side patches `10` and `11`** — revive the `*.dropped` patches from `v2.2.x/` against `wasmvm` v3.0.4. Add `check-baseline-v3-wasmvm.ps1` for the parallel verification.
+- [ ] **Tag `Dragonmonk111/wasmvm v3.0.4-bn254`** — once both cosmwasm and wasmvm test suites are green.
+- [ ] **Hand Jake the `replace` directive** for v30's `go.mod`:
+  ```
+  replace github.com/CosmWasm/wasmvm/v3 => github.com/Dragonmonk111/wasmvm/v3 v3.0.4-bn254
+  ```
 
 ## Output (when complete)
 
@@ -42,14 +76,6 @@ git tag -a v3.0.4-bn254 -m "Forward-port BN254 patches onto wasmvm v3.0.4 (Juno 
 git push origin v3.0.4-bn254
 ```
 
-Plus a one-line `replace` directive for Juno v30's `go.mod`:
-
-```
-replace github.com/CosmWasm/wasmvm/v3 => github.com/Dragonmonk111/wasmvm/v3 v3.0.4-bn254
-```
-
-Hand the directive to Jake via the same Telegram thread that landed PR-1202 communication.
-
 ---
 
-*Apache-2.0. This file describes the target state. The patches themselves arrive in subsequent commits as the forward-port work proceeds.*
+*Apache-2.0. Day-2 outcome: 10/10 CLEAN against v3.0.1, substantially better than the day-0 plan estimated.*

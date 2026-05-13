@@ -2,7 +2,7 @@
 
 ## Summary (3 lines)
 
-The deterministic-scrutiny benchmark is a 4-axis methodology applied to every JunoClaw contract: (1) failure-mode enumeration, (2) gas trace, (3) storage-layout discipline, (4) determinism proof. Each contract gets a `DETERMINISTIC_AUDIT.md` next to its `Cargo.toml`. As of 2026-05-13, 6/9 contracts are audited; the strongest cross-cutting finding is "permission models are too lenient" — most contracts have at least one HIGH/MEDIUM where a public state-mutating handler lacks an auth or fee gate.
+The deterministic-scrutiny benchmark is a 4-axis methodology applied to every JunoClaw contract: (1) failure-mode enumeration, (2) gas trace, (3) storage-layout discipline, (4) determinism proof. Each contract gets a `DETERMINISTIC_AUDIT.md` next to its `Cargo.toml`. As of 2026-05-13 PM, **7 of 10** contracts are audited; the strongest cross-cutting findings are (A) "permission models are too lenient" — most contracts have at least one HIGH/MEDIUM where a public state-mutating handler lacks an auth or fee gate; and (B) "derivative protocols inherit surface without defenses" — `junoswap-pair` F1 demonstrates a Uniswap v2 inflation attack that the original protocol patched a decade ago.
 
 ## Key facts
 
@@ -10,10 +10,11 @@ The deterministic-scrutiny benchmark is a 4-axis methodology applied to every Ju
 |---|---|
 | Method origin | Ffern / Lex review pattern; adapted to CosmWasm context |
 | Anchor doc per contract | `contracts/<name>/DETERMINISTIC_AUDIT.md` |
-| Audited (6) | `moultbook-v0`, `agent-company`, `agent-registry`, `task-ledger`, `escrow`, `zk-verifier` |
-| Pending (3) | `junoswap-pair`, `junoswap-factory`, `builder-grant`, `faucet` |
-| Cross-cutting HIGH findings | `agent-company` F1 (vote-weights), `zk-verifier` F1 (permissionless verify) |
-| Cross-cutting pattern | Permission/fee-gate gaps on public state-mutating handlers |
+| Audited (7) | `moultbook-v0`, `agent-company`, `agent-registry`, `task-ledger`, `escrow`, `zk-verifier`, `junoswap-pair` |
+| Pending (3) | `junoswap-factory`, `builder-grant`, `faucet` |
+| Cross-cutting HIGH findings | `agent-company` F1 (vote-weights), `zk-verifier` F1 (permissionless verify), `junoswap-pair` F1 (first-depositor inflation) |
+| Cross-cutting pattern A | Permission/fee-gate gaps on public state-mutating handlers |
+| Cross-cutting pattern B | Inheriting public-protocol surface without inheriting accumulated defenses (e.g. Uniswap v2's `MIN_LIQUIDITY` lockup) |
 | CI enforcement | `.github/workflows/audit-bot.yml` requires audit-doc updates on contract source changes |
 
 ## The 4 axes
@@ -62,6 +63,7 @@ For each hot-path handler, produce a per-step gas estimate breakdown. Match to m
 | `task-ledger` | 1 LOW-MED + 9 LOW | F1: CancelTask leaves orphaned escrow obligations | [`contracts/task-ledger/DETERMINISTIC_AUDIT.md`](../contracts/task-ledger/DETERMINISTIC_AUDIT.md) |
 | `escrow` | 1 MEDIUM + 5 LOW | F1: timeout_blocks dead + unit mismatch with created_at | [`contracts/escrow/DETERMINISTIC_AUDIT.md`](../contracts/escrow/DETERMINISTIC_AUDIT.md) |
 | `zk-verifier` | 1 HIGH + 8 LOW-MED | F1: VerifyProof permissionless + unmetered → gas-DoS + LAST_VERIFICATION spoofing | [`contracts/zk-verifier/DETERMINISTIC_AUDIT.md`](../contracts/zk-verifier/DETERMINISTIC_AUDIT.md) |
+| `junoswap-pair` | 1 HIGH + 4 MED + 3 LOW | F1: first-depositor inflation attack (no `MIN_LIQUIDITY` lockup); F4: `f64` in `Pool` query (determinism violation) | [`contracts/junoswap-pair/DETERMINISTIC_AUDIT.md`](../contracts/junoswap-pair/DETERMINISTIC_AUDIT.md) |
 
 ## Cross-cutting pattern
 
