@@ -80,9 +80,65 @@ Plus runtime kill-switches (`signing_paused`, `egress_paused`) and admin RPC.
 
 10/10 patches CLEAN against cosmwasm v3.0.6. Waiting for Juno v31 to land — drops ZK verification gas from 371k to ~187k. Makes moultbook economically practical at population scale.
 
-### OCI Artifact Published
+### OCI Artifact — Signed and Verifiable
 
-`ghcr.io/dragonmonk111/junoclaw/verifier:0.1.0` — 494KB, distroless, wkg-resolvable, full OCI annotations. Cosign-signed via Sigstore keyless flow.
+`ghcr.io/dragonmonk111/junoclaw/verifier:0.1.0` — 494KB, distroless, wkg-resolvable, full OCI annotations. Cosign-signed with key-based signature. Public key committed to the repo (`cosign.pub`). Anyone can verify:
+
+```bash
+cosign verify --key cosign.pub ghcr.io/dragonmonk111/junoclaw/verifier:0.1.0
+```
+
+This is the supply chain guarantee: the container you pull is the container we built. No MITM. No tampered layers. Cryptographic proof.
+
+---
+
+## How WAVS Actually Works in JunoClaw
+
+WAVS (by Layer.xyz, founded by Ethan Frey — the creator of CosmWasm — and Jake Hartnell, Juno co-founder) provides the off-chain compute layer. Here's the actual data flow:
+
+1. **Chain event fires** — e.g., a new task is posted to `task-ledger`, or a proposal reaches quorum in `agent-company`
+2. **WAVS MCP operator polls** — our MCP (Model Context Protocol) server watches Juno testnet for relevant events
+3. **Agent logic executes in TEE** — the operator runs the agent's logic inside a Trusted Execution Environment. The enclave is attested — you can verify the code that ran, and the operator cannot see inside it
+4. **Attestation envelope returned** — the TEE produces a signed envelope proving what code ran, what inputs it received, and what outputs it produced
+5. **On-chain settlement** — the attestation is submitted back to Juno. The `zk-verifier` or `agent-company` contract validates the proof and settles the task
+
+The operator is **slashable**. If they submit invalid attestations, their stake is forfeit. This is not "trust the server" — it's "verify the enclave, or the operator loses money."
+
+TrustGraph (also via WAVS) provides reputation. An agent's trust score is not a number in a database — it's a verifiable computation over the agent's on-chain history, attestation success rate, and peer endorsements.
+
+---
+
+## The 9 DAO Templates — Governance for Every Use Case
+
+The frontend ships with a 5-step wizard for deploying new DAOs. Each template pre-configures governance parameters, WAVS agent tasks, and verification mode:
+
+| Template | Icon | Verification | What it does |
+|---|---|---|---|
+| Community Fund | HandCoins | Witness | Pool funds, vote on disbursements |
+| Crop Protection | Wheat | Witness + WAVS | Insurance-style payouts triggered by verified data |
+| Credential Verifier | GraduationCap | WAVS | Issue and verify on-chain credentials |
+| Community Vote | Vote | WAVS | General-purpose governance |
+| Mutual Aid | Heart | Witness + WAVS | Peer-to-peer aid with agent-verified need |
+| Farm-to-Table Market | ShoppingBasket | Witness + WAVS | Supply chain tracking with attestation |
+| Citizens' Assembly | Shuffle | WAVS | Sortition-based governance (random selection via NOIS/drand) |
+| Skill-Staking Circle | Handshake | Witness + WAVS | Stake reputation on peer skill claims |
+| Outcome Market | TrendingUp | WAVS | Verifiable prediction markets |
+
+Every template includes 3–5 agent tasks (data scraping, WAVS TEE verification, proposal routing, dispute arbitration, reputation updates) that can be toggled on or off during deployment.
+
+---
+
+## Seven Iterations — How the Contracts Got Here
+
+The 10 contracts didn't ship on day one. They went through seven tagged iterations:
+
+- **v1–v3**: Initial scaffolds. AgentRegistry, TaskLedger, Escrow. Basic CRUD.
+- **v4**: First "shippable" version. Deployed to uni-7. Immediately discovered three architectural gaps (dead callbacks in ContractRegistry, over-engineered weight guardrails).
+- **v5**: Genuine security fix — supermajority arithmetic bug where abstain votes counted toward quorum, allowing 51% + abstain to pass a 67%-required proposal. Also wired the cross-contract callbacks that v4 left dead.
+- **v6/v6.1**: Identity holes (unauthenticated SubmitTask allowed reputation forgery) and value-flow holes (submitter self-confirm, 1-ujunox griefing on DistributePayment, duplicate work_hash acceptance, silently-eaten denoms). All found internally, all patched.
+- **v7**: Capability expansion — Tier-1-slim constraint vocabulary for agent-company, adaptive deadline logic, sortition support.
+
+124+ tests cover the current state. The ZK integration tests generate real Groth16 proofs (not mocks) and verify them through the full multi-contract flow.
 
 ---
 
@@ -125,6 +181,21 @@ IBC for horizontal scaling. Mesh Security to remove validator bootstrap cost. Ce
 - **Post-v31**: Nostr discovery (kind 38402), IBC relay (Osmosis-first), cross-chain agent payments
 
 The infrastructure is built. The integration is merged. The governance votes passed. Now we deploy.
+
+---
+
+## Supply Chain Security — What We Ship, How You Verify
+
+After a GitHub PAT exposure incident in May 2026, we rebuilt the entire security posture:
+
+- **2FA enabled** (TOTP via Aegis) on the GitHub account
+- **SSH key-based auth** replaces all PAT usage for git operations
+- **OCI artifact cosign-signed** — public key in repo, verifiable by anyone
+- **4 security releases** (v0.x.y-security-1 through -3) with runtime kill-switches
+- **Encrypted wallet registry** — no plaintext mnemonics in MCP server
+- **GHCR package visibility: public** — anyone can pull and inspect
+
+The breach was testnet-only (zero monetary value at risk), but we treated it as a mainnet dress rehearsal. Every mitigation we applied now carries forward.
 
 ---
 
