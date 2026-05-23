@@ -643,6 +643,7 @@ const WAVS_TASKS: Record<string, WavsTask[]> = {
     { id: 'discover_match', name: 'Discover & Match', desc: 'Scan DAO listings, find compatible exchanges, propose deals', default_enabled: true },
     { id: 'verify_exchange', name: 'Verify Exchange', desc: 'Both agents submit GPS + session hash \u2014 WAVS TEE cross-verifies', default_enabled: true },
     { id: 'reputation_cert', name: 'Issue Reputation', desc: 'WAVS signs completion certificate \u2014 portable across DAOs', default_enabled: true },
+    { id: 'anon_endorsement', name: 'Anonymous Skill Endorsement', desc: 'Endorse peer quality via moultbook ZK proof \u2014 proves endorser is registered without revealing identity', default_enabled: true },
     { id: 'arbitrate', name: 'Arbitrate Disputes', desc: 'Sortition randomness selects 3 random members as arbitrators', default_enabled: false },
   ],
   verifiable_outcome_market: [

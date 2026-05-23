@@ -419,6 +419,32 @@ impl Constraint {
     }
 }
 
+// ──────────────────────────────────────────────
+// Moultbook Endorsement Topics (ADR-005)
+// ──────────────────────────────────────────────
+
+/// Schema identifier for anonymous skill endorsements via moultbook.
+pub const SKILL_ENDORSEMENT_SCHEMA: &str = "junoclaw:skill_endorsement:v1";
+
+/// Generates a deterministic topic_hash for skill endorsements.
+/// Format: sha256("skill_endorsement:{dao_addr}:{exchange_id}")
+/// Used by Skill-Staking Circle template's `anon_endorsement` WAVS task.
+pub fn skill_endorsement_topic(dao_addr: &str, exchange_id: &str) -> String {
+    use sha2::{Sha256, Digest};
+    let input = format!("skill_endorsement:{}:{}", dao_addr, exchange_id);
+    let hash = Sha256::digest(input.as_bytes());
+    format!("sha256:{}", hex::encode(hash))
+}
+
+/// Generates a topic_hash for querying all endorsements received by an agent.
+/// Format: sha256("skill_endorsement:{dao_addr}:agent:{agent_addr}")
+pub fn skill_endorsement_agent_topic(dao_addr: &str, agent_addr: &str) -> String {
+    use sha2::{Sha256, Digest};
+    let input = format!("skill_endorsement:{}:agent:{}", dao_addr, agent_addr);
+    let hash = Sha256::digest(input.as_bytes());
+    format!("sha256:{}", hex::encode(hash))
+}
+
 /// Helper that evaluates a batch of constraints and returns the first
 /// violation, or `Ok(())` if all pass. Preserves declaration order so
 /// error messages are deterministic.
