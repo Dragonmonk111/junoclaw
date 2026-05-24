@@ -115,11 +115,54 @@ Both visible. Both verifiable. Neither reveals the endorser.
 
 ## Implementation
 
-1. Add `anon_endorsement` task to `WAVS_TASKS.skill_circle` in `DaoPanel.tsx`
-2. Add `moultbook_addr` field to the Skill-Staking Circle deployment config
-3. Add endorsement topic convention to `junoclaw-common` shared types
-4. Wire the MCP operator to call `PublishAnon` after `verify_exchange` succeeds
-5. Add query helper in frontend: `ListByTopic` for endorsement aggregation
+| # | Step | Status |
+|---|------|--------|
+| 1 | Add `anon_endorsement` task to `WAVS_TASKS.skill_circle` in `DaoPanel.tsx` | **Done** |
+| 2 | Add `moultbook` (Option<Addr>) field to `agent-company` `Config` + `InstantiateMsg` + `RotateMoultbook` admin path | **Done (2026-05-24)** |
+| 3 | Thread `enabled_tasks` through `deployDao` payload so daemon can populate `moultbook` only when `anon_endorsement` is toggled on | **Done (2026-05-24)** |
+| 4 | Add endorsement topic convention to `junoclaw-common` shared types | Done in earlier ADR-002 work — `skill_endorsement_topic()` helper |
+| 5 | Wire the daemon DAO factory to resolve a chain-known moultbook address when `enabled_tasks.anon_endorsement === true` | Pending |
+| 6 | Wire the MCP operator to craft `PublishAnon` SubMsgs after `verify_exchange` succeeds | Pending |
+| 7 | Add query helper in frontend: `ListByTopic` for endorsement aggregation | Pending |
+
+### Opt-in pattern — runtime cost is zero by default
+
+The wiring is deliberately **opt-in per DAO**. `Config.moultbook` is `Option<Addr>` with `#[serde(default)]`:
+- `None` (default) → the anonymous endorsement code path is skipped entirely. DAOs that don't want anonymous review pay no extra gas.
+- `Some(addr)` → the Skill-Staking Circle settlement path may dispatch `PublishAnon` SubMsgs through that address.
+
+Three deployment modes are supported by toggling the `reputation_cert` and `anon_endorsement` skills independently:
+
+| Mode | `reputation_cert` | `anon_endorsement` | Use case |
+|------|-------------------|--------------------|----------|
+| **Default** | ON | OFF | Cost-sensitive DAOs; attributed reputation only |
+| **Hybrid** | ON | ON | Both attributed AND anonymous endorsements (max signal) |
+| **Anonymous-only** | OFF | ON | High-retaliation contexts (whistleblower-style review) |
+
+### Gas analysis
+
+| Step | Current (BN254 in CosmWasm) | After v31 BN254 precompile |
+|------|----------------------------:|--------------------------:|
+| moultbook validation + storage | ~80k | ~80k |
+| SubMsg dispatch to zk-verifier | ~25k | ~25k |
+| **Groth16 verification** | **~371k** | **~187k** |
+| Reply handler — persist entry | ~50k | ~50k |
+| Indexing (topic + author + moult_key) | ~40k | ~40k |
+| **Total per anonymous endorsement** | **~566k** | **~382k** |
+
+For comparison, a normal `task-ledger` `Post` is ~120k gas. An anonymous endorsement is ~4.7× more expensive today, dropping to ~3.2× post-v31. At Juno mainnet gas prices (0.075 ujuno/gas) that is roughly **0.042 JUNO per endorsement today**, dropping to **0.029 JUNO** after the precompile lands.
+
+This is economically practical for **one-off** peer endorsements (post-exchange, dispute verdicts, credential vouching) but **prohibitive** for high-frequency reputation events (per-message ratings, real-time match feedback, streaming reputation signals). Use `reputation_cert` (the WAVS-signed attributed path) for high-frequency and `anon_endorsement` for high-stakes.
+
+### Admin rotation surface
+
+```rust
+ExecuteMsg::RotateMoultbook { new_moultbook: Option<String> }
+```
+
+Admin-only, mirroring `RotateZkVerifier`. `None` clears the field and disables the anonymous endorsement path entirely. Decentralised rotation (via a `ConfigChange` governance proposal) is a future extension.
+
+Regression test: `tests::test_rotate_moultbook_admin_only` — covers default-None, unauthorized-stranger, admin-set, and admin-clear transitions.
 
 ---
 

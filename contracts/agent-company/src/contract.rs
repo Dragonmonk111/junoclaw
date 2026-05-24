@@ -67,6 +67,10 @@ pub fn instantiate(
         .zk_verifier
         .map(|v| deps.api.addr_validate(&v))
         .transpose()?;
+    let moultbook = msg
+        .moultbook
+        .map(|m| deps.api.addr_validate(&m))
+        .transpose()?;
     let escrow_contract = deps.api.addr_validate(&msg.escrow_contract)?;
     let agent_registry = deps.api.addr_validate(&msg.agent_registry)?;
     let task_ledger = msg.task_ledger
@@ -128,6 +132,7 @@ pub fn instantiate(
         nois_proxy,
         supermajority_quorum_percent,
         dex_factory: None,
+        moultbook,
     };
     CONFIG.save(deps.storage, &config)?;
     PROPOSAL.save(deps.storage, &None)?;
@@ -172,6 +177,8 @@ pub fn execute(
             execute_rotate_wavs_operator(deps, info, new_operator),
         ExecuteMsg::RotateZkVerifier { new_verifier } =>
             execute_rotate_zk_verifier(deps, info, new_verifier),
+        ExecuteMsg::RotateMoultbook { new_moultbook } =>
+            execute_rotate_moultbook(deps, info, new_moultbook),
         // ── Randomness ──
         ExecuteMsg::NoisReceive { callback } =>
             execute_nois_receive(deps, env, info, callback),
@@ -1291,6 +1298,29 @@ fn execute_rotate_zk_verifier(
         .add_attribute(
             "new_verifier",
             new_verifier.unwrap_or_else(|| "<cleared>".to_string()),
+        ))
+}
+
+fn execute_rotate_moultbook(
+    deps: DepsMut,
+    info: MessageInfo,
+    new_moultbook: Option<String>,
+) -> Result<Response, ContractError> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+    if info.sender != cfg.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let resolved = match &new_moultbook {
+        Some(raw) => Some(deps.api.addr_validate(raw)?),
+        None => None,
+    };
+    cfg.moultbook = resolved;
+    CONFIG.save(deps.storage, &cfg)?;
+    Ok(Response::new()
+        .add_attribute("action", "rotate_moultbook")
+        .add_attribute(
+            "new_moultbook",
+            new_moultbook.unwrap_or_else(|| "<cleared>".to_string()),
         ))
 }
 

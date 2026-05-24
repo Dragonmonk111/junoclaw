@@ -109,6 +109,13 @@ pub struct Config {
     pub supermajority_quorum_percent: u64,
     /// Optional Junoswap factory address (set via CodeUpgrade proposal)
     pub dex_factory: Option<Addr>,
+    /// Optional `moultbook-v0` contract address. When set, the Skill-Staking
+    /// Circle template (and any other consumer) can dispatch `PublishAnon`
+    /// SubMsgs for anonymous, ZK-protected peer endorsements (see ADR-005).
+    /// When `None`, the anonymous endorsement code path is skipped entirely —
+    /// no additional gas is spent on DAOs that have not opted in.
+    #[serde(default)]
+    pub moultbook: Option<Addr>,
 }
 
 // ──────────────────────────────────────────────

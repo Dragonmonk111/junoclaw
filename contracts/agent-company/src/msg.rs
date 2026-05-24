@@ -70,6 +70,12 @@ pub struct InstantiateMsg {
     /// atomically. When `None`, attestation flow is unchanged (hash-only).
     #[serde(default)]
     pub zk_verifier: Option<String>,
+    /// Optional `moultbook-v0` contract address. When set, Skill-Staking
+    /// Circle and similar templates can publish anonymous, ZK-protected
+    /// endorsements (ADR-005). When `None`, the anonymous endorsement path
+    /// is skipped and the DAO pays no additional gas.
+    #[serde(default)]
+    pub moultbook: Option<String>,
     pub escrow_contract: String,
     pub agent_registry: String,
     /// Optional task-ledger address for WavsPush proposals
@@ -149,6 +155,13 @@ pub enum ExecuteMsg {
     /// / emergency knob. Decentralized rotation is a future `ConfigChange`
     /// extension.
     RotateZkVerifier { new_verifier: Option<String> },
+
+    /// Admin-only: rotate the moultbook contract address. `new_moultbook =
+    /// None` clears it, disabling the anonymous endorsement path entirely
+    /// (DAOs reverting to attributed-only reputation pay no extra gas).
+    /// Admin-only as a bootstrap / emergency knob; decentralized rotation
+    /// is a future `ConfigChange` extension. See ADR-005.
+    RotateMoultbook { new_moultbook: Option<String> },
 
     // ── Randomness ──
 

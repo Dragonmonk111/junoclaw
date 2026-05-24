@@ -706,6 +706,7 @@ function DaoTemplateGallery({ onBack }: { onBack: () => void }) {
       voting_period_blocks: votingPeriod,
       quorum_percent: quorum,
       verification_model: verification,
+      enabled_tasks: enabledTasks,
     })
     setTimeout(() => { setDeploying(false); onBack() }, 2000)
   }

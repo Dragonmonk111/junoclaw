@@ -79,6 +79,7 @@ fn store_and_instantiate_with_overrides(
             adaptive_min_blocks: Some(13),
             verification: None,
             supermajority_quorum_percent: None,
+            moultbook: None,
         },
         &[],
         "agent-company",
@@ -141,6 +142,7 @@ fn test_invalid_weights_fails() {
             adaptive_min_blocks: None,
             verification: None,
             supermajority_quorum_percent: None,
+            moultbook: None,
         },
         &[],
         "bad-company",
@@ -1964,6 +1966,7 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
                 adaptive_min_blocks: None,
                 verification: None,
                 supermajority_quorum_percent: None,
+                moultbook: None,
             },
             &[],
             "bad-co-1",
@@ -1998,6 +2001,7 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
                 adaptive_min_blocks: None,
                 verification: None,
                 supermajority_quorum_percent: Some(50),
+                moultbook: None,
             },
             &[],
             "bad-co-2",
@@ -2032,6 +2036,7 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
                 adaptive_min_blocks: None,
                 verification: None,
                 supermajority_quorum_percent: None,
+                moultbook: None,
             },
             &[],
             "bad-co-3",
@@ -2180,6 +2185,7 @@ fn store_and_instantiate_with_zk_verifier(
             adaptive_min_blocks: Some(13),
             verification: None,
             supermajority_quorum_percent: None,
+            moultbook: None,
         },
         &[],
         "agent-company-zk",
@@ -2524,4 +2530,75 @@ fn test_rotate_zk_verifier_admin_only() {
         .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
         .unwrap();
     assert_eq!(cfg.zk_verifier, None);
+}
+
+#[test]
+fn test_rotate_moultbook_admin_only() {
+    // ADR-005: moultbook is the optional address that the Skill-Staking Circle
+    // template (or any other consumer) targets when dispatching anonymous,
+    // ZK-protected `PublishAnon` SubMsgs. The rotation surface must mirror
+    // RotateZkVerifier exactly: admin can set / clear, non-admin gets
+    // Unauthorized, and the saved Config reflects each transition. When
+    // moultbook is None the anonymous endorsement path is skipped entirely
+    // so the DAO pays zero additional gas.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let stranger = mk(&app, "stranger");
+    let members = two_member_msg(&alice, &bob);
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+
+    // Default: moultbook unset.
+    let cfg: crate::state::Config = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(cfg.moultbook, None);
+
+    // Stranger cannot rotate.
+    let moultbook_v1 = mk(&app, "moultbook-v1");
+    let err = app
+        .execute_contract(
+            stranger.clone(),
+            contract.clone(),
+            &ExecuteMsg::RotateMoultbook {
+                new_moultbook: Some(moultbook_v1.to_string()),
+            },
+            &[],
+        )
+        .unwrap_err();
+    assert!(
+        matches!(err.downcast::<ContractError>().unwrap(), ContractError::Unauthorized {}),
+    );
+
+    // Admin sets.
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::RotateMoultbook {
+            new_moultbook: Some(moultbook_v1.to_string()),
+        },
+        &[],
+    )
+    .unwrap();
+    let cfg: crate::state::Config = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(cfg.moultbook, Some(moultbook_v1));
+
+    // Admin clears (returns DAO to attributed-only reputation, zero extra gas).
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::RotateMoultbook { new_moultbook: None },
+        &[],
+    )
+    .unwrap();
+    let cfg: crate::state::Config = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(cfg.moultbook, None);
 }

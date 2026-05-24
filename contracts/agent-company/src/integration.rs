@@ -179,6 +179,7 @@ fn deploy_full_stack(app: &mut App) -> Deployment {
                 adaptive_min_blocks: Some(13),
                 verification: None,
                 supermajority_quorum_percent: None,
+                moultbook: None,
             },
             &[],
             "agent-company",

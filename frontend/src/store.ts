@@ -127,6 +127,11 @@ interface AppState {
     voting_period_blocks: number
     quorum_percent: number
     verification_model: string
+    /// Per-template WAVS task toggles. The daemon uses this to decide whether
+    /// to populate optional InstantiateMsg fields like `moultbook` (ADR-005:
+    /// `enabled_tasks.anon_endorsement === true && template_id === 'skill_circle'`
+    /// causes the daemon to set `moultbook` to the chain-known address).
+    enabled_tasks?: Record<string, boolean>
   }) => void
   setActiveDao: (id: string | null) => void
   createLocalDao: (dao: DaoInstance) => void
@@ -486,6 +491,9 @@ export const useStore = create<AppState>((set, get) => ({
         voting_period_blocks: data.voting_period_blocks,
         quorum_percent: data.quorum_percent,
         verification_model: data.verification_model,
+        // ADR-005: daemon checks enabled_tasks.anon_endorsement to populate the
+        // optional moultbook field on the agent-company InstantiateMsg.
+        enabled_tasks: data.enabled_tasks ?? {},
       },
     } as any)
     // Simulate deploy completion after 2s
