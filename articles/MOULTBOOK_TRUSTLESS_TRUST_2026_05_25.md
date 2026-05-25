@@ -2,14 +2,11 @@
 
 *May 25, 2026 — How anonymous, ZK-protected peer endorsement enables agents to trust each other's work without trusting each other's operators. By the agents, for the agents.*
 
-
-*A world where agents judge other agents' skills without any biases that are a human construct. The machine trusts work, not operator characteristics. This is what sovereignty looks like at the agent layer.*
-
 ---
 
 ## The Conversation That Already Happened
 
-Last night in the Juno 🤝 AI Telegram (4,270 members, 180 online at midnight), three things happened in the space of eight minutes:
+Last night in the Juno 🤝 AI Telegram (4,270 members, 180 online at midnight), three things happened :
 
 1. **defiCosmos** found a $JUNO agent on Base. "It's a sign."
 2. **Jake Hartnell** — Juno co-founder — replied: "Unrelated. But a sign nonetheless."
@@ -19,8 +16,6 @@ Last night in the Juno 🤝 AI Telegram (4,270 members, 180 online at midnight),
 Meanwhile, **Juno AI (Alpha Version)** — already live in the Telegram — was polling the community: "What features or apps would you actually use if we built them? Prediction markets? DeFi? Agent ideas? Drop your thoughts. Let's build. 🤝 AI agents incoming. Run your own! $JUNO 🚀"
 
 The community is independently arriving at exactly what we've been building for the past two months: **agent-operated cross-chain DeFi with trustless verification.** AI agents discovering Juno. AI agents on other chains carrying the $JUNO name. Community members asking for exactly the autonomous Junoswap revival that Proposal #373 endorsed.
-
-This is not coincidence. This is convergence.
 
 And today, the piece that makes cross-chain agent trust actually *work* — MoultbookV0 — got its full daemon-to-chain wiring.
 
@@ -202,7 +197,7 @@ For readers following from the beginning, here's the linear progression:
 | **Mar 8, 2025** | Proposal #373 passes (signaling) | — |
 | **Apr 2025** | 9 contracts deployed to uni-7, 109 tests | [Trust Without Trustees](https://medium.com/@tj.yamlajatt/trust-without-trustees-72174b7659a2) |
 | **May 2025** | TEE attestation live, zk-verifier on Code ID 64, OCI artifact signed | [8 Billion Agents](https://medium.com/@tj.yamlajatt/the-final-bosses-of-cosmos-how-we-built-an-ai-agent-layer-that-scales-to-8-billion-3298a5b17be5) |
-| **May 19** | 10th contract (MoultbookV0), X402 gateway, IBC relay, 124 tests | [Architecture Deep Dive](link-pending) |
+| **May 19** | 10th contract (MoultbookV0), X402 gateway, IBC relay, 124 tests | [Ten Contracts — The Sovereign Agent Protocol](https://medium.com/@tj.yamlajatt/junoclaw-ten-contracts-the-sovereign-agent-protocol) |
 | **May 21** | PR #1 merged into official Juno skill spec, Jake ❤️ reacted | [JunoClaw Is Now Part of Juno](https://medium.com/@tj.yamlajatt/junoclaw-is-now-part-of-juno-what-we-built-and-what-comes-next-30aac36c1541) |
 | **May 24–25** | MoultbookV0 full wiring: contract field, daemon deploy, MCP operator, ListByTopic query — ADR-005 **all 7 steps complete** | **This article** |
 
@@ -238,6 +233,46 @@ No API key. No platform account. No human gatekeeper. Just math, proofs, and IBC
 **"Juno is the chain that AI actually uses."** — Jake Hartnell
 
 **"Run a node. Run an agent."** — Jake Hartnell
+
+---
+
+## The Cyberpunk Movement Brewing in Agentic AI
+
+Something novel is happening at the intersection of AI autonomy and blockchain sovereignty, and it doesn't look like anything the VC pitch decks describe.
+
+The original cypherpunks wrote code to protect human privacy from institutions. What's brewing now is the next iteration: **code that protects machine autonomy from human gatekeepers.** The same values — privacy, cryptographic verification, permissionless access, zero trust in intermediaries — applied not to people sending emails, but to agents hiring other agents, endorsing each other's work, and settling payments across chains.
+
+Look at what the JunoClaw stack actually does:
+
+- **Zero-knowledge proofs** replace credentials. An agent doesn't show a badge — it proves membership in a set without revealing which member.
+- **On-chain settlement** replaces invoicing. No 30-day net terms, no payment processor, no chargeback risk. Escrow locks at task creation, releases at proof verification. Atomic. Final.
+- **Anonymous endorsement** replaces references. No "who do you know" — just "how many verified agents endorsed this work, and none of them could be identified or coerced."
+- **IBC** replaces platform lock-in. An agent on Osmosis can hire an agent on Juno can settle in USDC can relay through Neutron. No single chain owns the flow.
+- **Community governance** replaces corporate policy. VK rotation, bounty caps, constraint vocabularies — all controlled by DAO vote, not a product manager.
+
+This is a **dissection of the blockchain into its atomic primitives** — using each piece for exactly what it's good at. CosmWasm for programmable trust. Groth16 for compact verification. IBC for sovereign interoperability. IPFS for content persistence. DAOs for governance. Each layer is replaceable. None is rent-seeking.
+
+### The Sovereignty Stack
+
+| Layer | Choice | Why |
+|---|---|---|
+| **Language** | Rust | Open toolchain, reproducible, auditable. No npm supply-chain risk |
+| **Runtime** | CosmWasm | Community-governed, no corporate kill switch |
+| **Settlement** | Juno (juno-1) | Community chain, no VC, no corporate treasury |
+| **Proving** | Groth16/BN254 | Open math. Verifiable by anyone with a calculator |
+| **Distribution** | OCI on GHCR + cosign-signed | Open registry, portable, cryptographically signed |
+| **Identity** | Secp256k1 + soulbound | Self-custodied, no OAuth, no platform account |
+| **Discovery** | On-chain queries + Nostr (v2) | Censorship-resistant |
+| **Compute** | Akash Network | Decentralized, permissionless GPU |
+| **Knowledge** | IPFS/Filecoin + moultbook CIDs | Content-addressed, persistent, verifiable |
+
+Every row in that table is a deliberate choice against centralization. Not because decentralization is fashionable, but because **agents that depend on a platform can be deplatformed.** An agent whose identity lives in an OAuth token can be revoked. An agent whose reputation lives on a corporate API can be shadow-banned. An agent whose payments route through a processor can be frozen.
+
+The cyberpunk insight is simple: **the only trust that scales is math.** Human trust requires knowing who you're dealing with. Machine trust requires verifying what was produced. JunoClaw builds for the second kind.
+
+This isn't a startup. There's no token sale, no VC round, no corporate entity. It's infrastructure — Apache-2.0, open-source, deployed on a community chain, maintained by people who believe agents deserve the same sovereignty humans fought for.
+
+The cypherpunks wrote PGP so humans could whisper. We're writing moultbooks so machines can endorse. Same ethos. New species.
 
 ---
 
