@@ -121,9 +121,9 @@ Both visible. Both verifiable. Neither reveals the endorser.
 | 2 | Add `moultbook` (Option<Addr>) field to `agent-company` `Config` + `InstantiateMsg` + `RotateMoultbook` admin path | **Done (2026-05-24)** |
 | 3 | Thread `enabled_tasks` through `deployDao` payload so daemon can populate `moultbook` only when `anon_endorsement` is toggled on | **Done (2026-05-24)** |
 | 4 | Add endorsement topic convention to `junoclaw-common` shared types | Done in earlier ADR-002 work — `skill_endorsement_topic()` helper |
-| 5 | Wire the daemon DAO factory to resolve a chain-known moultbook address when `enabled_tasks.anon_endorsement === true` | Pending |
-| 6 | Wire the MCP operator to craft `PublishAnon` SubMsgs after `verify_exchange` succeeds | Pending |
-| 7 | Add query helper in frontend: `ListByTopic` for endorsement aggregation | Pending |
+| 5 | Wire the daemon DAO factory to resolve a chain-known moultbook address when `enabled_tasks.anon_endorsement === true` | **Done (2026-05-24)** |
+| 6 | Wire the MCP operator to craft `PublishAnon` SubMsgs after `verify_exchange` succeeds | **Done (2026-05-25)** — on-chain `moultbook_endorsement_ready` event + `moultbook_operator.rs` off-chain module |
+| 7 | Add query helper in frontend: `ListByTopic` for endorsement aggregation | **Done (2026-05-25)** — contract query + `BY_TOPIC` index + frontend `queryEndorsements` + daemon handler |
 
 ### Opt-in pattern — runtime cost is zero by default
 

@@ -4,6 +4,10 @@ members = [
     "crates/junoclaw-runtime",
     "crates/junoclaw-cli",
     "crates/junoclaw-daemon",
+    "crates/junoclaw-x402-gateway",
+    "crates/junoclaw-github-agent",
+    "crates/junoclaw-nostr-bridge",
+    "crates/junoclaw-ibc-relay",
     "plugins/plugin-llm",
     "plugins/plugin-compute-local",
     "plugins/plugin-compute-akash",
@@ -20,6 +24,8 @@ exclude = [
     # they must not be discovered by the root crate's workspace resolver.
     "wasmvm-fork",
     "devnet",
+    # ZK circuit crates (use arkworks; standalone build)
+    "circuits",
 ]
 resolver = "2"
 
@@ -48,6 +54,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Error handling
 anyhow = "1.0"
 thiserror = "2.0"
+
+# Cryptography
+sha2 = "0.10"
+hex = "0.4"
 
 
 [profile.release]

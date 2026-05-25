@@ -241,6 +241,19 @@ export type WsClientMessage =
   | { type: 'expire_proposal'; data: { proposal_id: number } }
   | { type: 'query_proposals' }
   | { type: 'query_config' }
+  | { type: 'deploy_dao'; data: DeployDaoRequest }
+  | { type: 'query_endorsements'; data: { topic_hash: string; limit?: number } }
+
+export interface DeployDaoRequest {
+  dao_id: string
+  name: string
+  members: { addr: string; weight: number; role: string }[]
+  template_id: string
+  voting_period_blocks: number
+  quorum_percent: number
+  verification_model: string
+  enabled_tasks?: Record<string, boolean>
+}
 
 // ── Junoswap v2 DEX Types ──
 
@@ -309,3 +322,16 @@ export type WsServerMessage =
   | { type: 'dao_config'; data: DaoConfig }
   | { type: 'proposal_list'; data: DaoProposal[] }
   | { type: 'proposal_update'; data: DaoProposal }
+  | { type: 'deploy_dao_ack'; data: { dao_id: string; status: string; instantiate_msg: unknown } }
+  | { type: 'endorsement_list'; data: { topic_hash: string; entries: MoultbookEntry[] } }
+
+// ── Moultbook Endorsement Types (ADR-005) ──
+
+export interface MoultbookEntry {
+  id: string
+  author: string
+  topic_hash: string | null
+  content_type: string
+  posted_at: string
+  attestation_ref: { zk_proof: { verifier: string; proof_id: string } } | null
+}

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AgentInfo, ChatMessage, DaoInstance, DelegationRecord, SiloConfig, ToolCallRecord, ToolCategory, WsClientMessage, WsServerMessage } from './types'
+import type { AgentInfo, ChatMessage, DaoInstance, DelegationRecord, MoultbookEntry, SiloConfig, ToolCallRecord, ToolCategory, WsClientMessage, WsServerMessage } from './types'
 import { DEFAULT_SILOS, getToolCategory } from './types'
 
 // ── localStorage persistence (must be defined before store) ──
@@ -138,6 +138,8 @@ interface AppState {
   joinAgentToDao: (daoId: string, agentId: string) => void
   removeAgentFromDao: (daoId: string, agentId: string) => void
   archiveDao: (daoId: string) => void
+  queryEndorsements: (topicHash: string, limit?: number) => void
+  endorsements: Record<string, MoultbookEntry[]>
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -482,7 +484,7 @@ export const useStore = create<AppState>((set, get) => ({
     persistDaos(updated)
     // Best-effort: notify daemon
     send({
-      type: 'deploy_dao' as any,
+      type: 'deploy_dao',
       data: {
         dao_id: dao.id,
         name: data.name,
@@ -495,7 +497,7 @@ export const useStore = create<AppState>((set, get) => ({
         // optional moultbook field on the agent-company InstantiateMsg.
         enabled_tasks: data.enabled_tasks ?? {},
       },
-    } as any)
+    })
     // Simulate deploy completion after 2s
     setTimeout(() => {
       const current = get().daos
@@ -544,6 +546,18 @@ export const useStore = create<AppState>((set, get) => ({
     const newActive = activeDaoId === daoId ? (updated.find(d => d.status !== 'archived')?.id ?? null) : activeDaoId
     set({ daos: updated, activeDaoId: newActive })
     persistDaos(updated)
+  },
+
+  endorsements: {},
+
+  queryEndorsements: (topicHash, limit) => {
+    const { ws } = get()
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    const msg: WsClientMessage = {
+      type: 'query_endorsements',
+      data: { topic_hash: topicHash, limit },
+    }
+    ws.send(JSON.stringify(msg))
   },
 }))
 
@@ -613,6 +627,15 @@ function handleServerMessage(
     case 'error':
       console.error('Server error:', msg.data.message)
       set({ isStreaming: false, streamingAgentId: null, lastError: msg.data.message })
+      break
+
+    case 'endorsement_list':
+      set((state) => ({
+        endorsements: {
+          ...state.endorsements,
+          [msg.data.topic_hash]: msg.data.entries,
+        },
+      }))
       break
 
     default:

@@ -1206,6 +1206,21 @@ fn execute_submit_attestation(
         }
     }
 
+    // ── ADR-005: moultbook endorsement trigger ──
+    // When moultbook is configured AND the attestation carries a verified proof,
+    // emit a `moultbook_endorsement_ready` event. The off-chain MCP operator
+    // (WAVS task) watches for this event, generates the moultbook membership
+    // proof for the endorser's moult-key, and submits `PublishAnon` to the
+    // moultbook contract. This keeps the on-chain contract stateless w.r.t.
+    // moultbook proofs — only the trigger responsibility lives here.
+    if cfg.moultbook.is_some() && proof_some && inputs_some {
+        let endorsement_event = Event::new("moultbook_endorsement_ready")
+            .add_attribute("proposal_id", proposal_id.to_string())
+            .add_attribute("moultbook", cfg.moultbook.unwrap().to_string())
+            .add_attribute("contract_address", env.contract.address.to_string());
+        response = response.add_event(endorsement_event);
+    }
+
     Ok(response)
 }
 

@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    entry_point, to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Order, QueryRequest,
-    Response, StdError, StdResult, WasmQuery,
+    entry_point, to_json_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order,
+    QueryRequest, Reply, Response, StdError, StdResult, SubMsg, WasmMsg, WasmQuery,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Bound;
@@ -12,8 +12,9 @@ use crate::msg::{
     WhoamiTokensResponse,
 };
 use crate::state::{
-    AttestationRef, Config, MoultEntry, Stats, Visibility, BY_AUTHOR, BY_REF, CONFIG, ENTRIES,
-    STATS,
+    AttestationRef, Config, Disclosure, MoultEntry, MoultKeyState, PendingVerification, Stats,
+    Visibility, BY_AUTHOR, BY_MOULT_KEY, BY_REF, BY_TOPIC, CONFIG, DISCLOSURES, ENTRIES,
+    MOULT_KEY_STATE, PENDING_VERIFICATION, STATS,
 };
 
 const CONTRACT_NAME: &str = "crates.io:moultbook-v0";
@@ -22,6 +23,7 @@ const COMMITMENT_LEN: usize = 32;
 const ID_PREFIX: &str = "moult";
 const DEFAULT_LIMIT: u32 = 30;
 const MAX_LIMIT: u32 = 100;
+const REPLY_ID_ZK_VERIFY: u64 = 1;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -39,6 +41,17 @@ pub fn instantiate(
         .map(|s| deps.api.addr_validate(s))
         .transpose()?;
 
+    let zk_verifier = msg
+        .zk_verifier
+        .as_deref()
+        .map(|s| deps.api.addr_validate(s))
+        .transpose()?;
+    let agent_registry = msg
+        .agent_registry
+        .as_deref()
+        .map(|s| deps.api.addr_validate(s))
+        .transpose()?;
+
     CONFIG.save(
         deps.storage,
         &Config {
@@ -48,6 +61,11 @@ pub fn instantiate(
             max_refs: msg.max_refs,
             max_content_type_len: msg.max_content_type_len,
             max_group_size: msg.max_group_size,
+            zk_verifier,
+            agent_registry,
+            membership_vk_hash: msg.membership_vk_hash,
+            entries_per_key_per_epoch: msg.entries_per_key_per_epoch.unwrap_or(10),
+            epoch_blocks: msg.epoch_blocks.unwrap_or(14400),
         },
     )?;
 
@@ -110,6 +128,32 @@ pub fn execute(
             max_size_bytes,
             max_refs,
             max_group_size,
+        ),
+        ExecuteMsg::PublishAnon {
+            topic_hash,
+            content_cid,
+            proof_base64,
+            public_inputs_base64,
+        } => execute_publish_anon(
+            deps,
+            env,
+            info,
+            topic_hash,
+            content_cid,
+            proof_base64,
+            public_inputs_base64,
+        ),
+        ExecuteMsg::VoluntaryDisclose {
+            entry_id,
+            primary_key,
+            derivation_proof_base64,
+        } => execute_voluntary_disclose(
+            deps,
+            env,
+            info,
+            entry_id,
+            primary_key,
+            derivation_proof_base64,
         ),
     }
 }
@@ -211,6 +255,7 @@ fn execute_post(
         refs: refs.clone(),
         posted_at: env.block.time,
         redacted_at: None,
+        topic_hash: None,
     };
     ENTRIES.save(deps.storage, &id, &entry)?;
     BY_AUTHOR.save(deps.storage, (&info.sender, id.as_str()), &())?;
@@ -344,6 +389,22 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             limit,
         } => to_json_binary(&query_list_by_ref(deps, ref_id, start_after, limit)?),
         QueryMsg::GetStats {} => to_json_binary(&STATS.load(deps.storage)?),
+        QueryMsg::ListByMoultKey {
+            moult_key,
+            start_after,
+            limit,
+        } => to_json_binary(&query_list_by_moult_key(deps, moult_key, start_after, limit)?),
+        QueryMsg::MoultKeyStats { moult_key } => {
+            to_json_binary(&query_moult_key_stats(deps, moult_key)?)
+        }
+        QueryMsg::GetDisclosure { entry_id } => {
+            to_json_binary(&DISCLOSURES.may_load(deps.storage, &entry_id)?)
+        }
+        QueryMsg::ListByTopic {
+            topic_hash,
+            start_after,
+            limit,
+        } => to_json_binary(&query_list_by_topic(deps, topic_hash, start_after, limit)?),
     }
 }
 
@@ -396,6 +457,252 @@ fn query_list_by_ref(
         .collect::<StdResult<Vec<_>>>()?;
 
     Ok(EntriesResponse { entries })
+}
+
+fn query_list_by_topic(
+    deps: Deps,
+    topic_hash: String,
+    start_after: Option<String>,
+    limit: Option<u32>,
+) -> StdResult<EntriesResponse> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let start = start_after.as_deref().map(Bound::exclusive);
+
+    let entries = BY_TOPIC
+        .prefix(topic_hash.as_str())
+        .range(deps.storage, start, None, Order::Ascending)
+        .take(limit)
+        .map(|kv| {
+            let (id, _) = kv?;
+            ENTRIES.load(deps.storage, &id)
+        })
+        .collect::<StdResult<Vec<_>>>()?;
+
+    Ok(EntriesResponse { entries })
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
+    match msg.id {
+        REPLY_ID_ZK_VERIFY => handle_zk_verify_reply(deps, env, msg),
+        _ => Err(ContractError::Std(StdError::generic_err(format!(
+            "unknown reply id: {}",
+            msg.id
+        )))),
+    }
+}
+
+fn handle_zk_verify_reply(
+    deps: DepsMut,
+    env: Env,
+    msg: Reply,
+) -> Result<Response, ContractError> {
+    // If the sub-message failed, the ZK proof was invalid.
+    if msg.result.is_err() {
+        PENDING_VERIFICATION.remove(deps.storage);
+        return Err(ContractError::MembershipProofInvalid {});
+    }
+
+    let pending = PENDING_VERIFICATION.load(deps.storage)?;
+    PENDING_VERIFICATION.remove(deps.storage);
+
+    // Deterministic id for anonymous entries
+    let mut hasher = Sha256::new();
+    hasher.update(pending.moult_key.as_bytes());
+    hasher.update(pending.topic_hash.as_bytes());
+    hasher.update(env.block.time.nanos().to_be_bytes());
+    let id = format!("{}:{}", ID_PREFIX, hex_encode(&hasher.finalize()));
+
+    let entry = MoultEntry {
+        id: id.clone(),
+        author: pending.moult_key.clone(),
+        author_alias: None,
+        commitment: pending.proof.clone(),
+        content_type: "application/ipfs-cid".to_string(),
+        size_bytes: 0,
+        attestation_ref: Some(AttestationRef::ZkProof {
+            verifier: CONFIG.load(deps.storage)?.zk_verifier.unwrap(),
+            proof_id: id.clone(),
+        }),
+        visibility: Visibility::Public,
+        refs: vec![],
+        posted_at: env.block.time,
+        redacted_at: None,
+        topic_hash: Some(pending.topic_hash.clone()),
+    };
+
+    ENTRIES.save(deps.storage, &id, &entry)?;
+    BY_AUTHOR.save(deps.storage, (&pending.moult_key, id.as_str()), &())?;
+    BY_MOULT_KEY.save(deps.storage, (&pending.moult_key, id.as_str()), &())?;
+    BY_TOPIC.save(deps.storage, (&pending.topic_hash, id.as_str()), &())?;
+
+    STATS.update(deps.storage, |mut s| -> StdResult<_> {
+        s.total_entries += 1;
+        s.total_active += 1;
+        Ok(s)
+    })?;
+
+    Ok(Response::new()
+        .add_attribute("action", "publish_anon")
+        .add_attribute("id", id)
+        .add_attribute("moult_key", pending.moult_key)
+        .add_attribute("topic_hash", pending.topic_hash)
+        .add_attribute("content_cid", pending.content_cid))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_publish_anon(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    topic_hash: String,
+    content_cid: String,
+    proof_base64: String,
+    public_inputs_base64: String,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    let zk_verifier = cfg
+        .zk_verifier
+        .ok_or(ContractError::ZkVerifierNotConfigured {})?;
+    let _membership_vk_hash = cfg
+        .membership_vk_hash
+        .ok_or(ContractError::MembershipVkNotConfigured {})?;
+
+    // Epoch-based rate limiting
+    let current_epoch = env.block.height / cfg.epoch_blocks;
+    let mut key_state = MOULT_KEY_STATE
+        .may_load(deps.storage, &info.sender)?
+        .unwrap_or(MoultKeyState {
+            entries_this_epoch: 0,
+            last_epoch: current_epoch,
+        });
+
+    if key_state.last_epoch < current_epoch {
+        key_state.entries_this_epoch = 0;
+        key_state.last_epoch = current_epoch;
+    }
+
+    if key_state.entries_this_epoch >= cfg.entries_per_key_per_epoch {
+        return Err(ContractError::EpochRateLimited {
+            count: key_state.entries_this_epoch,
+            max: cfg.entries_per_key_per_epoch,
+        });
+    }
+
+    key_state.entries_this_epoch += 1;
+    MOULT_KEY_STATE.save(deps.storage, &info.sender, &key_state)?;
+
+    // Store pending verification state for the reply handler
+    PENDING_VERIFICATION.save(
+        deps.storage,
+        &PendingVerification {
+            moult_key: info.sender.clone(),
+            topic_hash: topic_hash.clone(),
+            content_cid: content_cid.clone(),
+            proof: Binary::from(proof_base64.as_bytes()),
+            public_inputs: Binary::from(public_inputs_base64.as_bytes()),
+        },
+    )?;
+
+    // Fire sub-message to zk-verifier::VerifyProof
+    let verify_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: zk_verifier.to_string(),
+        msg: to_json_binary(&serde_json::json!({
+            "verify_proof": {
+                "proof_base64": proof_base64,
+                "public_inputs_base64": public_inputs_base64
+            }
+        }))?,
+        funds: vec![],
+    });
+
+    Ok(Response::new()
+        .add_submessage(SubMsg::reply_on_success(verify_msg, REPLY_ID_ZK_VERIFY))
+        .add_attribute("action", "publish_anon_pending")
+        .add_attribute("moult_key", info.sender)
+        .add_attribute("topic_hash", topic_hash))
+}
+
+fn execute_voluntary_disclose(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    entry_id: String,
+    primary_key: String,
+    _derivation_proof_base64: String,
+) -> Result<Response, ContractError> {
+    let entry = ENTRIES
+        .may_load(deps.storage, &entry_id)?
+        .ok_or_else(|| ContractError::EntryNotFound {
+            id: entry_id.clone(),
+        })?;
+
+    // Only the moult-key author can disclose
+    if info.sender != entry.author {
+        return Err(ContractError::NotEntryAuthor {
+            id: entry_id.clone(),
+        });
+    }
+
+    // No double disclosure
+    if DISCLOSURES.has(deps.storage, &entry_id) {
+        return Err(ContractError::AlreadyDisclosed { id: entry_id });
+    }
+
+    let primary = deps.api.addr_validate(&primary_key)?;
+
+    // TODO: verify derivation_proof via zk-verifier sub-message.
+    // For v0, we accept the disclosure at face value — the proof is
+    // logged for off-chain auditors. Full ZK verification of derivation
+    // lands when the membership circuit supports a "disclosure mode"
+    // public input.
+
+    DISCLOSURES.save(
+        deps.storage,
+        &entry_id,
+        &Disclosure {
+            entry_id: entry_id.clone(),
+            primary_key: primary.clone(),
+            disclosed_at: env.block.time,
+        },
+    )?;
+
+    Ok(Response::new()
+        .add_attribute("action", "voluntary_disclose")
+        .add_attribute("entry_id", entry_id)
+        .add_attribute("primary_key", primary)
+        .add_attribute("moult_key", info.sender))
+}
+
+fn query_list_by_moult_key(
+    deps: Deps,
+    moult_key: String,
+    start_after: Option<String>,
+    limit: Option<u32>,
+) -> StdResult<EntriesResponse> {
+    let moult_key = deps.api.addr_validate(&moult_key)?;
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let start = start_after.as_deref().map(Bound::exclusive);
+
+    let entries = BY_MOULT_KEY
+        .prefix(&moult_key)
+        .range(deps.storage, start, None, Order::Ascending)
+        .take(limit)
+        .map(|kv| {
+            let (id, _) = kv?;
+            ENTRIES.load(deps.storage, &id)
+        })
+        .collect::<StdResult<Vec<_>>>()?;
+
+    Ok(EntriesResponse { entries })
+}
+
+fn query_moult_key_stats(deps: Deps, moult_key: String) -> StdResult<MoultKeyState> {
+    let moult_key = deps.api.addr_validate(&moult_key)?;
+    MOULT_KEY_STATE
+        .may_load(deps.storage, &moult_key)?
+        .ok_or_else(|| StdError::not_found("moult_key_state"))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

@@ -288,6 +288,37 @@ pub enum WsClientMessage {
     CancelTask { task_id: String },
     ApproveToolCall { task_id: String, tool_call_id: String },
     DenyToolCall { task_id: String, tool_call_id: String },
+    /// Deploy a DAO from a template. The daemon resolves well-known addresses
+    /// (moultbook, zk-verifier, escrow, etc.) from chain config, builds the
+    /// `agent-company` `InstantiateMsg`, and submits the tx when chain is live.
+    /// `enabled_tasks` drives optional field resolution — e.g. when
+    /// `anon_endorsement == true` and `template_id == "skill_circle"`, the
+    /// daemon populates `moultbook` from the chain-known address (ADR-005).
+    DeployDao(DeployDaoRequest),
+    /// Query anonymous endorsements by topic hash (ADR-005 step 7).
+    QueryEndorsements { topic_hash: String, limit: Option<u32> },
+}
+
+/// Payload for the `DeployDao` WS message from frontend → daemon.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeployDaoRequest {
+    pub dao_id: String,
+    pub name: String,
+    pub members: Vec<DeployMemberInput>,
+    pub template_id: String,
+    pub voting_period_blocks: u64,
+    pub quorum_percent: u64,
+    pub verification_model: String,
+    #[serde(default)]
+    pub enabled_tasks: std::collections::HashMap<String, bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeployMemberInput {
+    pub addr: String,
+    pub weight: u64,
+    #[serde(default)]
+    pub role: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -303,4 +334,17 @@ pub enum WsServerMessage {
     TaskList(Vec<Task>),
     Error { message: String },
     Connected { version: String },
+    /// Acknowledgement for `DeployDao`. Returns the resolved `InstantiateMsg`
+    /// JSON (for dry-run inspection) and the deploy status.
+    DeployDaoAck {
+        dao_id: String,
+        status: String,
+        /// The resolved `InstantiateMsg` as a JSON value (for transparency).
+        instantiate_msg: serde_json::Value,
+    },
+    /// Response to `QueryEndorsements` — returns matching entries from moultbook.
+    EndorsementList {
+        topic_hash: String,
+        entries: Vec<serde_json::Value>,
+    },
 }

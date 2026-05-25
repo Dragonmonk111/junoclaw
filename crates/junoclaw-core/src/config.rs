@@ -268,6 +268,10 @@ pub struct ContractAddresses {
     pub agent_registry: Option<String>,
     pub task_ledger: Option<String>,
     pub escrow: Option<String>,
+    pub zk_verifier: Option<String>,
+    /// moultbook-v0 address. When set, DAO deploys with `anon_endorsement`
+    /// enabled will populate the agent-company `moultbook` field (ADR-005).
+    pub moultbook: Option<String>,
 }
 
 // ──────────────────────────────────────────────

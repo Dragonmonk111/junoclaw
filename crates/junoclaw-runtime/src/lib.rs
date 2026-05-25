@@ -15,6 +15,8 @@ use plugin_llm::ollama::OllamaProvider;
 use plugin_llm::LlmProviderRegistry;
 use plugin_shell::ShellPlugin;
 
+pub mod moultbook_operator;
+
 pub struct Runtime {
     _config: JunoClawConfig,
     agents: Arc<RwLock<HashMap<String, AgentInfo>>>,
@@ -413,6 +415,91 @@ impl Runtime {
                 } else {
                     warn!("No pending denial found for tool_call_id: {}", tool_call_id);
                 }
+            }
+
+            WsClientMessage::DeployDao(req) => {
+                info!("DeployDao requested: {} (template={})", req.name, req.template_id);
+
+                let contracts = &self._config.chain.contracts;
+
+                // ADR-005: resolve moultbook address when anon_endorsement is enabled.
+                let moultbook = if req.enabled_tasks.get("anon_endorsement") == Some(&true) {
+                    match &contracts.moultbook {
+                        Some(addr) => {
+                            info!("Moultbook enabled for DAO {}: {}", req.name, addr);
+                            Some(addr.clone())
+                        }
+                        None => {
+                            warn!(
+                                "DAO {} requests anon_endorsement but no moultbook address \
+                                configured in chain.contracts.moultbook — endorsement path \
+                                will be disabled on-chain",
+                                req.name
+                            );
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                // Build the agent-company InstantiateMsg JSON (dry-run / preview).
+                let instantiate_msg = serde_json::json!({
+                    "name": req.name,
+                    "admin": null,
+                    "governance": null,
+                    "wavs_operator": null,
+                    "zk_verifier": contracts.zk_verifier,
+                    "moultbook": moultbook,
+                    "escrow_contract": contracts.escrow.as_deref().unwrap_or("pending"),
+                    "agent_registry": contracts.agent_registry.as_deref().unwrap_or("pending"),
+                    "task_ledger": contracts.task_ledger,
+                    "nois_proxy": null,
+                    "members": req.members.iter().map(|m| serde_json::json!({
+                        "addr": m.addr,
+                        "weight": m.weight,
+                        "role": m.role,
+                    })).collect::<Vec<_>>(),
+                    "denom": if self._config.chain.chain_id.contains("uni") { "ujunox" } else { "ujuno" },
+                    "voting_period_blocks": req.voting_period_blocks,
+                    "quorum_percent": req.quorum_percent,
+                    "verification": { "model": req.verification_model },
+                });
+
+                let status = if self._config.chain.enabled {
+                    // TODO: submit InstantiateMsg via CosmWasm tx when chain signing is wired
+                    "dry_run_ready".to_string()
+                } else {
+                    "chain_disabled".to_string()
+                };
+
+                info!("DeployDao {} — status: {}", req.dao_id, status);
+                let _ = tx
+                    .send(WsServerMessage::DeployDaoAck {
+                        dao_id: req.dao_id,
+                        status,
+                        instantiate_msg,
+                    })
+                    .await;
+            }
+
+            WsClientMessage::QueryEndorsements { topic_hash, limit } => {
+                info!(
+                    "QueryEndorsements topic_hash={} limit={:?}",
+                    topic_hash, limit
+                );
+
+                // TODO: When chain signing is wired, query moultbook contract:
+                //   QueryMsg::ListByTopic { topic_hash, start_after: None, limit }
+                // For now, return empty list (daemon does not yet have RPC query wired).
+                let entries: Vec<serde_json::Value> = vec![];
+
+                let _ = tx
+                    .send(WsServerMessage::EndorsementList {
+                        topic_hash,
+                        entries,
+                    })
+                    .await;
             }
         }
     }

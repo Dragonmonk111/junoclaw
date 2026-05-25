@@ -2,7 +2,7 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Binary;
 
 #[allow(unused_imports)]
-use crate::state::{AttestationRef, Config, MoultEntry, Stats, Visibility};
+use crate::state::{AttestationRef, Config, Disclosure, MoultEntry, MoultKeyState, Stats, Visibility};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -14,6 +14,16 @@ pub struct InstantiateMsg {
     pub max_refs: u32,
     pub max_content_type_len: u32,
     pub max_group_size: u32,
+    /// zk-verifier contract (required for anonymous publishing)
+    pub zk_verifier: Option<String>,
+    /// agent-registry contract (source of membership merkle root)
+    pub agent_registry: Option<String>,
+    /// SHA-256 hash of the membership circuit verifying key
+    pub membership_vk_hash: Option<String>,
+    /// Max entries per moult-key per epoch (default: 10)
+    pub entries_per_key_per_epoch: Option<u32>,
+    /// Epoch length in blocks (default: 14400 ≈ 24h at 6s/block)
+    pub epoch_blocks: Option<u64>,
 }
 
 #[cw_serde]
@@ -39,6 +49,29 @@ pub enum ExecuteMsg {
         max_size_bytes: Option<u64>,
         max_refs: Option<u32>,
         max_group_size: Option<u32>,
+    },
+    /// Publish anonymously using a derived moult-key. Sender is the moult-key.
+    /// The Groth16 proof proves the moult-key belongs to a registered agent
+    /// without revealing which agent.
+    PublishAnon {
+        /// SHA-256 of the topic namespace
+        topic_hash: String,
+        /// IPFS CID of the knowledge content
+        content_cid: String,
+        /// Groth16 proof (base64-encoded arkworks CanonicalSerialize)
+        proof_base64: String,
+        /// Public inputs (base64-encoded arkworks CanonicalSerialize)
+        public_inputs_base64: String,
+    },
+    /// Voluntarily link a moultbook entry to your primary identity.
+    /// Sender must be the moult-key that authored the entry.
+    /// One-way and optional — nobody can force disclosure.
+    VoluntaryDisclose {
+        entry_id: String,
+        /// The primary agent-registry address to link to
+        primary_key: String,
+        /// Proof that moult-key derives from primary-key (base64)
+        derivation_proof_base64: String,
     },
 }
 
@@ -66,6 +99,27 @@ pub enum QueryMsg {
     },
     #[returns(Stats)]
     GetStats {},
+    /// List entries by moult-key (anonymous author)
+    #[returns(EntriesResponse)]
+    ListByMoultKey {
+        moult_key: String,
+        start_after: Option<String>,
+        limit: Option<u32>,
+    },
+    /// Returns moult-key rate-limit state
+    #[returns(MoultKeyState)]
+    MoultKeyStats { moult_key: String },
+    /// Check if an entry has a voluntary disclosure
+    #[returns(Option<Disclosure>)]
+    GetDisclosure { entry_id: String },
+    /// List entries by topic hash (e.g. skill endorsements for a specific DAO/proposal).
+    /// ADR-005: enables frontend endorsement aggregation queries.
+    #[returns(EntriesResponse)]
+    ListByTopic {
+        topic_hash: String,
+        start_after: Option<String>,
+        limit: Option<u32>,
+    },
 }
 
 #[cw_serde]
