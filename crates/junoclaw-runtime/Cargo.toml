@@ -24,3 +24,13 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
+base64 = "0.22"
+
+# ZK proof generation for moultbook anonymous endorsements
+moultbook-membership-circuit = { path = "../../circuits/moultbook-membership" }
+ark-bn254 = "0.5"
+ark-groth16 = "0.5"
+ark-ff = "0.5"
+ark-serialize = { version = "0.5", features = ["derive"] }
+ark-std = "0.5"
+ark-snark = "0.5"

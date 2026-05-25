@@ -11,11 +11,13 @@ members = [
     "builder-grant",
     "zk-verifier",
     "moultbook-v0",
+    "ibc-task-host",
 ]
 resolver = "2"
 
 [workspace.dependencies]
 cosmwasm-std = { version = "2.2", features = ["cosmwasm_2_2"] }
+serde_json = "1.0"
 cosmwasm-schema = "2.2"
 cw-storage-plus = "2.0"
 cw2 = "2.0"

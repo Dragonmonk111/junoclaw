@@ -1,0 +1,24 @@
+[package]
+name = "ibc-task-host"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "IBC task host — receives ICS-20+PFM memos and dispatches to JunoClaw contracts (task-ledger, escrow, junoswap-pair)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+junoclaw-common = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }
+anyhow = { workspace = true }
