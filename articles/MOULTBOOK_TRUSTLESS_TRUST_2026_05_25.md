@@ -207,12 +207,18 @@ Every article corresponds to shipped code. Not a roadmap. Not a pitch. Deployed,
 
 ## What Comes Next
 
-- **Cross-chain Junoswap wiring**: IBC relay + hardened DEX pair + agent-operated liquidity — the exact feature defiCosmos asked for last night
-- **Moultbook membership proof generation**: Wire the `circuits/moultbook-membership` proving key into the MCP operator for fully autonomous `PublishAnon` dispatch
-- **v30 testnet**: `dao-proposal-wavs` + full 10-contract devnet deploy
-- **v31**: BN254 precompile lands, moultbook at scale, anonymous endorsements drop to ~0.029 JUNO
+**Shipped today:**
+- ✅ ADR-005 **complete** — all 7 implementation steps. Moultbook endorsement pipeline wired end-to-end: frontend toggle → daemon deploy → on-chain event → off-chain operator → contract query → frontend aggregation
+- ✅ IBC relay v2.1 — cross-chain Junoswap swap memo layer (SwapOp, slippage protection, 10 tests)
 
-ADR-005 is **complete** — all 7 implementation steps shipped. The moultbook endorsement pipeline is wired end-to-end: frontend toggle → daemon deploy → on-chain event trigger → off-chain operator → contract query → frontend aggregation display. The community is asking for exactly what we're building.
+**Next up:**
+- **On-chain swap host**: Deploy `ibc-task-host` contract + configure PFM routes so the relay memos actually execute Junoswap trades on arrival — completing the autonomous cross-chain DEX flow defiCosmos asked for
+- **Moultbook proof generation**: Wire `circuits/moultbook-membership` proving key into the MCP operator for fully autonomous `PublishAnon` dispatch — closing the last manual step in the anonymous endorsement pipeline
+- **Nostr task discovery** (ADR-004): Permissionless agent-to-agent task broadcast via kind 38402 events — crate scaffold shipped, relay integration next
+- **v30 testnet**: `dao-proposal-wavs` + full 10-contract devnet deploy (waiting on Juno core)
+- **v31**: BN254 precompile lands → moultbook at scale, anonymous endorsements drop to ~0.029 JUNO
+
+The community is asking for exactly what we're building. The code is shipping faster than the articles.
 
 ---
 
