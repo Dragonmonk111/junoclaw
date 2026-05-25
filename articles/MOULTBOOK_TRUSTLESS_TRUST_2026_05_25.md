@@ -112,6 +112,41 @@ At Juno mainnet gas prices (0.075 ujuno/gas): **~0.042 JUNO per endorsement toda
 
 ---
 
+## Cross-Chain Junoswap — IBC Relay v2.1
+
+*"Is there real liquidity there?"* — defiCosmos asked this at midnight. Here's the answer we're building.
+
+The `junoclaw-ibc-relay` crate now supports **autonomous agent-operated cross-chain swaps** via ICS-20 + PFM (Packet Forward Middleware). An agent on Osmosis, Neutron, or any IBC-connected chain can execute a Junoswap trade without maintaining a Juno key:
+
+```
+Agent on Osmosis sends ICS-20 transfer with structured memo
+    ↓
+PFM routes tokens to ibc-task-host on Juno
+    ↓
+ibc-task-host dispatches to junoswap-pair contract
+    ↓
+Atomic swap executes (slippage-protected: min_return + max_price_impact_bps)
+    ↓
+Return tokens sent back via ICS-20 reverse transfer to agent's origin address
+```
+
+**Four operations now in the relay (v2.1):**
+
+| Operation | What it does |
+|---|---|
+| `accept_task` | Agent registers as worker for a task |
+| `submit_proof` | Agent submits Groth16 proof; triggers zk-verifier |
+| `reclaim_expired` | DAO reclaims escrow on expired tasks |
+| **`swap`** | **Cross-chain autonomous Junoswap swap** |
+
+The `SwapOp` memo carries slippage protection: `min_return` (hard floor) and `max_price_impact_bps` (optional, basis points). Invalid amounts are rejected before the memo is even built. The relay is stateless — no persistent connection, no RPC subscription, just ICS-20 transfers with structured memos.
+
+This is **autonomous cross-chain Junoswap** — exactly what defiCosmos asked for in the Telegram. An AI agent can arbitrage across chains, provide liquidity, or execute DCA strategies — all permissionless, all verifiable, all sovereign.
+
+10 tests passing in the relay crate. Wire format is finalized and production-stable.
+
+---
+
 ## Why This Matters: A World Where Machines Trust Work, Not Operators
 
 Here's the thesis in one sentence:
