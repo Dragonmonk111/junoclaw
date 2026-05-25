@@ -5,7 +5,7 @@
 # Best-effort verification of the day-2 forward-port deliverable.
 
 param(
-    [string]$CosmwasmTag = "v3.0.1",
+    [string]$CosmwasmTag = "v3.0.6",
     [string]$BuildDir    = (Join-Path $env:USERPROFILE "junoclaw-build"),
     [switch]$SkipTests   = $false
 )

@@ -2,28 +2,28 @@
 
 *Forward-port of [`v2.2.7/`](../v2.2.7/README.md) onto the v3.x stack consumed by Juno v30 (per [`CosmosContracts/juno#1202`](https://github.com/CosmosContracts/juno/pull/1202) which pins `wasmvm/v3 v3.0.4` directly).*
 
-**Status (2026-05-13 PM, day-2 forward-port complete):** **10/10 patches verify CLEAN against `cosmwasm` v3.0.1 (`74a568d38`).** Worklog: [`../FORWARD_PORT_V3.md`](../FORWARD_PORT_V3.md). Drift report: [`../DRIFT_REPORT_V3.md`](../DRIFT_REPORT_V3.md).
+**Status (2026-05-14, day-2.5 v3.0.6 retarget green):** **10/10 patches verify CLEAN against `cosmwasm` v3.0.6 (`355eea5ca`); `crypto-bn254` 22/22 PASS; `cosmwasm-vm` 318/319** (the 1 failure is `wasm_backend::compile::tests::contract_with_floats_passes_check`, a pre-existing v3.0.x flake on Windows + Rust 1.82 + wasmer 5.0.6 singlepass; reproduces on vanilla unpatched v3.0.1 and v3.0.6). Target was originally v3.0.1; reframed to v3.0.6 once we measured wasmvm v3.0.4's `cosmwasm-std = "3.0.5"` caret resolution. Worklog: [`../FORWARD_PORT_V3.md`](../FORWARD_PORT_V3.md). Drift report: [`../DRIFT_REPORT_V3.md`](../DRIFT_REPORT_V3.md).
 
 ---
 
 ## Manifest
 
-All 10 patches apply with `git apply --check` against `cosmwasm` v3.0.1.
+All 10 patches apply with `git apply --check` against `cosmwasm` v3.0.6.
 
-| #  | Patch                                              | Day-1 result on v3 | Provenance |
+| #  | Patch                                              | Result on v3.0.6   | Provenance |
 |----|----------------------------------------------------|--------------------|------------|
-| 00 | `00-rust-toolchain.toml.patch`                     | CLEAN              | copied verbatim from `v2.2.7/` |
-| 01 | `01-cosmwasm-std.imports.rs.patch`                 | rewritten          | `regen-patch-01-v3.ps1` (path move + reanchored against v3 line numbers; BN254 Api impl placed before `fn debug` in `impl Api for ExternalApi`) |
-| 02 | `02-cosmwasm-std.traits.rs.patch`                  | CLEAN              | copied verbatim |
-| 03 | `03-cosmwasm-std.testing.mock.rs.patch`            | CLEAN              | copied verbatim |
-| 04 | `04-cosmwasm-std.Cargo.toml.patch`                 | regenerated        | `regen-patches-cargo-v3.ps1` (anchored against v3's non-workspace dependency style) |
-| 05 | `05-cosmwasm-vm.imports.rs.patch`                  | CLEAN              | copied verbatim |
-| 06 | `06-cosmwasm-vm.instance.rs.patch`                 | CLEAN              | copied verbatim |
-| 07 | `07-cosmwasm-vm.compatibility.rs.patch`            | CLEAN              | copied verbatim |
-| 08 | `08-cosmwasm-vm.Cargo.toml.patch`                  | regenerated        | `regen-patches-cargo-v3.ps1` (same shape as 04) |
-| 09 | `09-cosmwasm-crypto-bn254-new-crate.patch`         | CLEAN              | copied verbatim |
+| 00 | `00-rust-toolchain.toml.patch`                     | CLEAN on v3.0.6    | copied verbatim from `v2.2.7/`, pinned to Rust 1.82 |
+| 01 | `01-cosmwasm-std.imports.rs.patch`                 | CLEAN on v3.0.6    | regenerated 2026-05-14 against v3.0.6 (preserves upstream's `UFT-8` typo in the unrelated debug-fn comment block; we only add BN254 extern fns + Api impl) |
+| 02 | `02-cosmwasm-std.traits.rs.patch`                  | CLEAN on v3.0.6    | copied verbatim |
+| 03 | `03-cosmwasm-std.testing.mock.rs.patch`            | CLEAN on v3.0.6    | copied verbatim |
+| 04 | `04-cosmwasm-std.Cargo.toml.patch`                 | CLEAN on v3.0.6    | regenerated 2026-05-14 against v3.0.6's `workspace = true` dep style. Adds `cosmwasm_2_3` feature; adds `cosmwasm-crypto-bn254 = { version = "0.1.0", path = "../crypto-bn254", optional = true }` (explicit-path form is one-line non-disruptive next to workspace-inherited deps). |
+| 05 | `05-cosmwasm-vm.imports.rs.patch`                  | CLEAN on v3.0.6    | day-2.5 AM: rewrote `do_bn254_{add,scalar_mul,pairing_equality}` to use v3's 4-arg `write_region(env, &mut store, ptr, data)` form. Removed three dead `let _memory = data.memory(&store);` bindings. `packages/vm/src/imports.rs` and `memory.rs` are byte-identical v3.0.1 ↔ v3.0.6 so the day-2.5 fix transferred without changes. |
+| 06 | `06-cosmwasm-vm.instance.rs.patch`                 | CLEAN on v3.0.6    | copied verbatim |
+| 07 | `07-cosmwasm-vm.compatibility.rs.patch`            | CLEAN on v3.0.6    | copied verbatim |
+| 08 | `08-cosmwasm-vm.Cargo.toml.patch`                  | CLEAN on v3.0.6    | regenerated 2026-05-14 against v3.0.6's `workspace = true` dep style. Adds `cosmwasm-crypto-bn254 = { version = "0.1.0", path = "../crypto-bn254" }` (explicit path, same rationale as 04). |
+| 09 | `09-cosmwasm-crypto-bn254-new-crate.patch`         | CLEAN on v3.0.6    | copied verbatim |
 
-The `wasmvm`-side wrapper patches (`10-wasmvm.api.rs.patch`, `11-wasmvm.lib.go.patch`) are **not yet in this directory**. They become live on v3 (v3.x has the BLS12-381 Go-wrapper analogue we mirror, which v2.2.x lacked) and land in a follow-up commit.
+The `wasmvm`-side wrapper patches (`10-wasmvm.api.rs.patch`, `11-wasmvm.lib.go.patch`) are **dropped** (2026-05-14 PM finding). Wasmvm v3.0.4 has zero BLS12-381 Go-API wrappers — confirmed by `Select-String Bls12 *.go` returning zero matches across the whole wasmvm v3.0.4 tree. There is no parallel structure to mirror; the dropped patches were always optional non-vm tooling sugar. The cosmwasm-vm Rust layer (which we already patch) is the only required surface.
 
 ## Reproduce
 
@@ -57,15 +57,39 @@ The original `FORWARD_PORT_V3.md` plan predicted three categories of substantial
 - [`../finalize-v3-series.ps1`](../finalize-v3-series.ps1) — top-level orchestrator: copies clean patches verbatim, calls the regenerators, runs the baseline check.
 - [`../apply-and-test-v3.ps1`](../apply-and-test-v3.ps1) — applies all 10 patches to a clean v3.0.1 checkout and runs `cargo test -p cosmwasm-crypto-bn254` + `-p cosmwasm-vm`.
 
-## Pending day-2 / day-3 work
+## Day-2.5 verification (2026-05-14)
 
-- [ ] **`cargo test` against patched v3.0.1** — `apply-and-test-v3.ps1` runs both suites. Targets: 22/22 `cosmwasm-crypto-bn254` (no-default-features) + 311+ `cosmwasm-vm`. Test logs land in `${BuildDir}/cargo-test-{crypto-bn254,vm}-v3.log`.
-- [ ] **`wasmvm`-side patches `10` and `11`** — revive the `*.dropped` patches from `v2.2.x/` against `wasmvm` v3.0.4. Add `check-baseline-v3-wasmvm.ps1` for the parallel verification.
-- [ ] **Tag `Dragonmonk111/wasmvm v3.0.4-bn254`** — once both cosmwasm and wasmvm test suites are green.
-- [ ] **Hand Jake the `replace` directive** for v30's `go.mod`:
-  ```
-  replace github.com/CosmWasm/wasmvm/v3 => github.com/Dragonmonk111/wasmvm/v3 v3.0.4-bn254
-  ```
+### Initial baseline (v3.0.1)
+
+```text
+$ powershell -ExecutionPolicy Bypass -File wasmvm-fork\patches\check-baseline-v3.ps1 -PatchDir wasmvm-fork\patches\v3.0.x -CosmwasmTag v3.0.1
+summary: 10 clean / 0 3-way-ok / 0 conflicts (target=v3.0.1)
+
+$ powershell -ExecutionPolicy Bypass -File wasmvm-fork\patches\apply-and-test-v3.ps1 -CosmwasmTag v3.0.1
+  cosmwasm-crypto-bn254 : rc=0   (22 passed; 0 failed)
+  cosmwasm-vm           : rc=101 (315 passed; 1 failed)  # pre-existing float flake
+```
+
+### Final retarget (v3.0.6 — what wasmvm v3.0.4 actually resolves to)
+
+```text
+$ powershell -ExecutionPolicy Bypass -File wasmvm-fork\patches\check-baseline-v3.ps1 -PatchDir wasmvm-fork\patches\v3.0.x -CosmwasmTag v3.0.6
+summary: 10 clean / 0 3-way-ok / 0 conflicts (target=v3.0.6)
+
+$ powershell -ExecutionPolicy Bypass -File wasmvm-fork\patches\apply-and-test-v3.ps1
+  cosmwasm-crypto-bn254 : rc=0   (22 passed; 0 failed)
+  cosmwasm-vm           : rc=101 (318 passed; 1 failed)  # same pre-existing float flake; v3.0.6 added 3 tests, all passing
+```
+
+The single `cosmwasm-vm` failure (`wasm_backend::compile::tests::contract_with_floats_passes_check`) is **pre-existing in unpatched v3.0.x** — verified by running the same test on `git reset --hard v3.0.1; git clean -fdx` with no patches applied, and observing the identical `assertion failed: compile(&engine, FLOATY).is_ok()` panic. Same on vanilla v3.0.6. Windows + Rust 1.82 + wasmer 5.0.6 singlepass environment issue.
+
+## Pending work
+
+- [x] ~~`wasmvm`-side patches `10` and `11`~~ — **DROPPED** 2026-05-14 PM. Wasmvm v3.0.4 has no parallel structure to mirror.
+- [x] ~~Retarget to cosmwasm v3.0.6~~ — **DONE** 2026-05-14 PM. 10/10 CLEAN.
+- [ ] **Pick publication shape (T2c)** — user decision pending:
+  - **P1 — fork + tag.** Fork `cosmwasm` to `Dragonmonk111/cosmwasm-bn254` with patches applied; tag `v3.0.6-bn254`. Fork `wasmvm` v3.0.4 to `Dragonmonk111/wasmvm`, add a one-line `[patch.crates-io]` injecting our cosmwasm fork; tag `v3.0.4-bn254`. Jake's v30 `go.mod` gets one `replace github.com/CosmWasm/wasmvm/v3 => github.com/Dragonmonk111/wasmvm/v3 v3.0.4-bn254`. *Shipping speed.*
+  - **P2 — patch series only.** Jake's build-script applies the 10 patches against the cosmwasm version that cargo resolves, then builds wasmvm against that. No fork on our side. *Lower maintenance for us.*
 
 ## Output (when complete)
 

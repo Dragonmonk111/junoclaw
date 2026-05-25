@@ -69,6 +69,16 @@ frontend/dist/
 # MCP build
 mcp/dist/
 
+# Session memory / internal notes — not for public repo
+memory/
+
+# Private DM drafts and outreach — contains personal comms
+docs/JAKE_DM_*.md
+docs/HIGHLANDER_OUTREACH_DM.md
+docs/CMW_ISSUE*_PASTE.md
+docs/PR924_COMMENT_DRAFT.md
+docs/GITHUB_2FA_STEPWISE_GUIDE.md
+
 # Personal files — never commit
 # NOTE: `_private/` contains personal/job-application drafts and must stay local.
 _private/

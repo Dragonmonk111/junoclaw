@@ -58,7 +58,7 @@ index b13cf74ac..6a8a9a9c5 100644
  #[inline(always)]
  fn charge_host_call_gas<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'static>(
      env: &Environment<A, S, Q>,
-@@ -845,6 +887,94 @@ pub fn do_debug<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'sta
+@@ -845,6 +887,89 @@ pub fn do_debug<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'sta
      Ok(())
  }
  
@@ -74,7 +74,6 @@ index b13cf74ac..6a8a9a9c5 100644
 +    out_ptr: u32,
 +) -> VmResult<u32> {
 +    let (data, mut store) = env.data_and_store_mut();
-+    let _memory = data.memory(&store);
 +
 +    let input = read_region(data, &mut store, input_ptr, 2 * G1_BYTES)?;
 +    let gas_info = GasInfo::with_cost(BN254_ADD_COST);
@@ -84,8 +83,7 @@ index b13cf74ac..6a8a9a9c5 100644
 +        Ok(bytes) => bytes,
 +        Err(e) => return Ok(bn254_error_code(&e)),
 +    };
-+    let memory = data.memory(&store);
-+    write_region(&memory, out_ptr, &result)?;
++    write_region(data, &mut store, out_ptr, &result)?;
 +    Ok(BN254_OK)
 +}
 +
@@ -100,7 +98,6 @@ index b13cf74ac..6a8a9a9c5 100644
 +    out_ptr: u32,
 +) -> VmResult<u32> {
 +    let (data, mut store) = env.data_and_store_mut();
-+    let _memory = data.memory(&store);
 +
 +    let input = read_region(data, &mut store, input_ptr, G1_BYTES + FR_BYTES)?;
 +    let gas_info = GasInfo::with_cost(BN254_SCALAR_MUL_COST);
@@ -110,8 +107,7 @@ index b13cf74ac..6a8a9a9c5 100644
 +        Ok(bytes) => bytes,
 +        Err(e) => return Ok(bn254_error_code(&e)),
 +    };
-+    let memory = data.memory(&store);
-+    write_region(&memory, out_ptr, &result)?;
++    write_region(data, &mut store, out_ptr, &result)?;
 +    Ok(BN254_OK)
 +}
 +
@@ -130,7 +126,6 @@ index b13cf74ac..6a8a9a9c5 100644
 +    input_ptr: u32,
 +) -> VmResult<u32> {
 +    let (data, mut store) = env.data_and_store_mut();
-+    let _memory = data.memory(&store);
 +
 +    let input = read_region(data, &mut store, input_ptr, MAX_BN254_PAIRING_INPUT)?;
 +    if input.len() % 192 != 0 {

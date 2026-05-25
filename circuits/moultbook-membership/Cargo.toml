@@ -1,0 +1,23 @@
+[package]
+name = "moultbook-membership-circuit"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Groth16 circuit for moultbook anonymous membership proof — proves a moult-key derives from a registered agent without revealing which agent"
+
+[dependencies]
+ark-bn254 = "0.5"
+ark-groth16 = "0.5"
+ark-ec = "0.5"
+ark-ff = "0.5"
+ark-serialize = { version = "0.5", features = ["derive"] }
+ark-std = "0.5"
+ark-relations = "0.5"
+ark-snark = "0.5"
+ark-r1cs-std = "0.5"
+ark-crypto-primitives = { version = "0.5", features = ["crh", "merkle_tree", "r1cs"] }
+sha2 = "0.10"
+rand = "0.8"
+
+[dev-dependencies]
+ark-groth16 = { version = "0.5", features = ["parallel"] }

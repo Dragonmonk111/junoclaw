@@ -1,0 +1,42 @@
+[package]
+name = "junoclaw-nostr-bridge"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Nostr bridge for JunoClaw — watches task-ledger events and publishes kind 38402 task discovery events to Nostr relays"
+repository = "https://github.com/Dragonmonk111/junoclaw"
+
+[dependencies]
+# Nostr protocol
+nostr-sdk = { version = "0.34", features = ["all-nips"] }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# HTTP / websocket for Tendermint subscription
+reqwest = { version = "0.12", features = ["json"] }
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+futures-util = "0.3"
+
+# Errors / logging
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Config
+toml = { workspace = true }
+
+# Secp256k1 for bridge signing key
+secp256k1 = { version = "0.29", features = ["rand"] }
+hex = "0.4"
+
+[dev-dependencies]
+tokio = { workspace = true }

@@ -1,0 +1,57 @@
+[package]
+name = "junoclaw-x402-gateway"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "HTTP/x402 gateway that exposes JunoClaw task-ledger operations to non-Cosmos-native agents"
+repository = "https://github.com/Dragonmonk111/junoclaw"
+readme = "README.md"
+
+[dependencies]
+# Workspace shared
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true, features = ["cors", "fs", "trace", "limit"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+reqwest = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# x402-gateway-specific
+tower = "0.5"
+tower_governor = "0.4"
+base64 = "0.22"
+sha2 = "0.10"
+rand = "0.8"
+hex = "0.4"
+time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+prometheus = "0.13"
+parking_lot = "0.12"
+
+# Cosmos / Juno
+cosmrs = { version = "0.21", features = ["rpc", "cosmwasm", "bip32"] }
+bip32 = "0.5"
+
+# Config
+clap = { version = "4.5", features = ["derive", "env"] }
+dotenvy = "0.15"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+mockito = "1.5"
+serde_test = "1.0"
+
+[lib]
+name = "junoclaw_x402_gateway"
+path = "src/lib.rs"
+
+[[bin]]
+name = "junoclaw-x402-gateway"
+path = "src/main.rs"

@@ -1,7 +1,13 @@
 # Upstream GitHub Issue Drafts
 
-**Status:** READY TO PUBLISH (2026-05-10). Both prerequisites complete — patches rebased onto `cosmwasm` v2.2.2 and forward-ported to v2.2.7 (10/10 clean on both); gas measured empirically at **1.823× reduction** on devnet.
-**Companion:** [`POST_VOTE_EXECUTION_PLAN.md`](./POST_VOTE_EXECUTION_PLAN.md) Phase 1
+**Status:** READY TO PUBLISH (refreshed 2026-05-14). Forward-ported now spans **three** parallel patch series, all green:
+
+- `wasmvm-fork/patches/v2.2.2/` — audit reference, matches `wasmvm` v2.2.4 / Juno mainnet today (10/10 CLEAN, 22/22 + 311/311 PASS)
+- `wasmvm-fork/patches/v2.2.7/` — latest 2.2.x (10/10 CLEAN; only 2 Cargo.toml patches differ from v2.2.2)
+- `wasmvm-fork/patches/v3.0.x/` — latest **v3.0.6** (10/10 CLEAN, 22/22 + 318/319 PASS; the single failure is a pre-existing floating-point compile-test on vanilla v3, unrelated to BN254)
+
+Gas measured empirically at **1.823× reduction** on devnet (370,600 → 203,266 SDK gas per Groth16 verify, 5 samples σ = 0). Wasmvm-side Go-wrapper patches were **dropped** in the v3 series after confirming BLS12-381 itself has no Go wrappers in either v2.2.x or v3.x — the absence is intentional across the codebase, not a 2.2.x-only oversight. Issue 2 now scopes to a single confirmation question + the two side-findings worth flagging.
+**Companion:** [`POST_VOTE_EXECUTION_PLAN.md`](./POST_VOTE_EXECUTION_PLAN.md) Phase 1, [`memory/track-b-forward-port.md`](../memory/track-b-forward-port.md) day-2.5 worklog
 **Targets:** `CosmWasm/cosmwasm`, `CosmWasm/wasmvm`
 
 ## Publish sequence (do these in order)
@@ -127,8 +133,8 @@ cc @ethanfrey @webmaster128 — happy to take this in any direction you prefer. 
 ## Issue 2 — `CosmWasm/wasmvm`
 
 **Repo:** `https://github.com/CosmWasm/wasmvm`
-**Title:** `Proposal: BN254 VM integration for cosmwasm-crypto-bn254 host functions`
-**Labels (suggested):** `enhancement`, `crypto`, `discussion`
+**Title:** `Question: should BN254 host functions also expose Go-side wrappers, or follow the BLS12-381 precedent of staying VM-internal?`
+**Labels (suggested):** `question`, `crypto`, `discussion`
 **Cross-reference:** companion issue on `CosmWasm/cosmwasm` (link added once Issue 1 is published)
 
 ### Body
@@ -136,62 +142,45 @@ cc @ethanfrey @webmaster128 — happy to take this in any direction you prefer. 
 ```markdown
 ## Context
 
-This is the wasmvm-side companion to [CosmWasm/cosmwasm#XXXX](TBD-after-issue-1-published) — a proposal to add BN254 (alt_bn128) host functions to CosmWasm, motivated by Juno governance proposal [#374](https://ping.pub/juno/gov/374) (passed 2026-05-05, ~80% Yes).
+This is the wasmvm-side companion to [CosmWasm/cosmwasm#XXXX](TBD-after-issue-1-published) — a proposal to add BN254 (alt_bn128) host functions to CosmWasm, motivated by Juno governance proposal [#374](https://ping.pub/juno/gov/374) (passed 2026-05-05, ~80% Yes / 22% Abstain / 0.003% No-with-Veto).
 
-The cosmwasm-side issue covers the host-function ABI, the Rust crate, the gas schedule, and the **measured 1.823× gas reduction** (370,600 → 203,266 SDK gas per Groth16 verification, 5 samples σ = 0). This issue covers what we'd add **here** in `wasmvm`: CGo FFI shims, Go-side wrappers, and the surface that `x/wasm` consumers call.
+The cosmwasm-side issue covers the host-function ABI, the Rust crate, the gas schedule, and the **measured 1.823× gas reduction** (370,600 → 203,266 SDK gas per Groth16 verification, 5 samples σ = 0). The patches there target three cosmwasm tags in parallel — v2.2.2 (audit baseline), v2.2.7 (latest 2.2.x), and **v3.0.6** (latest v3) — all 10/10 CLEAN.
 
-## What we'd add to wasmvm
+**This wasmvm-side issue is now smaller in scope than originally drafted.** When we tried to author Go-side wrappers (mirroring the BLS12-381 pattern we expected), the patches failed because **BLS12-381 itself has no Go-side wrappers in either `wasmvm` v2.2.4 or `wasmvm` v3.0.4**. We dropped the wrapper patches and would like to confirm that this absence is intentional design before deciding whether to contribute the wrappers ourselves.
 
-### `libwasmvm/src/bn254_ffi.rs` (new)
+## The single question
 
-Three `#[no_mangle] pub extern "C" fn` shims, one per host function, following the existing `ByteSliceView` → `UnmanagedVector` convention used for BLS12-381:
+Is the absence of Go-side wrappers for BLS12-381 (and by extension, BN254) **intentional design** — i.e. "these primitives are for use by Wasm contracts via host-function imports only, never by direct Go callers in `x/wasm`-adjacent code" — or is it a not-yet-done that you'd accept a contribution for?
 
-```rust
-pub unsafe extern "C" fn bn254_add(
-    a: ByteSliceView,
-    b: ByteSliceView,
-    error_msg: Option<&mut UnmanagedVector>,
-) -> UnmanagedVector { ... }
-```
+We're happy with either answer:
 
-Same shape for `bn254_scalar_mul` and `bn254_pairing_equality`. Each routes into `cosmwasm-crypto-bn254` (the new crate added in the cosmwasm-side PR).
+- **"Intentional, leave it out":** then the BN254 work is **cosmwasm-only**. Issue 1 is the entire upstream surface and this issue closes once that's confirmed.
+- **"Not-yet-done, contribution welcome":** then we'd open a follow-up wasmvm PR with the BLS12-381 + BN254 Go wrappers in one symmetrical change. The Go-side surface for BN254 alone would look like:
 
-### `internal/api/bn254.go` (new)
+  ```go
+  // internal/api/bn254.go (new)
+  func Bn254Add(a, b []byte) ([]byte, error) { ... }
+  func Bn254ScalarMul(point, scalar []byte) ([]byte, error) { ... }
+  func Bn254PairingEquality(input []byte) (bool, error) { ... }
+  ```
 
-Go-side wrappers around the C shims, returning `([]byte, error)` in the conventional way.
+  with matching C-ABI shims in `libwasmvm/src/` and exports in `lib_libwasmvm.go`. We have a draft of this from our v2.2.0-era attempt; it'd take ~1 day to refresh against v3.0.4.
 
-### `lib_libwasmvm.go` (patch)
+## What's already shipping (no wasmvm change required)
 
-Public-surface functions exported to `x/wasm` consumers, mirroring the BLS12-381 entry points.
+For either answer, the existing patches stand:
 
-## Why split into two PRs
-
-The cosmwasm-side PR adds the host functions and the crate. The wasmvm-side PR (this one) wires them through to Go. Splitting the change matches the existing repo structure — the BLS12-381 work landed in two PRs for the same reason.
-
-The wasmvm PR depends on the cosmwasm PR (we'd open the wasmvm PR with a blocking note pointing at the cosmwasm one).
-
-## Test plan
-
-- `make build-rust` — compile the C shims
-- `make test` — Go FFI sanity checks
-- A reproducible end-to-end gas measurement on a single-validator devnet running the patched binary: now measured at **203,266 SDK gas** (precompile) vs **370,600 SDK gas** (pure-Wasm) = 1.823× reduction; 5 samples σ = 0. See [BN254_BENCHMARK_RESULTS.md](https://github.com/Dragonmonk111/junoclaw/blob/main/docs/BN254_BENCHMARK_RESULTS.md). Reproduce with `bash devnet/scripts/reproduce-benchmark.sh`.
-
-The differential test (1,000 random Groth16 proofs through both the pure-Wasm verifier and the precompile-backed verifier, assert identical accept/reject) is in the cosmwasm-side PR but is reproducible from this side too via the devnet recipe.
-
-## What we'd like to confirm
-
-1. **Naming.** `bn254_add` / `bn254_scalar_mul` / `bn254_pairing_equality` for the C shim symbols. Match the cosmwasm-side names verbatim. Acceptable?
-2. **CI matrix.** Should the new crate appear in `make test`'s default suite, or behind a feature flag matching cosmwasm-side `cosmwasm_2_3`?
-3. **Gas-cost reporting.** Do you want the wasmvm-side benchmark numbers in the PR description, or only the cosmwasm-side numbers (since gas accounting lives in cosmwasm-vm)?
-4. **Track-target preference.** We have two parallel patch series ready, both 10/10 clean: `v2.2.2/` (the version `wasmvm` v2.2.4 pins, i.e. the baseline Juno mainnet ships today) and `v2.2.7/` (the latest 2.2.x tag; only the two `Cargo.toml` patches differ from v2.2.2 due to workspace inheritance). Would you prefer the upstream PR against `v3.x main` directly, with a backport branch for the v2.2.x line, or against `v2.2.x` first with a forward-port to `main` afterwards? We can produce either.
+- The cosmwasm-side host functions work end-to-end. A Wasm contract on a chain running the patched cosmwasm-vm (and any wasmvm version that consumes it, including stock v3.0.4) gets the 1.823× gas reduction today.
+- The Juno mainnet binary (Track A) is the consumer. It compiles against patched `cosmwasm-crypto-bn254` and stock `wasmvm`. No wasmvm-fork is in our publication path.
+- All tests pass on v3.0.6: 22/22 crypto-bn254 + 318/319 cosmwasm-vm (the single failure is a pre-existing floating-point compile-test on vanilla v3, unrelated to BN254 — reproducible by reverting the patches).
 
 ## Side-findings worth flagging (independent of the BN254 work)
 
-While rebasing the patches onto `wasmvm` v2.2.4 we hit two compatibility issues that are independent of the BN254 work itself but affect any source build of `wasmvm` v2.2.x in 2026. Surfacing them here in case they're useful even if the BN254 proposal stalls.
+Two issues surfaced while rebasing the patches in 2026 that are unrelated to BN254 itself but affect any source build of `wasmvm` in this period.
 
-### Finding 1 — `wasmer-vm` 4.3.7 × Rust ≥ 1.81: `__rust_probestack` linker error
+### Finding 1 — `wasmer-vm` 4.3.7 × Rust ≥ 1.81: `__rust_probestack` linker error (v2.2.x only)
 
-`wasmer-vm` 4.3.7 (transitive dep) emits inline assembly that references `__rust_probestack`, which `compiler-builtins` removed in Rust 1.81 ([rust-lang/rust#126985](https://github.com/rust-lang/rust/pull/126985), Sept 2024). Result: source builds of `wasmvm` v2.2.x fail at link time on Rust ≥ 1.81 with:
+`wasmer-vm` 4.3.7 (transitive dep on the v2.2.x line) emits inline assembly referencing `__rust_probestack`, which `compiler-builtins` removed in Rust 1.81 ([rust-lang/rust#126985](https://github.com/rust-lang/rust/pull/126985), Sept 2024). Source builds of `wasmvm` v2.2.x fail at link time on Rust ≥ 1.81:
 
 ```
 rust-lld: error: undefined symbol: __rust_probestack
@@ -201,23 +190,35 @@ rust-lld: error: undefined symbol: __rust_probestack
 
 Validators running pre-built `libwasmvm.x86_64.so` are unaffected. Anyone source-building `wasmvm` v2.2.x on a fresh dev machine in 2026 will hit this wall.
 
-Workaround we use: pin Rust 1.78.0 via `rust-toolchain.toml` in our patch set. Real fix would be either bumping `wasmer-vm` to a version that uses `__llvm_stack_probe` instead, or carrying a small in-tree patch that defines `__rust_probestack` as a shim.
+Workaround we use on v2.2.x: pin Rust 1.78.0 via `rust-toolchain.toml` in our patch set. Real fix on the v2.2.x line would be either bumping `wasmer-vm` to a version that uses `__llvm_stack_probe`, or carrying an in-tree shim. **The v3.x line already resolves this** — v3.0.4's `wasmer-vm` is newer and the 1.82 toolchain compiles cleanly. We pin Rust 1.82 in our v3.0.x patch set.
 
-This is independent of the BN254 work — we'd flag it the same way if we were rebasing any other patch set against `wasmvm` v2.2.x.
+This is independent of the BN254 work; we'd flag it the same way if we were rebasing any other patch set against `wasmvm` v2.2.x.
 
-### Finding 2 — v2.2.4 doesn't surface BLS12-381 at the cgo layer
+### Finding 2 — BLS12-381 has no Go-side wrappers in either v2.2.x or v3.x
 
-The original BN254 wasmvm patches we authored against `v2.2.0` added `Bn254Add` / `Bn254ScalarMul` / `Bn254PairingEquality` Go-side wrappers in `lib_libwasmvm.go` and matching C-ABI shims in `internal/api/bindings.h`, modelled on the BLS12-381 surface. When we tried to apply them to `v2.2.4` they failed cleanly — inspecting `v2.2.4`'s `lib_libwasmvm.go` and `internal/api/bindings.h` showed BLS12-381 itself has no Go-side wrappers in this branch. The pattern those patches were copying lives on `v3.x main`, not on the `v2.2.x` line.
+This is the same observation that motivated the single question above. Restated as a finding: when we surveyed `lib_libwasmvm.go` and `internal/api/bindings.h` across `wasmvm` v2.2.0, v2.2.4, and v3.0.4, no exported Go function corresponds to a BLS12-381 host operation. The host functions are reachable from Wasm contracts via cosmwasm-vm's import wiring, but not from Go code that links `libwasmvm` directly.
 
-This is good for our v2.2.x track — it shrinks Track A to cosmwasm-only — but we wanted to flag it because it surprised us. Is the absence intentional (e.g. "BLS12-381 is for in-VM use only, never for direct Go callers"), or is it pending a follow-up that didn't make the v2.2.x branch? If the former, we'd happily restrict the BN254 PR to `v3.x main` only and skip the wasmvm-side wrappers on the older branch. If the latter, we can include the wrappers in the v2.2.x backport when we get there.
+If this is intentional, we'd just like a one-line confirmation so we can document it for downstream consumers (we've had several questions about it on the Juno developer Discord).
+
+## Why we're keeping the issue scope tight
+
+The original draft of this issue proposed full FFI shims, Go wrappers, public-surface exports, and a CI plan — mirroring how a BLS12-381 PR *would* have looked if BLS12-381 itself had wrappers. After confirming it doesn't, we'd rather ask the design question first than spec-up code you may not want.
+
+If the answer is "contribute the wrappers," we'll open a separate issue with the full FFI proposal and a draft PR.
 
 ## Pinging once, politely
 
-cc @webmaster128 @ethanfrey — happy to adapt the FFI shape to whatever pattern fits cleanest with the existing wasmvm codebase. The implementation is mechanical once the cosmwasm side is agreed.
+cc @webmaster128 @ethanfrey — happy to take this in either direction. The cosmwasm-side patches stand on their own; this is a polish question.
 
 ---
 
-**Repo (for reference, not a request):** [Dragonmonk111/junoclaw](https://github.com/Dragonmonk111/junoclaw) — the live patches are at [`wasmvm-fork/patches/v2.2.2/`](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/patches/v2.2.2) (the audit reference, matches `wasmvm` v2.2.4 pin) and [`wasmvm-fork/patches/v2.2.7/`](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/patches/v2.2.7) (forward-port to the latest cosmwasm 2.2.x tag), both 10/10 clean. Each series has its own README manifest. The dropped Go-wrapper attempts are kept at `wasmvm-fork/patches/wasmvm.*.patch.dropped` for the audit trail described in Finding 2. Two verification harnesses are provided: [`check-baseline.sh`](https://github.com/Dragonmonk111/junoclaw/blob/main/wasmvm-fork/patches/check-baseline.sh) (fast `git apply --check` per patch) and [`rebase-track-a.sh`](https://github.com/Dragonmonk111/junoclaw/blob/main/wasmvm-fork/patches/rebase-track-a.sh) (full clone-apply-test loop, ~2 minutes from a warm cache).
+**Repo (for reference, not a request):** [Dragonmonk111/junoclaw](https://github.com/Dragonmonk111/junoclaw) — the live patch series:
+
+- [`wasmvm-fork/patches/v2.2.2/`](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/patches/v2.2.2) — audit reference, matches `wasmvm` v2.2.4 pin / Juno mainnet today.
+- [`wasmvm-fork/patches/v2.2.7/`](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/patches/v2.2.7) — forward-port to latest 2.2.x tag.
+- [`wasmvm-fork/patches/v3.0.x/`](https://github.com/Dragonmonk111/junoclaw/tree/main/wasmvm-fork/patches/v3.0.x) — forward-port to latest **v3.0.6**.
+
+All three series are 10/10 CLEAN with `git apply --check`. Each has its own README manifest. The dropped Go-wrapper attempts (the ones referenced in Finding 2) are kept at `wasmvm-fork/patches/wasmvm.*.patch.dropped` for the audit trail. Verification harnesses: [`check-baseline.sh`](https://github.com/Dragonmonk111/junoclaw/blob/main/wasmvm-fork/patches/check-baseline.sh) (fast `git apply --check` per patch) and [`apply-and-test-v3.ps1`](https://github.com/Dragonmonk111/junoclaw/blob/main/wasmvm-fork/patches/apply-and-test-v3.ps1) (full clone-apply-test loop on v3.0.6, ~3 minutes from a warm cache).
 ```
 
 ---

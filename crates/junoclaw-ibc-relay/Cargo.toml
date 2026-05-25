@@ -1,0 +1,32 @@
+[package]
+name = "junoclaw-ibc-relay"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "IBC task relay for JunoClaw — ICS-20 + packet-forward-middleware (PFM) memo-based cross-chain task operations"
+repository = "https://github.com/Dragonmonk111/junoclaw"
+
+[dependencies]
+# Cosmos transaction building
+cosmrs = { version = "0.21", features = ["cosmwasm", "rpc", "grpc"] }
+
+# Async
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Errors / logging
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# Base64 for proof encoding in memos
+base64 = "0.22"
+
+# Config
+toml = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

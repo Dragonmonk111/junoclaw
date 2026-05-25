@@ -1,0 +1,30 @@
+[package]
+name = "junoclaw-github-agent"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "GitHub App auth + PR authorship for JunoClaw agents — Cosmos key for on-chain identity, GitHub App for off-chain PR authorship"
+repository = "https://github.com/Dragonmonk111/junoclaw"
+
+[dependencies]
+# JWT signing for GitHub App auth
+jsonwebtoken = "9"
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+# Async
+tokio = { workspace = true }
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Errors
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+# Logging
+tracing = { workspace = true }
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+# Base64 (for PEM handling)
+base64 = "0.22"
+
+[dev-dependencies]
+tokio = { workspace = true }

@@ -1,5 +1,5 @@
 diff --git a/packages/std/Cargo.toml b/packages/std/Cargo.toml
-index 73d594fed..6d204c3e4 100644
+index c38e3933c..01b2e9d06 100644
 --- a/packages/std/Cargo.toml
 +++ b/packages/std/Cargo.toml
 @@ -55,6 +55,7 @@ cosmwasm_2_1 = ["cosmwasm_2_0"]
@@ -13,7 +13,7 @@ index 73d594fed..6d204c3e4 100644
 @@ -78,6 +79,7 @@ rmp-serde = "1.3.0"
  [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
  bech32 = "0.11.0"
- cosmwasm-crypto = { version = "3.0.1", path = "../crypto" }
+ cosmwasm-crypto = { workspace = true }
 +cosmwasm-crypto-bn254 = { version = "0.1.0", path = "../crypto-bn254", optional = true }
  rand_core = { version = "0.6.4", features = ["getrandom"] }
  

@@ -25,13 +25,28 @@ The wasmvm-side wrapper patches (`wasmvm.api.rs.patch.dropped`, `wasmvm.lib.go.p
 - [x] **2026-05-13 (PM, day 2 forward-port complete):** Reanchored `01-cosmwasm-std.imports.rs.patch` against v3's `packages/std/src/exports/imports.rs` via `regen-patch-01-v3.ps1` (path move + line-number shift; BN254 `Api` impl placed before `fn debug` in `impl Api for ExternalApi`). Regenerated `04` and `08` Cargo.toml patches via `regen-patches-cargo-v3.ps1` (manual application against v3's non-`workspace=true` style, since `git apply --3way` couldn't merge with v2.2.7 SHAs). Bumped `00` rust-toolchain pin from 1.78 to 1.82 after first `cargo test` run failed (v3 transitive deps `wasmer 5.0.6` need 1.81, `icu_provider 2.0.0` need 1.82).
   - **Result: 10/10 patches CLEAN against v3.0.1.** Patch series complete in `v3.0.x/`. README in that dir documents the per-patch provenance.
   - Helpers: `regen-patch-01-v3.ps1`, `regen-patches-cargo-v3.ps1`, `finalize-v3-series.ps1`, `apply-and-test-v3.ps1`. All idempotent.
-  - The originally-feared HIGH-risk patches (`05`, `07`) applied **structurally CLEAN** — but see the finding below for `05`.
-  - **🟡 Finding (day-2.5 work item): `cargo test -p cosmwasm-vm` against patched v3.0.1 fails to compile.** Root cause: v3's `cosmwasm-vm::memory::write_region` changed its signature from `write_region(ptr, data)` (v2.2.x) to `write_region(env, &mut StoreMut, ptr, data)` (v3.x). Our `05-cosmwasm-vm.imports.rs.patch` body invokes the old 2-arg signature inside the `do_bn254_*` host-fn impls. The patch applies cleanly because the surrounding lines (the `extern "C"` registrations, the gas-cost constants) didn't move — but the call sites are now stale. **Fix shape:** rewrite the BN254 host-fn impls in `05` to thread `env` and `store` through, matching the v3 `do_bls12_381_*` impls already in v3 source. ~30 min of focused work. This finding is the v3-specific equivalent of why we feared `05` would need rewriting — it does, just not for the reason the day-0 plan predicted.
-- [ ] **Day 2-3:** Add wasmvm-side patches (`10-wasmvm.api.rs.patch`, `11-wasmvm.lib.go.patch` mirroring the BLS12-381 path). These were the dropped patches in v2.2.x; v3.x has the analogue. Run a separate `check-baseline-v3-wasmvm.ps1` against `wasmvm` v3.0.4 first.
-- [ ] **Day 3:** Tag `bn254-precompile-v3.0.4` on the `Dragonmonk111/wasmvm` fork. Hand Jake the `replace` directive for v30's `go.mod`:
-  ```
-  replace github.com/CosmWasm/wasmvm/v3 => github.com/Dragonmonk111/wasmvm/v3 v3.0.4-bn254
-  ```
+  - The originally-feared HIGH-risk patches (`05`, `07`) applied **structurally CLEAN** — but see the day-2.5 finding for `05`.
+- [x] **2026-05-14 (day 2.5 fix complete):** Rewrote the `do_bn254_*` host-fn impls in `05-cosmwasm-vm.imports.rs.patch` to use v3's 4-arg `write_region(env, &mut store, ptr, data)` instead of v2.2.x's 2-arg `write_region(&memory, ptr, data)`. Also removed three dead `let _memory = data.memory(&store);` bindings (legacy from v2.2.x where the memory reference was needed at the call site; v3's `read_region` / `write_region` take `(env, store, ptr, ...)` and resolve memory internally). Templated against v3's `do_bls12_381_aggregate_g1` which uses the same pattern. Hunk-2 line count adjusted from 94 to 89.
+  - **Verification.**
+    - `check-baseline-v3.ps1`: **10/10 still CLEAN** — the fix is body-local; hunk anchors unchanged.
+    - `cargo test -p cosmwasm-crypto-bn254 --no-default-features`: **rc=0, 22/22 pass** (our target suite).
+    - `cargo test -p cosmwasm-vm`: **315 passed, 1 failed.** The one failure is `wasm_backend::compile::tests::contract_with_floats_passes_check` — verified to **fail identically on vanilla unpatched v3.0.1** (Windows / Rust 1.82 / wasmer 5.0.6 environment issue, not introduced by our patches). 315/316 is effectively 100% for our purposes.
+  - Logs captured at `${BuildDir}/cargo-test-{crypto-bn254,vm}-v3.log`.
+- [x] **2026-05-14 (day 2.5 PM, strategic findings reframe day 3):**
+  - **Finding A: the wasmvm-side wrapper patches are not needed.** `check-baseline-v3-wasmvm.ps1` against wasmvm v3.0.4 surfaced two conflicts — expected. What was *not* expected: `Get-ChildItem -Recurse -Filter *.go | Select-String Bls12` returns **zero matches** anywhere in wasmvm v3.0.4. Same for `bls12_381` in `*.h`. The BLS12-381 host fns live exclusively in the cosmwasm-vm Rust layer (which we already patched). There is no parallel Go-API surface to mirror. The dropped `wasmvm.{api.rs,lib.go}.patch.dropped` files were always optional non-vm-tooling sugar; in v3 they're moot. **We will not forward-port them.**
+  - **Finding B: wasmvm v3.0.4 resolves cosmwasm to v3.0.6, not v3.0.1.** Reading `libwasmvm/Cargo.toml`: `cosmwasm-std = { version = "3.0.5", ... }` and `cosmwasm-vm = { version = "3.0.5", ... }` — these are caret requirements, so Cargo resolves to whichever 3.x.y >= 3.0.5 is highest in the registry. As of 2026-05-14 the highest is **v3.0.6**. Therefore our patches must apply against v3.0.6 (or v3.0.5; both are acceptable Cargo-side, but v3.0.6 is what an unconstrained `cargo update` will land on).
+  - **Re-baseline against v3.0.6:** `check-baseline-v3.ps1 -CosmwasmTag v3.0.6` returns **7 CLEAN / 3 3-way-OK / 0 CONFLICTS.** Patch 05's day-2.5 fix carries cleanly. The 3 patches needing 3-way merge are: `01-cosmwasm-std.imports.rs.patch` (likely a 1-2 line shift from the diff `wc -l`), `04-cosmwasm-std.Cargo.toml.patch` (Cargo.toml version-bump drift), `08-cosmwasm-vm.Cargo.toml.patch` (same).
+  - **Cosmwasm-vm `imports.rs` and `memory.rs` are byte-identical v3.0.1 ↔ v3.0.5.** Our deepest patch (05) needs no further work to retarget to v3.0.6.
+- [ ] **Day 3 (refreshed plan):**
+  - Regenerate `01`, `04`, `08` against cosmwasm v3.0.6 via `--3way` or fresh anchor. Land them in `wasmvm-fork/patches/v3.0.x/` (replacing the v3.0.1-anchored versions, with a tracked git-diff for clarity).
+  - Re-run `apply-and-test-v3.ps1 -CosmwasmTag v3.0.6`. Expect 22/22 crypto-bn254 + 315/316 cosmwasm-vm (same float-test pre-existing fail).
+  - **Decide the publication shape for Jake.** Two options:
+    - **(P1) Fork `cosmwasm` to `Dragonmonk111/cosmwasm-bn254`, tag `v3.0.6-bn254`.** Hand Jake a `[patch.crates-io]` section to add to wasmvm v3.0.4's libwasmvm/Cargo.toml — i.e., we fork wasmvm too (`Dragonmonk111/wasmvm v3.0.4-bn254`) just to inject the patch directive; libwasmvm itself is unchanged. Replace directive for v30's `go.mod`:
+      ```
+      replace github.com/CosmWasm/wasmvm/v3 => github.com/Dragonmonk111/wasmvm/v3 v3.0.4-bn254
+      ```
+    - **(P2) Ship the patches as a v30-side application step.** Jake adds a `[patch.crates-io]` directly in v30's Go module fetching script (or in his vendored wasmvm build). No fork needed on our side. Cleaner for him; we just publish the patch series.
+    - P1 is the user-friendly path (one git tag for Jake to consume); P2 is the lower-blast-radius path (no maintenance burden on us). Recommend P1 for shipping speed.
 
 ## Patch-by-patch plan
 
@@ -51,6 +66,8 @@ The wasmvm-side wrapper patches (`wasmvm.api.rs.patch.dropped`, `wasmvm.lib.go.p
 | 11 | (new) `11-wasmvm.lib.go.patch`                     |             **N/A** | Was `wasmvm.lib.go.patch.dropped`; revive against v3. |
 
 The HIGH-risk patches (`05`, `07`) are the ones to validate first — if either of those needs a non-trivial rewrite (i.e., the upstream API shape has moved enough that we can't just `--3way` it), the timeline expands.
+
+*Update (2026-05-14):* This day-0 plan target was **wasmvm v3.0.4 + cosmwasm v3.0.1**. As of day-2.5, the actual target is **wasmvm v3.0.4 (unchanged) + cosmwasm v3.0.6** (caret resolution from wasmvm's `"3.0.5"` dep string). Drift v3.0.1 ↔ v3.0.6 is minimal in the patched files — `packages/vm/src/imports.rs` and `packages/vm/src/memory.rs` are byte-identical.
 
 ## Tooling needed
 
