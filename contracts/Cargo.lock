@@ -1055,8 +1055,10 @@ version = "0.1.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
+ "hex",
  "schemars",
  "serde",
+ "sha2",
 ]
 
 [[package]]
@@ -1141,6 +1143,13 @@ name = "moultbook-v0"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ark-bn254",
+ "ark-ff 0.5.0",
+ "ark-groth16",
+ "ark-relations",
+ "ark-serialize 0.5.0",
+ "ark-snark",
+ "ark-std 0.5.0",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-multi-test",
@@ -1148,8 +1157,10 @@ dependencies = [
  "cw2",
  "schemars",
  "serde",
+ "serde_json",
  "sha2",
  "thiserror 2.0.18",
+ "zk-verifier",
 ]
 
 [[package]]

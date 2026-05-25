@@ -41,4 +41,28 @@ pub enum ContractError {
 
     #[error("Visibility group too large: {count} > max {max}")]
     GroupTooLarge { count: u32, max: u32 },
+
+    #[error("ZK anonymous publishing requires zk_verifier to be configured")]
+    ZkVerifierNotConfigured {},
+
+    #[error("ZK anonymous publishing requires membership_vk_hash to be configured")]
+    MembershipVkNotConfigured {},
+
+    #[error("Epoch rate limit exceeded: {count} entries this epoch (max {max})")]
+    EpochRateLimited { count: u32, max: u32 },
+
+    #[error("ZK membership proof verification failed")]
+    MembershipProofInvalid {},
+
+    #[error("ZK verification sub-message failed: {reason}")]
+    ZkVerificationFailed { reason: String },
+
+    #[error("Entry {id} was not authored by sender")]
+    NotEntryAuthor { id: String },
+
+    #[error("Entry {id} already has a disclosure")]
+    AlreadyDisclosed { id: String },
+
+    #[error("Derivation proof verification failed")]
+    DerivationProofInvalid {},
 }

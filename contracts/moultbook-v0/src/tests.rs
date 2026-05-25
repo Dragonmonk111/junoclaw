@@ -4,7 +4,7 @@ use cw_multi_test::{App, ContractWrapper, Executor};
 use crate::contract::{execute, instantiate, migrate, query};
 use crate::error::ContractError;
 use crate::msg::{EntriesResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Config, MoultEntry, Stats, Visibility};
+use crate::state::{AttestationRef, Config, MoultEntry, Stats, Visibility};
 
 const MAX_SIZE: u64 = 1_048_576;
 const MAX_REFS: u32 = 8;
@@ -24,6 +24,11 @@ fn store_and_instantiate(app: &mut App, admin: &Addr) -> Addr {
             max_refs: MAX_REFS,
             max_content_type_len: MAX_CONTENT_TYPE,
             max_group_size: MAX_GROUP_SIZE,
+            zk_verifier: None,
+            agent_registry: None,
+            membership_vk_hash: None,
+            entries_per_key_per_epoch: None,
+            epoch_blocks: None,
         },
         &[],
         "moultbook-v0",
@@ -473,4 +478,287 @@ fn group_too_large_rejected() {
         .unwrap_err();
     let cerr: ContractError = err.downcast().unwrap();
     assert!(matches!(cerr, ContractError::GroupTooLarge { .. }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Integration: PublishAnon → zk-verifier SubMsg → reply → entry persisted
+// ─────────────────────────────────────────────────────────────────────────────
+
+mod publish_anon_integration {
+    use super::*;
+    use zk_verifier::contract::{
+        execute as zk_execute, instantiate as zk_instantiate, migrate as zk_migrate,
+        query as zk_query,
+    };
+    use zk_verifier::msg::{ExecuteMsg as ZkExecuteMsg, InstantiateMsg as ZkInstantiateMsg};
+    use ark_bn254::{Bn254, Fr};
+    use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
+    use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
+    use ark_serialize::CanonicalSerialize;
+    use ark_snark::SNARK;
+    use ark_std::rand::{SeedableRng, rngs::StdRng};
+    use sha2::{Digest, Sha256};
+
+    /// Minimal circuit: proves knowledge of sqrt(y). Public input: y.
+    #[derive(Clone)]
+    struct SquareCircuit {
+        x: Option<Fr>,
+    }
+
+    impl ConstraintSynthesizer<Fr> for SquareCircuit {
+        fn generate_constraints(
+            self,
+            cs: ConstraintSystemRef<Fr>,
+        ) -> Result<(), SynthesisError> {
+            let x_val = self.x.unwrap_or(Fr::from(1u64));
+            let y_val = x_val * x_val;
+            let x_var = cs.new_witness_variable(|| Ok(x_val))?;
+            let y_var = cs.new_input_variable(|| Ok(y_val))?;
+            cs.enforce_constraint(
+                ark_relations::lc!() + x_var,
+                ark_relations::lc!() + x_var,
+                ark_relations::lc!() + y_var,
+            )?;
+            Ok(())
+        }
+    }
+
+    fn base64_encode(bytes: &[u8]) -> String {
+        const ALPHA: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for chunk in bytes.chunks(3) {
+            let b0 = chunk[0] as u32;
+            let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+            let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+            let triple = (b0 << 16) | (b1 << 8) | b2;
+            out.push(ALPHA[((triple >> 18) & 0x3F) as usize] as char);
+            out.push(ALPHA[((triple >> 12) & 0x3F) as usize] as char);
+            if chunk.len() > 1 { out.push(ALPHA[((triple >> 6) & 0x3F) as usize] as char); } else { out.push('='); }
+            if chunk.len() > 2 { out.push(ALPHA[(triple & 0x3F) as usize] as char); } else { out.push('='); }
+        }
+        out
+    }
+
+    fn hex_encode(bytes: &[u8]) -> String {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let mut s = String::with_capacity(bytes.len() * 2);
+        for &b in bytes {
+            s.push(HEX[(b >> 4) as usize] as char);
+            s.push(HEX[(b & 0x0f) as usize] as char);
+        }
+        s
+    }
+
+    /// Generate (vk_bytes, vk_b64, proof_b64, inputs_b64) for x=3, y=9.
+    fn gen_proof() -> (Vec<u8>, String, String, String) {
+        let mut rng = StdRng::seed_from_u64(101);
+        let circuit = SquareCircuit { x: None };
+        let (pk, vk): (ProvingKey<Bn254>, VerifyingKey<Bn254>) =
+            Groth16::<Bn254>::circuit_specific_setup(circuit, &mut rng).unwrap();
+        let circuit = SquareCircuit { x: Some(Fr::from(3u64)) };
+        let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng).unwrap();
+
+        let mut vk_bytes: Vec<u8> = Vec::new();
+        CanonicalSerialize::serialize_compressed(&vk, &mut vk_bytes).unwrap();
+        let mut proof_bytes: Vec<u8> = Vec::new();
+        CanonicalSerialize::serialize_compressed(&proof, &mut proof_bytes).unwrap();
+        let public_input = Fr::from(9u64);
+        let mut input_bytes: Vec<u8> = Vec::new();
+        CanonicalSerialize::serialize_compressed(&public_input, &mut input_bytes).unwrap();
+
+        (
+            vk_bytes.clone(),
+            base64_encode(&vk_bytes),
+            base64_encode(&proof_bytes),
+            base64_encode(&input_bytes),
+        )
+    }
+
+    /// Deploy zk-verifier, store a VK, return (zk_contract, vk_hash_string).
+    fn deploy_zk_verifier_with_vk(
+        app: &mut App,
+        admin: &Addr,
+        vk_bytes: &[u8],
+        vk_b64: &str,
+    ) -> (Addr, String) {
+        let zk_code = ContractWrapper::new(zk_execute, zk_instantiate, zk_query)
+            .with_migrate(zk_migrate);
+        let zk_code_id = app.store_code(Box::new(zk_code));
+        let zk_contract = app
+            .instantiate_contract(
+                zk_code_id,
+                admin.clone(),
+                &ZkInstantiateMsg { admin: Some(admin.to_string()) },
+                &[],
+                "zk-verifier",
+                Some(admin.to_string()),
+            )
+            .unwrap();
+
+        app.execute_contract(
+            admin.clone(),
+            zk_contract.clone(),
+            &ZkExecuteMsg::StoreVk { vk_base64: vk_b64.to_string() },
+            &[],
+        )
+        .unwrap();
+
+        let mut hasher = Sha256::new();
+        hasher.update(vk_bytes);
+        let vk_hash = format!("sha256:{}", hex_encode(&hasher.finalize()));
+
+        (zk_contract, vk_hash)
+    }
+
+    /// Deploy moultbook-v0 (with reply handler) connected to a zk-verifier.
+    fn deploy_moultbook(
+        app: &mut App,
+        admin: &Addr,
+        zk_contract: &Addr,
+        vk_hash: &str,
+    ) -> Addr {
+        let mb_code = ContractWrapper::new(execute, instantiate, query)
+            .with_migrate(migrate)
+            .with_reply(crate::contract::reply);
+        let mb_code_id = app.store_code(Box::new(mb_code));
+        app.instantiate_contract(
+            mb_code_id,
+            admin.clone(),
+            &InstantiateMsg {
+                admin: admin.to_string(),
+                whoami_contract: None,
+                max_size_bytes: 1_048_576,
+                max_refs: 8,
+                max_content_type_len: 64,
+                max_group_size: 50,
+                zk_verifier: Some(zk_contract.to_string()),
+                agent_registry: None,
+                membership_vk_hash: Some(vk_hash.to_string()),
+                entries_per_key_per_epoch: None,
+                epoch_blocks: None,
+            },
+            &[],
+            "moultbook-v0",
+            Some(admin.to_string()),
+        )
+        .unwrap()
+    }
+
+    /// Happy path: valid Groth16 proof → entry created with ZkProof attestation ref.
+    #[test]
+    fn publish_anon_valid_proof_creates_entry_with_zk_attestation() {
+        let mut app = App::default();
+        let admin = app.api().addr_make("admin");
+        let moult_key = app.api().addr_make("moult_key_1");
+
+        let (vk_bytes, vk_b64, proof_b64, inputs_b64) = gen_proof();
+        let (zk_contract, vk_hash) =
+            deploy_zk_verifier_with_vk(&mut app, &admin, &vk_bytes, &vk_b64);
+        let mb_contract = deploy_moultbook(&mut app, &admin, &zk_contract, &vk_hash);
+
+        app.execute_contract(
+            moult_key.clone(),
+            mb_contract.clone(),
+            &ExecuteMsg::PublishAnon {
+                topic_hash: "sha256:cafebabe00".to_string(),
+                content_cid: "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"
+                    .to_string(),
+                proof_base64: proof_b64,
+                public_inputs_base64: inputs_b64,
+            },
+            &[],
+        )
+        .unwrap();
+
+        // Verify entry was created via reply handler
+        let entries: EntriesResponse = app
+            .wrap()
+            .query_wasm_smart(
+                &mb_contract,
+                &QueryMsg::ListByMoultKey {
+                    moult_key: moult_key.to_string(),
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(entries.entries.len(), 1, "one entry should be created");
+
+        let entry = &entries.entries[0];
+        assert_eq!(entry.author, moult_key);
+        assert!(entry.redacted_at.is_none());
+        assert!(
+            matches!(entry.attestation_ref, Some(AttestationRef::ZkProof { .. })),
+            "expected ZkProof attestation ref, got {:?}",
+            entry.attestation_ref
+        );
+
+        let stats: Stats = app
+            .wrap()
+            .query_wasm_smart(&mb_contract, &QueryMsg::GetStats {})
+            .unwrap();
+        assert_eq!(stats.total_entries, 1);
+        assert_eq!(stats.total_active, 1);
+    }
+
+    /// Adversarial: garbage proof bytes → SubMsg fails → entire tx rolls back → no entry.
+    #[test]
+    fn publish_anon_invalid_proof_rejected_atomically() {
+        let mut app = App::default();
+        let admin = app.api().addr_make("admin");
+        let moult_key = app.api().addr_make("moult_key_bad");
+
+        let (vk_bytes, vk_b64, _good_proof, inputs_b64) = gen_proof();
+        let (zk_contract, vk_hash) =
+            deploy_zk_verifier_with_vk(&mut app, &admin, &vk_bytes, &vk_b64);
+        let mb_contract = deploy_moultbook(&mut app, &admin, &zk_contract, &vk_hash);
+
+        // 16 zero bytes — not a valid Groth16 proof
+        let garbage_proof = base64_encode(&[0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x00,
+                                            0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x00]);
+
+        let err = app
+            .execute_contract(
+                moult_key.clone(),
+                mb_contract.clone(),
+                &ExecuteMsg::PublishAnon {
+                    topic_hash: "sha256:badbadbad".to_string(),
+                    content_cid: "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"
+                        .to_string(),
+                    proof_base64: garbage_proof,
+                    public_inputs_base64: inputs_b64,
+                },
+                &[],
+            )
+            .unwrap_err();
+
+        // The zk-verifier sub-message fails → whole tx aborts (reply_on_success)
+        let err_str = format!("{:?}", err);
+        assert!(
+            err_str.contains("proof") || err_str.contains("deserialization") || err_str.contains("ProofInvalid"),
+            "expected proof-related error, got: {}",
+            err_str
+        );
+
+        // Atomicity check: no entry persisted, stats unchanged
+        let entries: EntriesResponse = app
+            .wrap()
+            .query_wasm_smart(
+                &mb_contract,
+                &QueryMsg::ListByMoultKey {
+                    moult_key: moult_key.to_string(),
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(entries.entries.len(), 0, "no entries should survive a rolled-back tx");
+
+        let stats: Stats = app
+            .wrap()
+            .query_wasm_smart(&mb_contract, &QueryMsg::GetStats {})
+            .unwrap();
+        assert_eq!(stats.total_entries, 0);
+    }
 }
