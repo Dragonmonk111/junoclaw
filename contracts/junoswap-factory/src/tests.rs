@@ -115,3 +115,166 @@ fn test_update_config_success() {
     assert_eq!(res.pair_code_id, 5);
     assert_eq!(res.default_fee_bps, 100);
 }
+
+#[test]
+fn test_create_pair_uses_default_fee() {
+    let mut deps = mock_dependencies();
+    setup_factory(&mut deps);
+
+    let info = message_info(&Addr::unchecked("user1"), &[]);
+    let msg = ExecuteMsg::CreatePair {
+        token_a: AssetInfo::Native("ujuno".to_string()),
+        token_b: AssetInfo::Native("uusdc".to_string()),
+        fee_bps: None, // should use default (30)
+    };
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    let event = res.events.iter().find(|e| e.ty == "wasm-create_pair").unwrap();
+    assert_eq!(
+        event.attributes.iter().find(|a| a.key == "fee_bps").unwrap().value,
+        "30"
+    );
+}
+
+#[test]
+fn test_create_pair_excessive_fee() {
+    let mut deps = mock_dependencies();
+    setup_factory(&mut deps);
+
+    let info = message_info(&Addr::unchecked("user1"), &[]);
+    let msg = ExecuteMsg::CreatePair {
+        token_a: AssetInfo::Native("ujuno".to_string()),
+        token_b: AssetInfo::Native("uusdc".to_string()),
+        fee_bps: Some(15000),
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert!(err.to_string().contains("Invalid fee"));
+}
+
+#[test]
+fn test_create_pair_emits_submsg() {
+    let mut deps = mock_dependencies();
+    setup_factory(&mut deps);
+
+    let info = message_info(&Addr::unchecked("user1"), &[]);
+    let msg = ExecuteMsg::CreatePair {
+        token_a: AssetInfo::Native("ujuno".to_string()),
+        token_b: AssetInfo::Native("uusdc".to_string()),
+        fee_bps: Some(25),
+    };
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // Should contain a WasmMsg::Instantiate submessage for the pair contract
+    assert_eq!(res.messages.len(), 1);
+    match &res.messages[0].msg {
+        cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Instantiate { code_id, label, .. }) => {
+            assert_eq!(*code_id, 1); // pair_code_id from setup
+            assert!(label.contains("junoswap-pair"));
+        }
+        _ => panic!("expected WasmMsg::Instantiate"),
+    }
+}
+
+#[test]
+fn test_create_pair_sorts_assets() {
+    let mut deps = mock_dependencies();
+    setup_factory(&mut deps);
+
+    // Create with reversed order — event should show sorted keys
+    let info = message_info(&Addr::unchecked("user1"), &[]);
+    let msg = ExecuteMsg::CreatePair {
+        token_a: AssetInfo::Native("uusdc".to_string()),
+        token_b: AssetInfo::Native("ujuno".to_string()),
+        fee_bps: None,
+    };
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    let event = res.events.iter().find(|e| e.ty == "wasm-create_pair").unwrap();
+    let token_a_val = &event.attributes.iter().find(|a| a.key == "token_a").unwrap().value;
+    let token_b_val = &event.attributes.iter().find(|a| a.key == "token_b").unwrap().value;
+    // Sorted: ujuno < uusdc
+    assert_eq!(token_a_val, "ujuno");
+    assert_eq!(token_b_val, "uusdc");
+}
+
+#[test]
+fn test_pair_count_query() {
+    let mut deps = mock_dependencies();
+    setup_factory(&mut deps);
+
+    // Initially 0
+    let count: u64 =
+        cosmwasm_std::from_json(query(deps.as_ref(), mock_env(), QueryMsg::PairCount {}).unwrap())
+            .unwrap();
+    assert_eq!(count, 0);
+
+    // Create a pair → count becomes 1
+    let info = message_info(&Addr::unchecked("user1"), &[]);
+    execute(
+        deps.as_mut(),
+        mock_env(),
+        info.clone(),
+        ExecuteMsg::CreatePair {
+            token_a: AssetInfo::Native("ujuno".to_string()),
+            token_b: AssetInfo::Native("uusdc".to_string()),
+            fee_bps: None,
+        },
+    )
+    .unwrap();
+
+    let count: u64 =
+        cosmwasm_std::from_json(query(deps.as_ref(), mock_env(), QueryMsg::PairCount {}).unwrap())
+            .unwrap();
+    assert_eq!(count, 1);
+
+    // Create another → count becomes 2
+    execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        ExecuteMsg::CreatePair {
+            token_a: AssetInfo::Native("ujuno".to_string()),
+            token_b: AssetInfo::Native("uatom".to_string()),
+            fee_bps: Some(50),
+        },
+    )
+    .unwrap();
+
+    let count: u64 =
+        cosmwasm_std::from_json(query(deps.as_ref(), mock_env(), QueryMsg::PairCount {}).unwrap())
+            .unwrap();
+    assert_eq!(count, 2);
+}
+
+#[test]
+fn test_update_config_invalid_fee() {
+    let mut deps = mock_dependencies();
+    setup_factory(&mut deps);
+
+    let info = message_info(&Addr::unchecked("owner"), &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        pair_code_id: None,
+        default_fee_bps: Some(20000),
+        junoclaw_contract: None,
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert!(err.to_string().contains("Invalid fee"));
+}
+
+#[test]
+fn test_fee_boundary_10000_valid() {
+    let mut deps = mock_dependencies();
+    let info = message_info(&Addr::unchecked("owner"), &[]);
+    let msg = InstantiateMsg {
+        pair_code_id: 1,
+        default_fee_bps: 10000,
+        junoclaw_contract: None,
+    };
+    // 10000 bps = 100% — valid boundary
+    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    let res: ConfigResponse =
+        cosmwasm_std::from_json(query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap())
+            .unwrap();
+    assert_eq!(res.default_fee_bps, 10000);
+}
