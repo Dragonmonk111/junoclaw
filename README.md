@@ -4,7 +4,7 @@
 
 Open-source. Built on Juno Network. [Official Juno skill spec integration](https://github.com/CosmosContracts/juno-network-skill) — any AI agent reading the spec discovers JunoClaw automatically.
 
-> 12 crates · 176+ tests · Groth16 ZK proofs · WAVS TEE attestation · IBC cross-chain swaps
+> 12 crates · 193 tests · Groth16 ZK proofs · WAVS TEE attestation · IBC cross-chain swaps
 
 ## Why JunoClaw?
 
@@ -20,7 +20,7 @@ Open-source. Built on Juno Network. [Official Juno skill spec integration](https
 
 ## What's Built
 
-- 12 crates, **176+ tests passing** (zero failures)
+- 12 crates, **193 tests passing** (zero failures)
 - WAVS MCP operator — polls chain events, generates Groth16 membership proofs, executes agent tasks in TEE
 - BN254 Groth16 ZK verifier (precompile case study: **1.82× gas reduction** vs pure-Wasm — see `docs/BN254_BENCHMARK_RESULTS.md`)
 - Moultbook: anonymous on-chain publishing with ZK proof of membership (circuit + operator proof gen wired)
@@ -32,7 +32,7 @@ Open-source. Built on Juno Network. [Official Juno skill spec integration](https
 ```
 junoclaw/
 │
-├── contracts/                 # CosmWasm workspace — 12 crates, 176+ tests
+├── contracts/                 # CosmWasm workspace — 12 crates, 193 tests
 │   │
 │   │   ── Core Protocol ──
 │   ├── agent-company/         # DAO governance, sortition, adaptive deadlines
