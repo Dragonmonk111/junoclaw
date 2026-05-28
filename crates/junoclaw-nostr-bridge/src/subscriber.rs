@@ -159,3 +159,124 @@ fn handle_message(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    fn mock_tm_message(action: &str, task_id: &str, reward: &str, height: &str) -> String {
+        serde_json::json!({
+            "result": {
+                "data": {
+                    "value": {
+                        "TxResult": {
+                            "height": height,
+                            "result": {
+                                "events": [
+                                    {
+                                        "type": "wasm",
+                                        "attributes": [
+                                            {"key": "action", "value": action},
+                                            {"key": "_contract_address", "value": "juno1contract"},
+                                            {"key": "task_id", "value": task_id},
+                                            {"key": "reward", "value": reward},
+                                            {"key": "deadline", "value": "1750000000"},
+                                            {"key": "caps", "value": "compute,llm"},
+                                            {"key": "description", "value": "Test task"}
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        }).to_string()
+    }
+
+    #[test]
+    fn test_handle_post_task_event() {
+        let tasks: Arc<Mutex<Vec<TaskInfo>>> = Arc::new(Mutex::new(vec![]));
+        let tasks_clone = tasks.clone();
+        let on_task = move |t: TaskInfo| { tasks_clone.lock().unwrap().push(t); };
+
+        let msg = mock_tm_message("post_task", "42", "1000000ujuno", "12345");
+        handle_message(&msg, "juno1contract", "juno-1", "juno1verifier", &on_task).unwrap();
+
+        let received = tasks.lock().unwrap();
+        assert_eq!(received.len(), 1);
+        assert_eq!(received[0].task_id, 42);
+        assert_eq!(received[0].reward, "1000000ujuno");
+        assert_eq!(received[0].deadline, 1750000000);
+        assert_eq!(received[0].caps, vec!["compute", "llm"]);
+        assert_eq!(received[0].block_height, 12345);
+        assert_eq!(received[0].chain_id, "juno-1");
+        assert_eq!(received[0].status, TaskStatus::Open);
+    }
+
+    #[test]
+    fn test_handle_non_post_task_action_ignored() {
+        let tasks: Arc<Mutex<Vec<TaskInfo>>> = Arc::new(Mutex::new(vec![]));
+        let tasks_clone = tasks.clone();
+        let on_task = move |t: TaskInfo| { tasks_clone.lock().unwrap().push(t); };
+
+        let msg = mock_tm_message("accept_task", "42", "1000000ujuno", "12345");
+        handle_message(&msg, "juno1contract", "juno-1", "juno1verifier", &on_task).unwrap();
+
+        assert!(tasks.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_handle_no_events_in_message() {
+        let tasks: Arc<Mutex<Vec<TaskInfo>>> = Arc::new(Mutex::new(vec![]));
+        let tasks_clone = tasks.clone();
+        let on_task = move |t: TaskInfo| { tasks_clone.lock().unwrap().push(t); };
+
+        let msg = r#"{"result":{}}"#;
+        handle_message(msg, "juno1contract", "juno-1", "juno1verifier", &on_task).unwrap();
+
+        assert!(tasks.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_handle_missing_task_id_ignored() {
+        let tasks: Arc<Mutex<Vec<TaskInfo>>> = Arc::new(Mutex::new(vec![]));
+        let tasks_clone = tasks.clone();
+        let on_task = move |t: TaskInfo| { tasks_clone.lock().unwrap().push(t); };
+
+        let msg = serde_json::json!({
+            "result": {
+                "data": { "value": { "TxResult": { "height": "100", "result": {
+                    "events": [{"type": "wasm", "attributes": [
+                        {"key": "action", "value": "post_task"},
+                        {"key": "reward", "value": "500ujuno"}
+                    ]}]
+                }}}}
+            }
+        }).to_string();
+
+        handle_message(&msg, "juno1contract", "juno-1", "juno1verifier", &on_task).unwrap();
+        assert!(tasks.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_handle_non_wasm_event_ignored() {
+        let tasks: Arc<Mutex<Vec<TaskInfo>>> = Arc::new(Mutex::new(vec![]));
+        let tasks_clone = tasks.clone();
+        let on_task = move |t: TaskInfo| { tasks_clone.lock().unwrap().push(t); };
+
+        let msg = serde_json::json!({
+            "result": {
+                "data": { "value": { "TxResult": { "height": "100", "result": {
+                    "events": [{"type": "transfer", "attributes": [
+                        {"key": "recipient", "value": "juno1abc"}
+                    ]}]
+                }}}}
+            }
+        }).to_string();
+
+        handle_message(&msg, "juno1contract", "juno-1", "juno1verifier", &on_task).unwrap();
+        assert!(tasks.lock().unwrap().is_empty());
+    }
+}

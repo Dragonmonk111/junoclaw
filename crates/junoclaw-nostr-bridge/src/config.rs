@@ -70,3 +70,45 @@ impl BridgeConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_config(rpc: &str) -> BridgeConfig {
+        BridgeConfig {
+            rpc_url: rpc.into(),
+            contract: "juno1test".into(),
+            chain_id: "uni-7".into(),
+            zk_verifier: "juno1verifier".into(),
+            nostr_privkey_hex: "aa".repeat(32),
+            relays: vec!["wss://relay.damus.io".into()],
+            republish_interval_secs: 3600,
+            log_level: "info".into(),
+        }
+    }
+
+    #[test]
+    fn test_ws_url_https() {
+        let cfg = test_config("https://rpc.juno.strange.love:443");
+        assert_eq!(cfg.ws_url(), "wss://rpc.juno.strange.love:443/websocket");
+    }
+
+    #[test]
+    fn test_ws_url_http() {
+        let cfg = test_config("http://localhost:26657");
+        assert_eq!(cfg.ws_url(), "ws://localhost:26657/websocket");
+    }
+
+    #[test]
+    fn test_ws_url_trailing_slash() {
+        let cfg = test_config("https://rpc.example.com/");
+        assert_eq!(cfg.ws_url(), "wss://rpc.example.com/websocket");
+    }
+
+    #[test]
+    fn test_ws_url_bare() {
+        let cfg = test_config("rpc.example.com:26657");
+        assert_eq!(cfg.ws_url(), "rpc.example.com:26657/websocket");
+    }
+}

@@ -1,7 +1,7 @@
 //! Nostr publisher — sends kind 38402 events to configured relays.
 
 use anyhow::Result;
-use nostr_sdk::{Client, Keys};
+use nostr_sdk::{Client, JsonUtil, Keys};
 use tracing::{info, warn};
 
 use crate::config::BridgeConfig;
@@ -37,14 +37,11 @@ impl NostrPublisher {
 
     /// Build and publish a kind 38402 event for the given task.
     pub async fn publish_task(&self, task: &TaskInfo) -> Result<TaskEvent> {
-        let event = build_task_event(task, &self.keys)?;
+        let task_event = build_task_event(task, &self.keys)?;
 
-        match self.client.send_event_builder(
-            nostr_sdk::EventBuilder::new(
-                nostr_sdk::Kind::Custom(crate::event::KIND_TASK_DISCOVERY as u64),
-                event.event_json.clone(),
-            )
-        ).await {
+        // Parse back the signed event and send it
+        let event: nostr_sdk::Event = nostr_sdk::Event::from_json(&task_event.event_json)?;
+        match self.client.send_event(event).await {
             Ok(output) => {
                 info!(
                     "Task {} published to Nostr. Success: {}/{} relays",
@@ -59,7 +56,7 @@ impl NostrPublisher {
             Err(e) => warn!("Failed to publish task {}: {e}", task.task_id),
         }
 
-        Ok(event)
+        Ok(task_event)
     }
 
     pub fn pubkey_hex(&self) -> String {

@@ -18,9 +18,8 @@
 
 use anyhow::Result;
 use nostr_sdk::{
-    EventBuilder, JsonUtil, Keys, Kind, Tag, Timestamp,
+    EventBuilder, JsonUtil, Keys, Kind, Tag,
 };
-use serde_json;
 
 use crate::types::{TaskInfo, TaskStatus};
 
@@ -37,6 +36,10 @@ pub struct TaskEvent {
 /// Build a kind 38402 Nostr event from a [`TaskInfo`].
 pub fn build_task_event(task: &TaskInfo, keys: &Keys) -> Result<TaskEvent> {
     let d_tag = format!("{}:{}:{}", task.chain_id, task.contract, task.task_id);
+    let task_id_str = task.task_id.to_string();
+    let deadline_str = task.deadline.to_string();
+    let height_str = task.block_height.to_string();
+    let caps_str = task.caps.join(",");
 
     // Content: JSON-encoded task summary (up to 64 KB; relays may reject larger)
     let content = serde_json::to_string_pretty(&serde_json::json!({
@@ -53,25 +56,22 @@ pub fn build_task_event(task: &TaskInfo, keys: &Keys) -> Result<TaskEvent> {
         "block_height": task.block_height,
     }))?;
 
-    let tags = vec![
-        Tag::parse(vec!["d", &d_tag])?,
-        Tag::parse(vec!["chain", &task.chain_id])?,
-        Tag::parse(vec!["contract", &task.contract])?,
-        Tag::parse(vec!["task", &task.task_id.to_string()])?,
-        Tag::parse(vec!["reward", &task.reward])?,
-        Tag::parse(vec!["deadline", &task.deadline.to_string()])?,
-        Tag::parse(vec!["verifier", &task.verifier])?,
-        Tag::parse(vec!["vk_hash", &task.vk_hash])?,
-        Tag::parse(vec!["caps", &task.caps.join(",")])?,
-        Tag::parse(vec!["status", task.status.as_str()])?,
-        Tag::parse(vec!["height", &task.block_height.to_string()])?,
+    let tags: Vec<Tag> = vec![
+        Tag::custom(nostr_sdk::TagKind::Custom("d".into()), vec![d_tag]),
+        Tag::custom(nostr_sdk::TagKind::Custom("chain".into()), vec![task.chain_id.clone()]),
+        Tag::custom(nostr_sdk::TagKind::Custom("contract".into()), vec![task.contract.clone()]),
+        Tag::custom(nostr_sdk::TagKind::Custom("task".into()), vec![task_id_str]),
+        Tag::custom(nostr_sdk::TagKind::Custom("reward".into()), vec![task.reward.clone()]),
+        Tag::custom(nostr_sdk::TagKind::Custom("deadline".into()), vec![deadline_str]),
+        Tag::custom(nostr_sdk::TagKind::Custom("verifier".into()), vec![task.verifier.clone()]),
+        Tag::custom(nostr_sdk::TagKind::Custom("vk_hash".into()), vec![task.vk_hash.clone()]),
+        Tag::custom(nostr_sdk::TagKind::Custom("caps".into()), vec![caps_str]),
+        Tag::custom(nostr_sdk::TagKind::Custom("status".into()), vec![task.status.as_str().to_string()]),
+        Tag::custom(nostr_sdk::TagKind::Custom("height".into()), vec![height_str]),
     ];
 
-    let builder = EventBuilder::new(Kind::Custom(KIND_TASK_DISCOVERY as u64), content)
-        .tags(tags)
-        .custom_created_at(Timestamp::now());
-
-    let event = builder.sign_with_keys(keys)?;
+    let builder = EventBuilder::new(Kind::Custom(KIND_TASK_DISCOVERY), content, tags);
+    let event = builder.to_event(keys)?;
     let event_json = event.as_json();
 
     Ok(TaskEvent {
