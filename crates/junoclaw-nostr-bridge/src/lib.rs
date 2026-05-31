@@ -16,11 +16,15 @@
 //!
 //! ```bash
 //! JUNOCLAW_NOSTR_PRIVKEY=<hex_privkey> \
-//! JUNOCLAW_RPC=https://rpc.juno.strange.love:443 \
+//! JUNOCLAW_RPC=https://juno.rpc.t.stavr.tech \
 //! JUNOCLAW_CONTRACT=juno1... \
-//! JUNOCLAW_CHAIN_ID=juno-1 \
-//! junoclaw-nostr-bridge
+//! JUNOCLAW_CHAIN_ID=uni-7 \
+//!   cargo run -p junoclaw-nostr-bridge --bin junoclaw-nostr-bridge
 //! ```
+//!
+//! The daemon reconnects with exponential backoff if the chain websocket drops
+//! and shuts down gracefully on Ctrl+C / SIGTERM, draining any in-flight
+//! publishes before exiting.
 //!
 //! Multiple bridge instances can run simultaneously — relay deduplication
 //! by event ID ensures agents see each task exactly once.

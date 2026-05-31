@@ -6,8 +6,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: resolve(__dirname, "../../.env") });
 
 export const config = {
-  // Juno testnet (uni-7)
-  rpcEndpoint: process.env.JUNO_RPC || "https://juno-testnet-rpc.polkachu.com",
+  // Juno testnet (uni-7). Default to STAVR (verified live 2026-05-29);
+  // override with JUNO_RPC env var if needed.
+  rpcEndpoint: process.env.JUNO_RPC || "https://juno.rpc.t.stavr.tech",
   chainId: process.env.CHAIN_ID || "uni-7",
   gasPrice: process.env.GAS_PRICE || "0.025ujunox",
   denom: process.env.DENOM || "ujunox",

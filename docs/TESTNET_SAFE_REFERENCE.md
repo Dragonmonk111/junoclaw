@@ -14,10 +14,11 @@ written down. This file is the address book, not the key ring.*
 
 | Contract | Code ID | Address |
 |---|---|---|
-| agent-company v7 | 75 | (query: `junod q wasm list-contract-by-code 75 --node https://juno-testnet-rpc.polkachu.com`) |
+| agent-company v7 | 75 | (query: `junod q wasm list-contract-by-code 75 --node https://juno.rpc.t.stavr.tech`) |
 | zk-verifier | 64 | `juno1ydxksv...lse7ekem` |
 | junoswap-pair | 61 | live on uni-7 |
-| moultbook-v0 | TBD (post v30) | — |
+| moultbook-v0 | 76 | `juno1lahsc7ef0manp3czjx806l8v2erqzzlxhr7z9z7090h5k99vdd2qjhdh53` |
+| ibc-task-host | 77 | `juno1hskkxy5wlfdgc0ht595plwrhc2zqmrkcer2v9sehxf44nv3upa4sgu9cag` |
 | task-ledger | TBD (post v30) | — |
 | escrow | TBD (post v30) | — |
 | agent-registry | TBD (post v30) | — |

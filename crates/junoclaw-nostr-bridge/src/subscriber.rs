@@ -279,4 +279,49 @@ mod tests {
         handle_message(&msg, "juno1contract", "juno-1", "juno1verifier", &on_task).unwrap();
         assert!(tasks.lock().unwrap().is_empty());
     }
+
+    /// End-to-end pipeline (offline, deterministic): a raw Tendermint `post_task`
+    /// message is parsed into a [`TaskInfo`] and then built + signed into the exact
+    /// kind-38402 Nostr event the daemon would publish. This exercises the full
+    /// subscriber -> publisher path the live bridge runs, without needing a chain
+    /// websocket or live relays — so the only thing the real e2e run adds is secrets.
+    #[test]
+    fn test_end_to_end_tm_message_to_signed_kind_38402() {
+        use crate::event::{build_task_event, KIND_TASK_DISCOVERY};
+
+        // 1. Parse a realistic uni-7 post_task event through the subscriber.
+        let captured: Arc<Mutex<Option<TaskInfo>>> = Arc::new(Mutex::new(None));
+        let captured_clone = captured.clone();
+        let on_task = move |t: TaskInfo| { *captured_clone.lock().unwrap() = Some(t); };
+
+        let msg = mock_tm_message("post_task", "7", "2500000ujunox", "14254800");
+        handle_message(&msg, "juno1taskledger", "uni-7", "juno1verifier", &on_task).unwrap();
+
+        let task = captured.lock().unwrap().clone().expect("post_task parsed into TaskInfo");
+        assert_eq!(task.task_id, 7);
+        assert_eq!(task.chain_id, "uni-7");
+
+        // 2. Build + sign the Nostr event the publisher would broadcast.
+        let keys = nostr_sdk::Keys::generate();
+        let built = build_task_event(&task, &keys).unwrap();
+        let event: serde_json::Value = serde_json::from_str(&built.event_json).unwrap();
+
+        // 3. Assert the on-wire shape agents subscribe to.
+        assert_eq!(event["kind"], serde_json::json!(KIND_TASK_DISCOVERY));
+
+        let tags = event["tags"].as_array().unwrap();
+        let d_tag = tags.iter().find(|t| t[0] == "d").expect("replaceable d tag present");
+        assert_eq!(d_tag[1], "uni-7:juno1taskledger:7");
+
+        // Signed: non-empty signature + pubkey populated.
+        assert!(event["sig"].as_str().map(|s| !s.is_empty()).unwrap_or(false));
+        assert!(event["pubkey"].as_str().map(|s| !s.is_empty()).unwrap_or(false));
+
+        // Content round-trips the task the DAO posted.
+        let content: serde_json::Value =
+            serde_json::from_str(event["content"].as_str().unwrap()).unwrap();
+        assert_eq!(content["task_id"], serde_json::json!(7));
+        assert_eq!(content["status"], "open");
+        assert_eq!(content["reward"], "2500000ujunox");
+    }
 }

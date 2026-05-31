@@ -3,7 +3,11 @@
 export const CHAIN_CONFIG = {
   chainId: 'uni-7',
   chainName: 'Juno Testnet',
-  rpc: 'https://juno-testnet-rpc.polkachu.com',
+  // Primary RPC: STAVR (verified live, fully synced — sourced after Polkachu
+  // proved unreliable for the deploy script, see progress.txt 2026-05-29).
+  rpc: 'https://juno.rpc.t.stavr.tech',
+  // REST left on Polkachu (no STAVR REST endpoint confirmed yet); queries that
+  // only need RPC go through STAVR above.
   rest: 'https://juno-testnet-api.polkachu.com',
   denom: 'ujunox',
   displayDenom: 'JUNOX',
@@ -19,6 +23,9 @@ export const CONTRACTS = {
   junoswapFactory: 'juno12v0t60msclf3hcj56clrnh575ct35clglqunr489aj0xsvawghvq3wtkkh',
   junoswapPairJunoUsdc: 'juno1xn4mtv9cfc7q3zphvstkhqgn4g864pppvq64zvdnmcsen3jwacwqfr6e98',
   junoswapPairJunoStake: 'juno156t270zr84xskkj6k6yq6w4pj8xu646kfjsngscpjdhhmmdt7f7s8ttg4s',
+  // Deployed 2026-05-29 to uni-7 (code IDs 76 / 77).
+  moultbookV0: 'juno1lahsc7ef0manp3czjx806l8v2erqzzlxhr7z9z7090h5k99vdd2qjhdh53',
+  ibcTaskHost: 'juno1hskkxy5wlfdgc0ht595plwrhc2zqmrkcer2v9sehxf44nv3upa4sgu9cag',
 } as const
 
 // Keplr chain suggestion (for adding uni-7 if not already added)
