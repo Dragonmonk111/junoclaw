@@ -1,6 +1,10 @@
 # Copy-paste command sequence — Open the `juno-network-skill` PR
 
-*Click-paste path to land `references/junoclaw.md` as a PR on `CosmosContracts/juno-network-skill`. ~10 minutes user-side.*
+*Click-paste path to land the **v2 update** of `references/junoclaw.md` as a PR on `CosmosContracts/juno-network-skill`. ~10 minutes user-side.*
+
+> **v2 note:** this overwrites the existing `references/junoclaw.md` (it is an update,
+> not a new file). The `Copy-Item` step below replaces it in place. Use branch
+> `feat/junoclaw-reference-v2` and the body file `PR_BODY_V2.md`.
 
 ## Pre-requisite
 
@@ -20,7 +24,7 @@ gh repo fork CosmosContracts/juno-network-skill --clone --remote
 #    Adjust if you already have a juno-network-skill clone elsewhere.
 
 # 3. Create the feature branch
-git -C juno-network-skill checkout -b feat/junoclaw-reference
+git -C juno-network-skill checkout -b feat/junoclaw-reference-v2
 
 # 4. Copy the staged file into place
 Copy-Item `
@@ -29,10 +33,10 @@ Copy-Item `
 
 # 5. Commit (signed if possible — GPG / Sigstore / SSH key, doesn't matter which)
 git -C juno-network-skill add references/junoclaw.md
-git -C juno-network-skill commit -m "docs(references): add references/junoclaw.md — JunoClaw agent-company skill reference"
+git -C juno-network-skill commit -m "docs(references): update references/junoclaw.md — v2 (12 crates, moultbook + ibc-task-host)"
 
 # 6. Push the branch
-git -C juno-network-skill push -u origin feat/junoclaw-reference
+git -C juno-network-skill push -u origin feat/junoclaw-reference-v2
 
 # 7. Open the PR. The PR body is in
 #    c:\cosmos-node\node-data\config\CascadeProjects\windsurf-project\junoclaw\docs\juno-network-skill-pr\PR_BODY.md
@@ -40,9 +44,9 @@ git -C juno-network-skill push -u origin feat/junoclaw-reference
 gh pr create `
   --repo CosmosContracts/juno-network-skill `
   --base main `
-  --head Dragonmonk111:feat/junoclaw-reference `
-  --title "docs(references): add references/junoclaw.md — JunoClaw agent-company skill reference" `
-  --body-file "c:\cosmos-node\node-data\config\CascadeProjects\windsurf-project\junoclaw\docs\juno-network-skill-pr\PR_BODY.md"
+  --head Dragonmonk111:feat/junoclaw-reference-v2 `
+  --title "docs(references): update references/junoclaw.md — v2 (12 crates, moultbook + ibc-task-host)" `
+  --body-file "c:\cosmos-node\node-data\config\CascadeProjects\windsurf-project\junoclaw\docs\juno-network-skill-pr\PR_BODY_V2.md"
 ```
 
 `gh pr create` will print the PR URL. Open it in a browser, double-check the rendering, and that's it.

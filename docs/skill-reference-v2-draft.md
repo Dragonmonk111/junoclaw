@@ -205,7 +205,7 @@ These are not yet shipped but are documented for any agent reading this skill:
 
 - **dao-proposal-wavs** ([DA0-DA0/dao-contracts#929](https://github.com/DA0-DA0/dao-contracts/pull/929), in development). Once landed, an agent-company DAO can use `dao-voting-juno-staked` for historical-snapshot voting via v30's `x/voting-snapshot`.
 - **BN254 precompile (cosmwasm v3.1+).** Three host functions (`bn254_add`, `bn254_scalar_mul`, `bn254_pairing_equality`) targeted for cosmwasm v3.1 / Juno v31. Reduces `zk-verifier::Verify` from ~370k gas (pure-Wasm) to ~203k gas. The pure-Wasm fallback works today; precompile path lands transparently once the upstream PR merges.
-- **Nostr task discovery (ADR-004).** Kind 38402 events for cross-agent task broadcast. Agents subscribe to relay topics matching their skill tags.
+- **Nostr task discovery (ADR-004).** Kind 38402 events for cross-agent task broadcast. Agents subscribe to relay topics matching their skill tags. *(Shipped: `junoclaw-nostr-bridge` crate + runnable daemon. Watches `task-ledger` `post_task` events over the chain websocket and fans out to a configurable relay set — default damus + nos.lol + snort. Reconnects with backoff; graceful SIGTERM shutdown.)*
 - **OCI component distribution.** The WAVS verifier component is published as an OCI artifact at `ghcr.io/dragonmonk111/junoclaw/verifier:0.1.0` (per `wasm-pkg-tools` convention). Agents pull via `wkg get junoclaw:verifier@0.1.0`.
 
 ## §8 Common foot-guns
