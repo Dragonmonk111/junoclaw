@@ -11,7 +11,7 @@ const __dir = dirname(fileURLToPath(import.meta.url))
 // ── Config ──────────────────────────────────────────────────────────────────
 
 const CHAIN_ID  = process.env.CHAIN_ID  || 'uni-7'
-const RPC_URL   = process.env.RPC_URL   || 'https://juno-testnet-rpc.polkachu.com'
+const RPC_URL   = process.env.RPC_URL   || 'https://juno.rpc.t.stavr.tech'
 const GAS_PRICE = process.env.GAS_PRICE || '0.075ujunox'
 
 const PARLIAMENT_STATE = join(__dir, '..', 'wavs', 'bridge', 'parliament-state.json')
@@ -105,7 +105,7 @@ async function main() {
     const msg = {
       admin: address,
       whoami_contract: null,
-      max_size_bytes: '65536',
+      max_size_bytes: 65536,
       max_refs: 8,
       max_content_type_len: 64,
       max_group_size: 32,

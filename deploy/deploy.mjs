@@ -11,7 +11,7 @@ const __dir = dirname(fileURLToPath(import.meta.url))
 // ── Config ──────────────────────────────────────────────────────────────────
 
 const CHAIN_ID  = process.env.CHAIN_ID  || 'uni-7'
-const RPC_URL   = process.env.RPC_URL   || 'https://juno-testnet-rpc.polkachu.com'
+const RPC_URL   = process.env.RPC_URL   || 'https://juno.rpc.t.stavr.tech'
 const GAS_PRICE = process.env.GAS_PRICE || '0.075ujunox'
 const AUTO      = process.env.AUTO_CONFIRM === 'true'
 

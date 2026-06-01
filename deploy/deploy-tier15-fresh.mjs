@@ -37,7 +37,7 @@ import 'dotenv/config'
 const __dir = dirname(fileURLToPath(import.meta.url))
 
 const CHAIN_ID  = process.env.CHAIN_ID  || 'uni-7'
-const RPC_URL   = process.env.RPC_URL   || 'https://juno-testnet-rpc.polkachu.com'
+const RPC_URL   = process.env.RPC_URL   || 'https://juno.rpc.t.stavr.tech'
 const GAS_PRICE = process.env.GAS_PRICE || '0.075ujunox'
 const SKIP_UPLOAD = process.env.SKIP_UPLOAD === 'true'
 const DRY_RUN = process.env.DRY_RUN === 'true'

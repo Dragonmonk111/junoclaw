@@ -1,0 +1,246 @@
+JunoClaw progress log
+=====================
+
+Format: newest first. Pure text. Update at end of each session.
+Live status line below; everything else is dated entries.
+
+Last update: 2026-05-31 22:45 UTC+1
+Status: 12 crates - 203 tests green - uni-7 wired to STAVR - Nostr daemon shippable
+
+
+== 2026-05-31 ==
+
+- Frontend + bridge re-pointed off Polkachu onto STAVR (verified-live uni-7):
+    * frontend/src/lib/chain-config.ts: rpc -> https://juno.rpc.t.stavr.tech
+      REST left on Polkachu (no STAVR REST endpoint confirmed). Added the two
+      new contract addresses: moultbookV0 (code 76) + ibcTaskHost (code 77).
+    * wavs/bridge/src/config.ts: default rpcEndpoint -> STAVR (JUNO_RPC override
+      retained).
+
+- Nostr bridge daemon binary shipped: crates/junoclaw-nostr-bridge/src/main.rs.
+  The crate was lib-only; added the runnable entrypoint that wires subscriber ->
+  publisher. Design notes:
+    * sync subscriber callback -> async publisher bridged via unbounded mpsc.
+    * subscriber runs in a reconnect loop, exponential backoff 1s..30s, reset
+      to 1s after a connection stays up >=60s (stable-connection rule).
+    * graceful shutdown on Ctrl+C / SIGTERM; channel closed so the publisher
+      task drains in-flight events before exit.
+  cargo build clean; 10 existing tests still green; bin target recognised.
+
+- Docs synced: lib.rs run example now uses STAVR/uni-7; skill-reference-v2
+  §7 moves Nostr bridge from "not yet shipped" to shipped-with-daemon.
+  TESTNET_SAFE_REFERENCE.md table updated with codes 76/77 + STAVR RPC.
+
+- Still TODO (needs live secrets / manual run): execute the bridge end-to-end
+  against STAVR — emit a real post_task on task-ledger and confirm kind 38402
+  lands on relay.damus.io. Daemon is ready; this is a runtime step.
+
+- Side note (from Jacob Gadikian tweet review): commonware.xyz is a Rust
+  blockchain-primitives lib (Patrick O'Grady), NOT an MCP server. Powers Kora
+  (Andreas Bigger) -> Nunchi EVM testnet. Unrelated to JunoClaw; no action.
+
+- GitHub repo "About" description still says "10 CosmWasm contracts" — README
+  was fixed to 12 on 05-27 but the repo short-description field is separate.
+  MANUAL: update via repo Settings -> About -> "12 crates".
+
+
+== 2026-05-29 ==
+
+- STAVR (Discord #validators-private, juno) replied to our testnet DM with a
+  working uni-7 endpoint:
+      https://juno.rpc.t.stavr.tech/
+  Verified live: chain uni-7, app v29.0.0, block 14,254,738, fully synced,
+  catching_up=false. Moniker STAVR-Service. Unblocks the deploy script.
+
+- Jake commit e5ec25e on CosmosContracts/juno PR #1202:
+  "v30: voting-snapshot - address Cascade review findings + fix proto-gen path"
+    * CRITICAL sparse-delegator bug: fixed per our two-pass algorithm proposal.
+      Same fix extended to pruneTotalPower for symmetry (bonus correctness).
+    * RetentionWindowHeights default changed to 0 (the safe default we advised).
+    * LST quorum asymmetry: documented per our option (b); our math reproduced
+      in planning/05-staking-snapshot.md.
+    * pruneInterval: moved into types.Params field 3 as we suggested.
+    * Minor app.toml gas floor: added to operator checklist at two locations
+      in planning/07-rollout.md.
+    * Regression test uses our "Alice, 10k JUNO, set-and-forget" example.
+    * First commit on the 142-commit PR to cite an external reviewer by name.
+
+- Jake also pushed 5714178: CodeQL cw-hooks map iter fix (separate housekeeping,
+  not from our review).
+
+- Jake personal: back in San Francisco after a 2yr hiatus, "things are better
+  now". Telegram exchange warm. Responsive on Discord/Telegram for v30 coord.
+
+- Manuel Araoz tweet endorsed by Jake:
+  "PSA: I now consider all of DeFi unsafe. Coding agents are superhuman at
+  finding vulnerabilities, and smart contract security is too asymmetric -
+  defenders need to fix every bug while attackers need just one exploit."
+  Directly applicable to JunoClaw's AI-augmented review workflow; the v30
+  fix is the public demonstration.
+
+
+NEXT (queued, in priority order):
+
+  1. Deploy moultbook-v0 + ibc-task-host to uni-7.
+     Script: deploy/deploy-new-contracts.mjs
+     RPC:    https://juno.rpc.t.stavr.tech/
+     Need:   funded testnet wallet; check uni-7 faucet operational.
+
+  2. Wire frontend to uni-7; smoke test the 5-step DAO wizard against live
+     chain (templates: Community Fund, Crop Protection, Mutual Aid, etc.).
+
+  3. Run Nostr bridge end-to-end against STAVR RPC; emit a real post_task on
+     task-ledger and confirm kind 38402 lands on relay.damus.io.
+
+  4. PR the v2 skill reference to CosmosContracts/juno-network-skill.
+     Drops:  jclaw-token, jclaw-airdrop
+     Adds:   moultbook-v0, ibc-task-host, junoswap-factory, faucet
+     Diff:   ~250 lines
+     Draft already in docs/skill-reference-v2-draft.md.
+
+  5. Master article publish (articles/JUNOCLAW_V30_RECEIPT_2026_05_29.md) -
+     time to v30 governance proposal submission.
+
+  6. Thank STAVR publicly in #validators-private after deploy succeeds.
+
+
+KNOWN BLOCKERS: none today.
+
+
+OPEN QUESTIONS:
+
+  - v30 mainnet governance proposal submission date - waiting on Jake.
+    Article release ties to this.
+
+  - uni-7 faucet operational status - not verified yet; check before deploy.
+
+  - Track B (BN254 wasmvm v3 forward-port) timing - probably wait until v30
+    mainnet upgrade lands before proposing.
+
+  - Jake asked May 28: "Who else are you collaborating with? Who's we?"
+    Replied: "just me and my claude till now." His reaction: "Hehehe, nice
+    team." Worth tracking how he uses this framing publicly. The "address
+    Cascade review findings" commit message is one direction.
+
+
+THINGS TO REMEMBER:
+
+  - memory/ is gitignored - safe for personal notes / lessons / cascade memory
+  - .gitignore also excludes docs/JAKE_DM_*.md, _private/, cv_*, GHSA drafts
+  - contracts: 12 crates total (11 deployable + 1 shared lib: junoclaw-common)
+  - test count: 203 as of 2026-05-29 (Nostr bridge added 10 to previous 193)
+  - cosign public key in cosign.pub for OCI artifact verification
+  - WAVS = Layer.xyz event-driven framework (Ethan Frey + Jake Hartnell)
+
+
+VALIDATOR / COLLABORATOR CONTACTS:
+
+  - STAVR              Discord: STAVR | STAVR  in juno #validators-private
+                       RPC: https://juno.rpc.t.stavr.tech/
+                       Responsive; runs many cosmos chains. Thank visibly
+                       after deploy succeeds.
+
+  - Dragonmonk111      Also in #validators-private; uses mainnet for testing.
+
+  - Jake Hartnell      @JakeHartnell on X / Telegram - co-founder, decision
+                       authority for Juno chain-level changes.
+
+
+KEY REPO POSITIONS:
+
+  - CosmosContracts/juno PR #1202: v30 upgrade, 142 commits.
+    Review findings merged 2026-05-28. Awaiting final merge to main.
+
+  - CosmosContracts/juno-network-skill: v2 reference PR not yet submitted.
+    Draft ready in docs/skill-reference-v2-draft.md.
+
+  - Dragonmonk111/junoclaw: public.
+    5 security advisories C-1..C-4 + H-3 published.
+    4 security releases shipped (v0.x.y-security-1 through -3 plus follow-up).
+    OCI artifact published + cosign-signed.
+
+
+PUBLIC URLs:
+
+  repo:        github.com/Dragonmonk111/junoclaw
+  skill spec:  github.com/CosmosContracts/juno-network-skill
+  v30 PR:      github.com/CosmosContracts/juno/pull/1202
+  OCI image:   ghcr.io/dragonmonk111/junoclaw/verifier:0.1.0
+  pub cosign:  cosign.pub in repo root
+
+
+
+== 2026-05-28 ==
+
+- Nostr bridge crate shipped: junoclaw-nostr-bridge, 10 unit tests passing.
+  kind 38402, three-relay default fanout (damus + nos.lol + snort), secp256k1
+  signing, env-config (12-factor).
+
+- Total tests now 203 (up from 193 the day before).
+
+- Tests hardened on ibc-task-host and junoswap-factory:
+    * ibc-task-host: missing-config errors, success dispatch with stats,
+      swap denom mismatch, invalid min_return, partial config update, etc.
+    * junoswap-factory: default fee fallback, excessive fee rejection,
+      submsg shape verification, asset sorting, PairCount across sequential
+      creates, 10000 bps boundary check.
+
+- DM drafted to validators team for uni-7 RPC.
+  Sent to Juno x AI Telegram + Discord #validators-private.
+
+- OVERVIEW_2026_05_28.md drafted as aerial-view doc - architecture, Nostr
+  bridge explanation, WAVS pattern, full task lifecycle end-to-end.
+
+
+
+== 2026-05-25..27 ==
+
+- Moultbook trustless-trust article drafted
+  (articles/MOULTBOOK_TRUSTLESS_TRUST_2026_05_25.md).
+
+- ADR-005 skill-circle draft.
+
+- skill-reference-v2-draft.md drafted in docs/. Ready to PR upstream.
+
+
+
+== 2026-05-21 ==
+
+- PR #1 to CosmosContracts/juno-network-skill MERGED. JunoClaw now in the
+  official Juno skill spec. references/junoclaw.md, 243 lines.
+  Any agent reading the spec discovers JunoClaw automatically.
+
+- MEDIUM_POST_PR_MERGED_2026_05_21.md drafted as the merge announcement.
+
+
+
+== 2026-05-12 ==
+
+- Posted moultbook-style review of Juno v30 PR #1202 on GitHub.
+  Anchor commit 0a7098ef07. Three findings (one CRITICAL), worked example
+  per finding, suggested fix per finding, plus minor notes.
+  Internal long-form: docs/MOULTBOOK_REVIEW_OF_JUNO_V30_PR_1202.md
+  Posted comment:   docs/PR_1202_GITHUB_REVIEW_COMMENT.md
+
+
+
+== 2026-05-01 (governance) ==
+
+- Proposal #373 (BN254 precompile track) passed on juno-1 mainnet.
+- v0.x.y-security-1 through -3 shipped after Ffern Institute audit:
+    * Shell-injection bypass (allowlist + Cargo feature gate)
+    * Shell-metacharacter injection (no-shell spawn)
+    * MCP mnemonic exposure (encrypted wallet-handle registry)
+    * Path traversal in upload_wasm (symlink reject + size cap)
+    * SSRF in computeDataVerify (scheme/port allowlist + DNS pre-resolution)
+- Runtime kill-switches: signing_paused, egress_paused, admin RPC.
+
+
+
+NOTE TO FUTURE SELF:
+The discipline is: ship the safe failure mode first, then iterate. The v30
+RetentionWindowHeights = 0 default is the canonical example - unbounded
+storage growth is the better failure mode than silently zeroing sparse
+delegators. The same shape applies to our LST allowlist (empty by default
+at junoclaw launch) and our agent-registry's default reputation (zero, not
+implicit-positive).
