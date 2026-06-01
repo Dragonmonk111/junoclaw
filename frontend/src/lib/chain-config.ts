@@ -6,9 +6,9 @@ export const CHAIN_CONFIG = {
   // Primary RPC: STAVR (verified live, fully synced — sourced after Polkachu
   // proved unreliable for the deploy script, see progress.txt 2026-05-29).
   rpc: 'https://juno.rpc.t.stavr.tech',
-  // REST left on Polkachu (no STAVR REST endpoint confirmed yet); queries that
-  // only need RPC go through STAVR above.
-  rest: 'https://juno-testnet-api.polkachu.com',
+  // REST: STAVR (verified live 2026-06-01 — node_info reports network=uni-7,
+  // junod v29.0.0). Keeps RPC + REST on one provider for consistency.
+  rest: 'https://juno.api.t.stavr.tech',
   denom: 'ujunox',
   displayDenom: 'JUNOX',
   decimals: 6,

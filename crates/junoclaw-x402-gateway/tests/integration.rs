@@ -10,6 +10,7 @@
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -111,4 +112,86 @@ async fn reward_exceeding_cap_rejected_with_400() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     let body = body_json(resp.into_body()).await;
     assert_eq!(body["error"], "bad_request");
+}
+
+/// Full Phase-1 (402-mint) path. Closes the coverage gap previously tracked in
+/// `docs/X402_RISK_ANALYSIS.md` §5: an unsigned POST /tasks should resolve the
+/// child `task_ledger` address (mocked Tendermint abci_query) and return a
+/// `402 Payment Required` carrying a well-formed `PaymentEnvelope`.
+#[tokio::test]
+async fn post_task_unsigned_mints_402_envelope() {
+    let mut server = mockito::Server::new_async().await;
+
+    // agent-company::Config response the gateway resolves child addrs from.
+    let config_json = json!({
+        "task_ledger": "juno1taskledger",
+        "escrow": "juno1escrow",
+        "agent_registry": "juno1registry",
+        "zk_verifier": "juno1zkverifier",
+    });
+    let value_b64 = B64.encode(serde_json::to_vec(&config_json).unwrap());
+    let rpc_body = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "response": {
+                "code": 0,
+                "log": "",
+                "info": "",
+                "index": "0",
+                "key": null,
+                "value": value_b64,
+                "proofOps": null,
+                "height": "1",
+                "codespace": ""
+            }
+        }
+    });
+    let _m = server
+        .mock("POST", "/")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(rpc_body.to_string())
+        .expect_at_least(1)
+        .create_async()
+        .await;
+
+    let cosmos = Arc::new(CosmosClient::new(&server.url(), "juno-1").expect("cosmos client"));
+    let state = AppState {
+        cosmos,
+        nonces: NonceStore::new(),
+        agent_company: "juno1agentcompany".into(),
+        envelope_ttl_sec: 300,
+        max_task_ujuno: 1_000_000_000,
+    };
+    let app = build_router(state);
+
+    let body = serde_json::to_string(&json!({
+        "description": "render a thing",
+        "constraints": "deterministic",
+        "verifying_key_hash": "sha256:ab",
+        "reward": [{"denom":"ujuno","amount":"100"}],
+        "deadline_height": 1000u64
+    }))
+    .unwrap();
+    let req = Request::builder()
+        .method("POST")
+        .uri("/tasks")
+        .header("content-type", "application/json")
+        .body(Body::from(body))
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::PAYMENT_REQUIRED);
+
+    let env = body_json(resp.into_body()).await;
+    assert_eq!(env["chain_id"], "juno-1");
+    assert_eq!(env["contract"], "juno1taskledger");
+    assert_eq!(env["scheme"], "cosmos-direct");
+    assert_eq!(env["version"], "1");
+    assert!(env["msg"]["post_task"].is_object(), "envelope msg must carry post_task");
+    assert_eq!(env["gas_estimate"], 280_000);
+    assert!(
+        env["binding"].as_str().unwrap().starts_with("sha256:"),
+        "envelope must be binding-hashed"
+    );
 }

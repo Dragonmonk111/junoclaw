@@ -22,6 +22,10 @@
 //!   cargo run -p junoclaw-nostr-bridge --bin junoclaw-nostr-bridge
 //! ```
 //!
+//! Pass `--dry-run` to validate the live chain->event path with zero secrets:
+//! events are built and logged with an ephemeral key, and nothing is sent to a
+//! relay (so `JUNOCLAW_NOSTR_PRIVKEY` is not required).
+//!
 //! The daemon reconnects with exponential backoff if the chain websocket drops
 //! and shuts down gracefully on Ctrl+C / SIGTERM, draining any in-flight
 //! publishes before exiting.

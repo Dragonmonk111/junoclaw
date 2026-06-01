@@ -39,8 +39,10 @@ impl BridgeConfig {
                 .unwrap_or_else(|_| "juno-1".into()),
             zk_verifier: std::env::var("JUNOCLAW_ZK_VERIFIER")
                 .unwrap_or_else(|_| String::new()),
+            // Optional at load time so `--dry-run` needs no secret. The
+            // publisher enforces presence before any real relay publish.
             nostr_privkey_hex: std::env::var("JUNOCLAW_NOSTR_PRIVKEY")
-                .context("JUNOCLAW_NOSTR_PRIVKEY not set")?,
+                .unwrap_or_default(),
             relays: std::env::var("JUNOCLAW_NOSTR_RELAYS")
                 .unwrap_or_else(|_| {
                     "wss://relay.damus.io,wss://nos.lol,wss://relay.snort.social".into()

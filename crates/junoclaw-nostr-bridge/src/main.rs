@@ -20,11 +20,13 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
+use nostr_sdk::Keys;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use junoclaw_nostr_bridge::config::BridgeConfig;
+use junoclaw_nostr_bridge::event::build_task_event;
 use junoclaw_nostr_bridge::publisher::NostrPublisher;
 use junoclaw_nostr_bridge::subscriber::subscribe_task_ledger;
 use junoclaw_nostr_bridge::types::TaskInfo;
@@ -47,31 +49,60 @@ async fn main() -> Result<()> {
         )
         .init();
 
+    // `--dry-run`: build and log each kind-38402 event instead of publishing.
+    // Lets the live chain->event path be validated with zero secrets and no
+    // relay writes (uses an ephemeral signing key).
+    let dry_run = std::env::args().skip(1).any(|a| a == "--dry-run");
+
     info!("JunoClaw Nostr bridge starting");
     info!("  chain_id = {}", config.chain_id);
     info!("  contract = {}", config.contract);
     info!("  rpc_url  = {}", config.rpc_url);
     info!("  ws_url   = {}", config.ws_url());
-    info!("  relays   = {:?}", config.relays);
-
-    // Connect to relays before we start watching the chain, so the first task
-    // we see can be published immediately.
-    let publisher = NostrPublisher::new(&config)
-        .await
-        .context("failed to initialise Nostr publisher")?;
-    info!("bridge pubkey = {}", publisher.pubkey_hex());
+    if dry_run {
+        info!("  mode     = DRY-RUN (events logged, not published)");
+    } else {
+        info!("  relays   = {:?}", config.relays);
+    }
 
     // Sync (subscriber callback) -> async (publisher) bridge.
     let (tx, mut rx) = mpsc::unbounded_channel::<TaskInfo>();
 
-    let publish_handle = tokio::spawn(async move {
-        while let Some(task) = rx.recv().await {
-            if let Err(e) = publisher.publish_task(&task).await {
-                warn!("publish error for task {}: {e}", task.task_id);
+    let publish_handle = if dry_run {
+        // Ephemeral key: events are signed so the JSON is well-formed, but the
+        // key is discarded and nothing is ever sent to a relay.
+        let keys = Keys::generate();
+        info!("dry-run signing pubkey (ephemeral) = {}", keys.public_key());
+        tokio::spawn(async move {
+            while let Some(task) = rx.recv().await {
+                match build_task_event(&task, &keys) {
+                    Ok(ev) => info!(
+                        "[dry-run] would publish kind-38402 for task {}:\n{}",
+                        task.task_id, ev.event_json
+                    ),
+                    Err(e) => {
+                        warn!("[dry-run] failed to build event for task {}: {e}", task.task_id)
+                    }
+                }
             }
-        }
-        info!("publish queue drained; publisher task exiting");
-    });
+            info!("dry-run queue drained; consumer task exiting");
+        })
+    } else {
+        // Connect to relays before we start watching the chain, so the first
+        // task we see can be published immediately.
+        let publisher = NostrPublisher::new(&config)
+            .await
+            .context("failed to initialise Nostr publisher")?;
+        info!("bridge pubkey = {}", publisher.pubkey_hex());
+        tokio::spawn(async move {
+            while let Some(task) = rx.recv().await {
+                if let Err(e) = publisher.publish_task(&task).await {
+                    warn!("publish error for task {}: {e}", task.task_id);
+                }
+            }
+            info!("publish queue drained; publisher task exiting");
+        })
+    };
 
     // A single shutdown future, polled across every loop iteration.
     let shutdown = shutdown_signal();

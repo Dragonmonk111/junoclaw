@@ -1,0 +1,93 @@
+name: CI
+
+# Runs the test + build gates on every PR and on pushes to main.
+# Complements audit-bot.yml (which enforces audit-doc discipline) by actually
+# compiling and testing the code:
+#   - contracts/  : the 12 CosmWasm crates (204 unit/integration tests)
+#   - root        : the off-chain crates + plugins workspace (cli, daemon,
+#                   nostr-bridge, x402-gateway, ...)
+#   - frontend/   : `tsc -b && vite build` must stay green
+#
+# The `wavs/` workspace is intentionally excluded here — it builds with
+# cargo-component against a wasm target and is covered by its own tooling.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  contracts:
+    name: Contracts (cargo test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contracts
+      - name: Test
+        run: cargo test --workspace --locked
+
+  crates:
+    name: Off-chain crates (cargo test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test
+        run: cargo test --workspace --locked
+
+  # Advisory only: the codebase is not yet rustfmt-clean and clippy-clean, so
+  # these must not gate merges. They surface drift without blocking; flip
+  # continue-on-error to false once a dedicated cleanup PR lands.
+  lint:
+    name: Lint (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format check (contracts)
+        run: cargo fmt --all --check --manifest-path contracts/Cargo.toml
+      - name: Format check (root)
+        run: cargo fmt --all --check
+      - name: Clippy (contracts)
+        run: cargo clippy --manifest-path contracts/Cargo.toml --workspace --all-targets
+      - name: Clippy (root)
+        run: cargo clippy --workspace --all-targets
+
+  frontend:
+    name: Frontend (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Type-check + build
+        run: npm run build

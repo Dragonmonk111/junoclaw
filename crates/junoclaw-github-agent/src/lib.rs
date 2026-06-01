@@ -40,8 +40,8 @@
 //!         maintainer_can_modify: true,
 //!     };
 //!
-//!     let url = token.open_pull_request(pr).await?;
-//!     println!("PR opened: {url}");
+//!     let (url, number) = token.open_pull_request(pr).await?;
+//!     println!("PR #{number} opened: {url}");
 //!     Ok(())
 //! }
 //! ```

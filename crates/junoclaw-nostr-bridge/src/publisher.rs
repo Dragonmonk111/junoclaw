@@ -1,6 +1,6 @@
 //! Nostr publisher — sends kind 38402 events to configured relays.
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use nostr_sdk::{Client, JsonUtil, Keys};
 use tracing::{info, warn};
 
@@ -15,6 +15,12 @@ pub struct NostrPublisher {
 
 impl NostrPublisher {
     pub async fn new(config: &BridgeConfig) -> Result<Self> {
+        if config.nostr_privkey_hex.is_empty() {
+            bail!(
+                "JUNOCLAW_NOSTR_PRIVKEY not set — required to sign Nostr events. \
+                 Use --dry-run to build + log events without publishing."
+            );
+        }
         let privkey_bytes = hex::decode(&config.nostr_privkey_hex)?;
         let secret_key = nostr_sdk::SecretKey::from_slice(&privkey_bytes)?;
         let keys = Keys::new(secret_key);

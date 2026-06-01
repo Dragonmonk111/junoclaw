@@ -65,6 +65,8 @@ package-lock.json
 
 # Frontend build
 frontend/dist/
+# TypeScript incremental build cache
+*.tsbuildinfo
 
 # MCP build
 mcp/dist/
