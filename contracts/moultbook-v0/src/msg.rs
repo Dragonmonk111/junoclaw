@@ -66,12 +66,20 @@ pub enum ExecuteMsg {
     /// Voluntarily link a moultbook entry to your primary identity.
     /// Sender must be the moult-key that authored the entry.
     /// One-way and optional — nobody can force disclosure.
+    ///
+    /// The disclosure is only persisted if the supplied Groth16 derivation
+    /// proof verifies against the configured `zk_verifier` (the membership
+    /// circuit in disclosure mode). Verification runs as a `reply_on_success`
+    /// sub-message, so an invalid proof rolls the whole tx back.
     VoluntaryDisclose {
         entry_id: String,
         /// The primary agent-registry address to link to
         primary_key: String,
-        /// Proof that moult-key derives from primary-key (base64)
+        /// Proof that moult-key derives from primary-key (base64 arkworks Proof<Bn254>)
         derivation_proof_base64: String,
+        /// Public inputs for the derivation proof (base64 arkworks [Fr]).
+        /// Binds the proof to the moult-key / primary-key pair.
+        derivation_public_inputs_base64: String,
     },
 }
 

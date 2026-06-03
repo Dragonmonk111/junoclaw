@@ -1,9 +1,28 @@
 use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
-use cosmwasm_std::Addr;
+use cosmwasm_std::{Addr, Binary, Event, Reply, SubMsgResponse, SubMsgResult};
 
-use crate::contract::{execute, instantiate, query};
+use crate::contract::{execute, instantiate, query, reply};
+use crate::error::ContractError;
 use crate::msg::*;
 use junoclaw_common::AssetInfo;
+
+/// Build a successful instantiate reply carrying the standard wasmd
+/// `instantiate` event with the spawned `_contract_address`.
+#[allow(deprecated)]
+fn make_instantiate_reply(id: u64, contract_addr: &str) -> Reply {
+    Reply {
+        id,
+        payload: Binary::default(),
+        gas_used: 0,
+        result: SubMsgResult::Ok(SubMsgResponse {
+            events: vec![Event::new("instantiate")
+                .add_attribute("_contract_address", contract_addr)
+                .add_attribute("code_id", "1")],
+            data: None,
+            msg_responses: vec![],
+        }),
+    }
+}
 
 fn setup_factory(deps: &mut cosmwasm_std::OwnedDeps<cosmwasm_std::MemoryStorage, cosmwasm_std::testing::MockApi, cosmwasm_std::testing::MockQuerier>) {
     let info = message_info(&Addr::unchecked("owner"), &[]);
@@ -277,4 +296,125 @@ fn test_fee_boundary_10000_valid() {
         cosmwasm_std::from_json(query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap())
             .unwrap();
     assert_eq!(res.default_fee_bps, 10000);
+}
+
+#[test]
+fn test_create_pair_registers_pair_via_reply() {
+    let mut deps = mock_dependencies();
+    setup_factory(&mut deps);
+
+    let token_a = AssetInfo::Native("ujuno".to_string());
+    let token_b = AssetInfo::Native("uusdc".to_string());
+
+    // Create the pair → id 1, PENDING_PAIRS[1] stashed.
+    let info = message_info(&Addr::unchecked("user1"), &[]);
+    execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        ExecuteMsg::CreatePair {
+            token_a: token_a.clone(),
+            token_b: token_b.clone(),
+            fee_bps: Some(30),
+        },
+    )
+    .unwrap();
+
+    // Before the reply, the pair is not yet queryable.
+    assert!(query(
+        deps.as_ref(),
+        mock_env(),
+        QueryMsg::Pair { token_a: token_a.clone(), token_b: token_b.clone() },
+    )
+    .is_err());
+
+    // Simulate the child instantiate reply.
+    let pair_addr = deps.api.addr_make("pair1");
+    let reply_msg = make_instantiate_reply(1, pair_addr.as_str());
+    reply(deps.as_mut(), mock_env(), reply_msg).unwrap();
+
+    // Now the pair resolves via both Pair and AllPairs.
+    let res: PairResponse = cosmwasm_std::from_json(
+        query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::Pair { token_a: token_a.clone(), token_b: token_b.clone() },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(res.pair_addr, pair_addr);
+
+    let all: PairsResponse = cosmwasm_std::from_json(
+        query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::AllPairs { start_after: None, limit: None },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(all.pairs.len(), 1);
+    assert_eq!(all.pairs[0].pair_addr, pair_addr);
+}
+
+#[test]
+fn test_duplicate_pair_rejected_after_registration() {
+    let mut deps = mock_dependencies();
+    setup_factory(&mut deps);
+
+    let token_a = AssetInfo::Native("ujuno".to_string());
+    let token_b = AssetInfo::Native("uusdc".to_string());
+    let info = message_info(&Addr::unchecked("user1"), &[]);
+
+    // First create + reply registers the pair.
+    execute(
+        deps.as_mut(),
+        mock_env(),
+        info.clone(),
+        ExecuteMsg::CreatePair {
+            token_a: token_a.clone(),
+            token_b: token_b.clone(),
+            fee_bps: None,
+        },
+    )
+    .unwrap();
+    let pair_addr = deps.api.addr_make("pair1");
+    reply(deps.as_mut(), mock_env(), make_instantiate_reply(1, pair_addr.as_str())).unwrap();
+
+    // Second create with the same assets (even reversed) now fails.
+    let err = execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        ExecuteMsg::CreatePair {
+            token_a: token_b,
+            token_b: token_a,
+            fee_bps: None,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(err, ContractError::PairExists {}));
+}
+
+#[test]
+fn test_reply_unknown_id_rejected() {
+    let mut deps = mock_dependencies();
+    setup_factory(&mut deps);
+
+    let pair_addr = deps.api.addr_make("ghost");
+    let err = reply(deps.as_mut(), mock_env(), make_instantiate_reply(999, pair_addr.as_str()))
+        .unwrap_err();
+    assert!(matches!(err, ContractError::UnknownReplyId { id: 999 }));
+}
+
+#[test]
+fn test_migrate_ok() {
+    let mut deps = mock_dependencies();
+    setup_factory(&mut deps);
+    let res = crate::contract::migrate(deps.as_mut(), mock_env(), MigrateMsg {}).unwrap();
+    assert_eq!(
+        res.attributes.iter().find(|a| a.key == "action").unwrap().value,
+        "migrate"
+    );
 }

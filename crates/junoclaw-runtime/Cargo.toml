@@ -26,6 +26,10 @@ sha2 = { workspace = true }
 hex = { workspace = true }
 base64 = "0.22"
 
+# Cosmos / Juno on-chain signing (guarded; see chain.rs + SigningConfig)
+cosmrs = { version = "0.21", features = ["rpc", "cosmwasm", "bip32"] }
+bip32 = { version = "0.5", features = ["bip39"] }
+
 # ZK proof generation for moultbook anonymous endorsements
 moultbook-membership-circuit = { path = "../../circuits/moultbook-membership" }
 ark-bn254 = "0.5"

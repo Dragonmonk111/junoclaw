@@ -4,7 +4,7 @@ use cw_multi_test::{App, ContractWrapper, Executor};
 use crate::contract::{execute, instantiate, migrate, query};
 use crate::error::ContractError;
 use crate::msg::{EntriesResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{AttestationRef, Config, MoultEntry, Stats, Visibility};
+use crate::state::{AttestationRef, Config, Disclosure, MoultEntry, Stats, Visibility};
 
 const MAX_SIZE: u64 = 1_048_576;
 const MAX_REFS: u32 = 8;
@@ -760,5 +760,203 @@ mod publish_anon_integration {
             .query_wasm_smart(&mb_contract, &QueryMsg::GetStats {})
             .unwrap();
         assert_eq!(stats.total_entries, 0);
+    }
+
+    /// Helper: publish an anonymous entry and return its id.
+    fn publish_and_get_id(
+        app: &mut App,
+        mb_contract: &Addr,
+        moult_key: &Addr,
+        proof_b64: &str,
+        inputs_b64: &str,
+        topic: &str,
+    ) -> String {
+        app.execute_contract(
+            moult_key.clone(),
+            mb_contract.clone(),
+            &ExecuteMsg::PublishAnon {
+                topic_hash: topic.to_string(),
+                content_cid: "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"
+                    .to_string(),
+                proof_base64: proof_b64.to_string(),
+                public_inputs_base64: inputs_b64.to_string(),
+            },
+            &[],
+        )
+        .unwrap();
+
+        let entries: EntriesResponse = app
+            .wrap()
+            .query_wasm_smart(
+                mb_contract,
+                &QueryMsg::ListByMoultKey {
+                    moult_key: moult_key.to_string(),
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+        entries.entries[0].id.clone()
+    }
+
+    /// Happy path: a valid derivation proof persists the disclosure via reply.
+    #[test]
+    fn voluntary_disclose_valid_proof_persists_disclosure() {
+        let mut app = App::default();
+        let admin = app.api().addr_make("admin");
+        let moult_key = app.api().addr_make("moult_key_disc");
+        let primary = app.api().addr_make("primary_identity");
+
+        let (vk_bytes, vk_b64, proof_b64, inputs_b64) = gen_proof();
+        let (zk_contract, vk_hash) =
+            deploy_zk_verifier_with_vk(&mut app, &admin, &vk_bytes, &vk_b64);
+        let mb_contract = deploy_moultbook(&mut app, &admin, &zk_contract, &vk_hash);
+
+        let entry_id = publish_and_get_id(
+            &mut app,
+            &mb_contract,
+            &moult_key,
+            &proof_b64,
+            &inputs_b64,
+            "sha256:disc01",
+        );
+
+        app.execute_contract(
+            moult_key.clone(),
+            mb_contract.clone(),
+            &ExecuteMsg::VoluntaryDisclose {
+                entry_id: entry_id.clone(),
+                primary_key: primary.to_string(),
+                derivation_proof_base64: proof_b64.clone(),
+                derivation_public_inputs_base64: inputs_b64.clone(),
+            },
+            &[],
+        )
+        .unwrap();
+
+        let disclosure: Option<Disclosure> = app
+            .wrap()
+            .query_wasm_smart(
+                &mb_contract,
+                &QueryMsg::GetDisclosure {
+                    entry_id: entry_id.clone(),
+                },
+            )
+            .unwrap();
+        let disclosure = disclosure.expect("disclosure should be persisted");
+        assert_eq!(disclosure.entry_id, entry_id);
+        assert_eq!(disclosure.primary_key, primary);
+    }
+
+    /// Adversarial: garbage derivation proof → SubMsg fails → tx rolls back → no disclosure.
+    #[test]
+    fn voluntary_disclose_invalid_proof_rejected_atomically() {
+        let mut app = App::default();
+        let admin = app.api().addr_make("admin");
+        let moult_key = app.api().addr_make("moult_key_disc_bad");
+        let primary = app.api().addr_make("primary_identity_bad");
+
+        let (vk_bytes, vk_b64, proof_b64, inputs_b64) = gen_proof();
+        let (zk_contract, vk_hash) =
+            deploy_zk_verifier_with_vk(&mut app, &admin, &vk_bytes, &vk_b64);
+        let mb_contract = deploy_moultbook(&mut app, &admin, &zk_contract, &vk_hash);
+
+        let entry_id = publish_and_get_id(
+            &mut app,
+            &mb_contract,
+            &moult_key,
+            &proof_b64,
+            &inputs_b64,
+            "sha256:disc02",
+        );
+
+        let garbage_proof = base64_encode(&[
+            0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00,
+            0x00, 0x00,
+        ]);
+
+        let err = app
+            .execute_contract(
+                moult_key.clone(),
+                mb_contract.clone(),
+                &ExecuteMsg::VoluntaryDisclose {
+                    entry_id: entry_id.clone(),
+                    primary_key: primary.to_string(),
+                    derivation_proof_base64: garbage_proof,
+                    derivation_public_inputs_base64: inputs_b64.clone(),
+                },
+                &[],
+            )
+            .unwrap_err();
+
+        let err_str = format!("{:?}", err);
+        assert!(
+            err_str.contains("proof")
+                || err_str.contains("deserialization")
+                || err_str.contains("ProofInvalid"),
+            "expected proof-related error, got: {}",
+            err_str
+        );
+
+        // Atomicity: no disclosure persisted.
+        let disclosure: Option<Disclosure> = app
+            .wrap()
+            .query_wasm_smart(&mb_contract, &QueryMsg::GetDisclosure { entry_id })
+            .unwrap();
+        assert!(
+            disclosure.is_none(),
+            "no disclosure should survive a rolled-back tx"
+        );
+    }
+
+    /// Authorization: a non-author cannot disclose someone else's entry.
+    #[test]
+    fn voluntary_disclose_rejects_non_author() {
+        let mut app = App::default();
+        let admin = app.api().addr_make("admin");
+        let moult_key = app.api().addr_make("moult_key_owner");
+        let intruder = app.api().addr_make("intruder");
+        let primary = app.api().addr_make("primary_identity_2");
+
+        let (vk_bytes, vk_b64, proof_b64, inputs_b64) = gen_proof();
+        let (zk_contract, vk_hash) =
+            deploy_zk_verifier_with_vk(&mut app, &admin, &vk_bytes, &vk_b64);
+        let mb_contract = deploy_moultbook(&mut app, &admin, &zk_contract, &vk_hash);
+
+        let entry_id = publish_and_get_id(
+            &mut app,
+            &mb_contract,
+            &moult_key,
+            &proof_b64,
+            &inputs_b64,
+            "sha256:disc03",
+        );
+
+        let err = app
+            .execute_contract(
+                intruder.clone(),
+                mb_contract.clone(),
+                &ExecuteMsg::VoluntaryDisclose {
+                    entry_id: entry_id.clone(),
+                    primary_key: primary.to_string(),
+                    derivation_proof_base64: proof_b64.clone(),
+                    derivation_public_inputs_base64: inputs_b64.clone(),
+                },
+                &[],
+            )
+            .unwrap_err();
+
+        let err_str = format!("{:?}", err);
+        assert!(
+            err_str.contains("NotEntryAuthor") || err_str.contains("not authored"),
+            "expected author-mismatch error, got: {}",
+            err_str
+        );
+
+        let disclosure: Option<Disclosure> = app
+            .wrap()
+            .query_wasm_smart(&mb_contract, &QueryMsg::GetDisclosure { entry_id })
+            .unwrap();
+        assert!(disclosure.is_none());
     }
 }

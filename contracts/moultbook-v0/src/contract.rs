@@ -12,9 +12,9 @@ use crate::msg::{
     WhoamiTokensResponse,
 };
 use crate::state::{
-    AttestationRef, Config, Disclosure, MoultEntry, MoultKeyState, PendingVerification, Stats,
-    Visibility, BY_AUTHOR, BY_MOULT_KEY, BY_REF, BY_TOPIC, CONFIG, DISCLOSURES, ENTRIES,
-    MOULT_KEY_STATE, PENDING_VERIFICATION, STATS,
+    AttestationRef, Config, Disclosure, MoultEntry, MoultKeyState, PendingDisclosure,
+    PendingVerification, Stats, Visibility, BY_AUTHOR, BY_MOULT_KEY, BY_REF, BY_TOPIC, CONFIG,
+    DISCLOSURES, ENTRIES, MOULT_KEY_STATE, PENDING_DISCLOSURE, PENDING_VERIFICATION, STATS,
 };
 
 const CONTRACT_NAME: &str = "crates.io:moultbook-v0";
@@ -24,6 +24,7 @@ const ID_PREFIX: &str = "moult";
 const DEFAULT_LIMIT: u32 = 30;
 const MAX_LIMIT: u32 = 100;
 const REPLY_ID_ZK_VERIFY: u64 = 1;
+const REPLY_ID_DISCLOSURE_VERIFY: u64 = 2;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -147,6 +148,7 @@ pub fn execute(
             entry_id,
             primary_key,
             derivation_proof_base64,
+            derivation_public_inputs_base64,
         } => execute_voluntary_disclose(
             deps,
             env,
@@ -154,6 +156,7 @@ pub fn execute(
             entry_id,
             primary_key,
             derivation_proof_base64,
+            derivation_public_inputs_base64,
         ),
     }
 }
@@ -485,6 +488,7 @@ fn query_list_by_topic(
 pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
     match msg.id {
         REPLY_ID_ZK_VERIFY => handle_zk_verify_reply(deps, env, msg),
+        REPLY_ID_DISCLOSURE_VERIFY => handle_disclosure_verify_reply(deps, env, msg),
         _ => Err(ContractError::Std(StdError::generic_err(format!(
             "unknown reply id: {}",
             msg.id
@@ -624,14 +628,18 @@ fn execute_publish_anon(
         .add_attribute("topic_hash", topic_hash))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn execute_voluntary_disclose(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     info: MessageInfo,
     entry_id: String,
     primary_key: String,
-    _derivation_proof_base64: String,
+    derivation_proof_base64: String,
+    derivation_public_inputs_base64: String,
 ) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+
     let entry = ENTRIES
         .may_load(deps.storage, &entry_id)?
         .ok_or_else(|| ContractError::EntryNotFound {
@@ -652,27 +660,87 @@ fn execute_voluntary_disclose(
 
     let primary = deps.api.addr_validate(&primary_key)?;
 
-    // TODO: verify derivation_proof via zk-verifier sub-message.
-    // For v0, we accept the disclosure at face value — the proof is
-    // logged for off-chain auditors. Full ZK verification of derivation
-    // lands when the membership circuit supports a "disclosure mode"
-    // public input.
+    // Verification of the derivation proof is mandatory. The membership
+    // circuit (in disclosure mode) proves that `moult_key` was derived from
+    // `primary_key` without leaking the derivation secret. We delegate the
+    // Groth16 check to the configured zk-verifier as a reply_on_success
+    // sub-message: an invalid proof aborts the verifier call, which rolls the
+    // whole tx back, so the disclosure is never persisted.
+    let zk_verifier = cfg
+        .zk_verifier
+        .ok_or(ContractError::ZkVerifierNotConfigured {})?;
+
+    // Stash the pending disclosure so the reply handler can finalise it once
+    // the proof verifies. Storing the validated primary key avoids re-parsing.
+    PENDING_DISCLOSURE.save(
+        deps.storage,
+        &PendingDisclosure {
+            entry_id: entry_id.clone(),
+            moult_key: info.sender.clone(),
+            primary_key: primary.clone(),
+        },
+    )?;
+
+    let verify_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: zk_verifier.to_string(),
+        msg: to_json_binary(&serde_json::json!({
+            "verify_proof": {
+                "proof_base64": derivation_proof_base64,
+                "public_inputs_base64": derivation_public_inputs_base64
+            }
+        }))?,
+        funds: vec![],
+    });
+
+    Ok(Response::new()
+        .add_submessage(SubMsg::reply_on_success(
+            verify_msg,
+            REPLY_ID_DISCLOSURE_VERIFY,
+        ))
+        .add_attribute("action", "voluntary_disclose_pending")
+        .add_attribute("entry_id", entry_id)
+        .add_attribute("primary_key", primary)
+        .add_attribute("moult_key", info.sender))
+}
+
+fn handle_disclosure_verify_reply(
+    deps: DepsMut,
+    env: Env,
+    msg: Reply,
+) -> Result<Response, ContractError> {
+    // A failed sub-message means the derivation proof was invalid. Clear the
+    // pending state and surface a typed error so the tx rolls back cleanly.
+    if msg.result.is_err() {
+        PENDING_DISCLOSURE.remove(deps.storage);
+        return Err(ContractError::DerivationProofInvalid {});
+    }
+
+    let pending = PENDING_DISCLOSURE.load(deps.storage)?;
+    PENDING_DISCLOSURE.remove(deps.storage);
+
+    // Guard against a TOCTOU race: a disclosure for the same entry may have
+    // landed between the original execute and this reply.
+    if DISCLOSURES.has(deps.storage, &pending.entry_id) {
+        return Err(ContractError::AlreadyDisclosed {
+            id: pending.entry_id,
+        });
+    }
 
     DISCLOSURES.save(
         deps.storage,
-        &entry_id,
+        &pending.entry_id,
         &Disclosure {
-            entry_id: entry_id.clone(),
-            primary_key: primary.clone(),
+            entry_id: pending.entry_id.clone(),
+            primary_key: pending.primary_key.clone(),
             disclosed_at: env.block.time,
         },
     )?;
 
     Ok(Response::new()
         .add_attribute("action", "voluntary_disclose")
-        .add_attribute("entry_id", entry_id)
-        .add_attribute("primary_key", primary)
-        .add_attribute("moult_key", info.sender))
+        .add_attribute("entry_id", pending.entry_id)
+        .add_attribute("primary_key", pending.primary_key)
+        .add_attribute("moult_key", pending.moult_key))
 }
 
 fn query_list_by_moult_key(

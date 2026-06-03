@@ -16,6 +16,10 @@ pub const PAIR_COUNT: Item<u64> = Item::new("pair_count");
 pub const PAIRS: Map<(&str, &str), Addr> = Map::new("pairs");
 pub const ALL_PAIRS: Map<u64, PairRecord> = Map::new("all_pairs");
 
+/// Pairs awaiting their instantiate reply, keyed by the reply id (= pair id).
+/// Populated in `execute_create_pair`, consumed and removed in `reply`.
+pub const PENDING_PAIRS: Map<u64, PendingPair> = Map::new("pending_pairs");
+
 #[cw_serde]
 pub struct PairRecord {
     pub id: u64,
@@ -23,4 +27,12 @@ pub struct PairRecord {
     pub token_a: AssetInfo,
     pub token_b: AssetInfo,
     pub created_at: u64,
+}
+
+/// In-flight pair metadata stashed until the child instantiate reply arrives.
+#[cw_serde]
+pub struct PendingPair {
+    pub id: u64,
+    pub token_a: AssetInfo,
+    pub token_b: AssetInfo,
 }

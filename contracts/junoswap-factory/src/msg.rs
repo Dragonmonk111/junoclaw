@@ -10,6 +10,9 @@ pub struct InstantiateMsg {
 }
 
 #[cw_serde]
+pub struct MigrateMsg {}
+
+#[cw_serde]
 pub enum ExecuteMsg {
     CreatePair {
         token_a: AssetInfo,

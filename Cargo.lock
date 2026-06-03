@@ -2167,6 +2167,8 @@ dependencies = [
  "ark-std",
  "async-trait",
  "base64 0.22.1",
+ "bip32",
+ "cosmrs",
  "futures",
  "hex",
  "junoclaw-core",
@@ -2863,9 +2865,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "hex",
  "junoclaw-core",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tokio",
  "tracing",
 ]

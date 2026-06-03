@@ -17,4 +17,13 @@ pub enum ContractError {
 
     #[error("Cannot create pair with identical assets")]
     IdenticalAssets {},
+
+    #[error("Unknown reply id: {id}")]
+    UnknownReplyId { id: u64 },
+
+    #[error("Could not parse pair address from instantiate reply")]
+    ReplyParse {},
+
+    #[error("Pair id overflow")]
+    Overflow {},
 }

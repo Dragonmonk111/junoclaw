@@ -50,7 +50,7 @@ async function processEvent(event: TriggerEvent): Promise<void> {
       console.log(`[operator]   question: "${question}"`);
       console.log(`[operator]   criteria: "${criteria}"`);
 
-      result = computeOutcomeVerify(marketId, question, criteria);
+      result = await computeOutcomeVerify(marketId, question, criteria);
       break;
     }
 

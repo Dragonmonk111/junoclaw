@@ -6,6 +6,19 @@
 
 `junoswap-factory` is the registry contract that spawns AMM pair contracts via `WasmMsg::Instantiate`. The contract is **not production-functional in its current state**: `CreatePair` emits an event and submits the instantiate sub-message, but **never writes to `PAIRS` or `ALL_PAIRS` storage** (a code comment at `contract.rs:114-115` acknowledges this). The duplicate-pair guard is therefore a no-op, queries return empty results, and `PAIR_COUNT` drifts ahead of actual pair existence. Five additional lower-severity findings noted below.
 
+## Resolution (2026-06-02)
+
+| ID | Status | Resolution |
+|----|--------|------------|
+| F1 | **FIXED** | `CreatePair` now uses `SubMsg::reply_on_success`; a new `reply` entry_point parses `_contract_address` from the instantiate event and writes `PAIRS` + `ALL_PAIRS`. `PENDING_PAIRS` map stashes in-flight metadata. Tests added: `test_create_pair_registers_pair_via_reply`, `test_duplicate_pair_rejected_after_registration`, `test_reply_unknown_id_rejected`. |
+| F3 | **FIXED** | `AllPairs` now uses `Bound::exclusive(start_after)` — O(limit) instead of O(n). |
+| F4 | **FIXED** | `new_id` uses `checked_add(1)` → `ContractError::Overflow`. |
+| F5 | **FIXED** | Empty `migrate` entry_point added (`MigrateMsg`); `test_migrate_ok`. |
+| F2 | deferred | Fee ceiling left at 10000 — `test_fee_boundary_10000_valid` asserts it as a valid boundary; tightening to a lower `MAX_FEE_BPS` is a separate policy change. |
+| F6 | deferred | `cw2` introspection of `junoclaw_contract` — optional polish, deferred to v0.2. |
+
+Factory suite: **17 tests passing.** Findings below are retained as the original 2026-05-14 audit record.
+
 ## Methodology
 
 Same 4-axis deterministic-scrutiny benchmark used on the other six audited contracts:

@@ -9,13 +9,16 @@ use junoclaw_core::config::JunoClawConfig;
 use junoclaw_core::plugin::StreamEvent;
 use junoclaw_core::types::{
     gen_id, now_millis, AgentInfo, ChatMessage, CompletionRequest, LlmMessage, MessageRole,
-    Session, Task, ToolCall, WsClientMessage, WsServerMessage,
+    Session, Task, TaskStatus, ToolCall, WsClientMessage, WsServerMessage,
 };
 use plugin_llm::ollama::OllamaProvider;
 use plugin_llm::LlmProviderRegistry;
 use plugin_shell::ShellPlugin;
 
+pub mod chain;
 pub mod moultbook_operator;
+
+use chain::ChainClient;
 
 pub struct Runtime {
     _config: JunoClawConfig,
@@ -28,6 +31,9 @@ pub struct Runtime {
     pending_approvals: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
     /// Directory where agents.json and sessions.json are persisted
     data_dir: PathBuf,
+    /// Guarded on-chain client. `Some` when `chain.enabled`; reads always work,
+    /// writes are gated behind the `signing_paused` kill-switch inside the client.
+    chain: Option<Arc<ChainClient>>,
 }
 
 impl Runtime {
@@ -60,6 +66,31 @@ impl Runtime {
         let sessions = load_sessions(&data_dir).await;
         info!("Loaded {} agent(s) and {} session(s) from disk", agents.len(), sessions.len());
 
+        // Wire the guarded on-chain client when the chain is enabled. A connect
+        // failure (bad RPC, missing mnemonic when signing is enabled) is logged
+        // but non-fatal — the daemon still runs read-only.
+        let chain = if config.chain.enabled {
+            match ChainClient::connect(&config.chain) {
+                Ok(client) => {
+                    match (config.chain.signing.can_sign(), client.signer_address()) {
+                        (true, Some(addr)) => info!("Chain client ready (signing LIVE) — signer {}", addr),
+                        (false, Some(addr)) => info!(
+                            "Chain client ready (signer {} loaded but PARKED: enabled={}, paused={})",
+                            addr, config.chain.signing.enabled, config.chain.signing.signing_paused
+                        ),
+                        _ => info!("Chain client ready (read-only; no signer loaded)"),
+                    }
+                    Some(Arc::new(client))
+                }
+                Err(e) => {
+                    warn!("Chain client init failed ({}); running read-only", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let runtime = Self {
             _config: config.clone(),
             agents: Arc::new(RwLock::new(agents)),
@@ -74,6 +105,7 @@ impl Runtime {
             shell: Arc::new(ShellPlugin::new(false)),
             pending_approvals: Arc::new(RwLock::new(HashMap::new())),
             data_dir,
+            chain,
         };
 
         info!(
@@ -391,10 +423,24 @@ impl Runtime {
             }
 
             WsClientMessage::CancelTask { task_id } => {
-                warn!("Task cancel requested: {} (not yet implemented)", task_id);
-                let _ = tx.send(WsServerMessage::Error {
-                    message: "Task cancellation not yet implemented".to_string(),
-                }).await;
+                // Transition a Pending/Running task to Cancelled. Terminal tasks
+                // (Completed/Failed/Cancelled/BudgetExceeded) are not cancellable.
+                let outcome = {
+                    let mut tasks = self.tasks.write().await;
+                    cancel_task_in_place(&mut tasks, &task_id, now_millis())
+                };
+                match outcome {
+                    Ok(task) => {
+                        info!("Task cancelled: {}", task_id);
+                        let _ = tx.send(WsServerMessage::TaskStatusUpdate { task }).await;
+                    }
+                    Err(reason) => {
+                        warn!("Task cancel rejected ({}): {}", task_id, reason);
+                        let _ = tx.send(WsServerMessage::Error {
+                            message: reason,
+                        }).await;
+                    }
+                }
             }
 
             WsClientMessage::ApproveToolCall { task_id: _, tool_call_id } => {
@@ -466,11 +512,42 @@ impl Runtime {
                     "verification": { "model": req.verification_model },
                 });
 
-                let status = if self._config.chain.enabled {
-                    // TODO: submit InstantiateMsg via CosmWasm tx when chain signing is wired
-                    "dry_run_ready".to_string()
-                } else {
-                    "chain_disabled".to_string()
+                // Guarded broadcast: only sign+submit when the chain client is
+                // present, signing is live (enabled + un-paused), and a code id
+                // is configured. Otherwise fall back to a dry-run preview.
+                let status = match &self.chain {
+                    None => "chain_disabled".to_string(),
+                    Some(_) if !self._config.chain.signing.can_sign() => {
+                        "dry_run_ready".to_string()
+                    }
+                    Some(client) => match self._config.chain.signing.agent_company_code_id {
+                        None => {
+                            warn!("DeployDao: signing live but chain.signing.agent_company_code_id unset");
+                            "dry_run_ready (no code_id)".to_string()
+                        }
+                        Some(code_id) => {
+                            let label = format!("junoclaw-dao-{}", req.dao_id);
+                            match client
+                                .instantiate_contract(code_id, &label, &instantiate_msg, None)
+                                .await
+                            {
+                                Ok(outcome) => {
+                                    info!(
+                                        "DeployDao {} broadcast: tx={} addr={:?}",
+                                        req.dao_id, outcome.tx_hash, outcome.contract_address
+                                    );
+                                    match outcome.contract_address {
+                                        Some(addr) => format!("deployed:{addr}"),
+                                        None => format!("broadcast:{}", outcome.tx_hash),
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!("DeployDao {} broadcast failed: {}", req.dao_id, e);
+                                    format!("broadcast_failed: {e}")
+                                }
+                            }
+                        }
+                    },
                 };
 
                 info!("DeployDao {} — status: {}", req.dao_id, status);
@@ -489,10 +566,41 @@ impl Runtime {
                     topic_hash, limit
                 );
 
-                // TODO: When chain signing is wired, query moultbook contract:
-                //   QueryMsg::ListByTopic { topic_hash, start_after: None, limit }
-                // For now, return empty list (daemon does not yet have RPC query wired).
-                let entries: Vec<serde_json::Value> = vec![];
+                // Read path: query the moultbook contract's ListByTopic. Works
+                // without a signer (read-only); returns [] if chain/moultbook
+                // are not configured or the query fails.
+                let entries: Vec<serde_json::Value> = match (
+                    &self.chain,
+                    self._config.chain.contracts.moultbook.as_deref(),
+                ) {
+                    (Some(client), Some(moultbook)) => {
+                        let query = serde_json::json!({
+                            "list_by_topic": {
+                                "topic_hash": topic_hash,
+                                "start_after": null,
+                                "limit": limit,
+                            }
+                        });
+                        match client
+                            .query_smart::<serde_json::Value>(moultbook, &query)
+                            .await
+                        {
+                            Ok(resp) => resp
+                                .get("entries")
+                                .and_then(|e| e.as_array())
+                                .cloned()
+                                .unwrap_or_default(),
+                            Err(e) => {
+                                warn!("QueryEndorsements: moultbook query failed: {}", e);
+                                vec![]
+                            }
+                        }
+                    }
+                    _ => {
+                        warn!("QueryEndorsements: chain or moultbook address not configured");
+                        vec![]
+                    }
+                };
 
                 let _ = tx
                     .send(WsServerMessage::EndorsementList {
@@ -656,4 +764,87 @@ fn extract_tool_call(text: &str) -> Option<(ToolCall, String)> {
         },
         visible_text,
     ))
+}
+
+/// Cancel a task in-place by id.
+///
+/// Only `Pending` or `Running` tasks can be cancelled; on success the task is
+/// transitioned to `Cancelled`, stamped with `completed_at`, and a clone is
+/// returned. Returns `Err` with a human-readable reason when the task is
+/// missing or already in a terminal state.
+fn cancel_task_in_place(
+    tasks: &mut [Task],
+    task_id: &str,
+    now: u64,
+) -> Result<Task, String> {
+    match tasks.iter_mut().find(|t| t.id == task_id) {
+        None => Err(format!("Task not found: {task_id}")),
+        Some(task) => match task.status {
+            TaskStatus::Pending | TaskStatus::Running => {
+                task.status = TaskStatus::Cancelled;
+                task.completed_at = Some(now);
+                Ok(task.clone())
+            }
+            TaskStatus::Completed
+            | TaskStatus::Failed
+            | TaskStatus::Cancelled
+            | TaskStatus::BudgetExceeded => Err(format!(
+                "Task {task_id} is not cancellable (status: {:?})",
+                task.status
+            )),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use junoclaw_core::types::ExecutionTier;
+
+    fn task_with_status(id: &str, status: TaskStatus) -> Task {
+        let mut t = Task::new("agent-1", "do something", ExecutionTier::Local);
+        t.id = id.to_string();
+        t.status = status;
+        t
+    }
+
+    #[test]
+    fn cancel_pending_task_succeeds() {
+        let mut tasks = vec![task_with_status("t1", TaskStatus::Pending)];
+        let out = cancel_task_in_place(&mut tasks, "t1", 12345).unwrap();
+        assert_eq!(out.status, TaskStatus::Cancelled);
+        assert_eq!(out.completed_at, Some(12345));
+        assert_eq!(tasks[0].status, TaskStatus::Cancelled);
+    }
+
+    #[test]
+    fn cancel_running_task_succeeds() {
+        let mut tasks = vec![task_with_status("t2", TaskStatus::Running)];
+        let out = cancel_task_in_place(&mut tasks, "t2", 99).unwrap();
+        assert_eq!(out.status, TaskStatus::Cancelled);
+    }
+
+    #[test]
+    fn cancel_missing_task_errors() {
+        let mut tasks = vec![task_with_status("t3", TaskStatus::Pending)];
+        let err = cancel_task_in_place(&mut tasks, "nope", 1).unwrap_err();
+        assert!(err.contains("not found"), "unexpected: {err}");
+        // Unrelated task left untouched.
+        assert_eq!(tasks[0].status, TaskStatus::Pending);
+    }
+
+    #[test]
+    fn cancel_terminal_task_errors() {
+        for status in [
+            TaskStatus::Completed,
+            TaskStatus::Failed,
+            TaskStatus::Cancelled,
+            TaskStatus::BudgetExceeded,
+        ] {
+            let mut tasks = vec![task_with_status("t4", status.clone())];
+            let err = cancel_task_in_place(&mut tasks, "t4", 1).unwrap_err();
+            assert!(err.contains("not cancellable"), "unexpected: {err}");
+            assert_eq!(tasks[0].status, status);
+        }
+    }
 }

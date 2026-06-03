@@ -79,6 +79,14 @@ pub struct PendingVerification {
     pub public_inputs: Binary,
 }
 
+/// Temporary state for a pending voluntary-disclosure ZK verification.
+#[cw_serde]
+pub struct PendingDisclosure {
+    pub entry_id: String,
+    pub moult_key: Addr,
+    pub primary_key: Addr,
+}
+
 /// Voluntary disclosure linking moult-key → primary identity
 #[cw_serde]
 pub struct Disclosure {
@@ -95,6 +103,7 @@ pub const BY_REF: Map<(&str, &str), ()> = Map::new("by_ref");
 
 pub const MOULT_KEY_STATE: Map<&Addr, MoultKeyState> = Map::new("moult_key_state");
 pub const PENDING_VERIFICATION: Item<PendingVerification> = Item::new("pending_verify");
+pub const PENDING_DISCLOSURE: Item<PendingDisclosure> = Item::new("pending_disclose");
 pub const DISCLOSURES: Map<&str, Disclosure> = Map::new("disclosures");
 pub const BY_MOULT_KEY: Map<(&Addr, &str), ()> = Map::new("by_moult_key");
 /// Index: topic_hash → entry_id (for ListByTopic aggregation queries)

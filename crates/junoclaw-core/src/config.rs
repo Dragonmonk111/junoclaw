@@ -248,6 +248,10 @@ pub struct ChainConfig {
     pub grpc_endpoint: String,
     pub gas_prices: String,
     pub contracts: ContractAddresses,
+    /// On-chain signing configuration. Defaults to disabled + paused so the
+    /// daemon never holds a key or broadcasts a write unless explicitly opted in.
+    #[serde(default)]
+    pub signing: SigningConfig,
 }
 
 impl Default for ChainConfig {
@@ -259,7 +263,55 @@ impl Default for ChainConfig {
             grpc_endpoint: "https://grpc-juno.itastakers.com:443".to_string(),
             gas_prices: "0.075ujuno".to_string(),
             contracts: ContractAddresses::default(),
+            signing: SigningConfig::default(),
         }
+    }
+}
+
+/// Guarded on-chain signing config for the autonomous daemon.
+///
+/// Security posture: the BIP-39 mnemonic is NEVER stored in config/TOML — only
+/// the *name* of the environment variable that holds it. Both `enabled` and the
+/// `signing_paused` kill-switch must be satisfied (enabled=true, paused=false)
+/// before the runtime will sign or broadcast anything.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SigningConfig {
+    /// Master switch. When false, the runtime never loads a key or signs.
+    pub enabled: bool,
+    /// Runtime kill-switch. When true, signing is refused even if `enabled`.
+    /// Defaults to true so a freshly-enabled signer is still parked until an
+    /// operator explicitly un-pauses it.
+    pub signing_paused: bool,
+    /// Name of the env var holding the BIP-39 mnemonic (e.g. JUNOCLAW_MNEMONIC).
+    pub mnemonic_env: String,
+    /// bech32 account prefix.
+    pub account_prefix: String,
+    /// BIP-44 HD derivation path.
+    pub hd_path: String,
+    /// Gas limit applied to execute/instantiate (static; simulation is a follow-up).
+    pub default_gas_limit: u64,
+    /// Code ID of the agent-company contract — required to instantiate DAOs on-chain.
+    pub agent_company_code_id: Option<u64>,
+}
+
+impl Default for SigningConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            signing_paused: true,
+            mnemonic_env: "JUNOCLAW_MNEMONIC".to_string(),
+            account_prefix: "juno".to_string(),
+            hd_path: "m/44'/118'/0'/0/0".to_string(),
+            default_gas_limit: 500_000,
+            agent_company_code_id: None,
+        }
+    }
+}
+
+impl SigningConfig {
+    /// True only when signing is both enabled and not paused.
+    pub fn can_sign(&self) -> bool {
+        self.enabled && !self.signing_paused
     }
 }
 

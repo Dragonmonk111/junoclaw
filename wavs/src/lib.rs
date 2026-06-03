@@ -260,27 +260,206 @@ async fn process_drand_randomness(
 // 3. Outcome Verification (OutcomeResolve)
 // ──────────────────────────────────────────────
 
+/// A structured, template-driven resolution rule for an outcome market.
+///
+/// The on-chain `resolution_criteria` string is expected to be a JSON object
+/// describing how to resolve the market. Three templates are supported:
+///
+/// * `numeric_threshold` — fetch `source`, read the numeric value at `path`,
+///   and compare it against `value` using `comparator`
+///   (`gt` | `gte` | `lt` | `lte` | `eq`). Resolves YES when the comparison holds.
+/// * `string_match` — fetch `source`, read the string at `path`, and resolve
+///   YES when it equals `value` (string).
+/// * `boolean_field` — fetch `source` and resolve to the boolean at `path`.
+///
+/// Criteria that are not valid JSON (legacy free-text markets) fall back to the
+/// original behaviour: the criteria string is hashed and the market is left
+/// `unresolved` for a human/secondary oracle.
+#[derive(serde::Deserialize)]
+struct ResolutionCriteria {
+    template: String,
+    source: String,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    comparator: Option<String>,
+    #[serde(default)]
+    value: Option<serde_json::Value>,
+}
+
+/// Navigate a dotted JSON path (e.g. `data.result.price`). Array indices are
+/// supported as numeric path segments (e.g. `results.0.value`).
+fn json_path_get<'a>(root: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+    let mut cur = root;
+    for seg in path.split('.').filter(|s| !s.is_empty()) {
+        cur = match cur {
+            serde_json::Value::Object(map) => map.get(seg)?,
+            serde_json::Value::Array(arr) => {
+                let idx: usize = seg.parse().ok()?;
+                arr.get(idx)?
+            }
+            _ => return None,
+        };
+    }
+    Some(cur)
+}
+
+/// Coerce a JSON value to f64 (accepts numbers or numeric strings).
+fn as_f64(v: &serde_json::Value) -> Option<f64> {
+    match v {
+        serde_json::Value::Number(n) => n.as_f64(),
+        serde_json::Value::String(s) => s.trim().parse::<f64>().ok(),
+        _ => None,
+    }
+}
+
+/// Pure evaluation of a parsed criteria against already-fetched JSON. Separated
+/// from network I/O so the resolution logic is deterministic and unit-testable.
+/// Returns `(outcome, evidence)` where `evidence` describes the inputs to the
+/// decision for on-chain auditing.
+fn evaluate_resolution(
+    criteria: &ResolutionCriteria,
+    fetched: &serde_json::Value,
+) -> anyhow::Result<(bool, serde_json::Value)> {
+    match criteria.template.as_str() {
+        "numeric_threshold" => {
+            let path = criteria
+                .path
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("numeric_threshold requires 'path'"))?;
+            let comparator = criteria
+                .comparator
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("numeric_threshold requires 'comparator'"))?;
+            let threshold = criteria
+                .value
+                .as_ref()
+                .and_then(as_f64)
+                .ok_or_else(|| anyhow::anyhow!("numeric_threshold requires numeric 'value'"))?;
+
+            let observed = json_path_get(fetched, path)
+                .and_then(as_f64)
+                .ok_or_else(|| anyhow::anyhow!("no numeric value at path '{}'", path))?;
+
+            let outcome = match comparator {
+                "gt" => observed > threshold,
+                "gte" => observed >= threshold,
+                "lt" => observed < threshold,
+                "lte" => observed <= threshold,
+                "eq" => (observed - threshold).abs() < f64::EPSILON,
+                other => return Err(anyhow::anyhow!("unknown comparator '{}'", other)),
+            };
+
+            Ok((
+                outcome,
+                serde_json::json!({
+                    "template": "numeric_threshold",
+                    "path": path,
+                    "comparator": comparator,
+                    "threshold": threshold,
+                    "observed": observed,
+                }),
+            ))
+        }
+        "string_match" => {
+            let path = criteria
+                .path
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("string_match requires 'path'"))?;
+            let expected = criteria
+                .value
+                .as_ref()
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("string_match requires string 'value'"))?;
+
+            let observed = json_path_get(fetched, path)
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("no string value at path '{}'", path))?;
+
+            let outcome = observed == expected;
+            Ok((
+                outcome,
+                serde_json::json!({
+                    "template": "string_match",
+                    "path": path,
+                    "expected": expected,
+                    "observed": observed,
+                }),
+            ))
+        }
+        "boolean_field" => {
+            let path = criteria
+                .path
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("boolean_field requires 'path'"))?;
+            let observed = json_path_get(fetched, path)
+                .and_then(|v| v.as_bool())
+                .ok_or_else(|| anyhow::anyhow!("no boolean value at path '{}'", path))?;
+
+            Ok((
+                observed,
+                serde_json::json!({
+                    "template": "boolean_field",
+                    "path": path,
+                    "observed": observed,
+                }),
+            ))
+        }
+        other => Err(anyhow::anyhow!("unknown resolution template '{}'", other)),
+    }
+}
+
 async fn process_outcome_verify(
     market_id: u64,
     question: &str,
     resolution_criteria: &str,
 ) -> anyhow::Result<VerificationResult> {
-    // For outcome markets, the component fetches the resolution data
-    // and produces a deterministic hash of the evidence.
-    //
-    // In a full implementation, this would:
-    // 1. Parse resolution_criteria for data source URLs
-    // 2. Fetch the data
-    // 3. Evaluate the criteria against the data
-    // 4. Return the boolean outcome + evidence hash
-    //
-    // For now, we hash the criteria itself as a placeholder.
-    // The actual resolution logic will be template-specific.
+    // Legacy / free-text criteria: criteria that aren't structured JSON cannot
+    // be machine-resolved. Hash the criteria as before and report `unresolved`
+    // so a human or secondary oracle can settle the market.
+    let parsed: ResolutionCriteria = match serde_json::from_str(resolution_criteria) {
+        Ok(c) => c,
+        Err(_) => {
+            let mut hasher = Sha256::new();
+            hasher.update(question.as_bytes());
+            hasher.update(resolution_criteria.as_bytes());
+            hasher.update(market_id.to_le_bytes());
+            let data_hash = hex::encode(hasher.finalize());
+            let attestation_hash = compute_attestation_hash("outcome_verify", &data_hash);
+            return Ok(VerificationResult {
+                task_type: "outcome_verify".to_string(),
+                data_hash,
+                attestation_hash,
+                output: serde_json::json!({
+                    "market_id": market_id,
+                    "question": question,
+                    "resolution_criteria": resolution_criteria,
+                    "resolved": false,
+                    "status": "unresolved",
+                    "reason": "criteria are not structured JSON; manual resolution required",
+                }),
+                timestamp: current_timestamp(),
+            });
+        }
+    };
 
+    // 1) Fetch the resolution data source.
+    let raw = fetch_url(&parsed.source).await?;
+
+    // 2) Parse the response as JSON and evaluate the template.
+    let fetched: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|e| anyhow::anyhow!("resolution source returned non-JSON: {}", e))?;
+    let (outcome, evidence) = evaluate_resolution(&parsed, &fetched)?;
+
+    // 3) Bind the evidence into a deterministic data hash. Hashing the raw
+    //    fetched bytes plus the resolved outcome lets any verifier reproduce
+    //    the decision from the same source response.
     let mut hasher = Sha256::new();
     hasher.update(question.as_bytes());
     hasher.update(resolution_criteria.as_bytes());
     hasher.update(market_id.to_le_bytes());
+    hasher.update([outcome as u8]);
+    hasher.update(raw.as_bytes());
 
     let data_hash = hex::encode(hasher.finalize());
     let attestation_hash = compute_attestation_hash("outcome_verify", &data_hash);
@@ -292,8 +471,11 @@ async fn process_outcome_verify(
         output: serde_json::json!({
             "market_id": market_id,
             "question": question,
-            "resolution_criteria": resolution_criteria,
-            "note": "Full resolution logic pending — template-specific implementation required",
+            "source": parsed.source,
+            "resolved": true,
+            "status": "resolved",
+            "outcome": outcome,
+            "evidence": evidence,
         }),
         timestamp: current_timestamp(),
     })
@@ -1040,4 +1222,133 @@ fn current_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+// ──────────────────────────────────────────────
+// Tests
+// ──────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn criteria(j: serde_json::Value) -> ResolutionCriteria {
+        serde_json::from_value(j).unwrap()
+    }
+
+    #[test]
+    fn json_path_navigates_objects_and_arrays() {
+        let v = json!({ "data": { "results": [{ "price": 42 }, { "price": 7 }] } });
+        assert_eq!(json_path_get(&v, "data.results.0.price"), Some(&json!(42)));
+        assert_eq!(json_path_get(&v, "data.results.1.price"), Some(&json!(7)));
+        assert_eq!(json_path_get(&v, "data.missing"), None);
+        assert_eq!(json_path_get(&v, "data.results.9.price"), None);
+    }
+
+    #[test]
+    fn numeric_threshold_comparators() {
+        let fetched = json!({ "price": 50000.0 });
+        let mk = |cmp: &str, val: f64| {
+            criteria(json!({
+                "template": "numeric_threshold",
+                "source": "https://x",
+                "path": "price",
+                "comparator": cmp,
+                "value": val,
+            }))
+        };
+
+        assert!(evaluate_resolution(&mk("gte", 50000.0), &fetched).unwrap().0);
+        assert!(evaluate_resolution(&mk("gt", 49999.0), &fetched).unwrap().0);
+        assert!(!evaluate_resolution(&mk("gt", 50000.0), &fetched).unwrap().0);
+        assert!(evaluate_resolution(&mk("lte", 50000.0), &fetched).unwrap().0);
+        assert!(evaluate_resolution(&mk("lt", 50001.0), &fetched).unwrap().0);
+        assert!(!evaluate_resolution(&mk("lt", 50000.0), &fetched).unwrap().0);
+        assert!(evaluate_resolution(&mk("eq", 50000.0), &fetched).unwrap().0);
+    }
+
+    #[test]
+    fn numeric_threshold_accepts_numeric_strings() {
+        let fetched = json!({ "data": { "usd": "63250.55" } });
+        let c = criteria(json!({
+            "template": "numeric_threshold",
+            "source": "https://x",
+            "path": "data.usd",
+            "comparator": "gte",
+            "value": 60000,
+        }));
+        let (outcome, _) = evaluate_resolution(&c, &fetched).unwrap();
+        assert!(outcome);
+    }
+
+    #[test]
+    fn string_match_resolves_equality() {
+        let fetched = json!({ "status": "settled" });
+        let c = criteria(json!({
+            "template": "string_match",
+            "source": "https://x",
+            "path": "status",
+            "value": "settled",
+        }));
+        assert!(evaluate_resolution(&c, &fetched).unwrap().0);
+
+        let c_no = criteria(json!({
+            "template": "string_match",
+            "source": "https://x",
+            "path": "status",
+            "value": "pending",
+        }));
+        assert!(!evaluate_resolution(&c_no, &fetched).unwrap().0);
+    }
+
+    #[test]
+    fn boolean_field_returns_value() {
+        let fetched = json!({ "result": { "won": true } });
+        let c = criteria(json!({
+            "template": "boolean_field",
+            "source": "https://x",
+            "path": "result.won",
+        }));
+        assert!(evaluate_resolution(&c, &fetched).unwrap().0);
+    }
+
+    #[test]
+    fn unknown_template_errors() {
+        let c = criteria(json!({ "template": "magic", "source": "https://x" }));
+        assert!(evaluate_resolution(&c, &json!({})).is_err());
+    }
+
+    #[test]
+    fn missing_path_value_errors() {
+        let c = criteria(json!({
+            "template": "numeric_threshold",
+            "source": "https://x",
+            "path": "nope",
+            "comparator": "gt",
+            "value": 1,
+        }));
+        assert!(evaluate_resolution(&c, &json!({ "price": 5 })).is_err());
+    }
+
+    #[test]
+    fn unknown_comparator_errors() {
+        let c = criteria(json!({
+            "template": "numeric_threshold",
+            "source": "https://x",
+            "path": "price",
+            "comparator": "approx",
+            "value": 1,
+        }));
+        assert!(evaluate_resolution(&c, &json!({ "price": 5 })).is_err());
+    }
+
+    #[test]
+    fn legacy_free_text_criteria_does_not_parse_as_structured() {
+        // Free-text criteria must not deserialize into a structured rule, so the
+        // resolver falls back to the unresolved/manual path.
+        let parsed: Result<ResolutionCriteria, _> =
+            serde_json::from_str("Will BTC close above $60k on 2026-12-31?");
+        assert!(parsed.is_err());
+    }
 }

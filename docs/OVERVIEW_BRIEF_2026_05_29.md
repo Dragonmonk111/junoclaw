@@ -122,6 +122,34 @@ This is the WAVS pattern in miniature. One config change wraps it in TEE attesta
 
 ---
 
+## Upstream watch (2026-06-02)
+
+| Project | Latest | Note for JunoClaw |
+|---|---|---|
+| **Juno** | `v29.0.0` (`a63f2d3`) | No `v30` tag yet — our v30 fix is merged into the PR, release/governance still pending. Our chain is correctly on v29. |
+| **CosmWasm** | `v3.1.0-rc.0` / stable `v3.0.7` | We build on `cosmwasm-std 2.2`. CW 3.x is the upgrade horizon (not urgent under Juno v29). |
+| **wasmd** | `v0.55.0` | Baseline for the BN254 precompile work. |
+| **DAODAO** | `v2.8.0-alpha.2` | Adds Role-based Authorization Module (unaudited). **Optimizer moved to `0.17.0`** — update our deploy/runbook (was 0.16.0). |
+| **WAVS / Layer** | active | **Jake Hartnell → CEO of Lay3r Labs (WAVS); Ethan Frey CTO; $6M seed (1kx).** `Lay3rLabs/cw-middleware` (service handlers to CosmWasm chains) is a concrete integration target for our verifier/TEE path. `wavs-github-rewards` parallels our github-agent. |
+
+---
+
+## Pending work — engineering backlog
+
+Grounded in a 2026-06-02 deterministic pass over the tree. Ordered by leverage. Status as of 2026-06-03.
+
+| # | Area | Status | Gap (file) | Why it matters |
+|---|---|---|---|---|
+| 1 | **Daemon signing** | ✅ done | Guarded `ChainClient` (cosmrs + bip32) wired into `Runtime`; DAO deploy broadcasts when `signing.can_sign()` and a code id are set, else `dry_run_ready`. Gated by `signing_paused`/`egress_paused`. (`junoclaw-runtime/src/chain.rs`, `lib.rs`) | The line between "demo" and "autonomous economy." |
+| 2 | **Moultbook RPC read** | ✅ done | `QueryEndorsements` queries moultbook `ListByTopic` via `query_smart`; shape-matched to contract `EntriesResponse { entries }` (`lib.rs`). | Read path for #1 and the frontend endorsements UI. |
+| 3 | **junoswap-factory Reply** | ✅ done | Pair address captured via reply-on-success submessage + reply handler; `PENDING_PAIRS` registration, `checked_add`, migrate entry point, 17 tests (`junoswap-factory/src/contract.rs`). | Correctness bug for production — factory can now reliably resolve spawned pairs. |
+| 4 | **moultbook-v0 derivation proof** | → open | `disclose` accepts `derivation_proof` at face value; no zk-verifier sub-message (`moultbook-v0/src/contract.rs`). | Closes the v0 trust gap; needs membership-circuit "disclosure mode." |
+| 5 | **Compute plugins** | ◑ partial | `plugin-compute-local` now executes deterministically (directive ops + `sha256:` `output_hash`, bounded concurrency, 3 tests). `-akash`, `-ibc`, `-browser` still stubbed. | `compute-local` is the shortest path to a real end-to-end task completion. |
+| 6 | **WAVS resolution** | → open | `wavs/src/lib.rs` hashes the criteria as a placeholder instead of template-specific resolution. | Real attestation logic; evaluate `cw-middleware` rather than bespoke TEE. |
+| 7 | **CancelTask** | ✅ done | `CancelTask` transitions Pending/Running → Cancelled via pure `cancel_task_in_place` helper; rejects terminal/missing tasks; 4 tests (`junoclaw-runtime/src/lib.rs`). | Control-plane gap closed. |
+
+---
+
 ## Links
 
 | | |
@@ -134,4 +162,4 @@ This is the WAVS pattern in miniature. One config change wraps it in TEE attesta
 
 ---
 
-*12 crates · 204 tests · uni-7 live · v30 review merged · updated 2026-06-01 11:15 UTC+1*
+*12 crates · 204+ tests · uni-7 live · v30 review merged · backlog #1/#2/#3/#7 done + #5 partial (2026-06-03)*

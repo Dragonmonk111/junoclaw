@@ -1,7 +1,8 @@
 use cosmwasm_std::{
     entry_point, to_json_binary, Binary, Deps, DepsMut, Env, Event, MessageInfo,
-    Order, Response, StdResult, WasmMsg,
+    Order, Reply, Response, StdResult, SubMsg, SubMsgResult, WasmMsg,
 };
+use cw_storage_plus::Bound;
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
@@ -92,7 +93,7 @@ fn execute_create_pair(
     }
 
     let count = PAIR_COUNT.load(deps.storage)?;
-    let new_id = count + 1;
+    let new_id = count.checked_add(1).ok_or(ContractError::Overflow {})?;
 
     // Instantiate the pair contract via sub-message
     let pair_instantiate_msg = crate::msg::PairInstantiateMsg {
@@ -111,9 +112,20 @@ fn execute_create_pair(
         label: format!("junoswap-pair-{}", new_id),
     };
 
-    // For now, store a placeholder — the pair address will be set via reply or manual registration
-    // In production, use Reply to capture the instantiated address
+    // Track the instantiate as a reply-bearing sub-message so we can capture the
+    // spawned pair address and register it in PAIRS / ALL_PAIRS. The pending
+    // metadata is keyed by the reply id (= new_id) and finalised in `reply`.
+    // PAIR_COUNT is only advanced here; PAIRS/ALL_PAIRS are written on success.
     PAIR_COUNT.save(deps.storage, &new_id)?;
+    PENDING_PAIRS.save(
+        deps.storage,
+        new_id,
+        &PendingPair {
+            id: new_id,
+            token_a: token_a.clone(),
+            token_b: token_b.clone(),
+        },
+    )?;
 
     let event = Event::new("wasm-create_pair")
         .add_attribute("pair_id", new_id.to_string())
@@ -123,10 +135,69 @@ fn execute_create_pair(
         .add_attribute("creator", info.sender.to_string());
 
     Ok(Response::new()
-        .add_message(instantiate_msg)
+        .add_submessage(SubMsg::reply_on_success(instantiate_msg, new_id))
         .add_event(event)
         .add_attribute("action", "create_pair")
         .add_attribute("pair_id", new_id.to_string()))
+}
+
+/// Extract the instantiated contract address from a successful instantiate
+/// reply. wasmd emits an `instantiate` event carrying `_contract_address`.
+fn parse_instantiate_addr(result: SubMsgResult) -> Result<String, ContractError> {
+    let res = result.into_result().map_err(|_| ContractError::ReplyParse {})?;
+    for ev in &res.events {
+        if ev.ty == "instantiate" {
+            for attr in &ev.attributes {
+                if attr.key == "_contract_address" {
+                    return Ok(attr.value.clone());
+                }
+            }
+        }
+    }
+    Err(ContractError::ReplyParse {})
+}
+
+#[entry_point]
+pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
+    let reply_id = msg.id;
+    let pending = PENDING_PAIRS
+        .may_load(deps.storage, reply_id)?
+        .ok_or(ContractError::UnknownReplyId { id: reply_id })?;
+
+    let addr_str = parse_instantiate_addr(msg.result)?;
+    let pair_addr = deps.api.addr_validate(&addr_str)?;
+
+    let key_a = pending.token_a.denom_key();
+    let key_b = pending.token_b.denom_key();
+    let (key_a, key_b) = if key_a <= key_b {
+        (key_a, key_b)
+    } else {
+        (key_b, key_a)
+    };
+
+    PAIRS.save(deps.storage, (&key_a, &key_b), &pair_addr)?;
+    ALL_PAIRS.save(
+        deps.storage,
+        pending.id,
+        &PairRecord {
+            id: pending.id,
+            pair_addr: pair_addr.clone(),
+            token_a: pending.token_a,
+            token_b: pending.token_b,
+            created_at: env.block.height,
+        },
+    )?;
+    PENDING_PAIRS.remove(deps.storage, reply_id);
+
+    Ok(Response::new()
+        .add_attribute("action", "register_pair")
+        .add_attribute("pair_id", pending.id.to_string())
+        .add_attribute("pair_addr", pair_addr))
+}
+
+#[entry_point]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    Ok(Response::new().add_attribute("action", "migrate"))
 }
 
 fn execute_update_config(
@@ -184,10 +255,11 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         }
         QueryMsg::AllPairs { start_after, limit } => {
             let limit = limit.unwrap_or(30).min(100) as usize;
-            let start = start_after.map(|s| s + 1).unwrap_or(1);
+            // Seek directly to the start key at the storage layer — O(limit),
+            // not O(n) over every pair (audit F3).
+            let start_bound = start_after.map(Bound::exclusive);
             let pairs: Vec<PairResponse> = ALL_PAIRS
-                .range(deps.storage, None, None, Order::Ascending)
-                .filter(|r| r.as_ref().map(|(k, _)| *k >= start).unwrap_or(false))
+                .range(deps.storage, start_bound, None, Order::Ascending)
                 .take(limit)
                 .map(|r| {
                     let (_, rec) = r?;

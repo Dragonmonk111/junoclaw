@@ -33,7 +33,7 @@ auditable (raw `cargo build` wasms are testnet-only):
 ```bash
 docker run --rm -v "$(pwd)/contracts":/code \
   --mount type=volume,source=junoclaw_cache,target=/code/target \
-  cosmwasm/optimizer:0.16.0
+  cosmwasm/optimizer:0.17.0   # match the ecosystem (DAODAO v2.8 uses 0.17.0)
 ```
 
 Artifacts land in `contracts/artifacts/*.wasm` with a `checksums.txt`. Record
