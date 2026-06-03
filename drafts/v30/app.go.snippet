@@ -1,0 +1,23 @@
+// Snippet to paste into app.go (NewJunoApp), after the v29 handler registration.
+//
+// This registers the v30 upgrade handler and, if an upgrade plan for v30 is
+// present on-chain, sets the store loader.  No new stores are introduced, so
+// StoreUpgrades is empty.
+
+	// v30 — BN254 precompile upgrade
+	app.UpgradeKeeper.SetUpgradeHandler(
+		v30.UpgradeName,
+		v30.CreateUpgradeHandler(app.mm, app.configurator, &app.AppKeepers),
+	)
+
+	upgradeInfo, err := app.UpgradeKeeper.ReadUpgradeInfoFromDisk()
+	if err != nil {
+		// Cosmovisor / upgrade module may not have written info yet;
+		// not fatal at init time.
+		app.Logger().Info("failed to read upgrade info from disk", "err", err)
+	} else if upgradeInfo.Name == v30.UpgradeName && !app.UpgradeKeeper.IsSkipHeight(upgradeInfo.Height) {
+		storeUpgrades := storetypes.StoreUpgrades{
+			// No new stores. No deleted stores. No renamed stores.
+		}
+		app.SetStoreLoader(upgradetypes.UpgradeStoreLoader(upgradeInfo.Height, &storeUpgrades))
+	}
