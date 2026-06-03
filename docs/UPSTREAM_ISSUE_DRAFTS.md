@@ -1,6 +1,6 @@
 # Upstream GitHub Issue Drafts
 
-**Status:** READY TO PUBLISH (refreshed 2026-05-14). Forward-ported now spans **three** parallel patch series, all green:
+**Status:** PUBLISHED 2026-06-03. Issue 1 = [CosmWasm/cosmwasm#2685](https://github.com/CosmWasm/cosmwasm/issues/2685). Issue 2 = [CosmWasm/wasmvm#735](https://github.com/CosmWasm/wasmvm/issues/735). Forward-ported now spans **three** parallel patch series, all green:
 
 - `wasmvm-fork/patches/v2.2.2/` — audit reference, matches `wasmvm` v2.2.4 / Juno mainnet today (10/10 CLEAN, 22/22 + 311/311 PASS)
 - `wasmvm-fork/patches/v2.2.7/` — latest 2.2.x (10/10 CLEAN; only 2 Cargo.toml patches differ from v2.2.2)
@@ -142,7 +142,7 @@ cc @ethanfrey @webmaster128 — happy to take this in any direction you prefer. 
 ```markdown
 ## Context
 
-This is the wasmvm-side companion to [CosmWasm/cosmwasm#XXXX](TBD-after-issue-1-published) — a proposal to add BN254 (alt_bn128) host functions to CosmWasm, motivated by Juno governance proposal [#374](https://ping.pub/juno/gov/374) (passed 2026-05-05, ~80% Yes / 22% Abstain / 0.003% No-with-Veto).
+This is the wasmvm-side companion to [CosmWasm/cosmwasm#2685](https://github.com/CosmWasm/cosmwasm/issues/2685) — a proposal to add BN254 (alt_bn128) host functions to CosmWasm, motivated by Juno governance proposal [#374](https://ping.pub/juno/gov/374) (passed 2026-05-05, ~80% Yes / 22% Abstain / 0.003% No-with-Veto).
 
 The cosmwasm-side issue covers the host-function ABI, the Rust crate, the gas schedule, and the **measured 1.823× gas reduction** (370,600 → 203,266 SDK gas per Groth16 verification, 5 samples σ = 0). The patches there target three cosmwasm tags in parallel — v2.2.2 (audit baseline), v2.2.7 (latest 2.2.x), and **v3.0.6** (latest v3) — all 10/10 CLEAN.
 
