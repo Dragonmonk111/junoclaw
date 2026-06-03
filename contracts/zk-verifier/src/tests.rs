@@ -463,6 +463,125 @@ fn test_tampered_proof_rejected() {
     );
 }
 
+// ── Differential test: pure-Wasm vs precompile-style pairing ──
+
+/// Generates a Groth16 proof and checks that the *algebra* performed by the
+/// precompile path (4-pair equality) yields the same boolean as the
+/// pure-arkworks `Groth16::verify_proof` path.
+///
+/// This test does **not** require the `bn254-precompile` feature to be
+/// enabled; it re-implements the precompile-side arithmetic in arkworks so
+/// that any discrepancy in the algebraic reduction shows up as a failure.
+#[test]
+fn test_differential_pure_vs_precompile_algebra() {
+    use ark_bn254::{Bn254, Fr, G1Affine, G2Affine};
+    use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
+    use ark_std::Zero;
+    use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
+    use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
+    use ark_snark::SNARK;
+    use ark_std::rand::{SeedableRng, rngs::StdRng};
+
+    #[derive(Clone)]
+    struct SquareCircuit { x: Option<Fr> }
+
+    impl ConstraintSynthesizer<Fr> for SquareCircuit {
+        fn generate_constraints(self, cs: ConstraintSystemRef<Fr>) -> Result<(), SynthesisError> {
+            let x_val = self.x.unwrap_or(Fr::from(1u64));
+            let y_val = x_val * x_val;
+            let x_var = cs.new_witness_variable(|| Ok(x_val))?;
+            let y_var = cs.new_input_variable(|| Ok(y_val))?;
+            cs.enforce_constraint(
+                ark_relations::lc!() + x_var,
+                ark_relations::lc!() + x_var,
+                ark_relations::lc!() + y_var,
+            )?;
+            Ok(())
+        }
+    }
+
+    let mut rng = StdRng::seed_from_u64(42);
+    let circuit = SquareCircuit { x: None };
+    let (pk, vk): (ProvingKey<Bn254>, VerifyingKey<Bn254>) =
+        Groth16::<Bn254>::circuit_specific_setup(circuit, &mut rng).unwrap();
+
+    // --- valid proof (x=3, y=9) ---
+    let circuit = SquareCircuit { x: Some(Fr::from(3u64)) };
+    let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng).unwrap();
+    let public_inputs = vec![Fr::from(9u64)];
+
+    // Pure-Wasm path result
+    let pvk = ark_groth16::prepare_verifying_key(&vk);
+    let pure_result = Groth16::<Bn254>::verify_proof(&pvk, &proof, &public_inputs).unwrap();
+
+    // Precompile-style algebraic reduction (reconstructed in arkworks)
+    // 1. Compute vk_x = gamma_abc[0] + Σ input[i]·gamma_abc[i+1]
+    let mut vk_x = vk.gamma_abc_g1[0].into_group();
+    for (i, input) in public_inputs.iter().enumerate() {
+        let term = vk.gamma_abc_g1[i + 1].into_group() * *input;
+        vk_x += term;
+    }
+    let _vk_x_affine = vk_x.into_affine();
+
+    // 2. Build the 4 pairs for the equality:
+    //    e(A, B) · e(-α, β) · e(-vk_x, γ) · e(-C, δ) = 1
+    let neg_alpha = (-vk.alpha_g1.into_group()).into_affine();
+    let neg_c = (-proof.c.into_group()).into_affine();
+    let neg_vk_x = (-vk_x).into_affine();
+
+    let pairs: &[(G1Affine, G2Affine)] = &[
+        (proof.a, proof.b),
+        (neg_alpha, vk.beta_g2),
+        (neg_vk_x, vk.gamma_g2),
+        (neg_c, vk.delta_g2),
+    ];
+
+    // Compute product of pairings using arkworks
+    let precompile_result = <Bn254 as Pairing>::multi_pairing(
+        pairs.iter().map(|(g1, _)| g1),
+        pairs.iter().map(|(_, g2)| g2),
+    )
+    .is_zero(); // result is 1 (GT identity) when product == 1
+
+    assert_eq!(
+        pure_result, precompile_result,
+        "pure-Wasm and precompile-style algebra must agree for valid proof"
+    );
+
+    // --- invalid proof (wrong public input: y=16) ---
+    let wrong_inputs = vec![Fr::from(16u64)];
+    let pure_result_invalid = Groth16::<Bn254>::verify_proof(&pvk, &proof, &wrong_inputs).unwrap();
+
+    let mut vk_x_invalid = vk.gamma_abc_g1[0].into_group();
+    for (i, input) in wrong_inputs.iter().enumerate() {
+        let term = vk.gamma_abc_g1[i + 1].into_group() * *input;
+        vk_x_invalid += term;
+    }
+    let neg_vk_x_invalid = (-vk_x_invalid).into_affine();
+
+    let pairs_invalid: &[(G1Affine, G2Affine)] = &[
+        (proof.a, proof.b),
+        (neg_alpha, vk.beta_g2),
+        (neg_vk_x_invalid, vk.gamma_g2),
+        (neg_c, vk.delta_g2),
+    ];
+
+    let precompile_result_invalid = <Bn254 as Pairing>::multi_pairing(
+        pairs_invalid.iter().map(|(g1, _)| g1),
+        pairs_invalid.iter().map(|(_, g2)| g2),
+    )
+    .is_zero();
+
+    assert_eq!(
+        pure_result_invalid, precompile_result_invalid,
+        "pure-Wasm and precompile-style algebra must agree for invalid proof"
+    );
+
+    // Both should be false
+    assert!(!pure_result_invalid, "invalid proof must be rejected by both paths");
+    assert!(!precompile_result_invalid, "invalid proof must be rejected by precompile algebra");
+}
+
 #[test]
 fn test_mismatched_vk_rejects_valid_proof() {
     use ark_bn254::{Bn254, Fr};
