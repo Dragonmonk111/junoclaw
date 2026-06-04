@@ -11,16 +11,14 @@ REPO_ROOT="$(cd "${DEVNET_DIR}/.." && pwd)"
 
 CHAIN_ID="${CHAIN_ID:-junoclaw-bn254-1}"
 KEYRING="${KEYRING_BACKEND:-test}"
-NODE="${NODE:-http://localhost:26657}"
 GAS="${GAS:-auto}"
-GAS_ADJ="${GAS_ADJUSTMENT:-1.3}"
-GAS_PRICES="${GAS_PRICES:-0.025ujuno}"
+GAS_ADJ="${GAS_ADJUSTMENT:-1.5}"
+GAS_PRICES="${GAS_PRICES:-0.075ujuno}"
 
 exec_tx() {
   docker exec junoclaw-bn254-devnet junod tx "$@" \
     --chain-id "${CHAIN_ID}" \
     --keyring-backend "${KEYRING}" \
-    --node "${NODE}" \
     --gas "${GAS}" --gas-adjustment "${GAS_ADJ}" --gas-prices "${GAS_PRICES}" \
     --broadcast-mode sync --yes --output json
 }
@@ -34,7 +32,7 @@ query_ids_from_store() {
   for i in $(seq 1 20); do
     sleep 1
     out=$(docker exec junoclaw-bn254-devnet junod query tx "${tx_hash}" \
-            --node "${NODE}" --output json 2>/dev/null || true)
+            --output json 2>/dev/null || true)
     if [ -n "${out}" ] && [ "$(echo "${out}" | jq -r '.code // empty')" != "" ]; then
       break
     fi
@@ -51,7 +49,7 @@ query_addr_from_instantiate() {
   for i in $(seq 1 20); do
     sleep 1
     out=$(docker exec junoclaw-bn254-devnet junod query tx "${tx_hash}" \
-            --node "${NODE}" --output json 2>/dev/null || true)
+            --output json 2>/dev/null || true)
     if [ -n "${out}" ] && [ "$(echo "${out}" | jq -r '.code // empty')" != "" ]; then
       break
     fi
@@ -107,10 +105,12 @@ ADMIN=$(docker exec junoclaw-bn254-devnet junod keys show admin -a --keyring-bac
 
 echo "[deploy] Uploading pure-Wasm variant…"
 PURE_TX=$(exec_tx wasm store /tmp/zk_verifier_pure.wasm --from admin | jq -r '.txhash')
+sleep 3
 PURE_CODE_ID=$(query_ids_from_store "${PURE_TX}")
 
 echo "[deploy] Uploading precompile variant…"
 PREC_TX=$(exec_tx wasm store /tmp/zk_verifier_precompile.wasm --from admin | jq -r '.txhash')
+sleep 3
 PREC_CODE_ID=$(query_ids_from_store "${PREC_TX}")
 
 echo "[deploy] Instantiating both…"
@@ -120,9 +120,11 @@ if [ -z "${PURE_CODE_ID}" ] || [ -z "${PREC_CODE_ID}" ]; then
   echo "error: one of the store_code txs did not return a code_id" >&2
   exit 4
 fi
+sleep 3
 INIT='{"admin":"'${ADMIN}'"}'
 PURE_INIT_TX=$(exec_tx wasm instantiate "${PURE_CODE_ID}" "${INIT}" \
     --from admin --label "zk-verifier-pure" --no-admin | jq -r '.txhash')
+sleep 3
 PREC_INIT_TX=$(exec_tx wasm instantiate "${PREC_CODE_ID}" "${INIT}" \
     --from admin --label "zk-verifier-precompile" --no-admin | jq -r '.txhash')
 
