@@ -177,6 +177,8 @@ async function signer() {
   const [account] = await wallet.getAccounts();
   const client = await SigningCosmWasmClient.connectWithSigner(NODE, wallet, {
     gasPrice: GasPrice.fromString("0.1ujuno"),
+    broadcastTimeoutMs: 180_000,
+    broadcastPollIntervalMs: 3_000,
   });
   return { client, address: account.address };
 }

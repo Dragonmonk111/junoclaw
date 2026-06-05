@@ -14,6 +14,7 @@ KEYRING="${KEYRING_BACKEND:-test}"
 GAS="${GAS:-auto}"
 GAS_ADJ="${GAS_ADJUSTMENT:-1.5}"
 GAS_PRICES="${GAS_PRICES:-0.075ujuno}"
+NODE="${NODE:-http://localhost:26657}"
 
 exec_tx() {
   docker exec junoclaw-bn254-devnet junod tx "$@" \

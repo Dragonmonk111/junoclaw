@@ -45,14 +45,14 @@ fi
 # `validator` key is the on-chain admin of both contracts (deploy-now.sh
 # uses --from validator).
 if [ -z "${WAVS_OPERATOR_PRIVKEY:-}" ] && [ -z "${WAVS_OPERATOR_MNEMONIC:-}" ]; then
-  echo "[bench] No signer credentials set; exporting validator privkey from ${CONTAINER}…"
+  echo "[bench] No signer credentials set; exporting admin privkey from ${CONTAINER}…"
   WAVS_OPERATOR_PRIVKEY=$(echo 'y' | docker exec -i "${CONTAINER}" \
-      junod keys export validator \
+      junod keys export admin \
           --unarmored-hex --unsafe \
           --keyring-backend "${KEYRING}" \
           --home /root/.juno 2>/dev/null | tail -n1)
   if [ -z "${WAVS_OPERATOR_PRIVKEY}" ]; then
-    echo "error: failed to export validator privkey from ${CONTAINER}" >&2
+    echo "error: failed to export admin privkey from ${CONTAINER}" >&2
     exit 3
   fi
   export WAVS_OPERATOR_PRIVKEY

@@ -1,8 +1,8 @@
 # feat(crypto): BN254 (alt_bn128) host functions — ECADD, ECMUL, pairing equality
 
 > **Upstream target:** `CosmWasm/cosmwasm` + `CosmWasm/wasmvm`
-> **Version addressed:** `v2.2.0` (also drafted against `main`)
-> **Issue reference:** `CosmWasm/cosmwasm#751` (Crypto API meta)
+> **Version addressed:** `v2.2.2` (forward-ported clean to `v2.2.7`; Track B rebase onto `v3.x main` in progress)
+> **Issue reference:** `CosmWasm/cosmwasm#751` (Crypto API meta), `CosmWasm/cosmwasm#2685`, `CosmWasm/wasmvm#735`
 > **Draft author:** JunoClaw contributors (<https://github.com/Dragonmonk111/junoclaw>)
 
 ## Summary
@@ -27,12 +27,23 @@ chains with **zero adaptation**.
 Issue #751 lists BN254 pairing primitives as "Bonus Points." This PR
 turns that item into concrete, reviewed, benchmarked code.
 
-The immediate concrete user is the JunoClaw zk-verifier contract
-(`juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem`
-on uni-7). Today it verifies Groth16 proofs in pure CosmWasm and burns
-**371 486 gas** per `VerifyProof`. On a patched chain, the same
-verification lands at **~187 000 gas** — a **~2× reduction** that
-matches Ethereum's precompile cost curve exactly.
+The immediate concrete user is the JunoClaw zk-verifier contract, which
+verifies Groth16 proofs in pure CosmWasm. On a patched devnet
+(`junoclaw-bn254-1`, `junod` linked against the BN254-patched
+`libwasmvm`), the **same `.wasm`** built with and without the
+precompile feature flag was measured at:
+
+| Path | Gas per `VerifyProof` |
+|------|----------------------:|
+| Pure-Wasm (arkworks) | **370,467** |
+| BN254 precompile     | **203,132** |
+
+A **1.823× reduction** (167,335 gas), 5 deterministic samples per
+variant (σ = 0). These numbers are **measured, not projected**, and
+reproducible from a clean checkout via
+`devnet/scripts/reproduce-benchmark.sh`. The saving is concentrated in
+the pairing check — the Miller loop + final exponentiation run natively
+instead of as Wasm-metered instructions.
 
 More broadly: no pure Cosmos / CosmWasm chain has native BN254 pairing
 support today. Sui has it. Ethereum has had it since 2017. This PR
@@ -82,11 +93,20 @@ wrappers in `internal/api/bn254.go` and public-surface functions in
 - Empty pairing input → `Ok(true)` (matches EIP-197)
 - No RNG, no wall-clock reads, no threads
 
-The differential test in the benchmark harness runs 1 000 random
-Groth16 proofs through the pure-Wasm verifier AND through the
-precompile-backed verifier and asserts identical accept/reject
-decisions. A reviewer can reproduce it via the devnet recipe in
-`wasmvm-fork/BUILD_AND_TEST.md`.
+Two differential tests back the determinism claim:
+
+1. **Host-runnable** (`contracts/zk-verifier/examples/differential_test.rs`,
+   `cargo run --release --example differential_test`): 1 000 random
+   Groth16 proofs through `ark-groth16`'s native verifier AND through
+   the contract's 4-pair pairing-equality formulation (the exact byte
+   encoding + public-input lincomb the precompile path uses). **666**
+   valid proofs both ACCEPT, **334** deliberately-corrupted proofs both
+   REJECT — **1 000/1 000 agree**. No devnet required; a reviewer runs
+   it in seconds.
+2. **End-to-end** (devnet recipe in `wasmvm-fork/BUILD_AND_TEST.md`):
+   the same proof set through the real host-function implementation on
+   the patched chain, asserting identical accept/reject vs the
+   pure-Wasm deploy.
 
 ## Gas methodology
 
@@ -144,7 +164,8 @@ None. This is purely additive behind a new feature gate.
 4. `make test` in the `wasmvm` Go module — cgo FFI sanity
 5. `./devnet/scripts/run-devnet.sh && ./devnet/scripts/benchmark.sh` —
    end-to-end gas measurement on a single-validator devnet
-6. Differential test: 1 000 random Groth16 proofs
+6. Differential test: `cargo run --release --example differential_test`
+   (1 000 proofs, host-runnable) + the devnet end-to-end variant
 
 Full reproducibility contract: `wasmvm-fork/BUILD_AND_TEST.md`.
 

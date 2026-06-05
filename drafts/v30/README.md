@@ -31,7 +31,7 @@ These files are a **draft** intended to be copied into the Juno chain repo
 release containing BN254 host functions is available.
 
 Before finalising:
-- Verify the wasmd version's accepted-capabilities mechanism (param-state
-  vs node flag) and adjust `upgrade.go` accordingly.
+- ✅ Verified: wasmd v0.61.11 (Jake's v30 PR #1202) uses `--wasm.accept_list`
+  node flag for capabilities, NOT param-state. `upgrade.go` documented accordingly.
 - Update `go.mod` to the wasmvm version that includes the merged BN254 PR.
 - Run `make install` and the 3 local rehearsals documented in the design doc.

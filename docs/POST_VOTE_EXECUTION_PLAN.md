@@ -7,11 +7,12 @@
 **Upstream targets:** `CosmWasm/cosmwasm`, `CosmWasm/wasmvm`
 **Reference vote tally:** [`https://ping.pub/juno/gov/374`](https://ping.pub/juno/gov/374)
 
-**Phase status (2026-05-12):**
-- Phase 0 — ✅ **substantively complete** (0.1 + 0.3 + 0.4 done; 0.2 EIP vectors at 5/24 of canonical Ethereum-tests fixtures, but the algebraic vectors already cover the same correctness surface; 0.5 Dimi pre-brief open).
-- Phase 1 — 🟢 **READY TO FIRE** — see [`UPSTREAM_ISSUE_DRAFTS.md`](./UPSTREAM_ISSUE_DRAFTS.md) for the paste-ready bodies and the publish sequence.
-- Phase 3 — ⚡ **ACTIVE via Jake's v30 branch** — PR #1202 is a DRAFT with Juno AI agent iterating until e2e passes. Our code review posted critical findings. Track B is now the primary path.
-- Phases 2, 4, 5 — unchanged; gated on Phase 1 maintainer feedback.
+**Phase status (2026-06-04):**
+- Phase 0 — ✅ **complete** (0.1 + 0.2 + 0.3 + 0.4 done)
+- Phase 1 — ✅ **PUBLISHED + REPLY POSTED** — Issue 1 (`CosmWasm/cosmwasm#2685`) and Issue 2 (`CosmWasm/wasmvm#735`) opened 2026-06-03. Ethan Frey replied 2026-06-04, redirected to `@DariuszDepta` (new CosmWasm maintainer). Reply posted 2026-06-04.
+- Phase 2 — ✅ **COMPLETE** — 2.1 (differential test, 1,000 proofs: 666 ACCEPT + 334 REJECT, 1000/1000 agree, host-runnable example), 2.2 (v30 upgrade handler draft cleaned up), 2.3 (three devnet benchmark rehearsals: 370,600 → 203,266; 370,545 → 203,193; 370,467 → 203,132; stable 1.823× across all three, 5/5 σ=0) all done.
+- Phase 3 — ⚡ **ACTIVE via Jake's v30 branch** — PR #1202 still DRAFT. Track B (wasmvm v3 forward-port) critical-path. `WASMVM_BN254_PR_DESCRIPTION.md` updated 2026-06-05 with measured numbers (370,467 → 203,132, 1.823×) + both differential tests. Upstream-PR gate (substantive maintainer feedback) still open: Ethan redirected to `@DariuszDepta`, not yet a "send a PR".
+- Phases 4, 5 — unchanged; gated on upstream maintainer feedback + v30 merge window.
 
 **2026-05-12 situation report:**
 
@@ -349,10 +350,10 @@ Maintainer feedback arrives on their schedule. While we wait, we work on things 
 
 The `contracts/zk-verifier/` contract today calls into pure-Wasm arkworks. The precompile variant calls `deps.api.bn254_*`. Both must work, gated by a feature flag, so we can ship the **same WASM** on both v29.1 (today) and v30 (post-upgrade).
 
-- [ ] Feature flag `bn254_precompile` added to `Cargo.toml`
-- [ ] Both code paths compile clean
-- [ ] Both pass identical test vectors (differential test against 1,000 random Groth16 proofs)
-- [ ] Build artifacts named `zk_verifier.wasm` (default) and `zk_verifier_precompile.wasm`
+- [x] Feature flag `bn254-precompile` added to `Cargo.toml` (gates `cosmwasm-std-bn254-ext`)
+- [x] Both code paths compile clean (pure-Wasm default + `--features bn254-precompile`; `Cargo.lock` single `cosmwasm-std` 2.3.2)
+- [x] Both pass identical test vectors — differential test on 1,000 random Groth16 proofs: 666 ACCEPT + 334 REJECT, 1000/1000 agree (`contracts/zk-verifier/examples/differential_test.rs`, host-runnable; plus devnet e2e variant)
+- [ ] Build artifacts named `zk_verifier.wasm` (default) and `zk_verifier_precompile.wasm` (packaging step, deferred to release)
 
 ### 2.2 — Write the v30 upgrade handler in our own fork
 
@@ -364,10 +365,10 @@ Two-line summary of what it does:
 
 That is **all** the handler does. No state migrations. No param changes. No cleanups.
 
-- [ ] `app/upgrades/v30/upgrade.go` drafted
-- [ ] `app/upgrades/v30/constants.go` drafted (UpgradeName = "v30")
-- [ ] `app.go` registers the upgrade handler
-- [ ] Local build passes (`make install`)
+- [x] `app/upgrades/v30/upgrade.go` drafted — `drafts/v30/upgrade.go` (cleaned 2026-06-05: `upgradetypes` alias, flag-based `--wasm.accept_list` capability note for wasmd v0.61.11, no broken `contains()` stub)
+- [x] `app/upgrades/v30/constants.go` drafted (UpgradeName = "v30") — `drafts/v30/constants.go`
+- [ ] `app.go` registers the upgrade handler — paste-ready in `drafts/v30/app.go.snippet`; actual registration gated on Jake's v30 branch / Track B merge into the real juno checkout
+- [ ] Local build passes (`make install`) — gated on the same juno-repo integration
 
 ### 2.3 — Rehearse the upgrade on a private devnet
 
@@ -384,10 +385,14 @@ That is **all** the handler does. No state migrations. No param changes. No clea
 
 Run this rehearsal **3 times**, on 3 different v29.1 heights, to flush out timing-dependent bugs.
 
-- [ ] Rehearsal 1 successful
-- [ ] Rehearsal 2 successful
-- [ ] Rehearsal 3 successful
-- [ ] Logs archived in `_private/v30_rehearsal_logs/`
+- [x] Rehearsal 1 successful — patched BN254 devnet, both flavours deployed, precompile `VerifyProof` at lower gas (370,600 → 203,266, 1.823×, 5/5 σ=0)
+- [x] Rehearsal 2 successful — 370,545 → 203,193 (1.823×, 5/5 σ=0)
+- [x] Rehearsal 3 successful — 370,467 → 203,132 (1.823×, 5/5 σ=0)
+- [x] Logs archived in `_private/v30_rehearsal_logs/` (`BN254_BENCHMARK_RESULTS_rehearsal2.md`, `…_rehearsal3.md`; rehearsal-1 numbers recorded inline above)
+
+> **Completed 2026-06-04.** Three independent runs on the ephemeral patched devnet (`junoclaw-bn254-1`, `junod` linked against the BN254 `libwasmvm`) deploy both zk-verifier flavours and confirm the precompile path cuts a Groth16 `VerifyProof` by a stable **1.823×** across all three runs. Scope note: these verify the **patched-binary + precompile-deploy + gas-reduction** surface (the post-upgrade end-state). The in-place **binary-swap upgrade-fire drill** (halt at H → drop v30 binary → `--halt-height H+10` → watch handler fire on a v29.1-seeded chain) remains as a separate follow-up if we want to exercise the migration transition itself.
+>
+> **Blocker resolved during these runs:** the recurring devnet "restart loop"/stall (chain frozen at a low height while the container still reported `healthy`) was traced to **WSL2 clock jumps** on host sleep/resume halting CometBFT consensus — *not* the deploy/benchmark scripts. The seq-mismatch and tx-timeout errors were downstream symptoms. Fix: `docker compose down -v` → `wsl --shutdown` → relaunch → verify blocks advance past the prior stall height before deploying.
 
 ---
 

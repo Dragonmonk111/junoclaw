@@ -22,12 +22,14 @@ Every run hit identical gas. σ = 0 across both variants.
 
 | Variant                  | Gas per `VerifyProof` | vs precompile |
 |--------------------------|----------------------:|--------------:|
-| Pure-Wasm (arkworks)     |               370,600 |   1.823× more |
-| **BN254 precompile**     |           **203,266** | **1.000×**    |
+| Pure-Wasm (arkworks)     |               370,467 |   1.823× more |
+| **BN254 precompile**     |           **203,132** | **1.000×**    |
 
-**A single Groth16 verification on Juno costs 1.823× less when run through the BN254 precompile.** Per call, that is 167,334 SDK gas saved. Per block, at Juno's current 80,000,000-gas block budget, the precompile lifts the verification ceiling from 215 proofs/block to 393. Per agent task, the cost difference is whether you sample verifications or audit all of them. Universal auditing was the threshold; this is the number that crosses it.
+**A single Groth16 verification on Juno costs 1.823× less when run through the BN254 precompile.** Per call, that is 167,335 SDK gas saved. Per block, at Juno's current 80,000,000-gas block budget, the precompile lifts the verification ceiling from 215 proofs/block to 393. Per agent task, the cost difference is whether you sample verifications or audit all of them. Universal auditing was the threshold; this is the number that crosses it.
 
 The full per-run table — txhashes, block heights, gas wanted, gas used — is in `docs/BN254_BENCHMARK_RESULTS.md` and reproducible in one command: `bash devnet/scripts/reproduce-benchmark.sh`.
+
+**Update (5 June 2026).** The headline figures above are the output of `reproduce-benchmark.sh` as it stands today. The *first* measurement (10 May) read 370,600 → 203,266; three independent rehearsals on 4 June reproduced the effect with run-to-run variation under **0.04%** on absolute gas and an **identical 1.823× ratio every time** (370,600→203,266; 370,545→203,193; 370,467→203,132 — 5 samples each, σ = 0 *within* every run). We cite the current script output (370,467 → 203,132) as canonical precisely so a reviewer who runs the command lands on the exact headline number, not one a few hundred gas off it. The rehearsal logs are archived in `_private/v30_rehearsal_logs/` (`BN254_BENCHMARK_RESULTS_rehearsal2.md`, `…_rehearsal3.md`). The 1.823× is the load-bearing claim, and it did not move across any run.
 
 ## Why the measurement matters more than the projection
 
@@ -58,7 +60,7 @@ Two surprises took longer than they should have. First, the devnet's `globalfee`
 
 ## What the number unlocks
 
-**Universal auditing of agent tasks.** The number was always the deciding factor. At 370,600 gas per verification, every team that integrates with the agent-company suite has to decide between cost and completeness; that is not a decision a verifiable system should ask its users to make. At 203,266 gas, the decision becomes a non-decision. Verify everything; the chain can carry it.
+**Universal auditing of agent tasks.** The number was always the deciding factor. At 370,467 gas per verification, every team that integrates with the agent-company suite has to decide between cost and completeness; that is not a decision a verifiable system should ask its users to make. At 203,132 gas, the decision becomes a non-decision. Verify everything; the chain can carry it.
 
 **Confidence in the upstream PR.** The cosmwasm/wasmvm review will not have to take an algebraic argument as gospel. The reviewers can run the same `reproduce-benchmark.sh` on their own hardware and get the same number, deterministically. That is the conversation we wanted to be able to have.
 
@@ -77,7 +79,7 @@ Beyond the precompile, the work splits along the lines Jake sketched in the Spac
 
 ## A short note on attribution
 
-The pure-Wasm baseline was originally measured on uni-7 contract `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem`, code id 64, block 12,673,217, txhash `F6D5774E…5080F4DA`. That measurement is consistent with the devnet 370,600 gas to within rounding. Both numbers are public. The precompile measurement, the on-chain admin address, and the proof bundle hashes are all in `BN254_BENCHMARK_RESULTS.md` for anyone who wants to walk the chain themselves.
+The pure-Wasm baseline was originally measured on uni-7 contract `juno1ydxksvrfvn7s0qv08nlemj5pguyku0rwzjjmhsnt8m9gxpwc2rlse7ekem`, code id 64, block 12,673,217, txhash `F6D5774E…5080F4DA`. That measurement is consistent with the canonical devnet 370,467 gas to within rounding. Both numbers are public. The precompile measurement, the on-chain admin address, and the proof bundle hashes are all in `BN254_BENCHMARK_RESULTS.md` for anyone who wants to walk the chain themselves.
 
 The BN254 host-function crate, the upstream patches, and the integration scripts are joint work between VairagyaNodes and Cascade (the coding agent — named, as our discipline requires). Jake Hartnell endorsed the work in March; Dimi reviewed approach in April; Marius's stability-of-mainnet posture sat behind every "do not refactor while you're in there" we wrote. The Ffern Institute's 2026 operator-side audit shaped the path-discipline patterns that are now embedded in the benchmark harness itself.
 
