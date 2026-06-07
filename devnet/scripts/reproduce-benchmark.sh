@@ -7,15 +7,17 @@
 #   1. Ensure devnet container is up and producing blocks.
 #   2. Build pure-Wasm + precompile contracts (skipped if already on disk).
 #   3. Deploy both variants (skipped if deploy.env exists).
-#   4. Generate Groth16 proof bundle.
+#   4. Smoke-test both contracts (StoreVK + VerifyProof + query).
 #   5. Run benchmark.sh — emits docs/BN254_BENCHMARK_RESULTS.md.
 #
 # Force a full rebuild/redeploy with FRESH=1.
+# Skip smoke test with SKIP_SMOKE=1.
 #
 # Usage:
 #   bash devnet/scripts/reproduce-benchmark.sh                # idempotent re-run
 #   FRESH=1 bash devnet/scripts/reproduce-benchmark.sh        # full rebuild + redeploy
 #   N=20 bash devnet/scripts/reproduce-benchmark.sh           # 20 samples per variant
+#   SKIP_SMOKE=1 bash devnet/scripts/reproduce-benchmark.sh   # skip smoke-test, go straight to benchmark
 
 set -euo pipefail
 
@@ -33,7 +35,7 @@ FRESH=${FRESH:-0}
 step() { printf '\n\033[1;36m[reproduce] %s\033[0m\n' "$*"; }
 
 # ── 1. Devnet up ──────────────────────────────────────────────────────
-step "1/5 ensuring devnet container is running"
+step "1/6 ensuring devnet container is running"
 if [ "${FRESH}" = "1" ]; then
   step "  FRESH=1 → tearing down existing devnet"
   docker compose -f "${COMPOSE_FILE}" down -v 2>/dev/null || true
@@ -58,24 +60,32 @@ for i in $(seq 1 30); do
 done
 
 # ── 2. Build contracts ────────────────────────────────────────────────
-step "2/5 building contracts"
+step "2/6 building contracts"
 if [ "${FRESH}" = "1" ] || [ ! -f "${WASM_PURE}" ] || [ ! -f "${WASM_PREC}" ]; then
-  bash "${HERE}/build-contracts-docker.sh"
+  bash "${HERE}/build-zk-verifier.sh"
 else
   step "  artefacts exist; skipping (FRESH=1 to force rebuild)"
 fi
 
 # ── 3. Deploy ─────────────────────────────────────────────────────────
-step "3/5 deploying both variants"
+step "3/6 deploying both variants"
 if [ "${FRESH}" = "1" ] || [ ! -f "${DEPLOY_ENV}" ]; then
-  bash "${HERE}/deploy-now.sh"
+  bash "${HERE}/deploy-oneshot.sh"
 else
   step "  deploy.env exists; skipping (FRESH=1 to force redeploy)"
   cat "${DEPLOY_ENV}"
 fi
 
+# ── 4. Smoke test ─────────────────────────────────────────────────────
+step "4/6 smoke-testing both contracts"
+if [ "${SKIP_SMOKE:-0}" != "1" ]; then
+  bash "${HERE}/smoke-test.sh"
+else
+  step "  SKIP_SMOKE=1 — skipping"
+fi
+
 # ── 4. + 5. Run benchmark ────────────────────────────────────────────
-step "4-5/5 running benchmark (proof generation handled inside benchmark.sh)"
+step "5-6/6 running benchmark (proof generation handled inside benchmark.sh)"
 N=${N:-5} bash "${HERE}/benchmark.sh"
 
 # ── Summary ──────────────────────────────────────────────────────────
