@@ -120,10 +120,13 @@ step "Storing VK on both contracts…"
 
 STORE_MSG="{\"store_vk\":{\"vk_base64\":\"${VK_B64}\"}}"
 
+# Both txs are signed by `admin`; broadcast+commit them serially so the
+# account sequence increments before the next tx is built (avoids the
+# "account sequence mismatch" race from firing them back-to-back).
 PURE_STORE_HASH=$(exec_tx wasm execute "${PURE_ADDR}"   "${STORE_MSG}" --from admin | jq -r '.txhash')
-PREC_STORE_HASH=$(exec_tx wasm execute "${PRECOMPILE_ADDR}" "${STORE_MSG}" --from admin | jq -r '.txhash')
-
 if wait_tx "${PURE_STORE_HASH}"; then ok "pure   — StoreVK tx committed"; else fail "pure   — StoreVK tx failed"; fi
+
+PREC_STORE_HASH=$(exec_tx wasm execute "${PRECOMPILE_ADDR}" "${STORE_MSG}" --from admin | jq -r '.txhash')
 if wait_tx "${PREC_STORE_HASH}"; then ok "prec   — StoreVK tx committed"; else fail "prec   — StoreVK tx failed"; fi
 
 # ── 4. VerifyProof on both contracts ──────────────────────────────────
@@ -132,10 +135,11 @@ step "Executing VerifyProof on both contracts…"
 
 VERIFY_MSG="{\"verify_proof\":{\"proof_base64\":\"${PROOF_B64}\",\"public_inputs_base64\":\"${INPUTS_B64}\"}}"
 
+# Serial broadcast+commit (same account-sequence reasoning as StoreVK above).
 PURE_VERIFY_HASH=$(exec_tx wasm execute "${PURE_ADDR}"   "${VERIFY_MSG}" --from admin | jq -r '.txhash')
-PREC_VERIFY_HASH=$(exec_tx wasm execute "${PRECOMPILE_ADDR}" "${VERIFY_MSG}" --from admin | jq -r '.txhash')
-
 if wait_tx "${PURE_VERIFY_HASH}"; then ok "pure   — VerifyProof tx committed"; else fail "pure   — VerifyProof tx failed"; fi
+
+PREC_VERIFY_HASH=$(exec_tx wasm execute "${PRECOMPILE_ADDR}" "${VERIFY_MSG}" --from admin | jq -r '.txhash')
 if wait_tx "${PREC_VERIFY_HASH}"; then ok "prec   — VerifyProof tx committed"; else fail "prec   — VerifyProof tx failed"; fi
 
 # ── 5. Query LastVerify (post) ────────────────────────────────────────

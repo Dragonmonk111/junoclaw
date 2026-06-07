@@ -70,7 +70,18 @@ fi
 # ── 3. Deploy ─────────────────────────────────────────────────────────
 step "3/6 deploying both variants"
 if [ "${FRESH}" = "1" ] || [ ! -f "${DEPLOY_ENV}" ]; then
-  bash "${HERE}/deploy-oneshot.sh"
+  # deploy-oneshot.sh runs INSIDE the container (bare `junod`, /tmp paths).
+  # Stage the wasm + script in, exec it, then copy the generated deploy.env
+  # back out to the host path that benchmark.sh / smoke-test.sh source.
+  step "  staging wasm + deploy script into ${CONTAINER}"
+  docker cp "${WASM_PURE}" "${CONTAINER}:/tmp/zk_verifier_pure.wasm"
+  docker cp "${WASM_PREC}" "${CONTAINER}:/tmp/zk_verifier_precompile.wasm"
+  docker cp "${HERE}/deploy-oneshot.sh" "${CONTAINER}:/tmp/deploy-oneshot.sh"
+  step "  running deploy-oneshot.sh inside container"
+  docker exec "${CONTAINER}" bash /tmp/deploy-oneshot.sh
+  step "  copying deploy.env back to host"
+  docker cp "${CONTAINER}:/tmp/deploy.env" "${DEPLOY_ENV}"
+  cat "${DEPLOY_ENV}"
 else
   step "  deploy.env exists; skipping (FRESH=1 to force redeploy)"
   cat "${DEPLOY_ENV}"
