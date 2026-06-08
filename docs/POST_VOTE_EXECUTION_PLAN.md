@@ -1,13 +1,15 @@
 # Post-Vote Execution Plan — BN254 Precompile (Prop #374 → v30 Mainnet)
 
-**Status:** ACTIVE — Proposal #374 PASSED on Juno mainnet (~80% Yes, 22% Abstain, 0.003% No-with-Veto, 44.05% turnout)
+**Status:** Proposal #374 PASSED on Juno mainnet (~80% Yes, 22% Abstain, 0.003% No-with-Veto, 44.05% turnout)
 **Closing tally captured:** May 5, 2026
 **Owner:** VairagyaNodes (deployer) + Cascade (coding agent)
 **Co-author target:** Dimi (validator, security-patch steward) for v30 handler
 **Upstream targets:** `CosmWasm/cosmwasm`, `CosmWasm/wasmvm`
 **Reference vote tally:** [`https://ping.pub/juno/gov/374`](https://ping.pub/juno/gov/374)
 
-**Phase status (2026-06-04):**
+**Phase status (2026-06-08):**
+- **Live upstream check (2026-06-08):** `cosmwasm#2685` is now **assigned to `@DariuszDepta`** and labeled `g:fea` (Feature) — triage ownership is explicit; no "send a PR" comment yet. `wasmvm#735` open, no maintainer reply (follow-up body verified accurate: BLS12-381 has no Go wrappers in v2.2.4 or v3.0.4; cosmwasm patches 10/10 clean across v2.2.2 / v2.2.7 / v3.0.6). `juno#1202` still DRAFT (142 commits); our review cited verbatim in merged commit `e5ec25e`.
+
 - Phase 0 — ✅ **complete** (0.1 + 0.2 + 0.3 + 0.4 done)
 - Phase 1 — ✅ **PUBLISHED + REPLY POSTED** — Issue 1 (`CosmWasm/cosmwasm#2685`) and Issue 2 (`CosmWasm/wasmvm#735`) opened 2026-06-03. Ethan Frey replied 2026-06-04, redirected to `@DariuszDepta` (new CosmWasm maintainer). Reply posted 2026-06-04.
 - Phase 2 — ✅ **COMPLETE** — 2.1 (differential test, 1,000 proofs: 666 ACCEPT + 334 REJECT, 1000/1000 agree, host-runnable example), 2.2 (v30 upgrade handler draft cleaned up), 2.3 (three devnet benchmark rehearsals: 370,600 → 203,266; 370,545 → 203,193; 370,467 → 203,132; stable 1.823× across all three, 5/5 σ=0) all done.

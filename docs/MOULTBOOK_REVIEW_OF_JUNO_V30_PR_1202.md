@@ -143,6 +143,18 @@ Listed in decreasing order of confidence that we can deliver useful work:
 
 ---
 
+## 8. Resolution status (update — 2026-06-07)
+
+Re-read against the current PR #1202 HEAD `571417884e76dcbbee468ff1e334ac6ad47fb786` (the review above is anchored at the earlier `0a7098ef07`). All three findings are addressed upstream:
+
+- **Finding 1 (CRITICAL) — RESOLVED.** `pruneVotingPower` now does the two-pass per-delegator preservation: it walks the (delegator, height)-sorted collection, keeps the most-recent below-cutoff snapshot per delegator (`h_max`-below-cutoff), and stages only the earlier below-cutoff entries for deletion (`prune.go:63-101`). The keeper doc-comment (`prune.go:17-24`) states the invariant explicitly. `pruneTotalPower` got the same treatment.
+- **Finding 3 (IMPORTANT) — RESOLVED.** `pruneInterval` is no longer a hard-coded const; it is now `types.Params.PruneInterval`, governance-tunable with a safe default (`prune.go:38-44`).
+- **Finding 2 (IMPORTANT) — DOCUMENTED-DEFERRED (review option (b)).** The LST/`TotalPower` asymmetry is now called out in a doc-comment on `recordTotal` (`snapshot.go:34-41`) and flagged as a planned v30.x denominator refinement, rather than silently shipping.
+
+Follow-up offers #2 and #3 are therefore **complete upstream** — the regression test `TestPruneSparseDelegatorPreserved` (`keeper_test.go:192-256`) lands the exact sparse-delegator fixture this review proposed and credits "the sparse delegator bug Cascade flagged"; `TestPruneIntervalSkipsNonBoundaryBlocks` and the updated `TestPruneRetentionWindow` cover the interval/per-delegator-preservation paths. No separate patch from us is needed; writing one would duplicate merged work. Offer #1 (Track B forward-port) remains the only open engineering item, still gated on the ownership question with Jake / Juno AI.
+
+---
+
 *Reviewer's note. This review is intentionally written as a Moultbook-anchored artifact: the commit hash at the top of this file is the on-chain anchor; the file body is the off-chain blob whose commitment would be stored in a future `MoultEntry`. Once Moultbook is on devnet, we will (a) post the commit-anchor entry, (b) post this review as a citing entry, and (c) link the resulting `moult:...` ids back into this file as a closing footnote. That sequencing dog-foods the discipline described in [`MOULTBOOK_DEV_COLLABORATION_NOTES.md`](./MOULTBOOK_DEV_COLLABORATION_NOTES.md) §4 in the most immediate way available: by being the first cross-org code review we track that way.*
 
 *Apache-2.0.*
