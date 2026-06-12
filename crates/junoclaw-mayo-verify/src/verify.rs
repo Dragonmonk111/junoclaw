@@ -58,12 +58,16 @@ pub(crate) fn expand_pk<P: ParameterSet>(cpk: &[u8]) -> Result<(Vec<u64>, Vec<u6
     let seed_pk = &cpk[..P::PK_SEED_BYTES];
     let packed_p3 = &cpk[P::PK_SEED_BYTES..];
 
-    // P1 + P2 expanded bytes
-    let p1_p2_bytes = P::P1_BYTES + P::P2_BYTES;
-    let mut p1_p2_packed = vec![0u8; p1_p2_bytes];
+    // P1 + P2 keystream length uses PACKED nibble sizes (m/2 bytes per m-vec),
+    // not limb-storage sizes (m_vec_limbs*8 per m-vec). The two coincide only
+    // for MAYO-2 (m=64); for m=78/108/142 the packed stream is shorter.
+    let p1_vecs = P::V * (P::V + 1) / 2;
+    let p2_vecs = P::V * P::O;
+    let p1_packed_bytes = p1_vecs * (P::M / 2);
+    let p2_packed_bytes = p2_vecs * (P::M / 2);
+    let mut p1_p2_packed = vec![0u8; p1_packed_bytes + p2_packed_bytes];
     aes128_ctr(seed_pk, &mut p1_p2_packed);
 
-    // Unpack P1 and P2 (for MAYO-2: m/2 == m_vec_limbs*8, so memcpy-like)
     let p1_limbs = P::P1_BYTES / 8;
     let p2_limbs = P::P2_BYTES / 8;
     let p3_limbs = P::P3_BYTES / 8;
@@ -74,7 +78,7 @@ pub(crate) fn expand_pk<P: ParameterSet>(cpk: &[u8]) -> Result<(Vec<u64>, Vec<u6
     let mut p3 = vec![0u64; p3_limbs];
 
     unpack_m_vecs(&p1_p2_packed, &mut p1, p1_limbs / m_vec_limbs, P::M);
-    unpack_m_vecs(&p1_p2_packed[P::P1_BYTES..], &mut p2, p2_limbs / m_vec_limbs, P::M);
+    unpack_m_vecs(&p1_p2_packed[p1_packed_bytes..], &mut p2, p2_limbs / m_vec_limbs, P::M);
     unpack_m_vecs(packed_p3, &mut p3, p3_limbs / m_vec_limbs, P::M);
 
     Ok((p1, p2, p3))

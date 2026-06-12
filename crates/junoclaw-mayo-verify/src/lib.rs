@@ -3,7 +3,10 @@
 //! This crate implements MAYO signature verification without any C dependencies,
 //! making it suitable for `wasm32-unknown-unknown` targets (e.g. CosmWasm contracts).
 //!
-//! Currently supports **MAYO-2** (NIST Level 1, 186-byte signatures).
+//! Supports all NIST Round 4 parameter sets — **MAYO-1/2/3/5** — each
+//! cross-checked bit-for-bit against the MAYO-C reference implementation.
+//! MAYO-2 (186-byte signatures) is recommended for on-chain use at Level 1;
+//! MAYO-5 (964-byte signatures) provides NIST Level 5.
 //!
 //! # Usage
 //! ```ignore
@@ -38,32 +41,58 @@ mod tests {
         assert!(!verify::<Mayo2>(msg, &sig, &pk).unwrap());
     }
 
-    /// Cross-check against the reference C implementation (sriracha-mayo).
-    /// Generates a MAYO-2 keypair with the C crate, signs a message,
-    /// and asserts that our pure-Rust verifier accepts the signature.
+    /// Cross-check harness against the reference C implementation
+    /// (sriracha-mayo). Generates a keypair with the C crate, signs a message,
+    /// and asserts that our pure-Rust verifier accepts the signature and
+    /// rejects a tampered message. Macro-based so each expansion uses concrete
+    /// types (sriracha-mayo's variant trait is not publicly nameable).
     #[cfg(feature = "test-c")]
-    #[test]
-    fn test_mayo2_cross_check_sriracha() {
-        use sriracha_mayo::Mayo2 as CMayo2;
-        use rand_chacha::ChaCha20Rng;
-        use rand_core::SeedableRng;
+    macro_rules! cross_check_test {
+        ($name:ident, $p:ty, $c:ty) => {
+            #[test]
+            fn $name() {
+                use rand_chacha::ChaCha20Rng;
+                use rand_core::SeedableRng;
 
-        let mut rng = ChaCha20Rng::from_seed([42; 32]);
-        let msg = b"hello mayo pure-rust verifier";
+                let mut rng = ChaCha20Rng::from_seed([42; 32]);
+                let msg = b"hello mayo pure-rust verifier";
 
-        let (pk, sk) = sriracha_mayo::SecretKey::<CMayo2>::random(&mut rng).unwrap();
-        let sig = sk.sign(msg).unwrap();
+                let (pk, sk) = sriracha_mayo::SecretKey::<$c>::random(&mut rng).unwrap();
+                let sig = sk.sign(msg).unwrap();
 
-        // C impl should accept
-        assert!(sig.verify(&pk, msg));
+                // C impl should accept
+                assert!(
+                    sig.verify(&pk, msg),
+                    "{}: C verify rejected own sig",
+                    <$p as ParameterSet>::NAME
+                );
 
-        // Our verifier should accept the signature
-        assert!(verify::<Mayo2>(msg, sig.as_ref(), pk.as_ref()).unwrap());
+                // Our verifier should accept the signature
+                assert!(
+                    verify::<$p>(msg, sig.as_ref(), pk.as_ref()).unwrap(),
+                    "{}: pure-Rust verifier rejected valid sig",
+                    <$p as ParameterSet>::NAME
+                );
 
-        // Tampered message should fail
-        let bad_msg = b"tampered message";
-        assert!(!verify::<Mayo2>(bad_msg, sig.as_ref(), pk.as_ref()).unwrap());
+                // Tampered message should fail
+                let bad_msg = b"tampered message";
+                assert!(
+                    !verify::<$p>(bad_msg, sig.as_ref(), pk.as_ref()).unwrap(),
+                    "{}: pure-Rust verifier accepted tampered msg",
+                    <$p as ParameterSet>::NAME
+                );
+            }
+        };
     }
+
+    #[cfg(feature = "test-c")]
+    cross_check_test!(test_mayo1_cross_check_sriracha, Mayo1, sriracha_mayo::Mayo1);
+    #[cfg(feature = "test-c")]
+    cross_check_test!(test_mayo2_cross_check_sriracha, Mayo2, sriracha_mayo::Mayo2);
+    #[cfg(feature = "test-c")]
+    cross_check_test!(test_mayo3_cross_check_sriracha, Mayo3, sriracha_mayo::Mayo3);
+    #[cfg(feature = "test-c")]
+    cross_check_test!(test_mayo5_cross_check_sriracha, Mayo5, sriracha_mayo::Mayo5);
 
     /// Verify our public-key expansion matches the C implementation bit-for-bit.
     #[cfg(feature = "test-c")]

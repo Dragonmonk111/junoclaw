@@ -76,7 +76,8 @@ impl ParameterSet for Mayo1 {
     const DIGEST_BYTES: usize = 32;
     const PK_SEED_BYTES: usize = 16;
     const SK_SEED_BYTES: usize = 24;
-    const F_TAIL: [u8; 4] = [8, 0, 2, 8];
+    // f(z) = z^78 + z^2 + z + x^3 — distinct from the m=64 polynomial.
+    const F_TAIL: [u8; 4] = [8, 1, 1, 0];
 }
 
 /// MAYO-2 parameter set (NIST Level 1, smallest signatures — recommended for on-chain).
