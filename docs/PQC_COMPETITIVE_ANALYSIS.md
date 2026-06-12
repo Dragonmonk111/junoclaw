@@ -204,9 +204,10 @@ These are **complementary architectures optimizing for different Pareto points**
 - Effort: 2-3 days (pattern established with BN254)
 - **Status:** Not yet implemented
 
-**Path B: BN254 Precompile for ZK (on devnet fork) — 10-20× cheaper**
-- Current: ~371k gas (wasm emulated pairing)
-- With precompile: **~20-50k gas** (native BN254 pairing)
+**Path B: BN254 Precompile for ZK (on devnet fork) — 1.82× cheaper (measured)**
+- Testnet (pure wasm): ~371k gas (wasm emulated pairing)
+- Devnet (BN254 precompile): **203,000 gas** (native BN254 pairing)
+- **Actual reduction: 1.82×** (167,156 gas saved per verify)
 - Effort: Already done in `junoclaw-bn254-1`
 - **Status:** Devnet only; testnet lacks precompile
 
