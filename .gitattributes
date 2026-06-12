@@ -1,5 +1,1 @@
-# Force LF line endings on checkout for files that must not have CRLF
-# on Linux (Docker build context, shell scripts, patch files).
-*.sh        text eol=lf
-*.patch     text eol=lf
-Dockerfile  text eol=lf
+* text=auto eol=lf
