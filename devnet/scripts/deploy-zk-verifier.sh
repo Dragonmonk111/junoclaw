@@ -77,6 +77,7 @@ if [ "${BUILD}" = "1" ]; then
       cargo build --release --target wasm32-unknown-unknown -p zk-verifier )
   cp "${REPO_ROOT}/contracts/target/wasm32-unknown-unknown/release/zk_verifier.wasm" \
      "${WASM_PURE_OUT}"
+  wasm-opt -O3 --disable-reference-types "${WASM_PURE_OUT}" -o "${WASM_PURE_OUT}"
 
   echo "[deploy] Building zk-verifier (precompile feature)…"
   ( cd "${REPO_ROOT}/contracts" && \
@@ -84,6 +85,7 @@ if [ "${BUILD}" = "1" ]; then
           --features bn254-precompile )
   cp "${REPO_ROOT}/contracts/target/wasm32-unknown-unknown/release/zk_verifier.wasm" \
      "${WASM_PREC_OUT}"
+  wasm-opt -O3 --disable-reference-types "${WASM_PREC_OUT}" -o "${WASM_PREC_OUT}"
 else
   echo "[deploy] BUILD=0 — reusing pre-built wasm artefacts"
   for f in "${WASM_PURE_OUT}" "${WASM_PREC_OUT}"; do
