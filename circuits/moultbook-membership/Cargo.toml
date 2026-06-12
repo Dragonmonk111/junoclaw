@@ -18,6 +18,11 @@ ark-r1cs-std = "0.5"
 ark-crypto-primitives = { version = "0.5", features = ["crh", "merkle_tree", "r1cs"] }
 sha2 = "0.10"
 rand = "0.8"
+base64 = "0.22"
+hex = "0.4"
+
+[[bin]]
+name = "gen-proof"
+path = "src/bin/gen-proof.rs"
 
 [dev-dependencies]
-ark-groth16 = { version = "0.5", features = ["parallel"] }

@@ -1,0 +1,21 @@
+{
+  "zk-verifier-pure": {
+    "codeId": 78,
+    "tx": "A0F2C4368329757E24DD0979F6412AEFD9C126512CA7E996B90661E4D46DA899",
+    "address": "juno19jk0dnvcjm8hm4kjxmgwy6f8phd4yumfvgjsjn5exu805j5ye6mqgvrfr2"
+  },
+  "zk-verifier-precompile": {
+    "skipped": true,
+    "reason": "uni-7 lacks bn254_add precompile"
+  },
+  "jclaw-credential": {
+    "codeId": 79,
+    "tx": "E41A67F9472031DEB48B9E73F44B098ACB73D240CCBE5E8FEA75BB75A18BC553",
+    "address": "juno1z2w067ptpn2f6zpwt207je0kqeqc2eek7jf4p4dpztf24zncnhzqz5el2r"
+  },
+  "moultbook": {
+    "codeId": 80,
+    "tx": "508F48C22CBAF5F40135713815E10CE5E9B47BE544D82DA0621E151324437BCE",
+    "address": "juno1nm0mu2uwxnphn2hqnuyywyvxp6qfdfuhe64svrnq3vjh66pwxlhskt3dx4"
+  }
+}

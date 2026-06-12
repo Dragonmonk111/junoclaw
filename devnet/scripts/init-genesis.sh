@@ -57,11 +57,25 @@ if [ ! -f "${HOME_DIR}/config/genesis.json" ]; then
   # Set minimum gas prices to avoid tx fee rejection.
   sed -i 's/^minimum-gas-prices = ""/minimum-gas-prices = "0.025ujuno"/' "${HOME_DIR}/config/app.toml"
 
+  # Single-node devnet: commit immediately, no round delay.
+  sed -i 's/timeout_commit = "2s"/timeout_commit = "0s"/' "${HOME_DIR}/config/config.toml"
+
   echo "[init-genesis] Done. admin=${ADMIN_ADDR} verifier=${BENCH_ADDR}"
 else
   echo "[init-genesis] Existing node — skipping genesis creation."
 fi
 
+# Fix client node to IPv4 localhost (Docker IPv6 resolution can hang).
+if [ -f "${HOME_DIR}/config/client.toml" ]; then
+  sed -i 's|tcp://localhost:26657|tcp://127.0.0.1:26657|' "${HOME_DIR}/config/client.toml"
+fi
+
 # --wasm.skip_wasmvm_version_check: wasmvm is linked via go mod replace so
 # Go reports its version as "(devel)"; this bypasses the equality check.
-exec junod "$@" --home "${HOME_DIR}" --wasm.skip_wasmvm_version_check
+# Devnet workaround: junod occasionally exits (observed ~30-60s). Loop to keep
+# the container alive so RPC and ports remain stable.
+while true; do
+  junod "$@" --home "${HOME_DIR}" --wasm.skip_wasmvm_version_check || true
+  echo "[init-genesis] junod exited (code=$?), restarting in 2s …"
+  sleep 2
+done

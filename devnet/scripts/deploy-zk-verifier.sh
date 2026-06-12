@@ -106,12 +106,12 @@ ADMIN=$(docker exec junoclaw-bn254-devnet junod keys show admin -a --keyring-bac
 
 echo "[deploy] Uploading pure-Wasm variant…"
 PURE_TX=$(exec_tx wasm store /tmp/zk_verifier_pure.wasm --from admin | jq -r '.txhash')
-sleep 3
+sleep 8
 PURE_CODE_ID=$(query_ids_from_store "${PURE_TX}")
 
 echo "[deploy] Uploading precompile variant…"
 PREC_TX=$(exec_tx wasm store /tmp/zk_verifier_precompile.wasm --from admin | jq -r '.txhash')
-sleep 3
+sleep 8
 PREC_CODE_ID=$(query_ids_from_store "${PREC_TX}")
 
 echo "[deploy] Instantiating both…"
@@ -121,11 +121,11 @@ if [ -z "${PURE_CODE_ID}" ] || [ -z "${PREC_CODE_ID}" ]; then
   echo "error: one of the store_code txs did not return a code_id" >&2
   exit 4
 fi
-sleep 3
+sleep 8
 INIT='{"admin":"'${ADMIN}'"}'
 PURE_INIT_TX=$(exec_tx wasm instantiate "${PURE_CODE_ID}" "${INIT}" \
     --from admin --label "zk-verifier-pure" --no-admin | jq -r '.txhash')
-sleep 3
+sleep 8
 PREC_INIT_TX=$(exec_tx wasm instantiate "${PREC_CODE_ID}" "${INIT}" \
     --from admin --label "zk-verifier-precompile" --no-admin | jq -r '.txhash')
 

@@ -16,8 +16,15 @@ fn main() -> Result<()> {
     match command {
         "init" => cmd_init()?,
         "start" => cmd_start()?,
+        #[cfg(feature = "mayo")]
+        "keygen" => cmd_keygen(&args)?,
         "version" => cmd_version(),
         "help" | "--help" | "-h" => cmd_help(),
+        #[cfg(not(feature = "mayo"))]
+        "keygen" => {
+            eprintln!("keygen requires the 'mayo' feature. Build with: cargo build -p junoclaw-cli --features mayo");
+            eprintln!("Note: MAYO requires cmake + C toolchain (see docs/MAYO.md)");
+        }
         other => {
             eprintln!("Unknown command: {}", other);
             cmd_help();
@@ -79,6 +86,21 @@ fn cmd_version() {
     println!("junoclaw {}", env!("CARGO_PKG_VERSION"));
 }
 
+#[cfg(feature = "mayo")]
+fn cmd_keygen(args: &[String]) -> Result<()> {
+    use junoclaw_core::mayo::{generate_keypair, MayoVariant};
+    use std::str::FromStr;
+
+    let variant_str = args.get(2).map(|s| s.as_str()).unwrap_or("mayo2");
+    let variant = MayoVariant::from_str(variant_str)?;
+
+    let keypair = generate_keypair(variant)?;
+    let json = serde_json::to_string_pretty(&keypair)?;
+
+    println!("{}", json);
+    Ok(())
+}
+
 fn cmd_help() {
     println!("JunoClaw — Open-source agentic AI platform on Juno Network");
     println!();
@@ -88,6 +110,10 @@ fn cmd_help() {
     println!("COMMANDS:");
     println!("  init       Initialize JunoClaw (~/.junoclaw/)");
     println!("  start      Start the JunoClaw daemon");
+    #[cfg(feature = "mayo")]
+    println!("  keygen     Generate a MAYO post-quantum keypair (mayo1/2/3/5)");
+    #[cfg(not(feature = "mayo"))]
+    println!("  keygen     [disabled — build with --features mayo to enable]");
     println!("  version    Print version");
     println!("  help       Show this help");
 }

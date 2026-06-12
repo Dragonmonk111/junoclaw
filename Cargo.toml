@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/junoclaw-core",
+    "crates/junoclaw-mayo-verify",
     "crates/junoclaw-runtime",
     "crates/junoclaw-cli",
     "crates/junoclaw-daemon",
@@ -58,6 +59,7 @@ thiserror = "2.0"
 # Cryptography
 sha2 = "0.10"
 hex = "0.4"
+sriracha-mayo = { version = "0.0.4", default-features = false }
 
 
 [profile.release]

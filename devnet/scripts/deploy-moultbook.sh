@@ -37,6 +37,17 @@ GAS_PRICES="${GAS_PRICES:-0.025ujuno}"
 MAX_SIZE_BYTES="${MAX_SIZE_BYTES:-1048576}"
 MAX_REFS="${MAX_REFS:-8}"
 MAX_CT_LEN="${MAX_CT_LEN:-64}"
+MAX_GROUP_SIZE="${MAX_GROUP_SIZE:-50}"
+
+# Optional zk-anonymous-publishing wiring. When ZK_VERIFIER is set (e.g.
+# exported by deploy-moultbook-full.sh from deploy.env's PRECOMPILE_ADDR),
+# the contract is instantiated with the anonymous-publish path configured.
+# MEMBERSHIP_VK_HASH may stay empty: PublishAnon then reports
+# MembershipVkNotConfigured while the Post/Redact path still works, which is
+# exactly what the smoke test below exercises.
+ZK_VERIFIER="${ZK_VERIFIER:-}"
+AGENT_REGISTRY="${AGENT_REGISTRY:-}"
+MEMBERSHIP_VK_HASH="${MEMBERSHIP_VK_HASH:-}"
 
 WASM_OUT="${DEVNET_DIR}/moultbook_v0.wasm"
 
@@ -125,13 +136,21 @@ INIT=$(jq -nc \
   --argjson maxsize "${MAX_SIZE_BYTES}" \
   --argjson maxrefs "${MAX_REFS}" \
   --argjson maxctlen "${MAX_CT_LEN}" \
+  --argjson maxgroup "${MAX_GROUP_SIZE}" \
+  --arg zk "${ZK_VERIFIER}" \
+  --arg areg "${AGENT_REGISTRY}" \
+  --arg vkhash "${MEMBERSHIP_VK_HASH}" \
   '{
      admin: $admin,
      whoami_contract: null,
      max_size_bytes: $maxsize,
      max_refs: $maxrefs,
-     max_content_type_len: $maxctlen
-   }')
+     max_content_type_len: $maxctlen,
+     max_group_size: $maxgroup
+   }
+   + (if $zk     != "" then {zk_verifier: $zk}             else {} end)
+   + (if $areg   != "" then {agent_registry: $areg}        else {} end)
+   + (if $vkhash != "" then {membership_vk_hash: $vkhash}  else {} end)')
 
 echo "[deploy-moultbook] Instantiating…"
 INIT_TX=$(exec_tx wasm instantiate "${CODE_ID}" "${INIT}" \

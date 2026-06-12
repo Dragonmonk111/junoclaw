@@ -68,8 +68,10 @@ frontend/dist/
 # TypeScript incremental build cache
 *.tsbuildinfo
 
-# MCP build
+# MCP build + debug scripts (may contain mnemonics)
 mcp/dist/
+mcp/*.cjs
+mcp/*.js
 
 # Session memory / internal notes — not for public repo
 memory/

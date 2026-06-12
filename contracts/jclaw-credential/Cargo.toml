@@ -1,0 +1,28 @@
+[package]
+name = "jclaw-credential"
+version = "0.1.0"
+edition = "2021"
+authors = ["JunoClaw Contributors"]
+description = "cw4-compatible soulbound credential with trust-tree topology (Bud/BreakChannel/Sunset)"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+junoclaw-mayo-verify = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }

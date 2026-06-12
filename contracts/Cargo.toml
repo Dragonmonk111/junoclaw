@@ -12,6 +12,7 @@ members = [
     "zk-verifier",
     "moultbook-v0",
     "ibc-task-host",
+    "jclaw-credential",
 ]
 resolver = "2"
 
@@ -27,7 +28,9 @@ thiserror = "2.0"
 cw-multi-test = "2.3"
 anyhow = "1.0"
 sha2 = "0.10"
+hex = "0.4"
 junoclaw-common = { path = "junoclaw-common" }
+junoclaw-mayo-verify = { path = "../crates/junoclaw-mayo-verify", default-features = false }
 
 # Arkworks ZK ecosystem (pinned for zk-verifier)
 ark-bn254 = "0.5"

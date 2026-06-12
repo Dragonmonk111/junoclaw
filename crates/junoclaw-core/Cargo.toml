@@ -13,3 +13,11 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+# MAYO post-quantum signatures — requires cmake + C toolchain
+sriracha-mayo = { workspace = true, optional = true }
+rand = { version = "0.8", optional = true }
+
+[features]
+default = []
+mayo = ["dep:sriracha-mayo", "dep:rand"]
