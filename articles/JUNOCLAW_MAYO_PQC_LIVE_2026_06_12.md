@@ -52,7 +52,7 @@ MAYO verification is deterministic: given a fixed `(public_key, message, signatu
 
 | Operation | Gas Used | Cost (0.075 ujunox) |
 |-----------|----------|---------------------|
-| Bud (create member + MAYO PK) | 335,126 | ~25.1 ujunox |
+| Bud (create member + MAYO PK) | 336,659 | ~25.2 ujunox |
 | VerifyMayoAttestation (valid) | 355,771 | ~26.7 ujunox |
 | VerifyMayoAttestation (tampered) | Rejected ✅ | — |
 
@@ -90,6 +90,19 @@ The `junoclaw-bn254-devnet` was stuck in a restart loop on WSL2 — `junod` exit
 ### 4. MAYO-2 PQC Live on Testnet (this article)
 
 `jclaw-credential` deployed at `juno1z2w...` (codeId 79). Bud + VerifyMayoAttestation tested end-to-end. Valid signature accepted at ~356k gas; tampered message rejected. The pure-Rust verifier works in wasm32 at ~127 KB peak memory.
+
+### 5. ZK-Verifier Benchmark on Testnet (Jun 12)
+
+The pure wasm zk-verifier (no BN254 precompile on `uni-7`) was benchmarked with a live Groth16 proof:
+
+| Operation | Gas Used | Time |
+|-----------|----------|------|
+| VK store | 212,823 | — |
+| Proof verify | **371,129** | ~3.2s |
+
+Contract: `juno19jk0dnvcjm8hm4kjxmgwy6f8phd4yumfvgjsjn5exu805j5ye6mqgvrfr2` (codeId 78)
+
+This gives us a baseline for the pure wasm path. The devnet with BN254 precompile should be significantly cheaper — that comparison is pending devnet stability fixes.
 
 ---
 

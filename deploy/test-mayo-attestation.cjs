@@ -4,9 +4,22 @@ const { DirectSecp256k1HdWallet } = require('@cosmjs/proto-signing');
 const { SigningCosmWasmClient } = require('@cosmjs/cosmwasm-stargate');
 const { GasPrice, calculateFee } = require('@cosmjs/stargate');
 
+const REPO_ROOT = join(__dirname, '..');
+
+// ── Load .env if present ──
+const envPath = join(REPO_ROOT, '.env');
+if (require('fs').existsSync(envPath)) {
+  require('fs').readFileSync(envPath, 'utf8')
+    .split('\n')
+    .forEach(line => {
+      const m = line.match(/^([^#=\s]+)=(.*)$/);
+      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
+    });
+}
+
 const MNEMONIC = process.env.JUNO_MNEMONIC;
 if (!MNEMONIC) {
-  console.error('Error: Set JUNO_MNEMONIC environment variable');
+  console.error('Error: Create junoclaw/.env with JUNO_MNEMONIC=your words');
   process.exit(1);
 }
 const CHAIN_ID = 'uni-7';

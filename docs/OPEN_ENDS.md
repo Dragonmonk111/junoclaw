@@ -20,16 +20,16 @@
 | Junoswap factory | LIVE (uni-7) | Code ID 61 |
 | Junoswap pair (JUNOX/USDC) | LIVE (uni-7) | Code ID 60, no real liquidity |
 | Junoswap pair (JUNOX/STAKE) | LIVE (uni-7) | Code ID 60, no real liquidity |
-| $JClaw soulbound token | TODO | Contract not written. Trust-tree budding model designed but not implemented |
-| Escrow contract | TODO | Referenced in proposal but not yet written |
-| Task-ledger contract | TODO | Referenced in proposal but not yet written |
-| Agent-registry contract | TODO | Referenced in proposal but not yet written |
+| $JClaw soulbound credential | DECIDED | Not a token. Governance credential already lives in `agent-company` member roster (cw4-like). See `docs/JCLAW_TOKEN_DESIGN.md` |
+| Escrow contract | BUILT | `contracts/escrow/` — Authorize/Confirm/Dispute/Cancel + stats + cross-contract registry |
+| Task-ledger contract | BUILT | `contracts/task-ledger/` — v7 with pre/post hooks, atomic escrow + registry callbacks |
+| Agent-registry contract | BUILT | `contracts/agent-registry/` — register, trust scores, increment tasks, slash |
 
 ### Open ends:
 - **Mainnet deployment**: All contracts need redeployment on juno-1 after proposal passes
 - **Liquidity**: Junoswap pairs have zero real liquidity — needs community LP provision post-mainnet
-- **$JClaw token**: Soulbound token contract needs design + implementation
-- **Missing contracts**: escrow, task-ledger, agent-registry are mentioned in proposal roadmap but don't exist yet
+- **$JClaw**: Resolved as a credential decision (ADR `docs/JCLAW_TOKEN_DESIGN.md`). Open choice: keep roster in `agent-company` (1a) vs extract a cw4-compatible `jclaw-credential` contract (1b). Economic TokenFactory token (layer 2) deferred until a concrete use exists
+- **Devnet wiring**: escrow + task-ledger + agent-registry built but not yet deployed together with `ContractRegistry` pointers live
 
 ---
 

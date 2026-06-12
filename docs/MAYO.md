@@ -155,7 +155,7 @@ This prevents cross-protocol signature replay (e.g., a moultbook attestation can
 
 | Operation | Gas Used | Cost (0.075 ujunox) |
 |-----------|----------|---------------------|
-| Bud (create member + MAYO PK) | 335,126 | ~25.1 ujunox |
+| Bud (create member + MAYO PK) | 336,659 | ~25.2 ujunox |
 | VerifyMayoAttestation (valid) | 355,771 | ~26.7 ujunox |
 | VerifyMayoAttestation (tampered) | Rejected ✅ | — |
 

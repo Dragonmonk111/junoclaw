@@ -3,6 +3,14 @@
 **Status**: DRAFT — Execute after Proposal #373 passes (voting ends March 24, 2026)
 **Recipient**: Dimi (testnet ops, said "gg @Dragonmonk111")
 
+> **Current state (2026-06-08):** Prop #373 passed (quorum crossed, ~85% YES).
+> The active blocker is **recruitment**: 12 of 13 seats are still open (Dimi is
+> tentative #1). Governance weight is held in the `agent-company` member roster
+> — the soulbound credential already exists there (see
+> `docs/JCLAW_TOKEN_DESIGN.md`); no token is needed to seat the 13. Use
+> `drafts/BUD_INVITATION_TEMPLATE.md` to invite candidates. The `WeightChange`
+> proposal becomes meaningful only once enough addresses are collected.
+
 ---
 
 ## Two-Tier Trust Model
