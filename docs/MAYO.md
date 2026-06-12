@@ -76,6 +76,8 @@ Output (JSON):
 
 ## Architecture
 
+### Phase 1: CLI/Local (C-based)
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        JunoClaw Agent                        │
@@ -97,6 +99,39 @@ Output (JSON):
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Phase 2: On-Chain (Pure Rust)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    jclaw-credential (CosmWasm)               │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────────────────┐      ┌─────────────────────────┐ │
+│  │ Bud {               │      │ VerifyMayoAttestation { │ │
+│  │   parent, child,    │ ──▶  │   addr, message,       │ │
+│  │   child_weight,    │      │   signature,            │ │
+│  │   mayo_pk: <4,912B>│      │   public_key            │ │
+│  │ }                   │      │ }                       │ │
+│  │                     │      │                         │ │
+│  │ contract:           │      │ contract:               │ │
+│  │   verify length     │      │   1. Load stored hash   │ │
+│  │   SHA-256 → 64-hex  │      │   2. Hash public_key    │ │
+│  │   store hash         │      │   3. Mayo2::verify()   │ │
+│  └─────────────────────┘      │   4. Accept/reject      │ │
+│                               └─────────────────────────┘ │
+│                                        │                    │
+│                                        ▼                    │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ junoclaw-mayo-verify (pure Rust, #![no_std], no C)   │  │
+│  │  • gf16.rs — GF(16) arithmetic                       │  │
+│  │  • verify.rs — AES-128-CTR + SHAKE256 + P signature   │  │
+│  │  • params.rs — MAYO-2 parameters (n=66, m=64, etc.)  │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Why hash-stored PK?** The full 4,912 B public key is too large for permanent contract storage. We store a 32-byte SHA-256 hash (cheap, permanent). The actual public key travels in the transaction payload at verification time — same pattern as Bitcoin P2PKH and Ethereum AA.
+
 ## Domain Separation
 
 JunoClaw uses the **Commonware convention** for message binding:
@@ -116,13 +151,27 @@ This prevents cross-protocol signature replay (e.g., a moultbook attestation can
 | `mayo3` | 3 | 32 B | 2,986 B | 681 B | High security |
 | `mayo5` | 5 | 40 B | 5,554 B | 964 B | Maximum security |
 
+## Live Testnet Results (uni-7, 2026-06-12)
+
+| Operation | Gas Used | Cost (0.075 ujunox) |
+|-----------|----------|---------------------|
+| Bud (create member + MAYO PK) | 335,126 | ~25.1 ujunox |
+| VerifyMayoAttestation (valid) | 355,771 | ~26.7 ujunox |
+| VerifyMayoAttestation (tampered) | Rejected ✅ | — |
+
+**Contract**: `jclaw-credential` at `juno1z2w067ptpn2f6zpwt207je0kqeqc2eek7jf4p4dpztf24zncnhzqz5el2r`
+
+**Memory**: Pure-Rust verifier peak ~127 KB in wasm32 (within CosmWasm's 512 KB limit).
+
 ## Roadmap
 
-- [x] **Phase 1:** Key generation, signing, verification in `junoclaw-core`
-- [ ] **Phase 2:** On-chain MAYO verification (pure-Rust verifier for CosmWasm, or ZK-proof approach)
-- [ ] **Phase 3:** Integrate MAYO into `jclaw-credential` for post-quantum bud governance
+- [x] **Phase 1:** Key generation, signing, verification in `junoclaw-core` (C-based, CLI)
+- [x] **Phase 2:** On-chain MAYO verification — pure-Rust `junoclaw-mayo-verify` crate, `#![no_std]`, wasm32-compatible
+- [x] **Phase 3:** Integrate MAYO into `jclaw-credential` — `Bud` with `mayo_pk`, `VerifyMayoAttestation`, `MayoPkHash` query
 - [ ] **Phase 4:** MAYO-signed content attestations in `moultbook-v0`
-- [ ] **Phase 5:** IBC cross-chain MAYO signatures for PQC-secure relay
+- [ ] **Phase 5:** MAYO-3 / MAYO-5 support — streaming `expand_pk` for larger parameter sets (L3/L5 security)
+- [ ] **Phase 6:** ZK-proof of MAYO verification — Groth16/BN254 circuit for cross-chain portability
+- [ ] **Phase 7:** IBC cross-chain MAYO signatures for PQC-secure relay
 
 ## References
 

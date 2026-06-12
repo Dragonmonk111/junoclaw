@@ -62,6 +62,37 @@ MAYO verification is deterministic: given a fixed `(public_key, message, signatu
 
 ---
 
+## What's New Since May 18
+
+The [Ten Contracts article](JUNOCLAW_10_CONTRACTS_X402_2026_05_18.md) laid out the architecture. Since then, four important things have happened:
+
+### 1. $JClaw Token Design Resolved (Jun 8)
+
+The docs had a contradiction: `DIMI_HANDOFF_PLAN.md` called $JClaw a soulbound non-transferable credential; `GENESIS_BUDS_ARCHITECTURE.md` called it a tradeable CW20 with airdrop/LP/vesting. Mutually exclusive.
+
+**Resolution**: Three-layer separation:
+- **Credential layer** = trust-tree (soulbound, non-transferable, prunable). Already exists as the `agent-company` member roster or the new `jclaw-credential` contract. No token needed.
+- **Economic layer** = `TokenFactory` `ujclaw` (if ever needed). Cheap, native, IBC-ready. Deferred until there is actual demand for a tradeable token.
+- **No CW20** — soulbinding a CW20 is broken by design. CW20 = programmable but fundamentally transferrable. Soulbinding it requires broken hooks.
+
+### 2. WSL2 Devnet Stability Fixed (Jun 11)
+
+The `junoclaw-bn254-devnet` was stuck in a restart loop on WSL2 — `junod` exited with code 255 every ~30–60 seconds due to WSL2 clock jumps stalling CometBFT consensus.
+
+**Fix applied**: `init-genesis.sh` now uses a `while true` restart loop inside the container (keeping ports mapped), `timeout_commit = "0s"` for instant blocks, and `client.toml` → `tcp://127.0.0.1:26657` to avoid IPv6 resolution hangs. The devnet now reaches height 300+ without interruption.
+
+**Lesson**: WSL2 clock jumps (not drift) halt consensus. Only jumps matter. The fix is to restart `junod` fast enough that RPC stays stable.
+
+### 3. Moultbook Deployed on Testnet (Jun 12)
+
+`moultbook-v0` is now live on `uni-7` at `juno1nm0mu2uwxnphn2hqnuyywyvxp6qfdfuhe64svrnq3vjh66pwxlhskt3dx4` (codeId 80). Wired to the pure zk-verifier (`juno19jk0...`) and `jclaw-credential` registry. The devnet still can't deploy moultbook (WSL2 restart loop kills the store→instantiate gap), but testnet has it running.
+
+### 4. MAYO-2 PQC Live on Testnet (this article)
+
+`jclaw-credential` deployed at `juno1z2w...` (codeId 79). Bud + VerifyMayoAttestation tested end-to-end. Valid signature accepted at ~356k gas; tampered message rejected. The pure-Rust verifier works in wasm32 at ~127 KB peak memory.
+
+---
+
 ## What Comes Next
 
 ### Immediate: MAYO-Signed Moultbook Attestations
