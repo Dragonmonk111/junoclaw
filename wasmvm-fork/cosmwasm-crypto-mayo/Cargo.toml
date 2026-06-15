@@ -1,0 +1,15 @@
+[package]
+name = "cosmwasm-crypto-mayo"
+version = "0.1.0"
+edition = "2021"
+authors = ["JunoClaw Contributors"]
+description = "MAYO post-quantum signature host-function implementations for the CosmWasm VM"
+license = "Apache-2.0"
+repository = "https://github.com/junoclaw/junoclaw"
+
+[dependencies]
+junoclaw-mayo-verify = { path = "../../crates/junoclaw-mayo-verify" }
+
+[features]
+default = []
+std = ["junoclaw-mayo-verify/std"]

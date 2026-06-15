@@ -14,6 +14,17 @@
 | **zk-verifier (precompile)** | — | *Skipped — uni-7 lacks bn254_add precompile* |
 | **jclaw-credential** | 79 | `juno1z2w067ptpn2f6zpwt207je0kqeqc2eek7jf4p4dpztf24zncnhzqz5el2r` |
 | **moultbook** | 80 | `juno1nm0mu2uwxnphn2hqnuyywyvxp6qfdfuhe64svrnq3vjh66pwxlhskt3dx4` |
+| **jclaw-credential (multi-variant MAYO)** | 81 | `juno1zj39neajvynzv4swf3a33394z84l6nfduy5sntw58re3z7ef9p4q3w4y47` |
+
+### MAYO Multi-Variant Benchmark (2026-06-12, code ID 81)
+
+| Variant | NIST | Verify gas | Verify tx |
+|---------|------|------------|-----------|
+| MAYO-2 | L1 | 356,368 | `1C96D7824C4F5C474FE439695F5F58FF319C44F76B39BCD42AA78229D6A5AA81` |
+| MAYO-3 | L3 | 457,221 | `04A948673618FB4830FCCA75DEDECB59638A02AA972A2FA0AF6AC171BC8258BB` |
+| MAYO-5 | L5 | 798,803 | `83F49BE3E2B0E0FACA660822799F8269C971C35EDAB6D23A5E52BEC07312C86C` |
+
+Full results: `deploy/mayo-benchmark-results.json` (reproduce with `node deploy/benchmark-mayo-variants.cjs`).
 
 **Notes**:
 - Moultbook wired to pure verifier + jclaw-credential registry

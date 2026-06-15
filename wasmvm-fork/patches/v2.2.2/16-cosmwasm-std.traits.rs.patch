@@ -1,0 +1,25 @@
+diff --git a/packages/std/src/traits.rs b/packages/std/src/traits.rs
+index 2276ff0..2ac318e 100644
+--- a/packages/std/src/traits.rs
++++ b/packages/std/src/traits.rs
+@@ -347,6 +347,20 @@ pub trait Api {
+     fn bn254_pairing_equality(&self, input: &[u8]) -> Result<bool, VerificationError> {
+         unimplemented!()
+     }
++    /// MAYO multi-variant post-quantum signature verification.
++    ///
++    /// `variant` is 1/2/3/5 for MAYO-1/2/3/5. Added in `cosmwasm_2_3`.
++    #[cfg(feature = "cosmwasm_2_3")]
++    #[allow(unused_variables)]
++    fn mayo_verify(
++        &self,
++        variant: u32,
++        pk: &[u8],
++        msg: &[u8],
++        sig: &[u8],
++    ) -> Result<bool, VerificationError> {
++        unimplemented!()
++    }
+     fn debug(&self, message: &str);
+ }
+ 

@@ -1,0 +1,22 @@
+diff --git a/packages/std/src/testing/mock.rs b/packages/std/src/testing/mock.rs
+index 2127b10..367cbaf 100644
+--- a/packages/std/src/testing/mock.rs
++++ b/packages/std/src/testing/mock.rs
+@@ -288,6 +288,17 @@ impl Api for MockApi {
+         cosmwasm_crypto_bn254::bn254_pairing_equality(input)
+             .map_err(|e| VerificationError::generic_err(e.to_string()))
+     }
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn mayo_verify(
++        &self,
++        variant: u32,
++        pk: &[u8],
++        msg: &[u8],
++        sig: &[u8],
++    ) -> Result<bool, VerificationError> {
++        cosmwasm_crypto_mayo::mayo_verify(variant, pk, msg, sig)
++            .map_err(|e| VerificationError::generic_err(e.to_string()))
++    }
+     fn debug(&self, #[allow(unused)] message: &str) {
+         println!("{message}");
+     }

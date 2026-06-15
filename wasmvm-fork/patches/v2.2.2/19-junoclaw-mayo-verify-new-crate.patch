@@ -1,0 +1,1139 @@
+diff --git a/packages/mayo-verify/Cargo.toml b/packages/mayo-verify/Cargo.toml
+new file mode 100755
+index 0000000..9578ab8
+--- /dev/null
++++ b/packages/mayo-verify/Cargo.toml
+@@ -0,0 +1,25 @@
++[package]
++name = "junoclaw-mayo-verify"
++version = "0.1.0"
++edition = "2021"
++authors = ["JunoClaw Contributors"]
++description = "Pure-Rust MAYO post-quantum signature verifier for CosmWasm (no_std + alloc)"
++license = "Apache-2.0"
++repository = "https://github.com/junoclaw/junoclaw"
++
++[dependencies]
++sha2 = { version = "0.10", default-features = false }
++sha3 = { version = "0.10", default-features = false }
++aes = { version = "0.8", default-features = false }
++sriracha-mayo = { version = "0.0.4", optional = true }
++
++[dev-dependencies]
++hex-literal = "0.4"
++hex = "0.4"
++rand_chacha = "0.3"
++rand_core = "0.6"
++
++[features]
++default = []
++std = ["sha2/std", "sha3/std"]
++test-c = ["sriracha-mayo", "std"]
+diff --git a/packages/mayo-verify/src/error.rs b/packages/mayo-verify/src/error.rs
+new file mode 100755
+index 0000000..71da99f
+--- /dev/null
++++ b/packages/mayo-verify/src/error.rs
+@@ -0,0 +1,38 @@
++//! Error types for MAYO verification failures.
++
++use core::fmt;
++
++/// MAYO verifier error.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum Error {
++    /// Input has wrong length for the parameter set.
++    InvalidLength {
++        expected: usize,
++        actual: usize,
++    },
++    /// Verification failed (invalid signature).
++    VerifyFailed,
++    /// AES-128-CTR key expansion failed.
++    AesError,
++    /// SHAKE256 operation failed.
++    ShakeError,
++}
++
++impl fmt::Display for Error {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        match self {
++            Error::InvalidLength { expected, actual } => {
++                write!(f, "invalid length: expected {}, got {}", expected, actual)
++            }
++            Error::VerifyFailed => write!(f, "signature verification failed"),
++            Error::AesError => write!(f, "AES operation failed"),
++            Error::ShakeError => write!(f, "SHAKE256 operation failed"),
++        }
++    }
++}
++
++/// Convenience alias for `Result<T, Error>`.
++pub type Result<T> = core::result::Result<T, Error>;
++
++#[cfg(feature = "std")]
++impl std::error::Error for Error {}
+diff --git a/packages/mayo-verify/src/gf16.rs b/packages/mayo-verify/src/gf16.rs
+new file mode 100755
+index 0000000..fc66800
+--- /dev/null
++++ b/packages/mayo-verify/src/gf16.rs
+@@ -0,0 +1,182 @@
++//! GF(16) arithmetic and m-vector operations.
++//!
++//! MAYO operates over GF(16) = GF(2)[x] / (x^4 + x + 1).
++//! Elements are packed as 4-bit nibbles in `u64` limbs (16 elements per limb).
++
++use crate::params::ParameterSet;
++
++/// GF(16) multiplication mod x^4 + x + 1.
++#[inline(always)]
++pub fn mul(a: u8, b: u8) -> u8 {
++    let mut p = (a & 1) * b;
++    p ^= (a & 2) * b;
++    p ^= (a & 4) * b;
++    p ^= (a & 8) * b;
++    let top = p & 0xf0;
++    ((p ^ (top >> 4) ^ (top >> 3)) & 0x0f) as u8
++}
++
++/// GF(16) addition / subtraction (same operation: XOR).
++#[inline(always)]
++pub fn add(a: u8, b: u8) -> u8 {
++    a ^ b
++}
++
++/// Pre-computed multiplication table for vectorised ops.
++/// Returns a `u32` where each byte is `mul(b, n)` for n = [1, 2, 4, 8].
++#[inline(always)]
++pub fn mul_table(b: u8) -> u32 {
++    let x = (b as u32).wrapping_mul(0x08040201);
++    let high = x & 0xf0f0f0f0;
++    x ^ (high >> 4) ^ (high >> 3)
++}
++
++/// Multiply an m-vector (packed nibbles in `u64` limbs) by a GF(16) scalar
++/// and XOR the result into `acc`.
++#[inline(always)]
++pub fn m_vec_mul_add<P: ParameterSet>(
++    m_vec_limbs: usize,
++    inp: &[u64],
++    scalar: u8,
++    acc: &mut [u64],
++) {
++    let tab = mul_table(scalar);
++    let lsb_mask = 0x1111111111111111u64;
++    for i in 0..m_vec_limbs {
++        acc[i] ^= (inp[i] & lsb_mask).wrapping_mul(tab as u64 & 0xff)
++            ^ ((inp[i] >> 1) & lsb_mask).wrapping_mul((tab >> 8) as u64 & 0xf)
++            ^ ((inp[i] >> 2) & lsb_mask).wrapping_mul((tab >> 16) as u64 & 0xf)
++            ^ ((inp[i] >> 3) & lsb_mask).wrapping_mul((tab >> 24) as u64 & 0xf);
++    }
++}
++
++/// XOR two m-vectors.
++#[inline(always)]
++pub fn m_vec_add(m_vec_limbs: usize, a: &[u64], b: &mut [u64]) {
++    for i in 0..m_vec_limbs {
++        b[i] ^= a[i];
++    }
++}
++
++/// Copy an m-vector.
++#[inline(always)]
++pub fn m_vec_copy(m_vec_limbs: usize, src: &[u64], dst: &mut [u64]) {
++    for i in 0..m_vec_limbs {
++        dst[i] = src[i];
++    }
++}
++
++/// Multiply m-vector by x (the primitive element) and add into acc.
++#[inline(always)]
++pub fn m_vec_mul_add_x(m_vec_limbs: usize, inp: &[u64], acc: &mut [u64]) {
++    let msb_mask = 0x8888888888888888u64;
++    for i in 0..m_vec_limbs {
++        let t = inp[i] & msb_mask;
++        acc[i] ^= ((inp[i] ^ t) << 1) ^ ((t >> 3) * 3);
++    }
++}
++
++/// Multiply m-vector by x^{-1} and add into acc.
++#[inline(always)]
++pub fn m_vec_mul_add_x_inv(m_vec_limbs: usize, inp: &[u64], acc: &mut [u64]) {
++    let lsb_mask = 0x1111111111111111u64;
++    for i in 0..m_vec_limbs {
++        let t = inp[i] & lsb_mask;
++        acc[i] ^= ((inp[i] ^ t) >> 1) ^ (t * 9);
++    }
++}
++
++/// Combine 16 "bins" (accumulators indexed by GF(16) value) into a single
++/// m-vector result. This is the bottleneck of MAYO verification.
++#[inline(always)]
++pub fn m_vec_multiply_bins<P: ParameterSet>(m_vec_limbs: usize, bins: &mut [u64], out: &mut [u64]) {
++    // Fixed reduction pattern from reference C implementation.
++    // Uses split_at_mut to satisfy the borrow checker.
++    macro_rules! op {
++        ($src:literal, $dst:literal, $f:ident) => {
++            {
++                let m = m_vec_limbs;
++                let s = $src * m;
++                let s_end = s + m;
++                let d = $dst * m;
++                let d_end = d + m;
++                if s_end <= d {
++                    let (left, right) = bins.split_at_mut(d);
++                    let src = &left[s..s_end];
++                    let dst = &mut right[..m];
++                    $f(m, src, dst);
++                } else if d_end <= s {
++                    let (left, right) = bins.split_at_mut(s);
++                    let src = &right[..m];
++                    let dst = &mut left[d..d_end];
++                    $f(m, src, dst);
++                } else {
++                    panic!("overlapping bins");
++                }
++            }
++        };
++    }
++
++    op!(5, 10, m_vec_mul_add_x_inv);
++    op!(11, 12, m_vec_mul_add_x);
++    op!(10, 7, m_vec_mul_add_x_inv);
++    op!(12, 6, m_vec_mul_add_x);
++    op!(7, 14, m_vec_mul_add_x_inv);
++    op!(6, 3, m_vec_mul_add_x);
++    op!(14, 15, m_vec_mul_add_x_inv);
++    op!(3, 8, m_vec_mul_add_x);
++    op!(15, 13, m_vec_mul_add_x_inv);
++    op!(8, 4, m_vec_mul_add_x);
++    op!(13, 9, m_vec_mul_add_x_inv);
++    op!(4, 2, m_vec_mul_add_x);
++    op!(9, 1, m_vec_mul_add_x_inv);
++    op!(2, 1, m_vec_mul_add_x);
++    m_vec_copy(m_vec_limbs, &bins[m_vec_limbs..2 * m_vec_limbs], out);
++}
++
++/// Decode packed nibbles (2 per byte) into individual nibbles.
++/// `out` must have at least `in_bytes * 2` capacity (or `in_bytes * 2 - 1` if `n` is odd).
++pub fn decode(in_bytes: &[u8], out: &mut [u8], n: usize) {
++    let full = n / 2;
++    for i in 0..full {
++        out[2 * i] = in_bytes[i] & 0x0f;
++        out[2 * i + 1] = in_bytes[i] >> 4;
++    }
++    if n % 2 == 1 {
++        out[n - 1] = in_bytes[full] & 0x0f;
++    }
++}
++
++/// Encode individual nibbles into packed bytes.
++pub fn encode(in_nibbles: &[u8], out: &mut [u8], n: usize) {
++    let full = n / 2;
++    for i in 0..full {
++        out[i] = in_nibbles[2 * i] | (in_nibbles[2 * i + 1] << 4);
++    }
++    if n % 2 == 1 {
++        out[full] = in_nibbles[n - 1];
++    }
++}
++
++/// Matrix multiplication over GF(16).
++/// `a` is row-major with `colrow_ab` columns; result in `c`.
++pub fn mat_mul(a: &[u8], b: &[u8], c: &mut [u8], colrow_ab: usize, row_a: usize, col_b: usize) {
++    for i in 0..row_a {
++        for j in 0..col_b {
++            let mut acc = 0u8;
++            for k in 0..colrow_ab {
++                acc = add(acc, mul(a[i * colrow_ab + k], b[k * col_b + j]));
++            }
++            c[i * col_b + j] = acc;
++        }
++    }
++}
++
++/// Matrix addition over GF(16).
++pub fn mat_add(a: &[u8], b: &[u8], c: &mut [u8], rows: usize, cols: usize) {
++    for i in 0..rows {
++        for j in 0..cols {
++            c[i * cols + j] = a[i * cols + j] ^ b[i * cols + j];
++        }
++    }
++}
+diff --git a/packages/mayo-verify/src/lib.rs b/packages/mayo-verify/src/lib.rs
+new file mode 100755
+index 0000000..5fe4091
+--- /dev/null
++++ b/packages/mayo-verify/src/lib.rs
+@@ -0,0 +1,224 @@
++//! Pure-Rust MAYO signature verifier for CosmWasm (`no_std` + `alloc`).
++//!
++//! This crate implements MAYO signature verification without any C dependencies,
++//! making it suitable for `wasm32-unknown-unknown` targets (e.g. CosmWasm contracts).
++//!
++//! Supports all NIST Round 4 parameter sets — **MAYO-1/2/3/5** — each
++//! cross-checked bit-for-bit against the MAYO-C reference implementation.
++//! MAYO-2 (186-byte signatures) is recommended for on-chain use at Level 1;
++//! MAYO-5 (964-byte signatures) provides NIST Level 5.
++//!
++//! # Usage
++//! ```ignore
++//! use junoclaw_mayo_verify::Mayo2;
++//!
++//! let valid = Mayo2::verify(message, signature, public_key).unwrap();
++//! ```
++
++#![cfg_attr(not(feature = "std"), no_std)]
++#![cfg_attr(not(feature = "test-c"), forbid(unsafe_code))]
++
++extern crate alloc;
++
++pub mod error;
++pub mod gf16;
++pub mod params;
++pub mod verify;
++
++pub use error::{Error, Result};
++pub use params::{Mayo1, Mayo2, Mayo3, Mayo5, ParameterSet};
++pub use verify::verify;
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn test_mayo2_verify_rejects_garbage() {
++        let msg = b"test";
++        let sig = [0u8; Mayo2::SIG_BYTES];
++        let pk = [0u8; Mayo2::PK_BYTES];
++        assert!(!verify::<Mayo2>(msg, &sig, &pk).unwrap());
++    }
++
++    /// Cross-check harness against the reference C implementation
++    /// (sriracha-mayo). Generates a keypair with the C crate, signs a message,
++    /// and asserts that our pure-Rust verifier accepts the signature and
++    /// rejects a tampered message. Macro-based so each expansion uses concrete
++    /// types (sriracha-mayo's variant trait is not publicly nameable).
++    #[cfg(feature = "test-c")]
++    macro_rules! cross_check_test {
++        ($name:ident, $p:ty, $c:ty) => {
++            #[test]
++            fn $name() {
++                use rand_chacha::ChaCha20Rng;
++                use rand_core::SeedableRng;
++
++                let mut rng = ChaCha20Rng::from_seed([42; 32]);
++                let msg = b"hello mayo pure-rust verifier";
++
++                let (pk, sk) = sriracha_mayo::SecretKey::<$c>::random(&mut rng).unwrap();
++                let sig = sk.sign(msg).unwrap();
++
++                // C impl should accept
++                assert!(
++                    sig.verify(&pk, msg),
++                    "{}: C verify rejected own sig",
++                    <$p as ParameterSet>::NAME
++                );
++
++                // Our verifier should accept the signature
++                assert!(
++                    verify::<$p>(msg, sig.as_ref(), pk.as_ref()).unwrap(),
++                    "{}: pure-Rust verifier rejected valid sig",
++                    <$p as ParameterSet>::NAME
++                );
++
++                // Tampered message should fail
++                let bad_msg = b"tampered message";
++                assert!(
++                    !verify::<$p>(bad_msg, sig.as_ref(), pk.as_ref()).unwrap(),
++                    "{}: pure-Rust verifier accepted tampered msg",
++                    <$p as ParameterSet>::NAME
++                );
++            }
++        };
++    }
++
++    /// Peak-heap instrumentation: a tracking global allocator measures the
++    /// high-water mark of heap usage during `verify`. The verify pipeline
++    /// executes fully even for garbage inputs (only the final comparison
++    /// differs), so zeroed pk/sig give the true memory profile per variant.
++    /// Native usize == wasm32 usize for the dominant buffers (u64 limbs),
++    /// so this approximates the CosmWasm memory footprint well.
++    /// Run: cargo test --features test-c -- peak_heap --nocapture --test-threads=1
++    #[cfg(feature = "test-c")]
++    mod peak_heap {
++        use super::super::*;
++        use std::alloc::{GlobalAlloc, Layout, System};
++        use std::sync::atomic::{AtomicUsize, Ordering};
++
++        struct TrackingAlloc;
++        static CURRENT: AtomicUsize = AtomicUsize::new(0);
++        static PEAK: AtomicUsize = AtomicUsize::new(0);
++
++        unsafe impl GlobalAlloc for TrackingAlloc {
++            unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
++                let p = System.alloc(layout);
++                if !p.is_null() {
++                    let cur = CURRENT.fetch_add(layout.size(), Ordering::SeqCst) + layout.size();
++                    PEAK.fetch_max(cur, Ordering::SeqCst);
++                }
++                p
++            }
++            unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
++                System.dealloc(ptr, layout);
++                CURRENT.fetch_sub(layout.size(), Ordering::SeqCst);
++            }
++        }
++
++        #[global_allocator]
++        static ALLOC: TrackingAlloc = TrackingAlloc;
++
++        fn measure<P: ParameterSet>() -> usize {
++            let msg = b"memory measurement";
++            let sig = vec![0u8; P::SIG_BYTES];
++            let pk = vec![0u8; P::PK_BYTES];
++            PEAK.store(CURRENT.load(Ordering::SeqCst), Ordering::SeqCst);
++            let _ = verify::<P>(msg, &sig, &pk).unwrap();
++            PEAK.load(Ordering::SeqCst) - CURRENT.load(Ordering::SeqCst)
++        }
++
++        #[test]
++        fn peak_heap_all_variants() {
++            for (name, peak) in [
++                ("MAYO-1", measure::<Mayo1>()),
++                ("MAYO-2", measure::<Mayo2>()),
++                ("MAYO-3", measure::<Mayo3>()),
++                ("MAYO-5", measure::<Mayo5>()),
++            ] {
++                println!("{name}: peak heap = {peak} bytes ({:.1} KB)", peak as f64 / 1024.0);
++            }
++        }
++    }
++
++    #[cfg(feature = "test-c")]
++    cross_check_test!(test_mayo1_cross_check_sriracha, Mayo1, sriracha_mayo::Mayo1);
++    #[cfg(feature = "test-c")]
++    cross_check_test!(test_mayo2_cross_check_sriracha, Mayo2, sriracha_mayo::Mayo2);
++    #[cfg(feature = "test-c")]
++    cross_check_test!(test_mayo3_cross_check_sriracha, Mayo3, sriracha_mayo::Mayo3);
++    #[cfg(feature = "test-c")]
++    cross_check_test!(test_mayo5_cross_check_sriracha, Mayo5, sriracha_mayo::Mayo5);
++
++    /// Emit benchmark/test vectors (PK, SIG, SHA-256 PK hash) for each variant,
++    /// signed exactly like the cross-check (raw message, seed=[42;32]) so they
++    /// are accepted by the on-chain `verify`. Ignored by default; run with:
++    ///   cargo test --features test-c -- print_vectors --ignored --nocapture
++    #[cfg(feature = "test-c")]
++    macro_rules! print_vectors_test {
++        ($name:ident, $label:expr, $c:ty) => {
++            #[test]
++            #[ignore]
++            fn $name() {
++                use rand_chacha::ChaCha20Rng;
++                use rand_core::SeedableRng;
++                use sha2::{Digest, Sha256};
++
++                let mut rng = ChaCha20Rng::from_seed([42; 32]);
++                let msg = b"hello mayo pure-rust verifier";
++                let (pk, sk) = sriracha_mayo::SecretKey::<$c>::random(&mut rng).unwrap();
++                let sig = sk.sign(msg).unwrap();
++                let pk_hash = hex::encode(Sha256::digest(pk.as_ref()));
++
++                println!("=== {} VECTOR (seed=[42;32]) ===", $label);
++                println!("MSG: {}", core::str::from_utf8(msg).unwrap());
++                println!("PK_HEX: {}", hex::encode(pk.as_ref()));
++                println!("SIG_HEX: {}", hex::encode(sig.as_ref()));
++                println!("PK_HASH: {}", pk_hash);
++                println!("=== END {} ===", $label);
++            }
++        };
++    }
++
++    #[cfg(feature = "test-c")]
++    print_vectors_test!(print_vectors_mayo1, "MAYO-1", sriracha_mayo::Mayo1);
++    #[cfg(feature = "test-c")]
++    print_vectors_test!(print_vectors_mayo2, "MAYO-2", sriracha_mayo::Mayo2);
++    #[cfg(feature = "test-c")]
++    print_vectors_test!(print_vectors_mayo3, "MAYO-3", sriracha_mayo::Mayo3);
++    #[cfg(feature = "test-c")]
++    print_vectors_test!(print_vectors_mayo5, "MAYO-5", sriracha_mayo::Mayo5);
++
++    /// Verify our public-key expansion matches the C implementation bit-for-bit.
++    #[cfg(feature = "test-c")]
++    #[test]
++    fn test_mayo2_expand_pk_matches_c() {
++        use sriracha_mayo::Mayo2 as CMayo2;
++        use rand_chacha::ChaCha20Rng;
++        use rand_core::SeedableRng;
++        use core::ffi::c_int;
++
++        extern "C" {
++            fn pqmayo_MAYO_2_opt_mayo_expand_pk(pk: *mut u64, cpk: *const u8) -> c_int;
++        }
++
++        let mut rng = ChaCha20Rng::from_seed([42; 32]);
++        let (cpk_obj, _sk) = sriracha_mayo::SecretKey::<CMayo2>::random(&mut rng).unwrap();
++        let cpk = cpk_obj.as_ref();
++
++        // C expansion
++        let mut c_epk = vec![0u64; Mayo2::EPK_LIMBS];
++        let ret = unsafe { pqmayo_MAYO_2_opt_mayo_expand_pk(c_epk.as_mut_ptr(), cpk.as_ptr()) };
++        assert_eq!(ret, 0, "C expand_pk failed");
++
++        // Rust expansion
++        let (rust_p1, rust_p2, rust_p3) = verify::expand_pk::<Mayo2>(cpk).unwrap();
++        let mut rust_epk = Vec::new();
++        rust_epk.extend_from_slice(&rust_p1);
++        rust_epk.extend_from_slice(&rust_p2);
++        rust_epk.extend_from_slice(&rust_p3);
++
++        assert_eq!(c_epk, rust_epk, "expanded PK mismatch");
++    }
++}
+diff --git a/packages/mayo-verify/src/params.rs b/packages/mayo-verify/src/params.rs
+new file mode 100755
+index 0000000..b6657bf
+--- /dev/null
++++ b/packages/mayo-verify/src/params.rs
+@@ -0,0 +1,148 @@
++//! MAYO parameter sets (NIST Round 4).
++
++/// Trait for MAYO parameter sets.
++pub trait ParameterSet: Copy + core::fmt::Debug + PartialEq + Eq {
++    /// Human-readable name.
++    const NAME: &'static str;
++    /// Number of variables (n).
++    const N: usize;
++    /// Number of equations (m).
++    const M: usize;
++    /// Oil space dimension (o).
++    const O: usize;
++    /// Vinegar space dimension (v = n - o).
++    const V: usize = Self::N - Self::O;
++    /// Number of signature vectors (k).
++    const K: usize;
++    /// Field size (q = 16).
++    const Q: usize = 16;
++    /// m-vector limbs (ceil(m / 16)).
++    const M_VEC_LIMBS: usize = (Self::M + 15) / 16;
++    /// Bytes to encode m nibbles.
++    const M_BYTES: usize = (Self::M + 1) / 2;
++    /// Bytes for O matrix (v * o nibbles).
++    const O_BYTES: usize = (Self::V * Self::O + 1) / 2;
++    /// Bytes for vinegar vectors.
++    const V_BYTES: usize = (Self::V + 1) / 2;
++    /// R bytes.
++    const R_BYTES: usize = (Self::K * Self::O + 1) / 2;
++    /// P1 bytes (upper-triangular v×v matrix of m-vectors).
++    const P1_BYTES: usize = Self::V * (Self::V + 1) / 2 * Self::M_VEC_LIMBS * 8;
++    /// P2 bytes (v×o matrix of m-vectors).
++    const P2_BYTES: usize = Self::V * Self::O * Self::M_VEC_LIMBS * 8;
++    /// P3 bytes (upper-triangular o×o matrix of m-vectors).
++    const P3_BYTES: usize = Self::O * (Self::O + 1) / 2 * Self::M_VEC_LIMBS * 8;
++    /// Compact secret key bytes.
++    const SK_BYTES: usize;
++    /// Compact public key bytes.
++    const PK_BYTES: usize;
++    /// Signature bytes.
++    const SIG_BYTES: usize;
++    /// Salt bytes.
++    const SALT_BYTES: usize;
++    /// Digest bytes.
++    const DIGEST_BYTES: usize;
++    /// Public key seed bytes.
++    const PK_SEED_BYTES: usize;
++    /// Secret key seed bytes.
++    const SK_SEED_BYTES: usize;
++    /// Expanded public key limbs.
++    const EPK_LIMBS: usize = Self::P1_BYTES / 8 + Self::P2_BYTES / 8 + Self::P3_BYTES / 8;
++    /// f(z) tail coefficients for field reduction.
++    const F_TAIL: [u8; 4];
++    /// A_cols = k * o + 1.
++    const A_COLS: usize = Self::K * Self::O + 1;
++    /// Whether to expand the public key in a streaming fashion (P1/P2 rows
++    /// generated on demand from the AES-CTR keystream) to bound peak memory.
++    /// Default false (materialise P1/P2/P3 up front — faster for small sets).
++    /// Enabled for MAYO-3/5 where the full expansion is hundreds of KB.
++    const STREAM_EXPAND: bool = false;
++
++    /// Verify a MAYO signature with this parameter set.
++    fn verify(message: &[u8], signature: &[u8], cpk: &[u8]) -> crate::error::Result<bool> {
++        crate::verify::verify::<Self>(message, signature, cpk)
++    }
++}
++
++/// MAYO-1 parameter set (NIST Level 1).
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct Mayo1;
++
++impl ParameterSet for Mayo1 {
++    const NAME: &'static str = "MAYO-1";
++    const N: usize = 86;
++    const M: usize = 78;
++    const O: usize = 8;
++    const K: usize = 10;
++    const SK_BYTES: usize = 24;
++    const PK_BYTES: usize = 1420;
++    const SIG_BYTES: usize = 454;
++    const SALT_BYTES: usize = 24;
++    const DIGEST_BYTES: usize = 32;
++    const PK_SEED_BYTES: usize = 16;
++    const SK_SEED_BYTES: usize = 24;
++    // f(z) = z^78 + z^2 + z + x^3 — distinct from the m=64 polynomial.
++    const F_TAIL: [u8; 4] = [8, 1, 1, 0];
++}
++
++/// MAYO-2 parameter set (NIST Level 1, smallest signatures — recommended for on-chain).
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct Mayo2;
++
++impl ParameterSet for Mayo2 {
++    const NAME: &'static str = "MAYO-2";
++    const N: usize = 81;
++    const M: usize = 64;
++    const O: usize = 17;
++    const K: usize = 4;
++    const SK_BYTES: usize = 24;
++    const PK_BYTES: usize = 4912;
++    const SIG_BYTES: usize = 186;
++    const SALT_BYTES: usize = 24;
++    const DIGEST_BYTES: usize = 32;
++    const PK_SEED_BYTES: usize = 16;
++    const SK_SEED_BYTES: usize = 24;
++    const F_TAIL: [u8; 4] = [8, 0, 2, 8];
++}
++
++/// MAYO-3 parameter set (NIST Level 3).
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct Mayo3;
++
++impl ParameterSet for Mayo3 {
++    const NAME: &'static str = "MAYO-3";
++    const N: usize = 118;
++    const M: usize = 108;
++    const O: usize = 10;
++    const K: usize = 11;
++    const SK_BYTES: usize = 32;
++    const PK_BYTES: usize = 2986;
++    const SIG_BYTES: usize = 681;
++    const SALT_BYTES: usize = 32;
++    const DIGEST_BYTES: usize = 48;
++    const PK_SEED_BYTES: usize = 16;
++    const SK_SEED_BYTES: usize = 32;
++    const F_TAIL: [u8; 4] = [8, 0, 1, 7];
++    const STREAM_EXPAND: bool = true;
++}
++
++/// MAYO-5 parameter set (NIST Level 5).
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct Mayo5;
++
++impl ParameterSet for Mayo5 {
++    const NAME: &'static str = "MAYO-5";
++    const N: usize = 154;
++    const M: usize = 142;
++    const O: usize = 12;
++    const K: usize = 12;
++    const SK_BYTES: usize = 40;
++    const PK_BYTES: usize = 5554;
++    const SIG_BYTES: usize = 964;
++    const SALT_BYTES: usize = 40;
++    const DIGEST_BYTES: usize = 64;
++    const PK_SEED_BYTES: usize = 16;
++    const SK_SEED_BYTES: usize = 40;
++    const F_TAIL: [u8; 4] = [4, 0, 8, 1];
++    const STREAM_EXPAND: bool = true;
++}
+diff --git a/packages/mayo-verify/src/verify.rs b/packages/mayo-verify/src/verify.rs
+new file mode 100755
+index 0000000..26f513d
+--- /dev/null
++++ b/packages/mayo-verify/src/verify.rs
+@@ -0,0 +1,486 @@
++//! MAYO signature verification.
++
++use crate::error::Error;
++use crate::gf16::{self, decode, m_vec_add, m_vec_multiply_bins};
++use crate::params::ParameterSet;
++use alloc::vec;
++use alloc::vec::Vec;
++
++// ---------------------------------------------------------------------------
++// AES-128-CTR (counter in bytes 0..7 LE, nonce in bytes 8..15 = 0)
++// ---------------------------------------------------------------------------
++
++/// AES-128-CTR as used by MAYO-C.
++/// Counter block layout: bytes 0..11 = IV (zeros), bytes 12..15 = 32-bit big-endian counter.
++fn aes128_ctr(key: &[u8], out: &mut [u8]) {
++    use aes::cipher::{BlockEncryptMut, KeyInit, generic_array::GenericArray};
++    use aes::Aes128;
++    let mut cipher = Aes128::new_from_slice(key).unwrap();
++    let mut block = [0u8; 16];
++    let mut counter: u32 = 0;
++    for chunk in out.chunks_mut(16) {
++        block[12..16].copy_from_slice(&counter.to_be_bytes());
++        let mut ga = GenericArray::clone_from_slice(&block);
++        cipher.encrypt_block_mut(&mut ga);
++        for (o, b) in chunk.iter_mut().zip(ga.iter()) {
++            *o = *b;
++        }
++        counter += 1;
++    }
++}
++
++// ---------------------------------------------------------------------------
++// SHAKE256
++// ---------------------------------------------------------------------------
++
++fn shake256(out: &mut [u8], data: &[u8]) {
++    use sha3::{Shake256, digest::Update, digest::ExtendableOutput, digest::XofReader};
++    let mut hasher = Shake256::default();
++    hasher.update(data);
++    let mut reader = hasher.finalize_xof();
++    reader.read(out);
++}
++
++// ---------------------------------------------------------------------------
++// Public-key expansion
++// ---------------------------------------------------------------------------
++
++/// Expand a compact MAYO public key into P1, P2, P3.
++/// Returns `(P1, P2, P3)` as Vec<u64> limbs.
++pub(crate) fn expand_pk<P: ParameterSet>(cpk: &[u8]) -> Result<(Vec<u64>, Vec<u64>, Vec<u64>), Error> {
++    if cpk.len() != P::PK_BYTES {
++        return Err(Error::InvalidLength {
++            expected: P::PK_BYTES,
++            actual: cpk.len(),
++        });
++    }
++
++    let seed_pk = &cpk[..P::PK_SEED_BYTES];
++    let packed_p3 = &cpk[P::PK_SEED_BYTES..];
++
++    // P1 + P2 keystream length uses PACKED nibble sizes (m/2 bytes per m-vec),
++    // not limb-storage sizes (m_vec_limbs*8 per m-vec). The two coincide only
++    // for MAYO-2 (m=64); for m=78/108/142 the packed stream is shorter.
++    let p1_vecs = P::V * (P::V + 1) / 2;
++    let p2_vecs = P::V * P::O;
++    let p1_packed_bytes = p1_vecs * (P::M / 2);
++    let p2_packed_bytes = p2_vecs * (P::M / 2);
++    let mut p1_p2_packed = vec![0u8; p1_packed_bytes + p2_packed_bytes];
++    aes128_ctr(seed_pk, &mut p1_p2_packed);
++
++    let p1_limbs = P::P1_BYTES / 8;
++    let p2_limbs = P::P2_BYTES / 8;
++    let p3_limbs = P::P3_BYTES / 8;
++    let m_vec_limbs = P::M_VEC_LIMBS;
++
++    let mut p1 = vec![0u64; p1_limbs];
++    let mut p2 = vec![0u64; p2_limbs];
++    let mut p3 = vec![0u64; p3_limbs];
++
++    unpack_m_vecs(&p1_p2_packed, &mut p1, p1_limbs / m_vec_limbs, P::M);
++    unpack_m_vecs(&p1_p2_packed[p1_packed_bytes..], &mut p2, p2_limbs / m_vec_limbs, P::M);
++    unpack_m_vecs(packed_p3, &mut p3, p3_limbs / m_vec_limbs, P::M);
++
++    Ok((p1, p2, p3))
++}
++
++/// Unpack m-vectors from packed bytes.
++fn unpack_m_vecs(inp: &[u8], out: &mut [u64], vecs: usize, m: usize) {
++    let m_vec_limbs = (m + 15) / 16;
++    let half = m / 2;
++    let copy_len = core::cmp::min(half, m_vec_limbs * 8);
++    for i in 0..vecs {
++        let src_off = i * half;
++        let dst_off = i * m_vec_limbs;
++        let mut tmp = [0u8; 72]; // max m_vec_limbs * 8 = 9*8 = 72
++        tmp[..copy_len].copy_from_slice(&inp[src_off..src_off + copy_len]);
++        for j in 0..m_vec_limbs {
++            let mut val = 0u64;
++            for k in 0..8 {
++                val |= (tmp[j * 8 + k] as u64) << (k * 8);
++            }
++            out[dst_off + j] = val;
++        }
++    }
++}
++
++/// Unpack a single m-vector from `half = m/2` packed bytes into `m_vec_limbs`
++/// little-endian u64 limbs.
++fn unpack_one_mvec(packed: &[u8], out: &mut [u64], m: usize) {
++    let m_vec_limbs = (m + 15) / 16;
++    let half = m / 2;
++    let copy_len = core::cmp::min(half, m_vec_limbs * 8);
++    let mut tmp = [0u8; 72];
++    tmp[..copy_len].copy_from_slice(&packed[..copy_len]);
++    for j in 0..m_vec_limbs {
++        let mut val = 0u64;
++        for k in 0..8 {
++            val |= (tmp[j * 8 + k] as u64) << (k * 8);
++        }
++        out[j] = val;
++    }
++}
++
++// ---------------------------------------------------------------------------
++// Streaming AES-128-CTR keystream
++// ---------------------------------------------------------------------------
++
++/// Streaming AES-128-CTR keystream generator supporting a starting byte
++/// offset, so independent regions of the keystream (P1, P2) can be consumed
++/// in parallel without materialising the full expansion. Counter-block layout
++/// matches `aes128_ctr`: bytes 0..12 = 0, bytes 12..16 = 32-bit BE counter.
++struct AesCtrStream {
++    cipher: aes::Aes128,
++    counter: u32,
++    block: [u8; 16],
++    pos: usize, // 16 == exhausted, must refill
++}
++
++impl AesCtrStream {
++    fn new(key: &[u8], byte_offset: usize) -> Self {
++        use aes::cipher::KeyInit;
++        let cipher = aes::Aes128::new_from_slice(key).unwrap();
++        let mut s = Self {
++            cipher,
++            counter: (byte_offset / 16) as u32,
++            block: [0u8; 16],
++            pos: 16,
++        };
++        let skip = byte_offset % 16;
++        if skip != 0 {
++            s.refill();
++            s.pos = skip;
++        }
++        s
++    }
++
++    fn refill(&mut self) {
++        use aes::cipher::{BlockEncryptMut, generic_array::GenericArray};
++        let mut b = [0u8; 16];
++        b[12..16].copy_from_slice(&self.counter.to_be_bytes());
++        let mut ga = GenericArray::clone_from_slice(&b);
++        self.cipher.encrypt_block_mut(&mut ga);
++        self.block.copy_from_slice(ga.as_slice());
++        self.counter = self.counter.wrapping_add(1);
++        self.pos = 0;
++    }
++
++    fn next_bytes(&mut self, out: &mut [u8]) {
++        for o in out.iter_mut() {
++            if self.pos == 16 {
++                self.refill();
++            }
++            *o = self.block[self.pos];
++            self.pos += 1;
++        }
++    }
++}
++
++// ---------------------------------------------------------------------------
++// Public map evaluation: S * P * S^t
++// ---------------------------------------------------------------------------
++
++/// Compute P * S^t.
++/// Optimised: processes one output row at a time, reusing a `k * 16` bin accumulator
++/// instead of allocating the full `n * k * 16` grid.  Peak memory drops from
++/// ~165 KB to ~2 KB for MAYO-2.
++fn calculate_ps<P: ParameterSet>(
++    p1: &[u64],
++    p2: &[u64],
++    p3: &[u64],
++    s: &[u8],
++) -> Vec<u64> {
++    let n = P::N;
++    let v = P::V;
++    let o = P::O;
++    let k = P::K;
++    let m_vec_limbs = P::M_VEC_LIMBS;
++
++    let mut ps = vec![0u64; n * k * m_vec_limbs];
++    let mut row_acc = vec![0u64; k * 16 * m_vec_limbs];
++
++    let mut p1_used = 0usize;
++    for row in 0..v {
++        row_acc.fill(0);
++        for j in row..v {
++            for col in 0..k {
++                let idx = (col * 16 + s[col * n + j] as usize) * m_vec_limbs;
++                m_vec_add(m_vec_limbs, &p1[p1_used * m_vec_limbs..], &mut row_acc[idx..]);
++            }
++            p1_used += 1;
++        }
++        for j in 0..o {
++            for col in 0..k {
++                let p2_idx = (row * o + j) * m_vec_limbs;
++                let idx = (col * 16 + s[col * n + j + v] as usize) * m_vec_limbs;
++                m_vec_add(m_vec_limbs, &p2[p2_idx..], &mut row_acc[idx..]);
++            }
++        }
++        for col in 0..k {
++            let src = &mut row_acc[col * 16 * m_vec_limbs..];
++            let dst = &mut ps[(row * k + col) * m_vec_limbs..];
++            m_vec_multiply_bins::<P>(m_vec_limbs, src, dst);
++        }
++    }
++
++    let mut p3_used = 0usize;
++    for row in v..n {
++        row_acc.fill(0);
++        for j in row..n {
++            for col in 0..k {
++                let idx = (col * 16 + s[col * n + j] as usize) * m_vec_limbs;
++                m_vec_add(m_vec_limbs, &p3[p3_used * m_vec_limbs..], &mut row_acc[idx..]);
++            }
++            p3_used += 1;
++        }
++        for col in 0..k {
++            let src = &mut row_acc[col * 16 * m_vec_limbs..];
++            let dst = &mut ps[(row * k + col) * m_vec_limbs..];
++            m_vec_multiply_bins::<P>(m_vec_limbs, src, dst);
++        }
++    }
++
++    ps
++}
++
++/// Streaming variant of `calculate_ps`: P1 and P2 m-vectors are generated
++/// on demand from the AES-CTR keystream (one m-vec at a time) instead of
++/// materialising the full expanded public key. P3 is unpacked directly from
++/// the compact public key (it is small). Peak memory becomes ~`ps` + a few
++/// small buffers, independent of the (large) P1/P2 size. Used for MAYO-3/5.
++fn calculate_ps_streaming<P: ParameterSet>(
++    seed_pk: &[u8],
++    packed_p3: &[u8],
++    s: &[u8],
++) -> Vec<u64> {
++    let n = P::N;
++    let v = P::V;
++    let o = P::O;
++    let k = P::K;
++    let m = P::M;
++    let m_vec_limbs = P::M_VEC_LIMBS;
++    let half = m / 2;
++
++    // P3 is small — unpack fully from the compact public key.
++    let p3_limbs = P::P3_BYTES / 8;
++    let mut p3 = vec![0u64; p3_limbs];
++    unpack_m_vecs(packed_p3, &mut p3, p3_limbs / m_vec_limbs, m);
++
++    // P1 keystream starts at byte offset 0; P2 right after P1's packed bytes.
++    let p1_vecs = v * (v + 1) / 2;
++    let p1_packed_bytes = p1_vecs * half;
++    let mut p1_stream = AesCtrStream::new(seed_pk, 0);
++    let mut p2_stream = AesCtrStream::new(seed_pk, p1_packed_bytes);
++
++    let mut ps = vec![0u64; n * k * m_vec_limbs];
++    let mut row_acc = vec![0u64; k * 16 * m_vec_limbs];
++    let mut packed_mvec = [0u8; 71]; // max half (m=142 -> 71)
++    let mut cur = [0u64; 9]; // max m_vec_limbs
++
++    for row in 0..v {
++        row_acc.fill(0);
++        for j in row..v {
++            p1_stream.next_bytes(&mut packed_mvec[..half]);
++            unpack_one_mvec(&packed_mvec[..half], &mut cur[..m_vec_limbs], m);
++            for col in 0..k {
++                let idx = (col * 16 + s[col * n + j] as usize) * m_vec_limbs;
++                m_vec_add(m_vec_limbs, &cur[..m_vec_limbs], &mut row_acc[idx..]);
++            }
++        }
++        for j in 0..o {
++            p2_stream.next_bytes(&mut packed_mvec[..half]);
++            unpack_one_mvec(&packed_mvec[..half], &mut cur[..m_vec_limbs], m);
++            for col in 0..k {
++                let idx = (col * 16 + s[col * n + j + v] as usize) * m_vec_limbs;
++                m_vec_add(m_vec_limbs, &cur[..m_vec_limbs], &mut row_acc[idx..]);
++            }
++        }
++        for col in 0..k {
++            let src = &mut row_acc[col * 16 * m_vec_limbs..];
++            let dst = &mut ps[(row * k + col) * m_vec_limbs..];
++            m_vec_multiply_bins::<P>(m_vec_limbs, src, dst);
++        }
++    }
++
++    let mut p3_used = 0usize;
++    for row in v..n {
++        row_acc.fill(0);
++        for j in row..n {
++            for col in 0..k {
++                let idx = (col * 16 + s[col * n + j] as usize) * m_vec_limbs;
++                m_vec_add(m_vec_limbs, &p3[p3_used * m_vec_limbs..], &mut row_acc[idx..]);
++            }
++            p3_used += 1;
++        }
++        for col in 0..k {
++            let src = &mut row_acc[col * 16 * m_vec_limbs..];
++            let dst = &mut ps[(row * k + col) * m_vec_limbs..];
++            m_vec_multiply_bins::<P>(m_vec_limbs, src, dst);
++        }
++    }
++
++    ps
++}
++
++/// Compute S * PS.
++/// Optimised: processes one (row, col) pair at a time with a 16-bin
++/// accumulator on the stack (~256 B for MAYO-2) instead of a `k*k*16` grid.
++fn calculate_sps<P: ParameterSet>(ps: &[u64], s: &[u8]) -> Vec<u64> {
++    let n = P::N;
++    let k = P::K;
++    let m_vec_limbs = P::M_VEC_LIMBS;
++
++    let mut sps = vec![0u64; k * k * m_vec_limbs];
++    let mut bins = vec![0u64; 16 * m_vec_limbs];
++
++    for row in 0..k {
++        for col in 0..k {
++            bins.fill(0);
++            for j in 0..n {
++                let ps_idx = (j * k + col) * m_vec_limbs;
++                let acc_idx = (s[row * n + j] as usize) * m_vec_limbs;
++                m_vec_add(m_vec_limbs, &ps[ps_idx..], &mut bins[acc_idx..]);
++            }
++            let dst = &mut sps[(row * k + col) * m_vec_limbs..];
++            m_vec_multiply_bins::<P>(m_vec_limbs, &mut bins, dst);
++        }
++    }
++    sps
++}
++
++// ---------------------------------------------------------------------------
++// RHS computation (reduce mod f(X) and compare with target)
++// ---------------------------------------------------------------------------
++
++fn compute_rhs<P: ParameterSet>(v_pv: &mut [u64], t: &[u8], y: &mut [u8]) {
++    let m = P::M;
++    let k = P::K;
++    let m_vec_limbs = P::M_VEC_LIMBS;
++    let top_pos = ((m - 1) % 16) * 4;
++
++    // zero out tail nibbles
++    if m % 16 != 0 {
++        let mask = (1u64 << ((m % 16) * 4)) - 1;
++        for i in 0..k * k {
++            v_pv[i * m_vec_limbs + m_vec_limbs - 1] &= mask;
++        }
++    }
++
++    let mut temp = [0u64; 9]; // max m_vec_limbs across all parameter sets
++
++    for i in (0..k).rev() {
++        for j in i..k {
++            // multiply temp by X (shift up 4 bits)
++            let top = ((temp[m_vec_limbs - 1] >> top_pos) & 0xf) as u8;
++            temp[m_vec_limbs - 1] <<= 4;
++            for l in (0..m_vec_limbs - 1).rev() {
++                temp[l + 1] ^= temp[l] >> 60;
++                temp[l] <<= 4;
++            }
++            // reduce mod f(X) — write directly into temp as little-endian bytes
++            for jj in 0..4 {
++                let val = gf16::mul(top, P::F_TAIL[jj]);
++                let byte_idx = jj / 2;
++                let shift = if jj % 2 == 0 { 0 } else { 4 };
++                let limb_idx = byte_idx / 8;
++                let byte_in_limb = byte_idx % 8;
++                let old_byte = ((temp[limb_idx] >> (byte_in_limb * 8)) & 0xFF) as u8;
++                let new_byte = old_byte ^ (val << shift);
++                temp[limb_idx] = (temp[limb_idx] & !(0xFFu64 << (byte_in_limb * 8)))
++                    | ((new_byte as u64) << (byte_in_limb * 8));
++            }
++
++            // add vPv[i,k + j] and symmetric if i != j
++            let base = (i * k + j) * m_vec_limbs;
++            for l in 0..m_vec_limbs {
++                temp[l] ^= v_pv[base + l];
++                if i != j {
++                    temp[l] ^= v_pv[(j * k + i) * m_vec_limbs + l];
++                }
++            }
++        }
++    }
++
++    // y = t XOR temp (read temp as little-endian bytes)
++    for i in (0..m).step_by(2) {
++        let byte_idx = i / 2;
++        let limb_idx = byte_idx / 8;
++        let byte_in_limb = byte_idx % 8;
++        let byte_val = ((temp[limb_idx] >> (byte_in_limb * 8)) & 0xFF) as u8;
++        y[i] = t[i] ^ (byte_val & 0xf);
++        if i + 1 < m {
++            y[i + 1] = t[i + 1] ^ ((byte_val >> 4) & 0xf);
++        }
++    }
++}
++
++// ---------------------------------------------------------------------------
++// Top-level verify
++// ---------------------------------------------------------------------------
++
++/// Verify a MAYO signature.
++///
++/// # Errors
++/// Returns `Error::InvalidLength` if any slice has the wrong size for the
++/// chosen parameter set.
++pub fn verify<P: ParameterSet>(
++    message: &[u8],
++    signature: &[u8],
++    cpk: &[u8],
++) -> Result<bool, Error> {
++    if signature.len() != P::SIG_BYTES {
++        return Err(Error::InvalidLength {
++            expected: P::SIG_BYTES,
++            actual: signature.len(),
++        });
++    }
++    if cpk.len() != P::PK_BYTES {
++        return Err(Error::InvalidLength {
++            expected: P::PK_BYTES,
++            actual: cpk.len(),
++        });
++    }
++
++    // 2. Hash message
++    let mut digest = vec![0u8; P::DIGEST_BYTES];
++    shake256(&mut digest, message);
++
++    // 3. Parse signature: [packed_s: SIG_BYTES - SALT_BYTES] [salt: SALT_BYTES]
++    // Note: reference C impl places salt at the END of the signature.
++    let salt = &signature[P::SIG_BYTES - P::SALT_BYTES..];
++    let packed_s = &signature[..P::SIG_BYTES - P::SALT_BYTES];
++
++    // 4. Compute t = H(digest || salt)
++    let mut t_enc = vec![0u8; P::M_BYTES];
++    let mut to_hash = vec![0u8; P::DIGEST_BYTES + P::SALT_BYTES];
++    to_hash[..P::DIGEST_BYTES].copy_from_slice(&digest);
++    to_hash[P::DIGEST_BYTES..].copy_from_slice(salt);
++    shake256(&mut t_enc, &to_hash);
++
++    let mut t = vec![0u8; P::M];
++    decode(&t_enc, &mut t, P::M);
++
++    // 5. Decode signature vector s
++    let mut s = vec![0u8; P::K * P::N];
++    decode(packed_s, &mut s, P::K * P::N);
++
++    // 6. Evaluate public map. Large parameter sets (MAYO-3/5) stream the
++    // public-key expansion row-by-row to bound peak memory; small sets
++    // materialise P1/P2/P3 up front (faster, single AES pass).
++    let ps = if P::STREAM_EXPAND {
++        let seed_pk = &cpk[..P::PK_SEED_BYTES];
++        let packed_p3 = &cpk[P::PK_SEED_BYTES..];
++        calculate_ps_streaming::<P>(seed_pk, packed_p3, &s)
++    } else {
++        let (p1, p2, p3) = expand_pk::<P>(cpk)?;
++        calculate_ps::<P>(&p1, &p2, &p3, &s)
++    };
++    let mut sps = calculate_sps::<P>(&ps, &s);
++    let mut y = vec![0u8; P::M];
++    compute_rhs::<P>(&mut sps, &t, &mut y);
++
++    // 7. Compare y == 0 (since compute_rhs XORs with t, y should be 0 for valid sig)
++    // Actually compute_rhs computes: y = t XOR temp, where temp = eval(public_map)
++    // For a valid signature, eval(public_map) should equal t, so y should be 0.
++    Ok(y.iter().all(|&b| b == 0))
++}

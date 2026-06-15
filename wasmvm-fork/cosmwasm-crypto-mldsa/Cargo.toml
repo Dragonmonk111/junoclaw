@@ -1,0 +1,22 @@
+[package]
+name = "cosmwasm-crypto-mldsa"
+version = "0.1.0"
+edition = "2021"
+authors = ["JunoClaw Contributors"]
+description = "ML-DSA (FIPS 204) post-quantum signature host-function implementations for the CosmWasm VM"
+license = "Apache-2.0"
+repository = "https://github.com/junoclaw/junoclaw"
+
+[dependencies]
+# Pure-Rust, no_std, integer-only FIPS 204 verifier. We disable `default-rng`
+# (getrandom) because the host function is verify-only and must stay
+# deterministic / RNG-free; we keep only the parameter-set modules.
+fips204 = { version = "0.4", default-features = false, features = [
+    "ml-dsa-44",
+    "ml-dsa-65",
+    "ml-dsa-87",
+] }
+
+[features]
+default = []
+std = []

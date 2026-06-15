@@ -1,0 +1,22 @@
+diff --git a/packages/std/src/testing/mock.rs b/packages/std/src/testing/mock.rs
+index 367cbaf..b2d5b7f 100644
+--- a/packages/std/src/testing/mock.rs
++++ b/packages/std/src/testing/mock.rs
+@@ -299,6 +299,17 @@ impl Api for MockApi {
+         cosmwasm_crypto_mayo::mayo_verify(variant, pk, msg, sig)
+             .map_err(|e| VerificationError::generic_err(e.to_string()))
+     }
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn ml_dsa_verify(
++        &self,
++        variant: u32,
++        pk: &[u8],
++        msg: &[u8],
++        sig: &[u8],
++    ) -> Result<bool, VerificationError> {
++        cosmwasm_crypto_mldsa::ml_dsa_verify(variant, pk, msg, sig)
++            .map_err(|e| VerificationError::generic_err(e.to_string()))
++    }
+     fn debug(&self, #[allow(unused)] message: &str) {
+         println!("{message}");
+     }

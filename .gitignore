@@ -1,7 +1,11 @@
 # Build artifacts
 target/
+target-wsl/
 *.wasm
 artifacts/
+
+# Build logs
+devnet/*.log
 
 # Devnet generated state
 devnet/deploy.env

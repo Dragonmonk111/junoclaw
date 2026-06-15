@@ -85,6 +85,63 @@ mod tests {
         };
     }
 
+    /// Peak-heap instrumentation: a tracking global allocator measures the
+    /// high-water mark of heap usage during `verify`. The verify pipeline
+    /// executes fully even for garbage inputs (only the final comparison
+    /// differs), so zeroed pk/sig give the true memory profile per variant.
+    /// Native usize == wasm32 usize for the dominant buffers (u64 limbs),
+    /// so this approximates the CosmWasm memory footprint well.
+    /// Run: cargo test --features test-c -- peak_heap --nocapture --test-threads=1
+    #[cfg(feature = "test-c")]
+    mod peak_heap {
+        use super::super::*;
+        use std::alloc::{GlobalAlloc, Layout, System};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        struct TrackingAlloc;
+        static CURRENT: AtomicUsize = AtomicUsize::new(0);
+        static PEAK: AtomicUsize = AtomicUsize::new(0);
+
+        unsafe impl GlobalAlloc for TrackingAlloc {
+            unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+                let p = System.alloc(layout);
+                if !p.is_null() {
+                    let cur = CURRENT.fetch_add(layout.size(), Ordering::SeqCst) + layout.size();
+                    PEAK.fetch_max(cur, Ordering::SeqCst);
+                }
+                p
+            }
+            unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+                System.dealloc(ptr, layout);
+                CURRENT.fetch_sub(layout.size(), Ordering::SeqCst);
+            }
+        }
+
+        #[global_allocator]
+        static ALLOC: TrackingAlloc = TrackingAlloc;
+
+        fn measure<P: ParameterSet>() -> usize {
+            let msg = b"memory measurement";
+            let sig = vec![0u8; P::SIG_BYTES];
+            let pk = vec![0u8; P::PK_BYTES];
+            PEAK.store(CURRENT.load(Ordering::SeqCst), Ordering::SeqCst);
+            let _ = verify::<P>(msg, &sig, &pk).unwrap();
+            PEAK.load(Ordering::SeqCst) - CURRENT.load(Ordering::SeqCst)
+        }
+
+        #[test]
+        fn peak_heap_all_variants() {
+            for (name, peak) in [
+                ("MAYO-1", measure::<Mayo1>()),
+                ("MAYO-2", measure::<Mayo2>()),
+                ("MAYO-3", measure::<Mayo3>()),
+                ("MAYO-5", measure::<Mayo5>()),
+            ] {
+                println!("{name}: peak heap = {peak} bytes ({:.1} KB)", peak as f64 / 1024.0);
+            }
+        }
+    }
+
     #[cfg(feature = "test-c")]
     cross_check_test!(test_mayo1_cross_check_sriracha, Mayo1, sriracha_mayo::Mayo1);
     #[cfg(feature = "test-c")]
@@ -93,6 +150,45 @@ mod tests {
     cross_check_test!(test_mayo3_cross_check_sriracha, Mayo3, sriracha_mayo::Mayo3);
     #[cfg(feature = "test-c")]
     cross_check_test!(test_mayo5_cross_check_sriracha, Mayo5, sriracha_mayo::Mayo5);
+
+    /// Emit benchmark/test vectors (PK, SIG, SHA-256 PK hash) for each variant,
+    /// signed exactly like the cross-check (raw message, seed=[42;32]) so they
+    /// are accepted by the on-chain `verify`. Ignored by default; run with:
+    ///   cargo test --features test-c -- print_vectors --ignored --nocapture
+    #[cfg(feature = "test-c")]
+    macro_rules! print_vectors_test {
+        ($name:ident, $label:expr, $c:ty) => {
+            #[test]
+            #[ignore]
+            fn $name() {
+                use rand_chacha::ChaCha20Rng;
+                use rand_core::SeedableRng;
+                use sha2::{Digest, Sha256};
+
+                let mut rng = ChaCha20Rng::from_seed([42; 32]);
+                let msg = b"hello mayo pure-rust verifier";
+                let (pk, sk) = sriracha_mayo::SecretKey::<$c>::random(&mut rng).unwrap();
+                let sig = sk.sign(msg).unwrap();
+                let pk_hash = hex::encode(Sha256::digest(pk.as_ref()));
+
+                println!("=== {} VECTOR (seed=[42;32]) ===", $label);
+                println!("MSG: {}", core::str::from_utf8(msg).unwrap());
+                println!("PK_HEX: {}", hex::encode(pk.as_ref()));
+                println!("SIG_HEX: {}", hex::encode(sig.as_ref()));
+                println!("PK_HASH: {}", pk_hash);
+                println!("=== END {} ===", $label);
+            }
+        };
+    }
+
+    #[cfg(feature = "test-c")]
+    print_vectors_test!(print_vectors_mayo1, "MAYO-1", sriracha_mayo::Mayo1);
+    #[cfg(feature = "test-c")]
+    print_vectors_test!(print_vectors_mayo2, "MAYO-2", sriracha_mayo::Mayo2);
+    #[cfg(feature = "test-c")]
+    print_vectors_test!(print_vectors_mayo3, "MAYO-3", sriracha_mayo::Mayo3);
+    #[cfg(feature = "test-c")]
+    print_vectors_test!(print_vectors_mayo5, "MAYO-5", sriracha_mayo::Mayo5);
 
     /// Verify our public-key expansion matches the C implementation bit-for-bit.
     #[cfg(feature = "test-c")]

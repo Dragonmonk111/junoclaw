@@ -1,0 +1,12 @@
+diff --git a/packages/vm/Cargo.toml b/packages/vm/Cargo.toml
+index 2181de1..b4acee2 100644
+--- a/packages/vm/Cargo.toml
++++ b/packages/vm/Cargo.toml
+@@ -53,6 +53,7 @@ cosmwasm-std = { version = "2.2.2", path = "../std", default-features = false, f
+ cosmwasm-crypto = { version = "2.2.2", path = "../crypto" }
+ cosmwasm-crypto-bn254 = { version = "0.1.0", path = "../crypto-bn254" }
+ cosmwasm-crypto-mayo = { version = "0.1.0", path = "../crypto-mayo" }
++cosmwasm-crypto-mldsa = { version = "0.1.0", path = "../crypto-mldsa" }
+ cosmwasm-vm-derive = { version = "2.2.2", path = "../vm-derive" }
+ derivative = "2"
+ hex = "0.4"

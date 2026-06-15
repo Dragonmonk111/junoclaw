@@ -11,6 +11,17 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
+# Routes VerifyMayoAttestation through the `mayo_verify` host function on a
+# wasmvm-fork chain instead of the in-contract pure-Wasm verifier. The
+# resulting .wasm only loads on a MAYO-patched chain — see
+# devnet/scripts/build-mayo-precompile.sh. Off = the pure-Wasm build that
+# runs on stock Juno (uni-7).
+mayo-precompile = ["dep:cosmwasm-std-bn254-ext"]
+# Routes VerifyMlDsaAttestation through the `ml_dsa_verify` host function
+# (FIPS 204) on a wasmvm-fork chain instead of the in-contract pure-Wasm
+# fips204 verifier. Off = pure-Wasm build (fips204 runs inside the contract).
+# See devnet/scripts/build-mldsa-precompile.sh and patches v2.2.2/20-28.
+mldsa-precompile = ["dep:cosmwasm-std-bn254-ext"]
 
 [dependencies]
 cosmwasm-std = { workspace = true }
@@ -23,6 +34,24 @@ thiserror = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 junoclaw-mayo-verify = { workspace = true }
+
+# Pure-Rust, no_std, integer-only FIPS 204 verifier (RNG-free: default-rng
+# disabled). Used by the default (pure-Wasm) VerifyMlDsaAttestation path; the
+# verify code is dead-code-eliminated when `mldsa-precompile` is enabled.
+fips204 = { version = "0.4", default-features = false, features = [
+    "ml-dsa-44",
+    "ml-dsa-65",
+    "ml-dsa-87",
+] }
+
+# Guest-side wrappers for the MAYO/BN254 host functions. Only compiled in
+# when the `mayo-precompile` feature is on; the `runtime` feature links the
+# `extern "C" { fn mayo_verify(..) }` import for the wasm32 target.
+[dependencies.cosmwasm-std-bn254-ext]
+path = "../../wasmvm-fork/cosmwasm-std-bn254-ext"
+version = "0.1.0"
+features = ["runtime"]
+optional = true
 
 [dev-dependencies]
 cw-multi-test = { workspace = true }

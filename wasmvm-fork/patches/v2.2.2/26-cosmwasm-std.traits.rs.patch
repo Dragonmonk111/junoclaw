@@ -1,0 +1,25 @@
+diff --git a/packages/std/src/traits.rs b/packages/std/src/traits.rs
+index 2ac318e..cee9aa9 100644
+--- a/packages/std/src/traits.rs
++++ b/packages/std/src/traits.rs
+@@ -361,6 +361,20 @@ pub trait Api {
+     ) -> Result<bool, VerificationError> {
+         unimplemented!()
+     }
++    /// ML-DSA (FIPS 204) multi-variant post-quantum signature verification.
++    ///
++    /// `variant` is 44/65/87 for ML-DSA-44/65/87. Added in `cosmwasm_2_3`.
++    #[cfg(feature = "cosmwasm_2_3")]
++    #[allow(unused_variables)]
++    fn ml_dsa_verify(
++        &self,
++        variant: u32,
++        pk: &[u8],
++        msg: &[u8],
++        sig: &[u8],
++    ) -> Result<bool, VerificationError> {
++        unimplemented!()
++    }
+     fn debug(&self, message: &str);
+ }
+ 

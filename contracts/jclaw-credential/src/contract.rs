@@ -8,8 +8,9 @@ use junoclaw_mayo_verify::ParameterSet;
 use crate::error::ContractError;
 use crate::msg::{
     AncestryResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, ListChildrenResponse,
-    ListMembersResponse, MayoPkHashResponse, MemberResponse, MigrateMsg, QueryMsg,
-    SunsetStatusResponse, TotalWeightResponse,
+    ListMembersResponse, MayoPkHashResponse, MayoVariant, MemberResponse, MigrateMsg,
+    MlDsaPkHashResponse, MlDsaVariant, QueryMsg, SunsetStatusResponse, TotalWeightResponse,
+    MLDSA_PK_LENS,
 };
 use crate::state::{
     Config, Member, MemberRole, SunsetState, CHILDREN, CONFIG, MEMBERS, SUNSET, TOTAL_WEIGHT,
@@ -65,6 +66,7 @@ pub fn instantiate(
         depth: 0,
         start_height: env.block.height,
         mayo_pk_hash: None,
+        mldsa_pk_hash: None,
     };
     MEMBERS.save(deps.storage, &genesis_addr, &genesis)?;
     TOTAL_WEIGHT_ITEM.save(deps.storage, &TOTAL_WEIGHT)?;
@@ -97,12 +99,23 @@ pub fn execute(
         ExecuteMsg::InitiateSunset {} => execute_initiate_sunset(deps, env, info),
         ExecuteMsg::ExecuteSunset {} => execute_execute_sunset(deps, env, info),
         ExecuteMsg::TransferAdmin { new_admin } => execute_transfer_admin(deps, info, new_admin),
+        ExecuteMsg::SetMlDsaPk { addr, mldsa_pk } => {
+            execute_set_mldsa_pk(deps, info, addr, mldsa_pk)
+        }
         ExecuteMsg::VerifyMayoAttestation {
             addr,
             message,
             signature,
             public_key,
-        } => execute_verify_mayo_attestation(deps, addr, message, signature, public_key),
+            variant,
+        } => execute_verify_mayo_attestation(deps, addr, message, signature, public_key, variant),
+        ExecuteMsg::VerifyMlDsaAttestation {
+            addr,
+            message,
+            signature,
+            public_key,
+            variant,
+        } => execute_verify_mldsa_attestation(deps, addr, message, signature, public_key, variant),
     }
 }
 
@@ -161,9 +174,11 @@ fn execute_bud(
     parent_mem.weight -= child_weight;
     MEMBERS.save(deps.storage, &parent_addr, &parent_mem)?;
 
-    // Validate MAYO PK length and compute hash if provided.
+    // Validate MAYO PK length (any supported variant) and compute hash if provided.
+    // Storage holds only the variant-agnostic SHA-256 hash, so any valid MAYO
+    // compact PK length is accepted here.
     let mayo_pk_hash = mayo_pk.map(|pk| {
-        if pk.len() != junoclaw_mayo_verify::Mayo2::PK_BYTES {
+        if !is_valid_mayo_pk_len(pk.len()) {
             return Err(ContractError::MayoInvalidPkLength {
                 expected: junoclaw_mayo_verify::Mayo2::PK_BYTES,
                 actual: pk.len(),
@@ -182,6 +197,7 @@ fn execute_bud(
         depth: parent_mem.depth + 1,
         start_height: env.block.height,
         mayo_pk_hash,
+        mldsa_pk_hash: None,
     };
     MEMBERS.save(deps.storage, &child_addr, &child_mem)?;
 
@@ -199,12 +215,58 @@ fn execute_bud(
         .add_attribute("child_weight", child_weight.to_string()))
 }
 
+/// True if `len` matches the compact public-key size of any supported MAYO variant.
+fn is_valid_mayo_pk_len(len: usize) -> bool {
+    use junoclaw_mayo_verify::{Mayo1, Mayo2, Mayo3, Mayo5};
+    len == Mayo1::PK_BYTES
+        || len == Mayo2::PK_BYTES
+        || len == Mayo3::PK_BYTES
+        || len == Mayo5::PK_BYTES
+}
+
+/// True if `len` matches the FIPS 204 public-key size of any supported
+/// ML-DSA variant (44 = 1 312 B, 65 = 1 952 B, 87 = 2 592 B).
+fn is_valid_mldsa_pk_len(len: usize) -> bool {
+    MLDSA_PK_LENS.contains(&len)
+}
+
+fn execute_set_mldsa_pk(
+    deps: DepsMut,
+    info: MessageInfo,
+    addr: String,
+    mldsa_pk: Vec<u8>,
+) -> Result<Response, ContractError> {
+    check_admin(&deps, &info)?;
+
+    if !is_valid_mldsa_pk_len(mldsa_pk.len()) {
+        return Err(ContractError::MlDsaInvalidPkLength {
+            expected: MLDSA_PK_LENS,
+            actual: mldsa_pk.len(),
+        });
+    }
+
+    let target = deps.api.addr_validate(&addr)?;
+    let mut member = MEMBERS
+        .load(deps.storage, &target)
+        .map_err(|_| ContractError::MemberNotFound { addr: addr.clone() })?;
+
+    use sha2::{Digest, Sha256};
+    let hash = hex::encode(Sha256::digest(&mldsa_pk));
+    member.mldsa_pk_hash = Some(hash);
+    MEMBERS.save(deps.storage, &target, &member)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "set_ml_dsa_pk")
+        .add_attribute("addr", addr))
+}
+
 fn execute_verify_mayo_attestation(
     deps: DepsMut,
     addr: String,
     message: Vec<u8>,
     signature: Vec<u8>,
     public_key: Vec<u8>,
+    variant: MayoVariant,
 ) -> Result<Response, ContractError> {
     let target = deps.api.addr_validate(&addr)?;
     let member = MEMBERS
@@ -224,13 +286,35 @@ fn execute_verify_mayo_attestation(
         return Err(ContractError::MayoPkHashMismatch { addr: addr.clone() });
     }
 
-    // Run pure-Rust MAYO-2 verifier.
-    let valid = junoclaw_mayo_verify::verify::<junoclaw_mayo_verify::Mayo2>(
+    // Dispatch to the requested MAYO parameter set. Two build flavours share
+    // this entry point:
+    //   * default                     → pure-Wasm verifier (junoclaw-mayo-verify
+    //                                     runs the whole verification inside the
+    //                                     contract; ~356k–799k gas on uni-7).
+    //   * --features mayo-precompile  → the `mayo_verify` host function on a
+    //                                     wasmvm-fork chain does the work natively.
+    #[cfg(not(feature = "mayo-precompile"))]
+    let valid = {
+        use junoclaw_mayo_verify::{verify, Mayo1, Mayo2, Mayo3, Mayo5};
+        match variant {
+            MayoVariant::Mayo1 => verify::<Mayo1>(&message, &signature, &public_key),
+            MayoVariant::Mayo2 => verify::<Mayo2>(&message, &signature, &public_key),
+            MayoVariant::Mayo3 => verify::<Mayo3>(&message, &signature, &public_key),
+            MayoVariant::Mayo5 => verify::<Mayo5>(&message, &signature, &public_key),
+        }
+        .map_err(|_| ContractError::MayoVerifyFailed { addr: addr.clone() })?
+    };
+
+    #[cfg(feature = "mayo-precompile")]
+    let valid = cosmwasm_std_bn254_ext::mayo_verify_call(
+        variant.to_code(),
+        &public_key,
         &message,
         &signature,
-        &public_key,
     )
-    .map_err(|_| ContractError::MayoVerifyFailed { addr: addr.clone() })?;
+    .map_err(|e| ContractError::MayoPrecompileError {
+        reason: e.to_string(),
+    })?;
 
     if !valid {
         return Err(ContractError::MayoVerifyFailed { addr: addr.clone() });
@@ -238,6 +322,88 @@ fn execute_verify_mayo_attestation(
 
     Ok(Response::new()
         .add_attribute("action", "verify_mayo_attestation")
+        .add_attribute("addr", addr)
+        .add_attribute("valid", "true"))
+}
+
+fn execute_verify_mldsa_attestation(
+    deps: DepsMut,
+    addr: String,
+    message: Vec<u8>,
+    signature: Vec<u8>,
+    public_key: Vec<u8>,
+    variant: MlDsaVariant,
+) -> Result<Response, ContractError> {
+    let target = deps.api.addr_validate(&addr)?;
+    let member = MEMBERS
+        .load(deps.storage, &target)
+        .map_err(|_| ContractError::MemberNotFound { addr: addr.clone() })?;
+
+    let stored_hash = member
+        .mldsa_pk_hash
+        .ok_or_else(|| ContractError::MlDsaPkNotFound { addr: addr.clone() })?;
+
+    // Verify provided PK matches stored hash.
+    use sha2::{Digest, Sha256};
+    let computed_hash = hex::encode(Sha256::digest(&public_key));
+    if computed_hash != stored_hash {
+        return Err(ContractError::MlDsaPkHashMismatch { addr: addr.clone() });
+    }
+
+    // Two build flavours share this entry point, mirroring MAYO:
+    //   * default                      → in-contract `fips204` verifier
+    //                                      (integer-only, deterministic).
+    //   * --features mldsa-precompile  → the `ml_dsa_verify` host function on a
+    //                                      wasmvm-fork chain does the work natively.
+    #[cfg(not(feature = "mldsa-precompile"))]
+    let valid = {
+        use fips204::traits::{SerDes, Verifier};
+        macro_rules! verify_variant {
+            ($m:path) => {{
+                use $m as m;
+                let pk_arr: [u8; m::PK_LEN] =
+                    public_key.as_slice().try_into().map_err(|_| {
+                        ContractError::MlDsaInvalidPkLength {
+                            expected: MLDSA_PK_LENS,
+                            actual: public_key.len(),
+                        }
+                    })?;
+                let sig_arr: [u8; m::SIG_LEN] =
+                    signature.as_slice().try_into().map_err(|_| {
+                        ContractError::MlDsaInvalidSigLength {
+                            expected: m::SIG_LEN,
+                            actual: signature.len(),
+                        }
+                    })?;
+                let pk = m::PublicKey::try_from_bytes(pk_arr)
+                    .map_err(|_| ContractError::MlDsaVerifyFailed { addr: addr.clone() })?;
+                pk.verify(&message, &sig_arr, &[])
+            }};
+        }
+        match variant {
+            MlDsaVariant::MlDsa44 => verify_variant!(fips204::ml_dsa_44),
+            MlDsaVariant::MlDsa65 => verify_variant!(fips204::ml_dsa_65),
+            MlDsaVariant::MlDsa87 => verify_variant!(fips204::ml_dsa_87),
+        }
+    };
+
+    #[cfg(feature = "mldsa-precompile")]
+    let valid = cosmwasm_std_bn254_ext::ml_dsa_verify_call(
+        variant.to_code(),
+        &public_key,
+        &message,
+        &signature,
+    )
+    .map_err(|e| ContractError::MlDsaPrecompileError {
+        reason: e.to_string(),
+    })?;
+
+    if !valid {
+        return Err(ContractError::MlDsaVerifyFailed { addr: addr.clone() });
+    }
+
+    Ok(Response::new()
+        .add_attribute("action", "verify_ml_dsa_attestation")
         .add_attribute("addr", addr)
         .add_attribute("valid", "true"))
 }
@@ -440,6 +606,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::SunsetStatus {} => to_json_binary(&query_sunset_status(deps)?),
         QueryMsg::Config {} => to_json_binary(&query_config(deps)?),
         QueryMsg::MayoPkHash { addr } => to_json_binary(&query_mayo_pk_hash(deps, addr)?),
+        QueryMsg::MlDsaPkHash { addr } => to_json_binary(&query_mldsa_pk_hash(deps, addr)?),
     }
 }
 
@@ -548,6 +715,7 @@ fn member_to_response(m: Member) -> MemberResponse {
         depth: m.depth,
         start_height: m.start_height,
         mayo_pk_hash: m.mayo_pk_hash,
+        mldsa_pk_hash: m.mldsa_pk_hash,
     }
 }
 
@@ -557,6 +725,15 @@ fn query_mayo_pk_hash(deps: Deps, addr: String) -> StdResult<MayoPkHashResponse>
     Ok(MayoPkHashResponse {
         addr: addr.to_string(),
         mayo_pk_hash: m.mayo_pk_hash,
+    })
+}
+
+fn query_mldsa_pk_hash(deps: Deps, addr: String) -> StdResult<MlDsaPkHashResponse> {
+    let addr = deps.api.addr_validate(&addr)?;
+    let m = MEMBERS.load(deps.storage, &addr)?;
+    Ok(MlDsaPkHashResponse {
+        addr: addr.to_string(),
+        mldsa_pk_hash: m.mldsa_pk_hash,
     })
 }
 

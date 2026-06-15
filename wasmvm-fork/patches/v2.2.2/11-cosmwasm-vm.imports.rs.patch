@@ -1,0 +1,73 @@
+diff --git a/packages/vm/src/imports.rs b/packages/vm/src/imports.rs
+index 6a8a9a9..9037cf1 100644
+--- a/packages/vm/src/imports.rs
++++ b/packages/vm/src/imports.rs
+@@ -15,6 +15,7 @@ use cosmwasm_crypto_bn254::{
+     bn254_add, bn254_pairing_equality, bn254_scalar_mul, gas::pairing_cost,
+     gas::BN254_ADD_COST, gas::BN254_SCALAR_MUL_COST, Bn254Error, FR_BYTES, G1_BYTES,
+ };
++use cosmwasm_crypto_mayo::{gas::mayo_verify_cost, mayo_verify, MayoError};
+ use rand_core::OsRng;
+ 
+ #[cfg(feature = "iterator")]
+@@ -975,6 +976,60 @@ pub fn do_bn254_pairing_equality<
+         Err(e) => Ok(bn254_error_code(&e)),
+     }
+ }
++
++// ── MAYO host-function status codes ───────────────────────────────────────
++//
++// Returned in the u32 of `do_mayo_verify`'s `VmResult<u32>`. 0 = valid,
++// 1 = invalid, >=2 = error (length mismatch, unknown variant, or internal).
++const MAYO_OK: u32 = 0;
++const MAYO_INVALID: u32 = 1;
++const MAYO_ERR_INVALID_INPUT_LENGTH: u32 = 2;
++const MAYO_ERR_UNKNOWN_VARIANT: u32 = 3;
++const MAYO_ERR_INVALID_SIGNATURE: u32 = 4;
++const MAYO_ERR_INTERNAL: u32 = 5;
++
++#[inline]
++fn mayo_error_code(err: &MayoError) -> u32 {
++    match err {
++        MayoError::InvalidInputLength { .. } => MAYO_ERR_INVALID_INPUT_LENGTH,
++        MayoError::UnknownVariant(_) => MAYO_ERR_UNKNOWN_VARIANT,
++        MayoError::InvalidSignature => MAYO_ERR_INVALID_SIGNATURE,
++        MayoError::InternalError => MAYO_ERR_INTERNAL,
++        _ => MAYO_ERR_INTERNAL,
++    }
++}
++
++/// MAYO multi-variant signature verification (post-quantum precompile).
++///
++/// `variant` is one of 1 (MAYO-1), 2 (MAYO-2), 3 (MAYO-3), or 5 (MAYO-5).
++/// Reads `pk`, `msg`, and `sig` from the three guest-supplied Regions.
++/// Returns 0 for a valid signature, 1 for invalid, and non-zero error codes
++/// for malformed inputs or internal failures. Gas is charged per variant
++/// before any cryptographic work begins.
++pub fn do_mayo_verify<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'static>(
++    mut env: FunctionEnvMut<Environment<A, S, Q>>,
++    variant: u32,
++    pk_ptr: u32,
++    msg_ptr: u32,
++    sig_ptr: u32,
++) -> VmResult<u32> {
++    let (data, mut store) = env.data_and_store_mut();
++
++    // v2.2.2 read_region signature: (data, &mut store, ptr, max_len).
++    let pk = read_region(data, &mut store, pk_ptr, 8192)?;
++    let msg = read_region(data, &mut store, msg_ptr, 65536)?;
++    let sig = read_region(data, &mut store, sig_ptr, 2048)?;
++
++    let gas_info = GasInfo::with_cost(mayo_verify_cost(variant));
++    process_gas_info(data, &mut store, gas_info)?;
++
++    match mayo_verify(variant, &pk, &msg, &sig) {
++        Ok(true) => Ok(MAYO_OK),
++        Ok(false) => Ok(MAYO_INVALID),
++        Err(e) => Ok(mayo_error_code(&e)),
++    }
++}
++
+ /// Aborts the contract and shows the given error message
+ pub fn do_abort<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'static>(
+     mut env: FunctionEnvMut<Environment<A, S, Q>>,

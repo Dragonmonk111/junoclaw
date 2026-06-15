@@ -85,6 +85,12 @@ extern "C" {
     fn bn254_add(input_ptr: u32, out_ptr: u32) -> u32;
     fn bn254_scalar_mul(input_ptr: u32, out_ptr: u32) -> u32;
     fn bn254_pairing_equality(input_ptr: u32) -> u32;
+    /// Multi-variant MAYO verify. `variant` ∈ {1, 2, 3, 5}.
+    /// Returns 0 = valid, 1 = invalid, ≥2 = error.
+    fn mayo_verify(variant: u32, pk_ptr: u32, msg_ptr: u32, sig_ptr: u32) -> u32;
+    /// Multi-variant ML-DSA (FIPS 204) verify. `variant` ∈ {44, 65, 87}.
+    /// Returns 0 = valid, 1 = invalid, ≥2 = error.
+    fn ml_dsa_verify(variant: u32, pk_ptr: u32, msg_ptr: u32, sig_ptr: u32) -> u32;
 }
 
 // ── Error type ────────────────────────────────────────────────────────────
@@ -203,6 +209,102 @@ pub fn bn254_pairing_equality_call(input: &[u8]) -> Result<bool, Bn254ExtError> 
     }
 }
 
+/// Calls the `mayo_verify` host function (multi-variant MAYO precompile).
+///
+/// * `variant` must be one of 1, 2, 3, 5 (MAYO-1/2/3/5).
+/// * `pk` / `msg` / `sig` are passed as separate Regions; the host validates
+///   per-variant lengths and returns an error code on mismatch.
+/// * Returns `Ok(true)` for a valid signature, `Ok(false)` for invalid.
+pub fn mayo_verify_call(
+    variant: u32,
+    pk: &[u8],
+    msg: &[u8],
+    sig: &[u8],
+) -> Result<bool, Bn254ExtError> {
+    if !matches!(variant, 1 | 2 | 3 | 5) {
+        return Err(Bn254ExtError::HostError(alloc::format!(
+            "mayo_verify: unknown variant {variant}"
+        )));
+    }
+    #[cfg(all(feature = "runtime", target_arch = "wasm32"))]
+    {
+        let pk_region = build_region(pk);
+        let msg_region = build_region(msg);
+        let sig_region = build_region(sig);
+        let code = unsafe {
+            mayo_verify(
+                variant,
+                &*pk_region as *const Region as u32,
+                &*msg_region as *const Region as u32,
+                &*sig_region as *const Region as u32,
+            )
+        };
+        mem::forget(pk_region);
+        mem::forget(msg_region);
+        mem::forget(sig_region);
+        match code {
+            0 => Ok(true),
+            1 => Ok(false),
+            c => Err(Bn254ExtError::HostError(alloc::format!(
+                "mayo_verify host error code: {c}"
+            ))),
+        }
+    }
+    #[cfg(not(all(feature = "runtime", target_arch = "wasm32")))]
+    {
+        let _ = (pk, msg, sig);
+        Err(Bn254ExtError::NotAvailableOffChain)
+    }
+}
+
+/// Calls the `ml_dsa_verify` host function (multi-variant ML-DSA / FIPS 204).
+///
+/// * `variant` must be one of 44, 65, 87 (ML-DSA-44/65/87).
+/// * `pk` / `msg` / `sig` are passed as separate Regions; the host validates
+///   per-variant lengths and returns an error code on mismatch.
+/// * Returns `Ok(true)` for a valid signature, `Ok(false)` for invalid.
+pub fn ml_dsa_verify_call(
+    variant: u32,
+    pk: &[u8],
+    msg: &[u8],
+    sig: &[u8],
+) -> Result<bool, Bn254ExtError> {
+    if !matches!(variant, 44 | 65 | 87) {
+        return Err(Bn254ExtError::HostError(alloc::format!(
+            "ml_dsa_verify: unknown variant {variant}"
+        )));
+    }
+    #[cfg(all(feature = "runtime", target_arch = "wasm32"))]
+    {
+        let pk_region = build_region(pk);
+        let msg_region = build_region(msg);
+        let sig_region = build_region(sig);
+        let code = unsafe {
+            ml_dsa_verify(
+                variant,
+                &*pk_region as *const Region as u32,
+                &*msg_region as *const Region as u32,
+                &*sig_region as *const Region as u32,
+            )
+        };
+        mem::forget(pk_region);
+        mem::forget(msg_region);
+        mem::forget(sig_region);
+        match code {
+            0 => Ok(true),
+            1 => Ok(false),
+            c => Err(Bn254ExtError::HostError(alloc::format!(
+                "ml_dsa_verify host error code: {c}"
+            ))),
+        }
+    }
+    #[cfg(not(all(feature = "runtime", target_arch = "wasm32")))]
+    {
+        let _ = (pk, msg, sig);
+        Err(Bn254ExtError::NotAvailableOffChain)
+    }
+}
+
 // ── Internals ──────────────────────────────────────────────────────────────
 
 #[derive(Copy, Clone)]
@@ -311,5 +413,33 @@ mod tests {
                 actual: 127
             }
         ));
+    }
+
+    #[test]
+    fn mayo_verify_rejects_unknown_variant() {
+        let err = mayo_verify_call(4, &[], &[], &[]).unwrap_err();
+        assert!(matches!(err, Bn254ExtError::HostError(_)));
+    }
+
+    #[test]
+    fn mayo_verify_off_chain_returns_not_available() {
+        match mayo_verify_call(2, &[0u8; 4912], b"msg", &[0u8; 186]) {
+            Err(Bn254ExtError::NotAvailableOffChain) => {}
+            other => panic!("expected NotAvailableOffChain, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ml_dsa_verify_rejects_unknown_variant() {
+        let err = ml_dsa_verify_call(2, &[], &[], &[]).unwrap_err();
+        assert!(matches!(err, Bn254ExtError::HostError(_)));
+    }
+
+    #[test]
+    fn ml_dsa_verify_off_chain_returns_not_available() {
+        match ml_dsa_verify_call(44, &[0u8; 1312], b"msg", &[0u8; 2420]) {
+            Err(Bn254ExtError::NotAvailableOffChain) => {}
+            other => panic!("expected NotAvailableOffChain, got {other:?}"),
+        }
     }
 }

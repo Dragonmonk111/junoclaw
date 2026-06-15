@@ -52,6 +52,11 @@ pub trait ParameterSet: Copy + core::fmt::Debug + PartialEq + Eq {
     const F_TAIL: [u8; 4];
     /// A_cols = k * o + 1.
     const A_COLS: usize = Self::K * Self::O + 1;
+    /// Whether to expand the public key in a streaming fashion (P1/P2 rows
+    /// generated on demand from the AES-CTR keystream) to bound peak memory.
+    /// Default false (materialise P1/P2/P3 up front — faster for small sets).
+    /// Enabled for MAYO-3/5 where the full expansion is hundreds of KB.
+    const STREAM_EXPAND: bool = false;
 
     /// Verify a MAYO signature with this parameter set.
     fn verify(message: &[u8], signature: &[u8], cpk: &[u8]) -> crate::error::Result<bool> {
@@ -118,6 +123,7 @@ impl ParameterSet for Mayo3 {
     const PK_SEED_BYTES: usize = 16;
     const SK_SEED_BYTES: usize = 32;
     const F_TAIL: [u8; 4] = [8, 0, 1, 7];
+    const STREAM_EXPAND: bool = true;
 }
 
 /// MAYO-5 parameter set (NIST Level 5).
@@ -138,4 +144,5 @@ impl ParameterSet for Mayo5 {
     const PK_SEED_BYTES: usize = 16;
     const SK_SEED_BYTES: usize = 40;
     const F_TAIL: [u8; 4] = [4, 0, 8, 1];
+    const STREAM_EXPAND: bool = true;
 }

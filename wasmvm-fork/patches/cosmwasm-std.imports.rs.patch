@@ -42,6 +42,13 @@ index 1ac223a..60d8b99 100644
 +    #[cfg(feature = "cosmwasm_2_3")]
 +    fn bn254_pairing_equality(input_ptr: u32) -> u32;
 +
++    // ── MAYO post-quantum signature verification host function ────────────
++    //
++    // Multi-variant: 1=MAYO-1, 2=MAYO-2, 3=MAYO-3, 5=MAYO-5.
++    // Returns 0 = valid, 1 = invalid, ≥2 = error.
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn mayo_verify(variant: u32, pk_ptr: u32, msg_ptr: u32, sig_ptr: u32) -> u32;
++
      /// Writes a debug message (UFT-8 encoded) to the host for debugging purposes.
      /// The host is free to log or process this in any way it considers appropriate.
      /// In production environments it is expected that those messages are discarded.
@@ -106,6 +113,32 @@ index 1ac223a..60d8b99 100644
 +            code => Err(bn254_error_from_code(code)),
 +        }
 +    }
++
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn mayo_verify(
++        &self,
++        variant: u32,
++        pk: &[u8],
++        msg: &[u8],
++        sig: &[u8],
++    ) -> Result<bool, VerificationError> {
++        let send_pk = Region::from_slice(pk);
++        let send_msg = Region::from_slice(msg);
++        let send_sig = Region::from_slice(sig);
++        let result = unsafe {
++            mayo_verify(
++                variant,
++                send_pk.as_ptr() as u32,
++                send_msg.as_ptr() as u32,
++                send_sig.as_ptr() as u32,
++            )
++        };
++        match result {
++            0 => Ok(true),
++            1 => Ok(false),
++            code => Err(mayo_error_from_code(code)),
++        }
++    }
      fn secp256k1_verify(
          &self,
          message_hash: &[u8],
@@ -124,5 +157,16 @@ index 1ac223a..60d8b99 100644
 +        6 => VerificationError::generic_err("bn254: backend error"),
 +        7 => VerificationError::generic_err("bn254: too many pairing pairs"),
 +        c => VerificationError::generic_err(format!("bn254: unknown error code {c}")),
++    }
++}
++
++#[cfg(feature = "cosmwasm_2_3")]
++fn mayo_error_from_code(code: u32) -> VerificationError {
++    match code {
++        2 => VerificationError::generic_err("mayo: invalid input length"),
++        3 => VerificationError::generic_err("mayo: unknown variant"),
++        4 => VerificationError::generic_err("mayo: signature verification failed"),
++        5 => VerificationError::generic_err("mayo: internal error"),
++        c => VerificationError::generic_err(format!("mayo: unknown error code {c}")),
 +    }
 +}

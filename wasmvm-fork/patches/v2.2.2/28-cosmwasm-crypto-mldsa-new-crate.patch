@@ -1,0 +1,330 @@
+diff --git a/packages/crypto-mldsa/Cargo.toml b/packages/crypto-mldsa/Cargo.toml
+new file mode 100755
+index 0000000..310f4c6
+--- /dev/null
++++ b/packages/crypto-mldsa/Cargo.toml
+@@ -0,0 +1,22 @@
++[package]
++name = "cosmwasm-crypto-mldsa"
++version = "0.1.0"
++edition = "2021"
++authors = ["JunoClaw Contributors"]
++description = "ML-DSA (FIPS 204) post-quantum signature host-function implementations for the CosmWasm VM"
++license = "Apache-2.0"
++repository = "https://github.com/junoclaw/junoclaw"
++
++[dependencies]
++# Pure-Rust, no_std, integer-only FIPS 204 verifier. We disable `default-rng`
++# (getrandom) because the host function is verify-only and must stay
++# deterministic / RNG-free; we keep only the parameter-set modules.
++fips204 = { version = "0.4", default-features = false, features = [
++    "ml-dsa-44",
++    "ml-dsa-65",
++    "ml-dsa-87",
++] }
++
++[features]
++default = []
++std = []
+diff --git a/packages/crypto-mldsa/src/errors.rs b/packages/crypto-mldsa/src/errors.rs
+new file mode 100755
+index 0000000..8008bbd
+--- /dev/null
++++ b/packages/crypto-mldsa/src/errors.rs
+@@ -0,0 +1,51 @@
++//! Error types for ML-DSA host-function failures.
++
++use core::fmt;
++
++/// ML-DSA host-function error.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++#[non_exhaustive]
++pub enum MlDsaError {
++    /// Input (public key or signature) has an unexpected length for the
++    /// requested variant.
++    InvalidInputLength {
++        /// Parameter-set name (e.g. "ML-DSA-44").
++        variant: &'static str,
++        /// Which field was wrong (e.g. "public_key" or "signature").
++        field: &'static str,
++        /// Expected byte length for this field.
++        expected: usize,
++        /// Actual byte length received.
++        actual: usize,
++    },
++    /// The supplied variant code is not supported (valid codes: 44, 65, 87).
++    UnknownVariant(u32),
++    /// The public-key bytes failed to decode into a valid ML-DSA public key.
++    InvalidPublicKey,
++    /// The signature is cryptographically invalid. Reserved: `ml_dsa_verify`
++    /// returns `Ok(false)` for a well-formed but invalid signature; this
++    /// variant exists for callers that prefer an error path.
++    InvalidSignature,
++}
++
++impl fmt::Display for MlDsaError {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        match self {
++            MlDsaError::InvalidInputLength {
++                variant,
++                field,
++                expected,
++                actual,
++            } => write!(
++                f,
++                "ml-dsa: invalid {field} length for {variant}: expected {expected}, got {actual}"
++            ),
++            MlDsaError::UnknownVariant(v) => write!(f, "ml-dsa: unknown variant code {v}"),
++            MlDsaError::InvalidPublicKey => write!(f, "ml-dsa: invalid public key encoding"),
++            MlDsaError::InvalidSignature => write!(f, "ml-dsa: signature verification failed"),
++        }
++    }
++}
++
++#[cfg(feature = "std")]
++impl std::error::Error for MlDsaError {}
+diff --git a/packages/crypto-mldsa/src/gas.rs b/packages/crypto-mldsa/src/gas.rs
+new file mode 100755
+index 0000000..7f7ff07
+--- /dev/null
++++ b/packages/crypto-mldsa/src/gas.rs
+@@ -0,0 +1,68 @@
++//! Gas schedule constants for ML-DSA host functions.
++//!
++//! Numbers are expressed in **CosmWasm VM gas** — the internal unit used by
++//! `cosmwasm-vm` when instrumenting Wasm execution. The conversion to
++//! Cosmos-SDK gas uses `wasmd`'s default multiplier of `100`:
++//!
++//! ```text
++//! sdk_gas = wasm_gas / 100
++//! ```
++//!
++//! # Status: pre-measurement estimates
++//!
++//! Unlike the MAYO schedule (which was derived from measured pure-Wasm gas),
++//! these constants are **initial estimates pending the Phase B devnet
++//! benchmark** on `junoclaw-bn254-1`. They are scaled from the measured
++//! release-build verify wall-clock (`aegis-bench --features timing`):
++//!
++//! | Variant | Verify (wall-clock) | Est. precompile (SDK gas) | VM gas |
++//! |---------|---------------------|---------------------------|--------|
++//! | ML-DSA-44 | ~101 µs           | ~20 000                   | 2 000 000 |
++//! | ML-DSA-65 | ~149 µs           | ~30 000                   | 3 000 000 |
++//! | ML-DSA-87 | (larger)          | ~40 000                   | 4 000 000 |
++//!
++//! The 44:65 ratio (~1 : 1.48) matches the measured verify-time ratio. These
++//! MUST be re-tuned against on-chain measurements before mainnet use.
++
++/// ML-DSA-44 (NIST category 2) verify cost, in CosmWasm VM gas. **Estimate.**
++pub const ML_DSA_44_VERIFY_COST: u64 = 2_000_000;
++
++/// ML-DSA-65 (NIST category 3) verify cost, in CosmWasm VM gas. **Estimate.**
++pub const ML_DSA_65_VERIFY_COST: u64 = 3_000_000;
++
++/// ML-DSA-87 (NIST category 5) verify cost, in CosmWasm VM gas. **Estimate.**
++pub const ML_DSA_87_VERIFY_COST: u64 = 4_000_000;
++
++/// Cost for an unknown / unmapped variant (saturates so the call fails on gas
++/// exhaustion rather than silently succeeding).
++pub const ML_DSA_UNKNOWN_VARIANT_COST: u64 = u64::MAX;
++
++/// Returns the precompile cost for the given ML-DSA variant code.
++/// `variant` must be one of 44, 65, or 87.
++pub const fn ml_dsa_verify_cost(variant: u32) -> u64 {
++    match variant {
++        44 => ML_DSA_44_VERIFY_COST,
++        65 => ML_DSA_65_VERIFY_COST,
++        87 => ML_DSA_87_VERIFY_COST,
++        _ => ML_DSA_UNKNOWN_VARIANT_COST,
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn cost_table_matches_targets() {
++        assert_eq!(ml_dsa_verify_cost(44), 2_000_000); // ~20k SDK
++        assert_eq!(ml_dsa_verify_cost(65), 3_000_000); // ~30k SDK
++        assert_eq!(ml_dsa_verify_cost(87), 4_000_000); // ~40k SDK
++    }
++
++    #[test]
++    fn unknown_variant_saturates() {
++        assert_eq!(ml_dsa_verify_cost(0), u64::MAX);
++        assert_eq!(ml_dsa_verify_cost(2), u64::MAX);
++        assert_eq!(ml_dsa_verify_cost(99), u64::MAX);
++    }
++}
+diff --git a/packages/crypto-mldsa/src/lib.rs b/packages/crypto-mldsa/src/lib.rs
+new file mode 100755
+index 0000000..a90e097
+--- /dev/null
++++ b/packages/crypto-mldsa/src/lib.rs
+@@ -0,0 +1,165 @@
++//! ML-DSA (FIPS 204) post-quantum signature host-function implementations for
++//! the CosmWasm VM.
++//!
++//! This crate wraps the pure-Rust, `#![no_std]`, integer-only `fips204`
++//! verifier and exposes a single host-function entry point: [`ml_dsa_verify`].
++//! Verification is deterministic and RNG-free (the `default-rng`/`getrandom`
++//! feature of `fips204` is deliberately disabled), making it suitable for an
++//! optional `cosmwasm-vm` capability alongside the existing BLS12-381, BN254,
++//! and MAYO host functions.
++//!
++//! # Supported variants
++//!
++//! | Code | Variant   | NIST cat | PK bytes | Sig bytes |
++//! |------|-----------|----------|----------|-----------|
++//! | 44   | ML-DSA-44 | 2        | 1 312    | 2 420     |
++//! | 65   | ML-DSA-65 | 3        | 1 952    | 3 309     |
++//! | 87   | ML-DSA-87 | 5        | 2 592    | 4 627     |
++//!
++//! # Determinism
++//!
++//! - No randomness, no wall-clock reads, no threading in the verify path.
++//! - ML-DSA verification is **integer-only** — no floating point — so it
++//!   verifies bit-for-bit identically across validator hardware. This is the
++//!   property that makes ML-DSA (not Falcon) the right choice at a consensus
++//!   trust root (see `docs/PROJECT_AEGIS_JUNO_FULL_PQC.md` §6).
++//!
++//! # Context string
++//!
++//! This entry point verifies with an **empty** FIPS 204 context string. Any
++//! domain separation is handled at the application layer (e.g. by the message
++//! the contract constructs), mirroring how MAYO attestations are bound.
++//!
++//! # Gas semantics
++//!
++//! See [`gas`] for per-variant cost constants (currently pre-measurement
++//! estimates pending the Phase B devnet benchmark).
++
++#![cfg_attr(not(feature = "std"), no_std)]
++#![deny(missing_docs)]
++#![deny(unsafe_code)]
++
++pub mod errors;
++pub mod gas;
++
++pub use errors::MlDsaError;
++
++use fips204::traits::{SerDes, Verifier};
++
++/// Verify an ML-DSA signature via the host-function precompile.
++///
++/// * `variant` — one of `44` (ML-DSA-44), `65` (ML-DSA-65), or `87`
++///   (ML-DSA-87). Other values return [`MlDsaError::UnknownVariant`].
++/// * `pk` — public-key bytes (length validated per variant).
++/// * `msg` — arbitrary-length message bytes.
++/// * `sig` — signature bytes (length validated per variant).
++///
++/// Returns `Ok(true)` for a valid signature, `Ok(false)` for a well-formed but
++/// invalid signature, and `Err(MlDsaError)` for malformed inputs.
++pub fn ml_dsa_verify(variant: u32, pk: &[u8], msg: &[u8], sig: &[u8]) -> Result<bool, MlDsaError> {
++    match variant {
++        44 => verify_44(pk, msg, sig),
++        65 => verify_65(pk, msg, sig),
++        87 => verify_87(pk, msg, sig),
++        v => Err(MlDsaError::UnknownVariant(v)),
++    }
++}
++
++macro_rules! impl_ml_dsa_verify {
++    ($fn_name:ident, $module:path, $name:literal) => {
++        fn $fn_name(pk: &[u8], msg: &[u8], sig: &[u8]) -> Result<bool, MlDsaError> {
++            use $module as m;
++            let pk_arr: [u8; m::PK_LEN] = pk.try_into().map_err(|_| {
++                MlDsaError::InvalidInputLength {
++                    variant: $name,
++                    field: "public_key",
++                    expected: m::PK_LEN,
++                    actual: pk.len(),
++                }
++            })?;
++            let sig_arr: [u8; m::SIG_LEN] = sig.try_into().map_err(|_| {
++                MlDsaError::InvalidInputLength {
++                    variant: $name,
++                    field: "signature",
++                    expected: m::SIG_LEN,
++                    actual: sig.len(),
++                }
++            })?;
++            let public_key =
++                m::PublicKey::try_from_bytes(pk_arr).map_err(|_| MlDsaError::InvalidPublicKey)?;
++            Ok(public_key.verify(msg, &sig_arr, &[]))
++        }
++    };
++}
++
++impl_ml_dsa_verify!(verify_44, fips204::ml_dsa_44, "ML-DSA-44");
++impl_ml_dsa_verify!(verify_65, fips204::ml_dsa_65, "ML-DSA-65");
++impl_ml_dsa_verify!(verify_87, fips204::ml_dsa_87, "ML-DSA-87");
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use fips204::traits::{KeyGen, Signer};
++
++    /// Round-trip a deterministic keygen+sign and check the host function
++    /// accepts the valid signature and rejects a tampered message.
++    fn roundtrip(variant: u32, pk_bytes: &[u8], sig: &[u8], msg: &[u8]) {
++        assert!(ml_dsa_verify(variant, pk_bytes, msg, sig).unwrap());
++        assert!(!ml_dsa_verify(variant, pk_bytes, b"tampered message", sig).unwrap());
++    }
++
++    #[test]
++    fn verifies_ml_dsa_44() {
++        let (pk, sk) = fips204::ml_dsa_44::KG::keygen_from_seed(&[7u8; 32]);
++        let msg = b"aegis phase B :: ml-dsa-44";
++        let sig = sk.try_sign_with_seed(&[9u8; 32], msg, &[]).unwrap();
++        roundtrip(44, &pk.into_bytes(), &sig, msg);
++    }
++
++    #[test]
++    fn verifies_ml_dsa_65() {
++        let (pk, sk) = fips204::ml_dsa_65::KG::keygen_from_seed(&[11u8; 32]);
++        let msg = b"aegis phase B :: ml-dsa-65";
++        let sig = sk.try_sign_with_seed(&[13u8; 32], msg, &[]).unwrap();
++        roundtrip(65, &pk.into_bytes(), &sig, msg);
++    }
++
++    #[test]
++    fn verifies_ml_dsa_87() {
++        let (pk, sk) = fips204::ml_dsa_87::KG::keygen_from_seed(&[17u8; 32]);
++        let msg = b"aegis phase B :: ml-dsa-87";
++        let sig = sk.try_sign_with_seed(&[19u8; 32], msg, &[]).unwrap();
++        roundtrip(87, &pk.into_bytes(), &sig, msg);
++    }
++
++    #[test]
++    fn rejects_unknown_variant() {
++        let err = ml_dsa_verify(7, &[], &[], &[]).unwrap_err();
++        assert!(matches!(err, MlDsaError::UnknownVariant(7)));
++    }
++
++    #[test]
++    fn rejects_bad_pk_length() {
++        let err = ml_dsa_verify(44, &[0u8; 10], b"x", &[0u8; 2420]).unwrap_err();
++        assert!(matches!(
++            err,
++            MlDsaError::InvalidInputLength {
++                variant: "ML-DSA-44",
++                field: "public_key",
++                expected: 1312,
++                actual: 10,
++            }
++        ));
++    }
++
++    #[test]
++    fn rejects_garbage_signature() {
++        // Valid-length but all-zero pk+sig: must fail verification, not error.
++        // (A zero pk may fail to decode; both InvalidPublicKey and Ok(false)
++        // are acceptable "not verified" outcomes — assert it is never Ok(true).)
++        let pk = [0u8; 1312];
++        let sig = [0u8; 2420];
++        let result = ml_dsa_verify(44, &pk, b"msg", &sig);
++        assert!(!matches!(result, Ok(true)));
++    }
++}

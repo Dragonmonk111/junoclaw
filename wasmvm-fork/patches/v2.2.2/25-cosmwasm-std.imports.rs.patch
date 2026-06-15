@@ -1,0 +1,64 @@
+diff --git a/packages/std/src/imports.rs b/packages/std/src/imports.rs
+index 62b24c7..84f976b 100644
+--- a/packages/std/src/imports.rs
++++ b/packages/std/src/imports.rs
+@@ -123,6 +123,12 @@ extern "C" {
+     #[cfg(feature = "cosmwasm_2_3")]
+     fn mayo_verify(variant: u32, pk_ptr: u32, msg_ptr: u32, sig_ptr: u32) -> u32;
+ 
++    // ML-DSA (FIPS 204) post-quantum signature verification host function.
++    // Multi-variant: 44=ML-DSA-44, 65=ML-DSA-65, 87=ML-DSA-87.
++    // Returns 0 = valid, 1 = invalid, >=2 = error.
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn ml_dsa_verify(variant: u32, pk_ptr: u32, msg_ptr: u32, sig_ptr: u32) -> u32;
++
+     /// Writes a debug message (UFT-8 encoded) to the host for debugging purposes.
+     /// The host is free to log or process this in any way it considers appropriate.
+     /// In production environments it is expected that those messages are discarded.
+@@ -635,6 +641,31 @@ impl Api for ExternalApi {
+             code => Err(mayo_error_from_code(code)),
+         }
+     }
++    #[cfg(feature = "cosmwasm_2_3")]
++    fn ml_dsa_verify(
++        &self,
++        variant: u32,
++        pk: &[u8],
++        msg: &[u8],
++        sig: &[u8],
++    ) -> Result<bool, VerificationError> {
++        let send_pk = Region::from_slice(pk);
++        let send_msg = Region::from_slice(msg);
++        let send_sig = Region::from_slice(sig);
++        let result = unsafe {
++            ml_dsa_verify(
++                variant,
++                send_pk.as_ptr() as u32,
++                send_msg.as_ptr() as u32,
++                send_sig.as_ptr() as u32,
++            )
++        };
++        match result {
++            0 => Ok(true),
++            1 => Ok(false),
++            code => Err(ml_dsa_error_from_code(code)),
++        }
++    }
+     fn secp256k1_verify(
+         &self,
+         message_hash: &[u8],
+@@ -877,3 +908,14 @@ fn mayo_error_from_code(code: u32) -> VerificationError {
+         c => VerificationError::generic_err(format!("mayo: unknown error code {c}")),
+     }
+ }
++
++#[cfg(feature = "cosmwasm_2_3")]
++fn ml_dsa_error_from_code(code: u32) -> VerificationError {
++    match code {
++        2 => VerificationError::generic_err("ml-dsa: invalid input length"),
++        3 => VerificationError::generic_err("ml-dsa: unknown variant"),
++        4 => VerificationError::generic_err("ml-dsa: invalid public key"),
++        5 => VerificationError::generic_err("ml-dsa: signature verification failed"),
++        c => VerificationError::generic_err(format!("ml-dsa: unknown error code {c}")),
++    }
++}

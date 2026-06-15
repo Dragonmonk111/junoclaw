@@ -1,0 +1,95 @@
+{
+  "chain": "junoclaw-bn254-1",
+  "flavours": {
+    "pure": {
+      "codeId": 4,
+      "wasmBytes": 472512,
+      "storeGas": "2938715",
+      "address": "juno1ghd753shjuwexxywmgs4xz7x2q732vcnkm6h2pyv9s6ah3hylvrq722sry",
+      "initGas": "180878",
+      "variants": {
+        "ml_dsa44": {
+          "nistLevel": 2,
+          "pkBytes": 1312,
+          "sigBytes": 2420,
+          "child": "juno1fu8zd6k2hszka7uu5ns3usmse0clunne7x5s9k",
+          "budGas": "153867",
+          "budTx": "A589E0F653325441E9FCF239EBD5DFED970A91BF6C2C5A23BCF26A49F9649C80",
+          "setPkGas": "183864",
+          "setPkTx": "189FFE2DD0A1C3E682DAE8A667722E517D33ED163A1F5E8994C62BD7974860D5",
+          "verifyGas": "269604",
+          "verifyTx": "A90B15D88A2440C36DCB74B89BD35C9B6FF0F71BD01B5DAF2F3DC666938F7966"
+        },
+        "ml_dsa65": {
+          "nistLevel": 3,
+          "pkBytes": 1952,
+          "sigBytes": 3309,
+          "child": "juno1z63uuf64flsenf4mqx4eszh69xfazk422phhgf",
+          "budGas": "155399",
+          "budTx": "57F5073FA74660C293F67F89C47C7B7FC60515E79EB51AA71E2405B4C672E91D",
+          "setPkGas": "206975",
+          "setPkTx": "86E3719E5B0CD5576A85DE0B76D533D440DEE45591639EBCB2D789E6A5D62FCF",
+          "verifyGas": "328945",
+          "verifyTx": "73877F1ECD192EC89560282D7B0B69395FEDEE1AB6A187D20607A43C2EAB89A9"
+        },
+        "ml_dsa87": {
+          "nistLevel": 5,
+          "pkBytes": 2592,
+          "sigBytes": 4627,
+          "child": "juno1uyg7pfcnm5vrlhd4j6rf6ewj664gzkza9lwc47",
+          "budGas": "156931",
+          "budTx": "BAB76E90FB23A7A21230EE12287F84151CD50A428D9FCCE6E37C50B2A469DED1",
+          "setPkGas": "230450",
+          "setPkTx": "7C67CCAE075C4A84CFA9641CCE7C7CD5B8346AE425DCE06F90E4D9A6FF31F875",
+          "verifyGas": "408298",
+          "verifyTx": "7CF23066DA4E16CE9A8BBA4636AE0528AFE7FF8B4C4B1BC2A43E729DF8DA834B"
+        }
+      }
+    },
+    "precompile": {
+      "codeId": 5,
+      "wasmBytes": 391752,
+      "storeGas": "2510811",
+      "address": "juno1eyfccmjm6732k7wp4p6gdjwhxjwsvje44j0hfx8nkgrm8fs7vqfs9a4ky4",
+      "initGas": "181118",
+      "variants": {
+        "ml_dsa44": {
+          "nistLevel": 2,
+          "pkBytes": 1312,
+          "sigBytes": 2420,
+          "child": "juno1c53hhg4ufrn6ru7uej8zlfgk5zpxxjwu9jv8qm",
+          "budGas": "153945",
+          "budTx": "D63C6B1ED7E83E4FC0FA75F598186C0B39FBEB9445322B04708E5FD8C7E391B3",
+          "setPkGas": "183942",
+          "setPkTx": "7DA34D53D5923D1756D4EEBF689009767C7BA3F269B56A840564FF1D0F5F69C0",
+          "verifyGas": "260381",
+          "verifyTx": "9C1C9C55673A3E356353FCAF04E074298B741F938414ADA6E08B39612E2504CA"
+        },
+        "ml_dsa65": {
+          "nistLevel": 3,
+          "pkBytes": 1952,
+          "sigBytes": 3309,
+          "child": "juno15yv9qw8tt7w0aunyadxydtrvaxlaxfru8xg4lj",
+          "budGas": "155477",
+          "budTx": "F38C91BF08E847BA1FF19EEAB5B24071C57044E820CF4A30ED1534AB370BFAFF",
+          "setPkGas": "207053",
+          "setPkTx": "0A1D4C8FCE5357D874847594C49926AF01532D16E264D33E36BB52D018E29C9F",
+          "verifyGas": "315212",
+          "verifyTx": "41072FEAA90904DF009907F9F510EE950AF3424661FF683C726B2B3599D56903"
+        },
+        "ml_dsa87": {
+          "nistLevel": 5,
+          "pkBytes": 2592,
+          "sigBytes": 4627,
+          "child": "juno1mzgu2dvamcm0uxttklvvxkjc8wt7y2s60qcnah",
+          "budGas": "157009",
+          "budTx": "6084DB3526A937A4C70E5395A3F283B7BC479CAC071374BE3E4CE9185BFD82BB",
+          "setPkGas": "230528",
+          "setPkTx": "4827DE4A26A0D07222131388D47DC5C7970A0DC0CEB682551812F62AFF8357BA",
+          "verifyGas": "387124",
+          "verifyTx": "49108A98571B580E84D7CE64DD9B85F4749E38775E10659F144A5C32395EDC91"
+        }
+      }
+    }
+  }
+}

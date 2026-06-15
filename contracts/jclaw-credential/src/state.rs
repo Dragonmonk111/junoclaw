@@ -29,6 +29,12 @@ pub struct Member {
     /// callers provide the full PK during verification and the contract
     /// checks this hash before running the pure-Rust verifier.
     pub mayo_pk_hash: Option<String>,
+    /// Hex-encoded SHA-256 of the member's ML-DSA (FIPS 204) public key.
+    /// PK is 1 312 / 1 952 / 2 592 B for ML-DSA-44 / 65 / 87 — too large for
+    /// on-chain storage, so only the hash is kept. Set/rotated via
+    /// `SetMlDsaPk`; the full PK is supplied at `VerifyMlDsaAttestation` time
+    /// and checked against this hash before verification.
+    pub mldsa_pk_hash: Option<String>,
 }
 
 /// Contract configuration.

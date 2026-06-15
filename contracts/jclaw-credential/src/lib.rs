@@ -8,3 +8,6 @@ mod tests;
 
 #[cfg(test)]
 mod mayo_vectors;
+
+#[cfg(test)]
+mod mldsa_vectors;

@@ -15,6 +15,7 @@ sriracha-mayo = { version = "0.0.4", optional = true }
 
 [dev-dependencies]
 hex-literal = "0.4"
+hex = "0.4"
 rand_chacha = "0.3"
 rand_core = "0.6"
 

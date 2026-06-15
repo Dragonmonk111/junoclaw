@@ -53,4 +53,25 @@ pub enum ContractError {
 
     #[error("Invalid MAYO public key length: expected {expected}, got {actual}")]
     MayoInvalidPkLength { expected: usize, actual: usize },
+
+    #[error("MAYO precompile host error: {reason}")]
+    MayoPrecompileError { reason: String },
+
+    #[error("ML-DSA public key not registered for member: {addr}")]
+    MlDsaPkNotFound { addr: String },
+
+    #[error("ML-DSA public key hash mismatch for member: {addr}")]
+    MlDsaPkHashMismatch { addr: String },
+
+    #[error("ML-DSA signature verification failed for member: {addr}")]
+    MlDsaVerifyFailed { addr: String },
+
+    #[error("Invalid ML-DSA public key length: expected one of {expected:?}, got {actual}")]
+    MlDsaInvalidPkLength { expected: [usize; 3], actual: usize },
+
+    #[error("Invalid ML-DSA signature length: expected {expected}, got {actual}")]
+    MlDsaInvalidSigLength { expected: usize, actual: usize },
+
+    #[error("ML-DSA precompile host error: {reason}")]
+    MlDsaPrecompileError { reason: String },
 }

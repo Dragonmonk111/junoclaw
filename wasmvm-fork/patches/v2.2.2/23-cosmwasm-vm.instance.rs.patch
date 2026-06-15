@@ -1,0 +1,27 @@
+diff --git a/packages/vm/src/instance.rs b/packages/vm/src/instance.rs
+index 69b1f8e..1a0cb8f 100644
+--- a/packages/vm/src/instance.rs
++++ b/packages/vm/src/instance.rs
+@@ -18,7 +18,7 @@ use crate::imports::{
+     do_bls12_381_aggregate_g2, do_bls12_381_hash_to_g1, do_bls12_381_hash_to_g2,
+     do_bls12_381_pairing_equality, do_bn254_add, do_bn254_pairing_equality, do_bn254_scalar_mul,
+     do_db_read, do_db_remove, do_db_write, do_debug, do_ed25519_batch_verify, do_ed25519_verify,
+-    do_mayo_verify, do_query_chain, do_secp256k1_recover_pubkey, do_secp256k1_verify,
++    do_mayo_verify, do_ml_dsa_verify, do_query_chain, do_secp256k1_recover_pubkey, do_secp256k1_verify,
+     do_secp256r1_recover_pubkey, do_secp256r1_verify,
+ };
+ #[cfg(feature = "iterator")]
+@@ -211,6 +211,13 @@ where
+             Function::new_typed_with_env(&mut store, &fe, do_mayo_verify),
+         );
+ 
++        // ML-DSA (FIPS 204) post-quantum signature verification host function.
++        // Multi-variant: 44=ML-DSA-44, 65=ML-DSA-65, 87=ML-DSA-87.
++        env_imports.insert(
++            "ml_dsa_verify",
++            Function::new_typed_with_env(&mut store, &fe, do_ml_dsa_verify),
++        );
++
+         // Verifies message hashes against a signature with a public key, using the secp256k1 ECDSA parametrization.
+         // Returns 0 on verification success, 1 on verification failure, and values greater than 1 in case of error.
+         // Ownership of input pointers is not transferred to the host.

@@ -1,0 +1,39 @@
+{
+  "codeId": 81,
+  "storeTx": "117CF56C5D47C3FBB1DA34ACAB44A88CC605CB19C2FEC9575881A745ED073BB5",
+  "storeGas": "2434831",
+  "wasmBytes": 376629,
+  "address": "juno1zj39neajvynzv4swf3a33394z84l6nfduy5sntw58re3z7ef9p4q3w4y47",
+  "variants": {
+    "mayo2": {
+      "nistLevel": 1,
+      "pkBytes": 4912,
+      "sigBytes": 186,
+      "child": "juno1nfg88z69jxqtm59tfqtdlv2wt90m0k3uurdu3t",
+      "budGas": "335229",
+      "budTx": "65DDE2181207CC631D5F9C78142744A87A1052E8CB8635A47DFE5E2B1FBF141F",
+      "verifyGas": "356368",
+      "verifyTx": "1C96D7824C4F5C474FE439695F5F58FF319C44F76B39BCD42AA78229D6A5AA81"
+    },
+    "mayo3": {
+      "nistLevel": 3,
+      "pkBytes": 2986,
+      "sigBytes": 681,
+      "child": "juno1z2tknh36v6zqmnss85splrpctrlwxsueeqrf6a",
+      "budGas": "265377",
+      "budTx": "5FC6C0C36916B1366CE51D3AAA0DB1DC4DEE5D80FA34C713184324B5CC04F6FB",
+      "verifyGas": "457221",
+      "verifyTx": "04A948673618FB4830FCCA75DEDECB59638A02AA972A2FA0AF6AC171BC8258BB"
+    },
+    "mayo5": {
+      "nistLevel": 5,
+      "pkBytes": 5554,
+      "sigBytes": 964,
+      "child": "juno1qkjjzxwtwxh7krj98ndnq5fp2xnnpmcp2l4pzs",
+      "budGas": "360814",
+      "budTx": "ABD5F74FE85FF348F7C6CD7A763BA00E3143F2C11C93BEB773F314CBF094E3F4",
+      "verifyGas": "798803",
+      "verifyTx": "83F49BE3E2B0E0FACA660822799F8269C971C35EDAB6D23A5E52BEC07312C86C"
+    }
+  }
+}

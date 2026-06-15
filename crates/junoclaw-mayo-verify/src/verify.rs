@@ -104,6 +104,78 @@ fn unpack_m_vecs(inp: &[u8], out: &mut [u64], vecs: usize, m: usize) {
     }
 }
 
+/// Unpack a single m-vector from `half = m/2` packed bytes into `m_vec_limbs`
+/// little-endian u64 limbs.
+fn unpack_one_mvec(packed: &[u8], out: &mut [u64], m: usize) {
+    let m_vec_limbs = (m + 15) / 16;
+    let half = m / 2;
+    let copy_len = core::cmp::min(half, m_vec_limbs * 8);
+    let mut tmp = [0u8; 72];
+    tmp[..copy_len].copy_from_slice(&packed[..copy_len]);
+    for j in 0..m_vec_limbs {
+        let mut val = 0u64;
+        for k in 0..8 {
+            val |= (tmp[j * 8 + k] as u64) << (k * 8);
+        }
+        out[j] = val;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Streaming AES-128-CTR keystream
+// ---------------------------------------------------------------------------
+
+/// Streaming AES-128-CTR keystream generator supporting a starting byte
+/// offset, so independent regions of the keystream (P1, P2) can be consumed
+/// in parallel without materialising the full expansion. Counter-block layout
+/// matches `aes128_ctr`: bytes 0..12 = 0, bytes 12..16 = 32-bit BE counter.
+struct AesCtrStream {
+    cipher: aes::Aes128,
+    counter: u32,
+    block: [u8; 16],
+    pos: usize, // 16 == exhausted, must refill
+}
+
+impl AesCtrStream {
+    fn new(key: &[u8], byte_offset: usize) -> Self {
+        use aes::cipher::KeyInit;
+        let cipher = aes::Aes128::new_from_slice(key).unwrap();
+        let mut s = Self {
+            cipher,
+            counter: (byte_offset / 16) as u32,
+            block: [0u8; 16],
+            pos: 16,
+        };
+        let skip = byte_offset % 16;
+        if skip != 0 {
+            s.refill();
+            s.pos = skip;
+        }
+        s
+    }
+
+    fn refill(&mut self) {
+        use aes::cipher::{BlockEncryptMut, generic_array::GenericArray};
+        let mut b = [0u8; 16];
+        b[12..16].copy_from_slice(&self.counter.to_be_bytes());
+        let mut ga = GenericArray::clone_from_slice(&b);
+        self.cipher.encrypt_block_mut(&mut ga);
+        self.block.copy_from_slice(ga.as_slice());
+        self.counter = self.counter.wrapping_add(1);
+        self.pos = 0;
+    }
+
+    fn next_bytes(&mut self, out: &mut [u8]) {
+        for o in out.iter_mut() {
+            if self.pos == 16 {
+                self.refill();
+            }
+            *o = self.block[self.pos];
+            self.pos += 1;
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Public map evaluation: S * P * S^t
 // ---------------------------------------------------------------------------
@@ -142,6 +214,85 @@ fn calculate_ps<P: ParameterSet>(
                 let p2_idx = (row * o + j) * m_vec_limbs;
                 let idx = (col * 16 + s[col * n + j + v] as usize) * m_vec_limbs;
                 m_vec_add(m_vec_limbs, &p2[p2_idx..], &mut row_acc[idx..]);
+            }
+        }
+        for col in 0..k {
+            let src = &mut row_acc[col * 16 * m_vec_limbs..];
+            let dst = &mut ps[(row * k + col) * m_vec_limbs..];
+            m_vec_multiply_bins::<P>(m_vec_limbs, src, dst);
+        }
+    }
+
+    let mut p3_used = 0usize;
+    for row in v..n {
+        row_acc.fill(0);
+        for j in row..n {
+            for col in 0..k {
+                let idx = (col * 16 + s[col * n + j] as usize) * m_vec_limbs;
+                m_vec_add(m_vec_limbs, &p3[p3_used * m_vec_limbs..], &mut row_acc[idx..]);
+            }
+            p3_used += 1;
+        }
+        for col in 0..k {
+            let src = &mut row_acc[col * 16 * m_vec_limbs..];
+            let dst = &mut ps[(row * k + col) * m_vec_limbs..];
+            m_vec_multiply_bins::<P>(m_vec_limbs, src, dst);
+        }
+    }
+
+    ps
+}
+
+/// Streaming variant of `calculate_ps`: P1 and P2 m-vectors are generated
+/// on demand from the AES-CTR keystream (one m-vec at a time) instead of
+/// materialising the full expanded public key. P3 is unpacked directly from
+/// the compact public key (it is small). Peak memory becomes ~`ps` + a few
+/// small buffers, independent of the (large) P1/P2 size. Used for MAYO-3/5.
+fn calculate_ps_streaming<P: ParameterSet>(
+    seed_pk: &[u8],
+    packed_p3: &[u8],
+    s: &[u8],
+) -> Vec<u64> {
+    let n = P::N;
+    let v = P::V;
+    let o = P::O;
+    let k = P::K;
+    let m = P::M;
+    let m_vec_limbs = P::M_VEC_LIMBS;
+    let half = m / 2;
+
+    // P3 is small — unpack fully from the compact public key.
+    let p3_limbs = P::P3_BYTES / 8;
+    let mut p3 = vec![0u64; p3_limbs];
+    unpack_m_vecs(packed_p3, &mut p3, p3_limbs / m_vec_limbs, m);
+
+    // P1 keystream starts at byte offset 0; P2 right after P1's packed bytes.
+    let p1_vecs = v * (v + 1) / 2;
+    let p1_packed_bytes = p1_vecs * half;
+    let mut p1_stream = AesCtrStream::new(seed_pk, 0);
+    let mut p2_stream = AesCtrStream::new(seed_pk, p1_packed_bytes);
+
+    let mut ps = vec![0u64; n * k * m_vec_limbs];
+    let mut row_acc = vec![0u64; k * 16 * m_vec_limbs];
+    let mut packed_mvec = [0u8; 71]; // max half (m=142 -> 71)
+    let mut cur = [0u64; 9]; // max m_vec_limbs
+
+    for row in 0..v {
+        row_acc.fill(0);
+        for j in row..v {
+            p1_stream.next_bytes(&mut packed_mvec[..half]);
+            unpack_one_mvec(&packed_mvec[..half], &mut cur[..m_vec_limbs], m);
+            for col in 0..k {
+                let idx = (col * 16 + s[col * n + j] as usize) * m_vec_limbs;
+                m_vec_add(m_vec_limbs, &cur[..m_vec_limbs], &mut row_acc[idx..]);
+            }
+        }
+        for j in 0..o {
+            p2_stream.next_bytes(&mut packed_mvec[..half]);
+            unpack_one_mvec(&packed_mvec[..half], &mut cur[..m_vec_limbs], m);
+            for col in 0..k {
+                let idx = (col * 16 + s[col * n + j + v] as usize) * m_vec_limbs;
+                m_vec_add(m_vec_limbs, &cur[..m_vec_limbs], &mut row_acc[idx..]);
             }
         }
         for col in 0..k {
@@ -290,9 +441,6 @@ pub fn verify<P: ParameterSet>(
         });
     }
 
-    // 1. Expand public key
-    let (p1, p2, p3) = expand_pk::<P>(cpk)?;
-
     // 2. Hash message
     let mut digest = vec![0u8; P::DIGEST_BYTES];
     shake256(&mut digest, message);
@@ -316,8 +464,17 @@ pub fn verify<P: ParameterSet>(
     let mut s = vec![0u8; P::K * P::N];
     decode(packed_s, &mut s, P::K * P::N);
 
-    // 6. Evaluate public map
-    let ps = calculate_ps::<P>(&p1, &p2, &p3, &s);
+    // 6. Evaluate public map. Large parameter sets (MAYO-3/5) stream the
+    // public-key expansion row-by-row to bound peak memory; small sets
+    // materialise P1/P2/P3 up front (faster, single AES pass).
+    let ps = if P::STREAM_EXPAND {
+        let seed_pk = &cpk[..P::PK_SEED_BYTES];
+        let packed_p3 = &cpk[P::PK_SEED_BYTES..];
+        calculate_ps_streaming::<P>(seed_pk, packed_p3, &s)
+    } else {
+        let (p1, p2, p3) = expand_pk::<P>(cpk)?;
+        calculate_ps::<P>(&p1, &p2, &p3, &s)
+    };
     let mut sps = calculate_sps::<P>(&ps, &s);
     let mut y = vec![0u8; P::M];
     compute_rhs::<P>(&mut sps, &t, &mut y);

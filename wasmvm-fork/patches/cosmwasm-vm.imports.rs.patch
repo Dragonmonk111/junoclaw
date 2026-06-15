@@ -7,6 +7,7 @@ index 5907879..366677e 100644
  ] }
  cosmwasm-crypto = { version = "2.2.0", path = "../crypto" }
 +cosmwasm-crypto-bn254 = { version = "0.1.0", path = "../crypto-bn254" }
++cosmwasm-crypto-mayo = { version = "0.1.0", path = "../crypto-mayo" }
  cosmwasm-vm-derive = { version = "2.2.0", path = "../vm-derive" }
  derivative = "2"
  hex = "0.4"
@@ -21,6 +22,7 @@ index c77e09e..e6d015a 100644
 +    "env.bn254_add",
 +    "env.bn254_scalar_mul",
 +    "env.bn254_pairing_equality",
++    "env.mayo_verify",
      "env.secp256k1_verify",
      "env.secp256k1_recover_pubkey",
      "env.secp256r1_verify",
@@ -36,6 +38,7 @@ index dc8ee95..de24cd7 100644
 +    bn254_add, bn254_pairing_equality, bn254_scalar_mul, gas::pairing_cost,
 +    gas::BN254_ADD_COST, gas::BN254_SCALAR_MUL_COST, Bn254Error, FR_BYTES, G1_BYTES,
 +};
++use cosmwasm_crypto_mayo::{gas::mayo_verify_cost, mayo_verify, MayoError};
  use rand_core::OsRng;
  
  #[cfg(feature = "iterator")]
@@ -58,6 +61,31 @@ index dc8ee95..de24cd7 100644
 +const BN254_ERR_INVALID_FIELD_ELEMENT: u32 = 5;
 +const BN254_ERR_BACKEND: u32 = 6;
 +const BN254_ERR_TOO_MANY_PAIRS: u32 = 7;
++
++// ── MAYO host-function status codes ───────────────────────────────────────
++//
++// Returned in the u32 of `do_mayo_verify`'s `VmResult<u32>`. 0 = valid,
++// 1 = invalid, ≥2 = error (length mismatch, unknown variant, or internal).
++const MAYO_OK: u32 = 0;
++const MAYO_INVALID: u32 = 1;
++const MAYO_ERR_INVALID_INPUT_LENGTH: u32 = 2;
++const MAYO_ERR_UNKNOWN_VARIANT: u32 = 3;
++const MAYO_ERR_INVALID_SIGNATURE: u32 = 4;
++const MAYO_ERR_INTERNAL: u32 = 5;
++
++#[inline]
++fn mayo_error_code(err: &MayoError) -> u32 {
++    match err {
++        MayoError::InvalidInputLength { .. } => MAYO_ERR_INVALID_INPUT_LENGTH,
++        MayoError::UnknownVariant(_) => MAYO_ERR_UNKNOWN_VARIANT,
++        MayoError::InvalidSignature => MAYO_ERR_INVALID_SIGNATURE,
++        MayoError::InternalError => MAYO_ERR_INTERNAL,
++        // `MayoError` is marked `#[non_exhaustive]`. Map future variants
++        // to the generic internal code so we never accidentally pass
++        // through a verification failure silently.
++        _ => MAYO_ERR_INTERNAL,
++    }
++}
 +
 +/// Maximum number of (G1, G2) pairs accepted by `do_bn254_pairing_equality`
 +/// in a single call. Each pair is 192 bytes; 64 pairs = 12 288 bytes of
@@ -177,6 +205,39 @@ index dc8ee95..de24cd7 100644
 +        Err(e) => Ok(bn254_error_code(&e)),
 +    }
 +}
++
++/// MAYO multi-variant signature verification (post-quantum precompile).
++///
++/// `variant` is one of 1 (MAYO-1), 2 (MAYO-2), 3 (MAYO-3), or 5 (MAYO-5).
++/// Reads `pk`, `msg`, and `sig` from the three guest-supplied Regions.
++/// Returns 0 for a valid signature, 1 for invalid, and non-zero error codes
++/// for malformed inputs or internal failures. Gas is charged per variant
++/// before any cryptographic work begins.
++pub fn do_mayo_verify<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'static>(
++    mut env: FunctionEnvMut<Environment<A, S, Q>>,
++    variant: u32,
++    pk_ptr: u32,
++    msg_ptr: u32,
++    sig_ptr: u32,
++) -> VmResult<u32> {
++    let (data, mut store) = env.data_and_store_mut();
++    let memory = data.memory(&store);
++
++    // Read regions. We do not know the exact lengths up front, so we
++    // read up to the per-variant maximums and let the verifier validate.
++    let pk = read_region(&memory, pk_ptr, 8192)?;
++    let msg = read_region(&memory, msg_ptr, 65536)?;
++    let sig = read_region(&memory, sig_ptr, 2048)?;
++
++    let gas_info = GasInfo::with_cost(mayo_verify_cost(variant));
++    process_gas_info(data, &mut store, gas_info)?;
++
++    match mayo_verify(variant, &pk, &msg, &sig) {
++        Ok(true) => Ok(MAYO_OK),
++        Ok(false) => Ok(MAYO_INVALID),
++        Err(e) => Ok(mayo_error_code(&e)),
++    }
++}
  /// Aborts the contract and shows the given error message
  pub fn do_abort<A: BackendApi + 'static, S: Storage + 'static, Q: Querier + 'static>(
      mut env: FunctionEnvMut<Environment<A, S, Q>>,
@@ -193,7 +254,7 @@ index caa7322..4f24753 100644
 -    do_secp256k1_verify, do_secp256r1_recover_pubkey, do_secp256r1_verify,
 +    do_bls12_381_pairing_equality, do_bn254_add, do_bn254_pairing_equality, do_bn254_scalar_mul,
 +    do_db_read, do_db_remove, do_db_write, do_debug, do_ed25519_batch_verify, do_ed25519_verify,
-+    do_query_chain, do_secp256k1_recover_pubkey, do_secp256k1_verify,
++    do_mayo_verify, do_query_chain, do_secp256k1_recover_pubkey, do_secp256k1_verify,
 +    do_secp256r1_recover_pubkey, do_secp256r1_verify,
  };
  #[cfg(feature = "iterator")]
@@ -217,6 +278,13 @@ index caa7322..4f24753 100644
 +        env_imports.insert(
 +            "bn254_pairing_equality",
 +            Function::new_typed_with_env(&mut store, &fe, do_bn254_pairing_equality),
++        );
++
++        // MAYO post-quantum signature verification host function.
++        // Multi-variant: 1=MAYO-1, 2=MAYO-2, 3=MAYO-3, 5=MAYO-5.
++        env_imports.insert(
++            "mayo_verify",
++            Function::new_typed_with_env(&mut store, &fe, do_mayo_verify),
 +        );
 +
          // Verifies message hashes against a signature with a public key, using the secp256k1 ECDSA parametrization.
