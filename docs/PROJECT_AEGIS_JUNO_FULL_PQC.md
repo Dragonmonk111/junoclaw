@@ -489,9 +489,23 @@ app-layer primitive we already shipped points at a chain-layer phase.
      native verifier, **not** performance.
    **"Prove on the Juno fork first" is done** — the on-chain gas number §5.1 left
    open is now measured and folded back into §5.1.
-4. **Phase C — transport:** prototype the hybrid X25519 + ML-KEM-768 secret
-   connection on a two-node devnet; measure handshake latency + bandwidth.
-5. **Phase D — accounts:** write `ADR-003-PQC-HYBRID-ACCOUNTS.md` (hybrid
+4. **Phase C — transport:**
+   - **[done] C1 — handshake spec + crate selection:** [`ADR-006-PQC-HYBRID-TRANSPORT.md`](./ADR-006-PQC-HYBRID-TRANSPORT.md)
+     specifies the hybrid CometBFT secret connection: confidentiality via a
+     concatenate-then-HKDF **KEM combiner** over X25519 + ML-KEM-768
+     (`session_key = HKDF(ss_x25519 || ss_mlkem768, salt=H(transcript))`), node
+     identity via hybrid **Ed25519 + ML-DSA-44**, with strictly downgrade-safe
+     negotiation (no peer is refused for lacking PQ). Runtime impl targets the
+     **Go stdlib `crypto/mlkem`** (the devnet already builds on Go 1.24, which
+     ships it), `cloudflare/circl` as the pre-1.24 fallback; Rust harness uses
+     `fips203` (same vendor as the `fips204` we already ship) cross-checked
+     against `libcrux-ml-kem`. One-time handshake overhead ≈ ~9.7 KB/connection.
+   - **C2 — vendor + conformance:** wire ML-KEM-768 NIST ACVP/KAT vectors into
+     CI; three-way differential (Go stdlib vs `fips203` vs `libcrux-ml-kem`),
+     mirroring the MAYO C cross-check.
+   - **C3 — prototype:** stand up the hybrid secret connection on a two-node
+     devnet; measure handshake latency + bandwidth vs pure X25519.
+5. **Phase D — accounts:** write `ADR-007-PQC-HYBRID-ACCOUNTS.md` (hybrid
    `PubKey` + AnteHandler + address derivation), then implement opt-in hybrid
    accounts on the fork.
 6. **Phase E — governance/treasury:** migrate long-lived authority keys to hybrid
