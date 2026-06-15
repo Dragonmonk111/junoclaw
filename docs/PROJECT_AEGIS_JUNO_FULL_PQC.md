@@ -274,6 +274,58 @@ so explicitly, with an option to offer SHA-512/SHA-3 variants for extra margin
 if governance ever wants it. Pretending hashes are broken would be the kind of
 overclaim this project exists to avoid.
 
+### 4.8 Verifiable computation — ZK proofs & TEE attestations (the honest gap)
+
+Two parts of the JunoClaw stack carry an integrity guarantee that **signature
+hybridization alone does not rescue**, and it is important to say so plainly
+rather than imply the precompile/transport work covers them.
+
+**TEE attestations (WAVS / TEE operators).** A TEE quote proves two separable
+things: *(a) submitter identity* and *(b) trustless execution integrity* —
+"this code ran in hardware the operator cannot tamper with." Wrapping the
+operator's submission in our own hybrid (ML-DSA/MAYO) co-signature **fully
+closes (a)** post-quantum and is pure upside, so we do it. But it **does not
+close (b)**: the vendor attestation root (Intel/AMD, ECDSA today) is
+Shor-forgeable, and once it is, a malicious or compromised operator can mint a
+valid quote for any measurement/output and co-sign it validly. The system
+silently degrades from *trust the hardware* to *trust the operator*. A
+co-signature can only ever assert "I vouch," never "untamperable hardware ran
+this." Genuine fixes for (b) are limited to: **vendor PQC attestation**
+(upstream — we track, can't ship), a **post-quantum proof of correct execution**
+(below), or multi-vendor *M-of-N* attestation (an economic hedge, not a
+cryptographic guarantee).
+
+**ZK proofs (`zk-verifier`, Groth16/BN254).** Groth16 — and every pairing/KZG
+SNARK — bases soundness on discrete log + knowledge-of-exponent, which Shor
+breaks, so a quantum adversary can forge accepting proofs for false statements.
+**The BN254 precompile (ADR-001) is a performance change and does nothing for
+this.** Groth16's zero-knowledge is also *computational*, so a captured proof
+encoding a secret witness is itself an HNDL target.
+
+**The deterministic way out — and it is one fix for both.** The conservative,
+post-quantum, *deterministically verifiable* answer is a **hash-based STARK/FRI**
+proof system: soundness reduces only to hash collision-resistance (the safest PQ
+assumption; Grover is countered by doubling the hash output), verification is a
+fixed sequence of field ops + Merkle/hash checks with Fiat-Shamir challenges
+derived **deterministically** from the transcript (no verify-time RNG —
+consensus-safe, exactly like ML-DSA verify), and the setup is **transparent** (no
+trusted SRS, hence no toxic-waste discrete log to recover). Crucially, a
+**zkVM STARK proof of correct execution** *replaces* the TEE hardware root for
+property (b): the proof *is* the integrity, with no vendor to trust. So the same
+move closes ZK soundness **and** reconstructs TEE execution integrity. The
+residual cost is **bytes and gas** (STARK proofs are large; the natural analog of
+the BN254 precompile becomes a Poseidon/Keccak verification host function) — an
+engineering/economics problem, **not** a cryptographic gap. Lattice SNARKs are a
+smaller-proof but younger/more-assumption-laden alternative (the "newer scheme"
+hedge). Witness/input *confidentiality* remains a separate problem solved by
+ML-KEM (§4.2), not by the proof system.
+
+This is flagged as a **distinct, later track** (a future ADR — "PQ verifiable
+computation / STARK migration"), not part of Phases A–E. It is called out here so
+the plan does not overclaim: transport (§4.2) and signatures (§4.3, §4.5) go
+hybrid now; **ZK soundness and TEE execution integrity need a proof-system
+migration, which signature hybridization cannot substitute for.**
+
 ---
 
 ## 5. Phased rollout (mapped to Juno upgrade handlers)
