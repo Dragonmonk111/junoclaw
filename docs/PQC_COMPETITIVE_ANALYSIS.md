@@ -39,12 +39,12 @@ Building a BFT stack from scratch with PQC at the foundation is a 12-18 month pr
 | Aspect | Details |
 |--------|---------|
 | **Layer** | Smart contract (CosmWasm wasm32) |
-| **Algorithm** | MAYO-2 (NIST Round 4 candidate) |
+| **Algorithm** | MAYO-1/2/3/5 (NIST Round 4 candidate) — all NIST levels 1/3/5 |
 | **Verifier** | Pure Rust, `#![no_std]`, zero dependencies |
 | **Deployment** | Upload wasm → instantiate. Works on ANY CosmWasm chain today. |
-| **Gas cost** | ~356k per `VerifyMayoAttestation` |
-| **PK size** | 4,912 B (tx payload) |
-| **Sig size** | 186 B (tx payload) |
+| **Gas cost** | 356k (L1) / 457k (L3) / 799k (L5) per `VerifyMayoAttestation` — measured |
+| **PK size** | 4,912 B (MAYO-2) / 2,986 B (MAYO-3) / 5,554 B (MAYO-5) |
+| **Sig size** | 186 B (MAYO-2) / 681 B (MAYO-3) / 964 B (MAYO-5) |
 | **State cost** | 32 B (SHA-256 hash stored per member) |
 | **Consensus impact** | Zero — validators still use Ed25519 |
 | **Time to live** | **Today** (deployed on `uni-7`) |
@@ -57,10 +57,9 @@ Building a BFT stack from scratch with PQC at the foundation is a 12-18 month pr
 - ✅ MAYO-2 has smallest signatures (186 B) among NIST candidates
 
 **Weaknesses:**
-- ❌ Gas cost: wasm interpreter + memory allocation overhead (~356k)
-- ❌ PK must travel in tx payload (4,912 B per verification)
-- ❌ Only MAYO-2 currently (MAYO-3/5 need streaming refactor)
-- ❌ Consensus layer remains classically secured (Ed2559 validator keys)
+- ❌ Gas cost: wasm interpreter + memory allocation overhead (356-799k)
+- ❌ PK must travel in tx payload (3-5.5 KB per verification)
+- ❌ Consensus layer remains classically secured (Ed25519 validator keys)
 
 ---
 
@@ -102,12 +101,39 @@ Building a BFT stack from scratch with PQC at the foundation is a 12-18 month pr
 
 | Approach | Per-Verify Gas | Sig Size | PK Size | NIST Level | Time to Live |
 |----------|---------------|----------|---------|------------|-------------|
-| **JunoClaw wasm MAYO-2** | 356,000 | 186 B | 4,912 B | Level 1 | **Today** |
+| **JunoClaw wasm MAYO-2** | 356,368 (measured) | 186 B | 4,912 B | Level 1 | **Today** |
+| **JunoClaw wasm MAYO-3** | 457,221 (measured) | 681 B | 2,986 B | Level 3 | **Today** |
+| **JunoClaw wasm MAYO-5** | 798,803 (measured) | 964 B | 5,554 B | **Level 5** | **Today** |
 | **Marius Falcon-1024 (native)** | ~10,000 | 1,280 B | 1,792 B | Level 5 | 6-12 months |
-| **MAYO precompile (our fork)** | ~50,000 | 186 B | 4,912 B | Level 1 | 2-4 weeks |
+| **MAYO precompile (our fork)** | ~50,000 | 186 B | 4,912 B | Level 1-5 | 2-4 weeks |
 | **ZK-proof of MAYO** | ~200,000 | 186 B | 4,912 B | Level 1 | 2-3 months |
 
-**Key insight:** Marius chose **highest security, largest signatures**. We chose **smallest signatures, lower security**. These are different optimization points on the same Pareto frontier — not direct competitors.
+### Measured Multi-Variant Ladder (uni-7, code ID 81, 2026-06-12)
+
+Contract: `juno1zj39neajvynzv4swf3a33394z84l6nfduy5sntw58re3z7ef9p4q3w4y47`
+
+| Variant | NIST | PK (B) | Sig (B) | Bud gas | Verify gas | Fee (0.075 ujunox/gas) |
+|---------|------|--------|---------|---------|------------|------------------------|
+| MAYO-2 | L1 | 4,912 | 186 | 335,229 | 356,368 | 0.0267 JUNOX |
+| MAYO-3 | L3 | 2,986 | 681 | 265,377 | 457,221 | 0.0343 JUNOX |
+| MAYO-5 | L5 | 5,554 | 964 | 360,814 | 798,803 | 0.0599 JUNOX |
+
+**Cost-per-attestation formula:** `verify_gas × 0.075 ujunox × JUNO_price / 10^6`.
+At $0.10/JUNO: **L1 ≈ $0.0027, L3 ≈ $0.0034, L5 ≈ $0.0060** per quantum-safe
+attestation. At $0.30/JUNO the worst case (L5) is still under 2 cents.
+
+**Key takeaways:**
+- **NIST Level 5 — the same security level as Falcon-1024 — verifies on-chain
+  today for <800k gas.** The "Level 5 requires a native greenfield chain"
+  argument is dead: it requires less gas than a complex DeFi swap.
+- L3 costs only +28% over L1 — the AES-CTR PK expansion dominates, not the
+  matrix dimension. L5 is 2.24× L1.
+- MAYO-3 has the *smallest* PK (2,986 B) — best tx-payload choice when L1
+  isn't enough.
+- Reproduce: `node deploy/benchmark-mayo-variants.cjs` (idempotent; results in
+  `deploy/mayo-benchmark-results.json`).
+
+**Key insight:** Marius chose **one fixed point** (Falcon-1024, L5, native-only). We ship **the whole Pareto frontier** — callers pick L1 for cheap high-frequency attestations or L5 for Falcon-equivalent security, per message, on a chain that exists today.
 
 ---
 
@@ -115,7 +141,7 @@ Building a BFT stack from scratch with PQC at the foundation is a 12-18 month pr
 
 ### Marius Wins On:
 - **Gas efficiency** — native execution is 10-50× cheaper
-- **Security level** — Falcon-1024 = NIST Level 5 (highest approved)
+- ~~**Security level**~~ — Falcon-1024 = NIST Level 5, **but JunoClaw now matches it: MAYO-5 (L5) measured on-chain 2026-06-12**
 - **Consensus PQC** — validator signatures are quantum-resistant from genesis
 - **Performance** — Rust implementation targeting Commonware-level throughput
 
@@ -135,8 +161,7 @@ Building a BFT stack from scratch with PQC at the foundation is a 12-18 month pr
 - **Hash-stored PK** — 32 B state vs storing full PK on-chain
 
 ### JunoClaw Weaknesses:
-- **Gas cost** — wasm overhead = ~356k gas (10-35× more than native)
-- **Security level** — MAYO-2 = NIST Level 1 (vs Falcon-1024 = Level 5)
+- **Gas cost** — wasm overhead = 356-799k gas (10-80× more than native; precompile plan closes this)
 - **Consensus layer** — validator signatures remain Ed25519 (classical)
 
 ### Critical Insight:
@@ -145,9 +170,9 @@ These are **complementary architectures optimizing for different Pareto points**
 
 | Dimension | Marius (Falcon-1024) | JunoClaw (MAYO-2) |
 |-----------|---------------------|-------------------|
-| **Security** | Level 5 (highest) | Level 1 (baseline) |
-| **Signature size** | 1,280 B (large) | 186 B (tiny) |
-| **Gas cost** | ~10k (cheap) | 356k (expensive) |
+| **Security** | Level 5 (highest) | **Level 1/3/5 — caller's choice** |
+| **Signature size** | 1,280 B (large) | 186-964 B (level-dependent) |
+| **Gas cost** | ~10k (cheap) | 356-799k (expensive; precompile → ~50-100k) |
 | **Deployability** | New L1 only | Any CosmWasm chain |
 | **Time to live** | 6-12 months | Today |
 | **Use case** | High-security consensus | High-frequency attestations |

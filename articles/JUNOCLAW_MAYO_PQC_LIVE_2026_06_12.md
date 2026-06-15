@@ -1,6 +1,8 @@
 # A Pure-Rust Post-Quantum Signature Verifier for CosmWasm
 
-> MAYO-2 is now live on the Juno testnet (`uni-7`). Here's what we built, why it matters, and what's next.
+> MAYO is now live on the Juno testnet (`uni-7`) at **all three NIST security levels (1, 3, and 5)**. Here's what we built, why it matters, and what's next.
+>
+> **The number that matters:** a quantum-safe attestation on Juno costs **356,368 gas ≈ $0.0027** (at $0.10/JUNO). Want Falcon-class, NIST Level 5 security? **798,803 gas ≈ $0.006.** Today. No new chain. No migration.
 
 ---
 
@@ -48,16 +50,35 @@ MAYO verification is deterministic: given a fixed `(public_key, message, signatu
 - **Light-client verification**: a third party can re-run the check without blockchain access.
 - **ZK-proof friendliness**: deterministic functions are trivial to arithmetize into circuits if we later want a ZK-proof-of-verification.
 
-### Live Testnet Results (uni-7)
+### Live Testnet Results (uni-7) — The Full Security Ladder
 
-| Operation | Gas Used | Cost (0.075 ujunox) |
-|-----------|----------|---------------------|
-| Bud (create member + MAYO PK) | 336,659 | ~25.2 ujunox |
-| VerifyMayoAttestation (valid) | 355,771 | ~26.7 ujunox |
-| VerifyMayoAttestation (tampered) | Rejected ✅ | — |
+Measured 2026-06-12, multi-variant contract (code ID 81):
+
+| Variant | NIST Level | PK Size | Sig Size | Bud Gas | Verify Gas | Fee @ 0.075 ujunox |
+|---------|-----------|---------|----------|---------|------------|---------------------|
+| **MAYO-2** | Level 1 | 4,912 B | 186 B | 335,229 | **356,368** | 0.0267 JUNOX |
+| **MAYO-3** | Level 3 | 2,986 B | 681 B | 265,377 | **457,221** | 0.0343 JUNOX |
+| **MAYO-5** | Level 5 | 5,554 B | 964 B | 360,814 | **798,803** | 0.0599 JUNOX |
+
+Tampered messages and wrong-variant inputs are rejected on-chain. ✅
+
+**Three things worth staring at:**
+
+1. **NIST Level 5 — the same security class as Falcon-1024 — verifies on a live
+   CosmWasm chain for under 800k gas.** That's less than a typical DeFi swap
+   (~1M gas). The claim that Level-5 PQC requires a purpose-built native chain
+   is now empirically false.
+2. **Level 3 costs only +28% over Level 1.** The AES-CTR public-key expansion
+   dominates the cost, not the matrix dimension — security scales sublinearly
+   in gas (L5 = 2.24× L1).
+3. **MAYO-3 has the *smallest* public key** (2,986 B) — the best tx-payload
+   choice when Level 1 isn't enough.
+
+Reproduce it yourself: `node deploy/benchmark-mayo-variants.cjs`.
 
 **Contract addresses**:
-- jclaw-credential: `juno1z2w067ptpn2f6zpwt207je0kqeqc2eek7jf4p4dpztf24zncnhzqz5el2r`
+- jclaw-credential (multi-variant, codeId 81): `juno1zj39neajvynzv4swf3a33394z84l6nfduy5sntw58re3z7ef9p4q3w4y47`
+- jclaw-credential (codeId 79): `juno1z2w067ptpn2f6zpwt207je0kqeqc2eek7jf4p4dpztf24zncnhzqz5el2r`
 - moultbook: `juno1nm0mu2uwxnphn2hqnuyywyvxp6qfdfuhe64svrnq3vjh66pwxlhskt3dx4`
 
 ---
@@ -112,17 +133,27 @@ This gives us a baseline for the pure wasm path. The devnet with BN254 precompil
 
 With this foundation, `jclaw-credential` members can now sign moultbook attestations with MAYO-2 keys, and the chain validates them natively—no bridge, no C precompile, no trust assumption. As quantum computers advance, the trust tree remains intact.
 
-### Phase 2: MAYO-3 & MAYO-5 for Maximum Security
+### Phase 2: MAYO-3 & MAYO-5 — ✅ SHIPPED (same day)
 
-MAYO-2 is the smallest parameter set (186-byte signatures, 4,912-byte public keys). For high-security use cases, we will extend to:
+Originally planned as future work — done. The streaming `expand_pk` refactor
+(row-by-row AES-128-CTR expansion, never materializing the full expanded key)
+brought all variants under the CosmWasm memory ceiling, and the ladder table
+above is the measured result. Use-case guidance:
 
-| Parameter Set | NIST Security Level | Signature Size | Public Key Size | Use Case |
-|---------------|---------------------|----------------|-----------------|----------|
-| **MAYO-2** | Level 1 | 186 B | 4,912 B | Standard governance, day-to-day attestations |
-| **MAYO-3** | Level 3 | 277 B | 12,128 B | High-value proposals, treasury ops |
-| **MAYO-5** | Level 5 | 964 B | 17,136 B | Critical infrastructure, multi-sig threshold |
+| Parameter Set | NIST Level | Use Case |
+|---------------|-----------|----------|
+| **MAYO-2** | Level 1 | Standard governance, day-to-day attestations |
+| **MAYO-3** | Level 3 | High-value proposals, treasury ops |
+| **MAYO-5** | Level 5 | Critical infrastructure, multi-sig threshold |
 
-**Challenge**: MAYO-3 and MAYO-5 public keys exceed the 512 KB CosmWasm memory limit when naively expanded. Solution: streaming `expand_pk` (row-by-row AES-128-CTR expansion) to compute verification matrices on-the-fly without materializing the full public key.
+### Phase 2.5: MAYO Precompile — closing the gas gap
+
+The wasm numbers above are the *worst case*. Our BN254-patched devnet fork
+already proves the host-function pattern (1.82× measured on ZK verify); a
+`mayo_verify` host function is in progress and should bring L1 to ~50k gas and
+L5 to ~100k — cheaper than a cw20 transfer. The endgame: propose it upstream
+as an opt-in CosmWasm capability so *Juno itself* becomes the first PQC-native
+CosmWasm chain. See `docs/MAYO_PRECOMPILE_PLAN.md`.
 
 ### Phase 3: ZK-Proof of MAYO Verification
 
@@ -137,4 +168,62 @@ MAYO attestations verified on Juno can be relayed via IBC to any Cosmos chain. A
 
 ---
 
-*Published 2026-06-12. Repo: [github.com/junoclaw/junoclaw](https://github.com/junoclaw/junoclaw) | Testnet: `uni-7`*
+## Explaining PQC to Normies (Illustration Plan)
+
+The metaphor that lands: **wax seals and locksmiths.** Today's signatures
+(Ed25519) are beautifully forged brass locks — but a quantum computer is a
+master key that opens *all brass locks at once*. MAYO is a new kind of lock
+that the master key doesn't fit. We didn't build a new house (chain) for the
+new locks — we fitted them to every door of the house everyone already lives in.
+
+### Midjourney Prompts
+
+**1. Hero image — the locksmith badger:**
+```
+A kindly old badger locksmith in a tweed waistcoat fitting an ornate brass
+padlock onto a round wooden door in a great oak tree, warm autumn light,
+soft watercolor and pencil illustration, Beatrix Potter style, E.H. Shepard
+linework, 1980s children's book aesthetic, muted earth tones, cozy and
+reassuring, storybook composition --ar 16:9 --style raw
+```
+
+**2. The quantum storm (the threat, gently):**
+```
+A distant violet storm gathering over rolling English countryside hills,
+small woodland animals calmly reinforcing the door of a tree-house with
+three differently-sized iron locks, hand-painted watercolor, Studio Ghibli
+meets E.H. Shepard, 1990s picture book, soft pencil outlines, warm interior
+light glowing from the windows, hopeful not scary --ar 16:9 --style raw
+```
+
+**3. The security ladder (L1/L3/L5):**
+```
+Three padlocks on a wooden workbench in a cozy cottage workshop: a small
+brass one, a medium iron one, and a great ornate steel one, a hedgehog
+shopkeeper in spectacles presenting them with a price tag of acorns beside
+each, soft watercolor, Beatrix Potter style, gentle morning light through
+a cottage window, 1980s storybook illustration, pencil and wash --ar 3:2
+--style raw
+```
+
+**4. The trust tree (jclaw-credential):**
+```
+A great oak tree with many small round doors along its branches, each door
+bearing a tiny wax seal, woodland creatures passing sealed letters between
+branches, golden afternoon light, hand-drawn pencil and watercolor, Winnie
+the Pooh classic illustration style, E.H. Shepard, soft and warm, English
+countryside, 1980s children's book --ar 2:3 --style raw
+```
+
+**5. The receipts (benchmark, for the thread):**
+```
+A small field mouse in a waistcoat proudly holding up a long paper receipt
+beside an enormous brass weighing scale balancing a tiny envelope against
+a single acorn, cozy candle-lit study, watercolor and pencil, Beatrix
+Potter aesthetic, 1990s picture book illustration, warm sepia and sage
+tones --ar 1:1 --style raw
+```
+
+---
+
+*Published 2026-06-12. Repo: [github.com/junoclaw/junoclaw](https://github.com/junoclaw/junoclaw) | Testnet: `uni-7` | Reproduce: `node deploy/benchmark-mayo-variants.cjs`*

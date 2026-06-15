@@ -1,0 +1,26 @@
+[package]
+name = "aegis-bench"
+version = "0.1.0"
+edition = "2021"
+authors = ["JunoClaw Contributors"]
+description = "Project Aegis — ML-DSA parameter (44 vs 65) size + consensus-bandwidth model, with optional real timing via a pure-Rust FIPS 204 impl."
+license = "Apache-2.0"
+publish = false
+
+[[bin]]
+name = "aegis-bench"
+path = "src/main.rs"
+
+[features]
+# Default build is dependency-free and runs fully offline.
+default = []
+# `timing` pulls a pure-Rust FIPS 204 (ML-DSA) implementation to measure real
+# keygen/sign/verify wall-clock time. Requires a network fetch from crates.io.
+timing = ["dep:fips204"]
+
+[dependencies]
+fips204 = { version = "0.4", optional = true }
+
+# Isolated from the root workspace (which explicitly lists its members and
+# excludes standalone crates). Keeps `cargo build` here independent.
+[workspace]

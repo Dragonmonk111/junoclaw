@@ -28,13 +28,30 @@
 
 ### The single real blocker: wasm memory
 
-Expanded public key (P1+P2+P3 limbs) per variant:
+Correction to an earlier assumption: CosmWasm's default VM memory limit is
+**32 MiB**, not 512 KB. No variant is memory-*impossible*. The true cost
+driver is **gas** — CosmWasm meters heap allocation per byte, so a 1.66 MB
+peak (MAYO-5) is both slow and expensive. Streaming attacks that directly.
 
-| Variant | Level | sig | compact PK | expanded PK | `ps` buf | peak est. | 512 KB wasm |
-|---------|-------|-----|-----------|-------------|----------|-----------|-------------|
-| MAYO-2 | 1 | 186 B | 4,912 B | ~104 KB | ~10 KB | ~127 KB (measured) | ✅ |
-| MAYO-3 | 3 | 681 B | 2,986 B | ~384 KB | ~71 KB | ~470 KB | ⚠️ borderline |
-| MAYO-5 | 5 | 964 B | 5,554 B | **~839 KB** | ~130 KB | >1 MB | ❌ needs streaming |
+**Measured peak heap** (tracking global allocator, `peak_heap_all_variants`
+test, isolated run, 2026-06-12 — instruments the real `verify` pipeline.
+MAYO-3/5 now route through streaming `calculate_ps_streaming`):
+
+| Variant | Level | sig | compact PK | **measured peak** | path | vs MAYO-2 |
+|---------|-------|-----|-----------|-------------------|------|-----------|
+| MAYO-1 | 1 | 454 B | 1,420 B | **288 KB** | materialized | 1.4× |
+| MAYO-2 | 1 | 186 B | 4,912 B | **203 KB** (live on uni-7) | materialized | 1.0× |
+| MAYO-3 | 3 | 681 B | 2,986 B | **85 KB** | **streaming** | 0.42× |
+| MAYO-5 | 5 | 964 B | 5,554 B | **151 KB** | **streaming** | 0.74× |
+
+Streaming validated: MAYO-5 dropped from ~1,661 KB (materialized EPK) to
+**151 KB** — below MAYO-2's footprint and comfortably under the wasm limit.
+MAYO-3 at 85 KB is the lowest of all. Cross-check tests confirm the streaming
+path is bit-for-bit identical to the C reference for all variants.
+
+Note: MAYO-1 (288 KB) now uses *more* memory than MAYO-5 because it still
+materializes its EPK. Flipping `STREAM_EXPAND` for MAYO-1 is a cheap future
+consistency win (not a blocker — well under limit).
 
 ### Why streaming works (from code inspection)
 
@@ -46,7 +63,8 @@ Therefore:
 
 - Generate P1/P2 **one row at a time** inside the `calculate_ps` row loop.
 - Row buffer for MAYO-5: max `v * m_vec_limbs * 8` = 142×72 ≈ **10.2 KB**.
-- New peak for MAYO-5: ~10 KB row + 130 KB `ps` + 19 KB sps/acc ≈ **~165 KB**. Fits.
+- Projected MAYO-5 peak: ~10 KB row + ~130 KB `ps` + sps/acc ≈ **~150-200 KB**
+  — roughly MAYO-2's current footprint. Confirm in Phase 2 via `peak_heap` test.
 - P3 comes directly from the compact PK (no AES) — 5.6 KB, trivial.
 
 No algorithm change, no new crypto — pure dataflow refactor.
@@ -95,14 +113,19 @@ No algorithm change, no new crypto — pure dataflow refactor.
 
 ## 3. The Plan: Five Phases to MAYO-5
 
-### Phase 0 — Test vectors for all variants (½ day)
+### Phase 0 — Test vectors for all variants (½ day) ✅ DONE
+_All four C cross-checks pass (`test_mayo1/2/3/5_cross_check_sriracha`)._
+
 - Extend `test-c` cross-check tests to MAYO-1, MAYO-3, MAYO-5
   (the test harness is already generic; add three `#[test]` fns).
 - Generate deterministic test vectors (seed=[42;32]) for each variant,
   export hex to `devnet/mayo_vector_{1,3,5}.hex` for contract tests.
 - **Gate:** all C cross-checks pass for all four parameter sets.
 
-### Phase 1 — MAYO-3 in pure wasm, measure reality (1 day)
+### Phase 1 — MAYO-3 in pure wasm, measure reality (1 day) ✅ RESOLVED → Outcome B
+_MAYO-3 streamed (85 KB) rather than materialized; it became the first streaming
+consumer alongside MAYO-5. Pure-wasm materialized path not needed._
+
 - MAYO-3 *may* fit without streaming (~470 KB peak, borderline).
 - Wire `Mayo3` into a test contract build; run under `cw-multi-test` with
   wasm memory instrumentation; deploy to devnet and attempt verify.
@@ -111,7 +134,11 @@ No algorithm change, no new crypto — pure dataflow refactor.
   first consumer of streaming.
 - **Gate:** measured peak memory + gas numbers for MAYO-3 documented.
 
-### Phase 2 — Streaming `expand_pk` (3-4 days, the core work)
+### Phase 2 — Streaming `expand_pk` (3-4 days, the core work) ✅ DONE (2026-06-12)
+_`AesCtrStream` + `calculate_ps_streaming` implemented; MAYO-3/5 route through it.
+Gate met: MAYO-5 peak = **151 KB** (< 200 KB target), MAYO-3 = 85 KB, both
+bit-for-bit against C. wasm32 build clean._
+
 - New `verify_streaming<P>` path in `junoclaw-mayo-verify`:
   - `AesCtrStream` struct: wraps AES-128-CTR with explicit counter offset,
     yields P1/P2 m-vec rows on demand.
