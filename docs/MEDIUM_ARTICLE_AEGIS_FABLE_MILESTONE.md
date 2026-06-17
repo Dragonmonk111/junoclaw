@@ -51,12 +51,17 @@ code with measured numbers. There are two halves, and I'll keep both honest.
 
 ## Two projects, one mission
 
-| | **Aegis** | **Fable** |
-|---|---|---|
-| **What it protects** | The chain's own plumbing: how nodes talk, how accounts sign | The receipts agents leave: credentials, attestations, endorsements |
-| **Plain-words version** | Re-key the building's doors and mail system | Give every worker a tamper-proof, future-proof ID badge + signed worklog |
-| **Crypto** | ML-KEM-768 (transport) + ML-DSA-44 (accounts), both **hybrid** with the classical primitives | MAYO (tiny post-quantum signatures), in a smart contract |
-| **Who it's for** | Juno — and any Cosmos chain, because it lives in the shared CometBFT/Cosmos-SDK layer | Any CosmWasm chain, **today**, no upgrade needed |
+```
+                    Aegis                        Fable
+What it protects    Chain plumbing (nodes talk,   Agent receipts (credentials,
+                    accounts sign)                 attestations, endorsements)
+Plain-words         Re-key the doors and mail      Give every worker a tamper-
+version             system                         proof ID badge + signed worklog
+Crypto              ML-KEM-768 + ML-DSA-44,        MAYO (tiny post-quantum
+                    both hybrid with classical     signatures) in a smart contract
+Who it's for        Juno / any Cosmos chain        Any CosmWasm chain, TODAY,
+                    (shared CometBFT/Cosmos-SDK)   no upgrade needed
+```
 
 Aegis is the moult of the shell itself. Fable is the moult of the creatures
 living in it — the agents of trust.
@@ -92,11 +97,12 @@ flipped by an environment variable.
 I ran the real fork code over real TCP sockets and measured. This is the part
 people hand-wave; here are the numbers:
 
-| Link round-trip | Classical handshake | Hybrid handshake | Extra cost |
-|---:|---:|---:|---:|
-| 0 ms (pure CPU) | 707 µs | 1.078 ms | **+371 µs** |
-| 10 ms | 11.27 ms | 16.76 ms | +5.49 ms |
-| 50 ms | 51.28 ms | 76.99 ms | +25.7 ms |
+```
+Link round-trip   Classical handshake   Hybrid handshake   Extra cost
+0 ms (pure CPU)   707 µs                1.078 ms           +371 µs
+10 ms             11.27 ms              16.76 ms           +5.49 ms
+50 ms             51.28 ms              76.99 ms           +25.7 ms
+```
 
 **Bytes on the wire:** classical 2,158 → hybrid 5,623 → **+3,465 bytes** per
 handshake.
@@ -163,11 +169,12 @@ I measured what it costs to verify a MAYO attestation on-chain, across three
 security levels, comparing pure-WebAssembly against a native **precompile** on my
 MAYO-patched Juno fork:
 
-| Variant | NIST level | Pure-Wasm | Native precompile | Speedup |
-|---|---|---:|---:|---:|
-| MAYO-2 | L1 | 355,932 | 310,391 | 1.15× |
-| MAYO-3 | L3 | 456,644 | 257,371 | 1.77× |
-| MAYO-5 | L5 | 798,137 | 360,902 | **2.21×** |
+```
+Variant   NIST level   Pure-Wasm    Native precompile   Speedup
+MAYO-2    L1           355,932      310,391           1.15×
+MAYO-3    L3           456,644      257,371           1.77×
+MAYO-5    L5           798,137      360,902           2.21×
+```
 
 The headline: **NIST Level 5 — the same security tier as Falcon-1024 — verifies
 on-chain today for under 800k gas** (about the cost of a fancy DeFi swap), and the
