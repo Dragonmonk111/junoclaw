@@ -105,7 +105,7 @@ Building a BFT stack from scratch with PQC at the foundation is a 12-18 month pr
 | **JunoClaw wasm MAYO-3** | 457,221 (measured) | 681 B | 2,986 B | Level 3 | **Today** |
 | **JunoClaw wasm MAYO-5** | 798,803 (measured) | 964 B | 5,554 B | **Level 5** | **Today** |
 | **Marius Falcon-1024 (native)** | ~10,000 | 1,280 B | 1,792 B | Level 5 | 6-12 months |
-| **MAYO precompile (our fork)** | ~50,000 | 186 B | 4,912 B | Level 1-5 | 2-4 weeks |
+| **JunoClaw MAYO precompile (our fork) — MEASURED** | 310k/257k/361k (L1/L3/L5) | 186-964 B | 2,986-5,554 B | Level 1-5 | **Done (devnet, 2026-06-17)** |
 | **ZK-proof of MAYO** | ~200,000 | 186 B | 4,912 B | Level 1 | 2-3 months |
 
 ### Measured Multi-Variant Ladder (uni-7, code ID 81, 2026-06-12)
@@ -161,7 +161,7 @@ attestation. At $0.30/JUNO the worst case (L5) is still under 2 cents.
 - **Hash-stored PK** — 32 B state vs storing full PK on-chain
 
 ### JunoClaw Weaknesses:
-- **Gas cost** — wasm overhead = 356-799k gas (10-80× more than native; precompile plan closes this)
+- **Gas cost** — wasm overhead = 356-799k gas (10-80× more than native). The MAYO precompile is now measured: it cuts whole-tx verify gas by 1.15× (L1) to 2.21× (L5) — useful, but short of the original 5-7× projection because fixed CosmWasm/SDK tx overhead dominates once the crypto is native.
 - **Consensus layer** — validator signatures remain Ed25519 (classical)
 
 ### Critical Insight:
@@ -172,7 +172,7 @@ These are **complementary architectures optimizing for different Pareto points**
 |-----------|---------------------|-------------------|
 | **Security** | Level 5 (highest) | **Level 1/3/5 — caller's choice** |
 | **Signature size** | 1,280 B (large) | 186-964 B (level-dependent) |
-| **Gas cost** | ~10k (cheap) | 356-799k (expensive; precompile → ~50-100k) |
+| **Gas cost** | ~10k (cheap) | 356-799k wasm; precompile measured 257-361k (1.15-2.21×) |
 | **Deployability** | New L1 only | Any CosmWasm chain |
 | **Time to live** | 6-12 months | Today |
 | **Use case** | High-security consensus | High-frequency attestations |
@@ -222,12 +222,11 @@ These are **complementary architectures optimizing for different Pareto points**
 
 ### Mitigation Pathways
 
-**Path A: MAYO Precompile (on devnet fork) — 5-7× cheaper**
-- We already have BN254 precompile in `junoclaw-bn254-1`
-- Add `mayo2_verify(bytes pk, bytes msg, bytes sig)` precompile
-- Expected gas: **~50-100k** (vs 356k today)
-- Effort: 2-3 days (pattern established with BN254)
-- **Status:** Not yet implemented
+**Path A: MAYO Precompile (on devnet fork) — DONE, measured 2026-06-17**
+- BN254 precompile shipped in `junoclaw-bn254-1`; MAYO `mayo_verify` host fn added (wasmvm-fork patches `10-19`)
+- Measured whole-tx `VerifyMayoAttestation` gas, pure → precompile: L1 356k→310k (1.15×), L3 457k→257k (1.77×), L5 798k→361k (2.21×)
+- **Reality check:** short of the projected 5-7×. Once the crypto is native, ~250-310k of fixed CosmWasm/SDK overhead + PK marshalling dominates. The host gas schedule (MAYO-2=5M / -3=7M / -5=12M VM gas) is a tunable knob that could widen the L1/L3 margins.
+- **Status:** ✅ Implemented + reproduced (`deploy/mayo-devnet-benchmark-results.json`; see `docs/MAYO_PRECOMPILE_BENCHMARK_RESULTS.md`)
 
 **Path B: BN254 Precompile for ZK (on devnet fork) — 1.82× cheaper (measured)**
 - Testnet (pure wasm): ~371k gas (wasm emulated pairing)
@@ -316,7 +315,7 @@ These are **complementary architectures optimizing for different Pareto points**
 > "There are two ways to do post-quantum crypto in blockchain: rebuild the chain (Marius — 12-18 months, optimal gas) or add it as a smart contract (JunoClaw — today, portable). We're building the latter. If Marius open-sources his primitives, we'll integrate them as a precompile on our fork and get the best of both."
 
 ### For technical audiences:
-> "MAYO-2 verification in CosmWasm costs ~356k gas today. A chain-native precompile would cost ~50k. A ZK-proof-of-verification would cost ~200k but work on any EVM or BN254-enabled chain. We're pursuing all three paths — wasm for portability now, precompile for speed on our fork, ZK for cross-chain future."
+> "MAYO-2 verification in CosmWasm costs ~356k gas today. We measured a chain-native precompile: whole-tx verify drops 1.15× (L1) to 2.21× (L5) — less than we projected, because fixed tx overhead dominates once the crypto is native. A ZK-proof-of-verification would cost ~200k but work on any EVM or BN254-enabled chain. We're pursuing all three paths — wasm for portability now, precompile for speed on our fork, ZK for cross-chain future."
 
 ---
 
@@ -359,4 +358,4 @@ These are **complementary architectures optimizing for different Pareto points**
 
 ---
 
-*Last updated: 2026-06-12*
+*Last updated: 2026-06-17 (MAYO precompile measured + reproduced on devnet; Aegis C5/C6/D3-core landed)*

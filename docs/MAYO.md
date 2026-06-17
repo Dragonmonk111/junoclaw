@@ -163,13 +163,31 @@ This prevents cross-protocol signature replay (e.g., a moultbook attestation can
 
 **Memory**: Pure-Rust verifier peak ~127 KB in wasm32 (within CosmWasm's 512 KB limit).
 
+## Devnet Precompile Results (junoclaw-bn254-1, 2026-06-17)
+
+On our MAYO-patched Juno fork (wasmvm-fork patches `10-19` add a native
+`mayo_verify` host function), the same `VerifyMayoAttestation` runs 1.15-2.21×
+cheaper. Whole-tx gas, pure-Wasm → precompile (reproduced within ~0.03% of the
+2026-06-14 run on a fresh chain after a full devnet reset):
+
+| Variant | NIST | Pure-Wasm | Precompile | Speedup |
+|---------|------|----------:|-----------:|--------:|
+| MAYO-2 | L1 | 355,932 | 310,391 | 1.15× |
+| MAYO-3 | L3 | 456,644 | 257,371 | 1.77× |
+| MAYO-5 | L5 | 798,137 | 360,902 | 2.21× |
+
+The win grows with the parameter set: at L5 (Falcon-equivalent security) the
+precompile more than halves the cost. It is short of the original 7× projection
+because, once the crypto is native, fixed CosmWasm/SDK tx overhead dominates.
+Full write-up + tx hashes: `docs/MAYO_PRECOMPILE_BENCHMARK_RESULTS.md`.
+
 ## Roadmap
 
 - [x] **Phase 1:** Key generation, signing, verification in `junoclaw-core` (C-based, CLI)
 - [x] **Phase 2:** On-chain MAYO verification — pure-Rust `junoclaw-mayo-verify` crate, `#![no_std]`, wasm32-compatible
 - [x] **Phase 3:** Integrate MAYO into `jclaw-credential` — `Bud` with `mayo_pk`, `VerifyMayoAttestation`, `MayoPkHash` query
 - [ ] **Phase 4:** MAYO-signed content attestations in `moultbook-v0`
-- [ ] **Phase 5:** MAYO-3 / MAYO-5 support — streaming `expand_pk` for larger parameter sets (L3/L5 security)
+- [x] **Phase 5:** MAYO-3 / MAYO-5 support — L3/L5 verified on-chain (457k/799k gas pure-Wasm; precompile 257k/361k). Done 2026-06-17.
 - [ ] **Phase 6:** ZK-proof of MAYO verification — Groth16/BN254 circuit for cross-chain portability
 - [ ] **Phase 7:** IBC cross-chain MAYO signatures for PQC-secure relay
 

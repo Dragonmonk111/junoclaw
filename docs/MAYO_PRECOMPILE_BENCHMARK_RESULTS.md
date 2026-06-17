@@ -21,6 +21,14 @@ The precompile advantage scales with NIST level: the heavier the verification, t
 more work moves from Wasm-metered instructions to the native host function. MAYO-5
 (NIST Level 5, the headline parameter set) verifies **2.21× cheaper** on-chain.
 
+> **Reproduced 2026-06-17.** After a full devnet reset (`docker compose down -v` +
+> `wsl --shutdown` + relaunch), a fresh-chain `FRESH=1` re-run reproduced every
+> number within ~0.03% (pure/precompile: L1 355,932/310,391 · L3 456,644/257,371 ·
+> L5 798,137/360,902). The 2026-06-14 run above is preserved at
+> `deploy/mayo-devnet-benchmark-results.prev.json`; the live results are in
+> `deploy/mayo-devnet-benchmark-results.json`. This also served as the end-to-end
+> stability proof for the reset devnet (16 txs over ~1 min, all included).
+
 ## Bud (child + PK-hash store) gas
 
 | Variant | Pure-Wasm Bud | Precompile Bud |
