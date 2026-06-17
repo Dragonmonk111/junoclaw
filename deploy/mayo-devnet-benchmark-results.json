@@ -3,40 +3,40 @@
   "flavours": {
     "pure": {
       "codeId": 1,
-      "wasmBytes": 378418,
-      "storeGas": "2455973",
+      "wasmBytes": 472512,
+      "storeGas": "2951740",
       "address": "juno14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9skjuwg8",
-      "initGas": "179864",
+      "initGas": "180464",
       "variants": {
         "mayo2": {
           "nistLevel": 1,
           "pkBytes": 4912,
           "sigBytes": 186,
-          "child": "juno1945su8pmutjrvz74m43jr3jraw4yrj0tkv9k3c",
-          "budGas": "334420",
-          "budTx": "046B0ADE3DA3200610F48A9B93D693A7FC278BD15F56F3150B087EB774FA580C",
-          "verifyGas": "355806",
-          "verifyTx": "0A24D1C1C835013F14C72C39332492C4AF2F050308C8C37BF7640E23A9C4A88D"
+          "child": "juno1c4vl2wsv6vh2zsgs927ez8u3mlsfm6qnpsm4ys",
+          "budGas": "335779",
+          "budTx": "87DCCD0AFF562E4678464C13D9C298FD7044CCD5380E37B93B7D08A4EE40002F",
+          "verifyGas": "355932",
+          "verifyTx": "16A2F385D99FD8D2E775EDDEE09D7C9A22F33E6A2A20F90F6892B237A288993C"
         },
         "mayo3": {
           "nistLevel": 3,
           "pkBytes": 2986,
           "sigBytes": 681,
-          "child": "juno1k4w9y57hmw4redm50ld8a28fyrpkl3reyh58jh",
-          "budGas": "264601",
-          "budTx": "8B9A98942ACE278699B7865B38EB8E32426F2011898E2D1639369A2F8D1CD35E",
-          "verifyGas": "456682",
-          "verifyTx": "EEC3C2EAD44A371379CDFAD835A00C69FD944F125A0B7E1A81BEB7DF1D0225CB"
+          "child": "juno1xgf96uxnuz9x96w3pdn3t7ee36uwthfmjapgs3",
+          "budGas": "265923",
+          "budTx": "977DBFC6AE6928AA22229AE42A98CCC7A8B73B96E1E98F942F66DB8F5D6354E5",
+          "verifyGas": "456644",
+          "verifyTx": "B0774DA6592FB558818A159521E83AD04652498F079F3D5CF40A122AFB58EAD5"
         },
         "mayo5": {
           "nistLevel": 5,
           "pkBytes": 5554,
           "sigBytes": 964,
-          "child": "juno1qss9rmw59l0lzd9zx463adj057mlfa6vhyagx2",
-          "budGas": "359994",
-          "budTx": "77C294E138E3EB8CBE432AA4021361076DA645A07208906090EF040F8182CAA6",
-          "verifyGas": "798214",
-          "verifyTx": "7AE7442534D34AC7C6861A0B059B51735996E949AAE06FB6821DF5E291D28DE5"
+          "child": "juno1aj8hen4ttv7vrhzpxqahrwq0tycntu57gvf6d8",
+          "budGas": "361365",
+          "budTx": "9152F7733DEF0BEA7CC26E45FA3C685BA372547C486AAEC5F81EC382FD87EFD5",
+          "verifyGas": "798137",
+          "verifyTx": "724A89722805394766B1C2DFEEE071B2D2F6020D5C8B1F35CFCEDB8058FA3077"
         }
       }
     },
@@ -45,37 +45,37 @@
       "wasmBytes": 289468,
       "storeGas": "1974163",
       "address": "juno1nc5tatafv6eyq7llkr2gv50ff9e22mnf70qgjlv737ktmt4eswrq68ev2p",
-      "initGas": "180128",
+      "initGas": "180098",
       "variants": {
         "mayo2": {
           "nistLevel": 1,
           "pkBytes": 4912,
           "sigBytes": 186,
-          "child": "juno13p4gwm0rkmpqg3f3nn83j6sklpvqpzzx42el5y",
-          "budGas": "334498",
-          "budTx": "65EBF9368719E87EBC532A514A104F69143E6FB2E60CCD027D4F44C538023C65",
-          "verifyGas": "310394",
-          "verifyTx": "026D59342C482C906668AACA83CA49BDF3CB45DC1E37D69F0428DB978D5A4DB7"
+          "child": "juno15at6xl9xm9yj78rz0cldkfrmh6ygxpdtjhxrrt",
+          "budGas": "334435",
+          "budTx": "A81BBCDAA75D1C6DFF481659728A190D9354E9B446B8B47B56A926B218F278C3",
+          "verifyGas": "310391",
+          "verifyTx": "ECB833396E91A87583E2AB9480139112F49B0C3E0D928D545805CF37FF7A6BEB"
         },
         "mayo3": {
           "nistLevel": 3,
           "pkBytes": 2986,
           "sigBytes": 681,
-          "child": "juno1zhrxarudhy5n3gzvz6lcdkxgw0vt9umpsypk5m",
-          "budGas": "264679",
-          "budTx": "672A3092621B27B1E40044C6976ED64806DBC74068644629F3D6B5C689E8C70F",
-          "verifyGas": "257374",
-          "verifyTx": "F251231312CEA43E487C7AD711DB0CE62FBAFE0BC0C000FCFD002833042FE360"
+          "child": "juno1d2me5jsmshn9634zcte8fxctqs80zkcgpm3l4d",
+          "budGas": "264616",
+          "budTx": "124658458D9E4E16A6BE861319692852F24F6A4F4E15851393AF9F841EBE8F69",
+          "verifyGas": "257371",
+          "verifyTx": "5AA33A384F73CBD62E32B68724A54DF9FD3E041F4515A56B79B8CBD7CD683218"
         },
         "mayo5": {
           "nistLevel": 5,
           "pkBytes": 5554,
           "sigBytes": 964,
-          "child": "juno1lda2kjn5xpywpzfjfmvkjp4nnwzp0ulmc8gh70",
-          "budGas": "360072",
-          "budTx": "469490C0AB3A1E3DEA719589E96EAE423B85394812409E2B5F3684ECE615C393",
-          "verifyGas": "360904",
-          "verifyTx": "42F95E319207379300501AFD931945081383212AE4EBCA7F5D78646E617AECDD"
+          "child": "juno1qx6gx9z8ap6k0mn8g8nknfs6vvxkyf95wvwj4v",
+          "budGas": "360009",
+          "budTx": "486E6954E308DF1BEB00B2FE97D62BEF5B6278C17E517020089985DE6626B581",
+          "verifyGas": "360902",
+          "verifyTx": "E233BBC5D951899FE3FD07D6C55C1CADFED8C4043E62EA0260CEA4193FD91032"
         }
       }
     }

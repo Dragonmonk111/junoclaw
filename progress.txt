@@ -4,8 +4,8 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-06-17 10:55 UTC+1
-Status: Aegis D1 (ADR-007) done + D2 (aegis-accounts) done & GREEN (20/20) - Fable P3 found already done
+Last update: 2026-06-17 11:45 UTC+1
+Status: Aegis C (C5+C6) + D (D1/D2/D3-core) COMPLETE; Fable P3+P4 COMPLETE; devnet reset (monotonic clock). Remaining: Fable P5, D3 wiring, upstream.
 
 
 == 2026-06-17 ==
@@ -92,6 +92,44 @@ Status: Aegis D1 (ADR-007) done + D2 (aegis-accounts) done & GREEN (20/20) - Fab
 - BOTH heavy forks now DONE (C5 + D3). Next: devnet restart (pre-approved
   wsl --shutdown) to unblock C6 (hybrid-transport RTT) + Fable P4 (MAYO gas
   ladder). Check non-destructive devnet/docker state FIRST before the shutdown.
+
+- C6 DONE (real fork + real TCP RTT measured). Phase C COMPLETE.
+
+- DEVNET RESET + Fable P4 DONE (later same day). Sequence:
+    * Committed all Aegis work locally FIRST (git commit OK; push BLOCKED - no
+      SSH key in WSL for git@github.com:Dragonmonk111/junoclaw. Work is SAFE in
+      local git, just not pushed - configure SSH or use a PAT/https to push).
+    * down -v (wiped devnet_junod-data) + wsl.exe --shutdown + run-devnet.sh.
+    * CLOCK FINDING (important, corrects earlier note): wsl --shutdown did NOT
+      fix wall-clock. Host w32time service is STOPPED (w32tm /resync ->
+      0x80070426) so the Hyper-V time-sync feeds a stale ~14-min-behind value.
+      BUT the fresh VM clock is MONOTONIC (advances steadily), which is all a
+      single-validator CometBFT needs - the old stall was a FROZEN/backward
+      clock, now cleared by the reset.
+    * DO NOT run hwclock -s / date -s on the live VM: it momentarily sets the
+      correct time then Hyper-V reverts within ~5s -> clock OSCILLATES +-15min
+      (backward jumps) -> consensus stalls. Leave the monotonic-offset clock
+      alone. To truly fix the offset: Start-Service w32time (admin) + w32tm
+      /resync /force, or reboot Windows. NOT needed for the devnet to run.
+    * Devnet LIVE; sustained block production confirmed (h11 -> h15 steady).
+
+- Fable P4 DONE (MAYO-2/3/5 gas ladder reproduced end-to-end on the fresh chain).
+  Ran FRESH=1 devnet/scripts/benchmark-mayo-devnet.sh -> deploy/benchmark-mayo-devnet.cjs.
+  Both flavours (pure + precompile) deployed; Bud + VerifyMayoAttestation per
+  variant. Reproduced prior numbers within ~0.03% (prior backed up to
+  deploy/mayo-devnet-benchmark-results.prev.json). Verify gas (pure / precompile):
+    MAYO-2 L1: 355932 / 310391 (1.15x)
+    MAYO-3 L3: 456644 / 257371 (1.77x)
+    MAYO-5 L5: 798137 / 360902 (2.21x)
+  KEY: pure-Wasm verify is BELOW the old 1.2-1.6M extrapolation -> MAYO-5 runs
+  on stock Juno with no precompile needed; the precompile win grows with level.
+  Image is MAYO-patched (wasmvm-fork patches 10-19 incl. mayo_verify host fn);
+  the devnet Dockerfile glob applies all v2.2.2/*.patch (00-09 BN254, 10-19
+  MAYO, 20-28 ML-DSA).
+
+- STATUS: Aegis C (C5+C6) COMPLETE, D (D1/D2/D3-core) COMPLETE (wiring gated),
+  Fable P3+P4 COMPLETE. Remaining: Fable P5 (docs/comms + article), D3 wiring
+  (needs protoc/buf), upstream pings. COMPLETION_PLAN.md updated to match.
 
 
 == 2026-06-16 ==

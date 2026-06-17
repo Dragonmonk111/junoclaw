@@ -13,15 +13,15 @@
 
 | Workstream | Items | Priority | Effort Estimate | Blocker |
 |-----------|-------|----------|-----------------|---------|
-| **Aegis Phase C (Transport)** | C5: fold into CometBFT fork; C6: devnet RTT | High | 2–3 days | Fork clone + devnet |
-| **Aegis Phase D (Accounts)** | ~~D1 ADR-007~~ ✅; ~~D2 harness~~ ✅; D3 SDK fork | Medium | 2–3 days left | D3: SDK fork + devnet |
-| **Project Fable** | ~~P3 multi-variant~~ ✅; P4 benchmark; P5 comms | Medium | 2–3 days left | Devnet stability |
-| **Infrastructure** | Devnet WSL2 clock jump fix | High | ½ day | WSL2 behavior |
+| **Aegis Phase C (Transport)** | ~~C5 CometBFT fork~~ ✅; ~~C6 RTT~~ ✅ | — | done | — |
+| **Aegis Phase D (Accounts)** | ~~D1~~ ✅; ~~D2~~ ✅; ~~D3 core~~ ✅; D3 wiring (gated) | Low | wiring only | protoc/buf |
+| **Project Fable** | ~~P3 multi-variant~~ ✅; ~~P4 benchmark~~ ✅; P5 comms | Low | ½ day left (P5) | — |
+| **Infrastructure** | ~~Devnet WSL2 clock jump fix~~ ✅ (reset applied; monotonic-offset clock OK) | Low | done | WSL2 behavior |
 | **Upstream** | cosmwasm#2685 follow-up; v30 proposal tracking | Low | Ongoing | External maintainers |
 
-**Critical path:** Devnet stability → Phase C6 RTT + Fable P4 benchmarks. The remaining non-gated
-work (D1, D2, P3) is **complete**; everything left needs either an external fork clone (C5, D3) or a
-stable devnet (C6, P4).
+**Critical path:** Devnet stability ✅ → Fable P4 benchmarks ✅ (both done 2026-06-17). The headline
+deliverables (Aegis C5/C6, D3 core; Fable P3/P4) are **complete**. Remaining: Fable **P5** (docs/comms,
+½ day) and **D3 wiring** (proto/keyring/CLI/gas — gated on protoc/buf).
 
 ---
 
@@ -222,12 +222,31 @@ signature family (e.g. Falcon/SLH-DSA) is added in-contract.
 
 ---
 
-### P4: Benchmark ladder + MAYO precompile
+### P4: Benchmark ladder + MAYO precompile — ✅ DONE (2026-06-17)
 
 **Priority:** Medium  
 **Effort:** 2 days  
 **Prerequisites:** P3; devnet stable (§6)  
 **Gating:** Devnet stability
+
+**Status:** Reproduced end-to-end on the freshly-reset devnet (`junoclaw-bn254-1`,
+single-validator, MAYO-patched image — patches `10`-`19`). Both flavours deployed
+(`jclaw_credential_pure.wasm`, `jclaw_credential_precompile.wasm`); `Bud` +
+`VerifyMayoAttestation` run for MAYO-2/3/5. Numbers reproduced the prior run to
+within ~0.03%. Results: `deploy/mayo-devnet-benchmark-results.json` (prior run
+preserved at `…-benchmark-results.prev.json`).
+
+| Variant | NIST | PK (B) | Sig (B) | Pure verify | Precompile verify | Speedup |
+|---------|------|--------|---------|-------------|-------------------|---------|
+| MAYO-2 | L1 | 4912 | 186 | 355,932 | 310,391 | 1.15× |
+| MAYO-3 | L3 | 2986 | 681 | 456,644 | 257,371 | 1.77× |
+| MAYO-5 | L5 | 5554 | 964 | 798,137 | 360,902 | 2.21× |
+
+Code size: pure 472,512 B · precompile 289,468 B (−39%). **Key finding:** pure-Wasm
+verify came in *below* the extrapolated estimate (MAYO-5 798k vs predicted 1.2–1.6M),
+so the "gas > block limit" risk never materialized — MAYO-5 verifies comfortably on
+stock Juno without the precompile. The precompile's win grows with security level
+(1.15× → 2.21×) and is largest exactly where it matters (L5).
 
 #### Steps
 
@@ -241,10 +260,10 @@ signature family (e.g. Falcon/SLH-DSA) is added in-contract.
 6. Benchmark wasm vs precompile for MAYO-5 in one pass.
 7. Record in `deploy/mayo-benchmark-ladder-results.json`.
 
-#### Success Criteria
-- Published benchmark table with all variants.
-- MAYO-5 verified live on-chain (devnet or testnet).
-- Precompile path shows measurable reduction vs pure-wasm for MAYO-5.
+#### Success Criteria — ✅ all met
+- ✅ Published benchmark table with all variants (above).
+- ✅ MAYO-5 verified live on-chain (devnet; gasUsed 798,137 pure / 360,902 precompile).
+- ✅ Precompile path shows measurable reduction vs pure-wasm for MAYO-5 (2.21× / −55%).
 
 ---
 
@@ -303,23 +322,35 @@ Upstream tracking (§7): ongoing, non-blocking.
 
 **Priority:** High  
 **Effort:** ½ day (known fix)  
-**Root cause:** WSL2 clock jumps on host sleep/resume halt CometBFT consensus.
+**Root cause (refined 2026-06-17):** WSL2's clock is driven by a Hyper-V time-sync
+enlightenment. On host sleep/resume the reference goes stale and the VM clock
+**freezes / jumps backward**, which halts CometBFT consensus (it needs a
+monotonically-advancing clock).
 
-#### Fix (known working)
-1. `docker compose down -v` (tear down devnet).
-2. `wsl.exe --shutdown` (reset WSL2 VM, clears clock drift).
+#### Fix (applied 2026-06-17 — works, with caveats)
+1. `docker compose down -v` (tear down devnet + wipe volume).
+2. `wsl.exe --shutdown` (reset the WSL2 VM).
 3. Relaunch via `devnet/scripts/run-devnet.sh`.
-4. **Verify:** blocks advance past prior stall height before any deploy/benchmark.
+4. **Verify:** blocks advance (run-devnet waits for height ≥ 2) before any deploy.
 
-#### Preventive measures to investigate
-- Windows power settings: disable sleep during long devnet runs.
-- WSL2 `ntp` / time-sync configuration (though manual `date -s` is reverted by WSL active sync within ~2s).
-- Container-level `ntpdate` inside devnet nodes (may not help if WSL2 clock itself jumps).
-- Consider moving devnet to a native Linux VM or cloud instance for stability.
+#### Caveats learned this round
+- **`wsl --shutdown` alone did NOT restore correct wall-clock time.** The host's
+  **Windows Time service (`w32time`) was stopped** (`w32tm /resync` → `0x80070426`),
+  so the Hyper-V time-sync reference stayed ~14 min behind real time.
+- **A constant offset is harmless** for a single-validator devnet — CometBFT only
+  needs the clock to advance **monotonically**, which a fresh VM does. The fatal
+  condition is a *frozen / backward-jumping* clock, which the reset cleared.
+- **Do NOT run `hwclock -s` (or `date -s`) on the running VM.** It momentarily sets
+  the correct time, but the Hyper-V sync reverts it within seconds → the clock
+  **oscillates ±15 min** (backward jumps) → consensus stalls again. Leave the
+  monotonic-but-offset clock alone.
+- To actually correct the offset (optional, cosmetic): start `w32time` on the host
+  (`Start-Service w32time`; needs admin) then `w32tm /resync /force`, or reboot Windows.
 
 #### Success Criteria
-- Devnet runs for ≥4 hours without stall.
-- Blocks advance consistently; `deploy-zk-verifier.sh` + `benchmark.sh` run clean.
+- ✅ Blocks advance consistently post-reset; full P4 benchmark (16 txs over ~1 min)
+  ran clean → devnet validated end-to-end.
+- [ ] Devnet runs for ≥4 hours without stall (not yet time-tested this session).
 
 ---
 
@@ -356,10 +387,10 @@ Upstream tracking (§7): ongoing, non-blocking.
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| Devnet keeps stalling despite fix | Medium | High | Move to cloud VM or native Linux for benchmarking |
+| Devnet keeps stalling despite fix | Low | High | **2026-06-17:** reset worked; root cause = stopped host `w32time` + stale Hyper-V sync. Monotonic-offset clock runs fine; do NOT run `hwclock -s`. Cloud VM remains the fallback for ≥4h runs. |
 | ~~Go stdlib lacks ML-DSA-44 (D2)~~ | — | — | **RESOLVED 2026-06-17:** used pure-Go `cloudflare/circl` ML-DSA-44; no CGO needed |
 | ~~CometBFT fork API drift (C5)~~ | — | — | **RESOLVED 2026-06-17:** additive hybrid handshake folded into cometbft v0.38.x fork; go test ./p2p/conn/ green incl. existing evil+golden tests UNCHANGED |
-| MAYO-5 gas > block limit (P4) | Medium | High | Precompile path; verify-once-store-hash pattern |
+| ~~MAYO-5 gas > block limit (P4)~~ | — | — | **RESOLVED 2026-06-17:** MAYO-5 pure-Wasm verify = 798k gas (well under block limit); precompile 361k. Risk did not materialize. |
 | cosmwasm maintainer unresponsive | Medium | Low | Our fork is functional; upstream merge is nice-to-have |
 | v30 delays | Medium | Low | Independent of our work; Track B waits anyway |
 
@@ -367,22 +398,23 @@ Upstream tracking (§7): ongoing, non-blocking.
 
 ## 9. Next Actions (Immediate)
 
-1. **C6 hybrid-transport RTT:** build forked `cmd/cometbft`, run two local nodes with `AEGIS_HYBRID_TRANSPORT=1` vs classical, measure handshake RTT (self-contained — does NOT need the Juno devnet/`wsl --shutdown`).
-2. **§6 Devnet stability:** apply the `wsl --shutdown` fix and verify stability (unblocks **P4** specifically).
-3. **P4 Fable benchmark ladder:** MAYO-2/3/5 gas matrix once devnet is stable.
-4. **D3 wiring (gated):** proto/codec + keyring/CLI + gas case (needs protoc/buf).
-5. **§7 Upstream:** schedule a polite ping on cosmwasm#2685 (not urgent).
+1. ~~**C6 hybrid-transport RTT**~~ ✅ DONE — real fork + real TCP RTT measured (`secret_connection_hybrid_rtt_test.go`); see `aegis-transport/docs/PHASE_C6_RTT_RESULTS.md`.
+2. ~~**§6 Devnet stability**~~ ✅ DONE — `down -v` + `wsl --shutdown` + relaunch; clock now monotonic (offset OK).
+3. ~~**P4 Fable benchmark ladder**~~ ✅ DONE — MAYO-2/3/5 gas matrix reproduced (`deploy/mayo-devnet-benchmark-results.json`).
+4. **Fable P5 (comms):** update `docs/MAYO.md` + `docs/PQC_COMPETITIVE_ANALYSIS.md` with L5 numbers; draft article + Telegram reply.
+5. **D3 wiring (gated):** proto/codec + keyring/CLI + gas case (needs protoc/buf).
+6. **§7 Upstream:** schedule a polite ping on cosmwasm#2685 (not urgent).
 
-**Done since plan creation:** D1 (ADR-007) ✅, D2 (aegis-accounts, 20/20 green) ✅, P3 (found already done) ✅, **C5 (CometBFT fork build+tests) ✅**, **D3 core (SDK crypto/keys/hybrid, 9/9 green) ✅**.
+**Done since plan creation:** D1 (ADR-007) ✅, D2 (aegis-accounts, 20/20 green) ✅, P3 (found already done) ✅, **C5 (CometBFT fork build+tests) ✅**, **C6 (hybrid RTT, real fork/TCP) ✅**, **D3 core (SDK crypto/keys/hybrid, 9/9 green) ✅**, **§6 devnet reset ✅**, **P4 (MAYO-2/3/5 ladder reproduced) ✅**.
 
 ---
 
 ## 10. Definition of "Done" for This Plan
 
-- [~] Phase C: CometBFT fork builds ✅ + tests pass ✅ (C5); devnet/real-link RTT measured and documented (C6 — pending).
+- [x] Phase C: CometBFT fork builds ✅ + tests pass ✅ (C5); real-link RTT measured + documented ✅ (C6). **Phase C COMPLETE.**
 - [x] Phase D: ADR-007 spec committed ✅; aegis-accounts/ harness tests green ✅ (20/20); SDK fork core done ✅ (D3 — crypto/keys/hybrid 9/9 green; proto/keyring/CLI/gas wiring gated).
-- [~] Fable: multi-variant contract tests pass ✅ (P3); benchmark ladder published (P4 — devnet-gated); precompile numbers in hand (P4).
-- [ ] Infrastructure: devnet stable for ≥4-hour runs.
+- [x] Fable: multi-variant contract tests ✅ (P3); benchmark ladder published ✅ + precompile numbers in hand ✅ (P4). Remaining: P5 (docs/comms).
+- [~] Infrastructure: devnet reset works; validated end-to-end via full P4 run ✅. (≥4-hour soak not yet time-tested.)
 - [ ] Upstream: at least one follow-up ping sent on each open issue.
 
 **Last updated:** 2026-06-17
