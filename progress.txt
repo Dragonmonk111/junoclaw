@@ -4,8 +4,115 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-05-31 22:45 UTC+1
-Status: 12 crates - 203 tests green - uni-7 wired to STAVR - Nostr daemon shippable
+Last update: 2026-06-17 10:55 UTC+1
+Status: Aegis D1 (ADR-007) done + D2 (aegis-accounts) done & GREEN (20/20) - Fable P3 found already done
+
+
+== 2026-06-17 ==
+
+- Deep re-audit of junoclaw vs memory. KEY CORRECTION: Project Fable Phase 3
+  (multi-variant contract) was ALREADY DONE, not pending. jclaw-credential
+  dispatches MAYO-1/2/3/5 (contract.rs ~296-306) + ML-DSA-44/65/87 (~383-388);
+  tests.rs has mayo3/mayo5/wrong-variant + mldsa 44/65/87 static-vector tests
+  (~33 tests). Design uses variant-agnostic SHA-256(pk) + variant at verify time
+  (cleaner than the planned stored variant_tag). PqcVerifier trait deferred as
+  unnecessary over-engineering on a working tested contract. Memory updated.
+
+- Aegis Phase D / D1 DONE: wrote docs/ADR-007-PQC-HYBRID-ACCOUNTS.md
+  (hybrid secp256k1 + ML-DSA-44 accounts; both-must-verify; 20-byte address via
+  domain-separated address.Hash; HD = BIP-44 secp + HKDF ML-DSA seed; opt-in;
+  SignMode/AnteHandler/gas; alternatives + consequences). Matches ADR-006 style.
+
+- Aegis Phase D / D2 DONE + VERIFIED: created aegis-accounts/ Go module
+  (go 1.24). Files: hybrid.go (keygen/sign/verify/address), bip32.go (BIP-32 CKD
+  for the classical half), hd.go (mnemonic -> hybrid via bip39 + crypto/hkdf),
+  bech32.go (in-tree BIP-173), 3 test files, README. Deps: cloudflare/circl
+  (ML-DSA-44), decred secp256k1 v4, cosmos/go-bip39.
+    * go vet clean, go test ./... = 20/20 PASS in WSL go1.24.
+    * Found+fixed a one-NIBBLE typo in my BIP-32 expected constant (a8 vs a2);
+      code was correct (matched 31.5/32 bytes -> avalanche proves typo not bug).
+      Rewrote TestBIP32Vector1 to derive expected from canonical xprv via an
+      in-test base58check decoder (checksum-protected, authoritative, non-circular).
+    * Headline test TestHybridBothHalvesRequired proves forgery needs BOTH
+      primitives (foreign classical OR foreign PQ half is rejected).
+  D2 is the source of truth for ADR-007 crypto; D3 (SDK fork) ports it 1:1.
+
+- Confirmed Fable P3 by running the suite: jclaw-credential 33/33 tests PASS
+  (incl. mayo3/mayo5/wrong-variant + mldsa 44/65 valid-sig + mldsa_static_vectors).
+
+- Aegis Phase D / D3 PREP DONE: wrote aegis-accounts/PORTING.md — function-by-
+  function map of the harness onto a Cosmos SDK fork (the D3 analogue of
+  secretconn/PORTING.md). Key insight documented: Cosmos's SigVerificationDecorator
+  calls PubKey.VerifySignature, so a hybrid VerifySignature requiring BOTH halves
+  needs NO new decorator and NO new SignMode — only a gas case. The actual fork
+  (clone SDK, proto key types, keyring algo, CLI, integration test) stays gated.
+
+- No go.work in repo (aegis-transport + aegis-accounts are independent modules).
+  No CometBFT version pinned anywhere in junoclaw (app-layer only) -> C5/D3 actual
+  forks need an external clone + version info not present here.
+
+- Updated COMPLETION_PLAN.md + todo list. Remaining Aegis/Fable work is now all
+  devnet-/fork-gated: C5 (CometBFT fork) + C6 (RTT), D3 (SDK fork), Fable P4
+  (benchmark ladder). Article (tweet + Medium w/ Midjourney prompts) queued for
+  after those land.
+
+- User steer: do the heavy forks (C5/D3) FIRST, then restart devnet for C6+P4.
+
+- Aegis C5 DONE (CometBFT fork builds + tests green). Shallow-cloned cometbft
+  v0.38.x -> aegis-forks/cometbft (gitignored; has own .git). ADDITIVE patch:
+    * p2p/conn/secret_connection_hybrid.go: MakeSecretConnectionHybrid (X25519 +
+      ML-KEM-768) reusing package internals + ChaCha20 framing. Combiner =
+      SHA256(dh||ssPQ) feeds the EXISTING deriveSecrets so the classical golden
+      vectors are untouched. ek's + ct bound into the Merlin transcript.
+    * secret_connection_hybrid_test.go: handshake + AEAD read/write + combiner-
+      binds-both. go.mod bumped 1.22.11 -> 1.24.0 (stdlib crypto/mlkem, no new dep).
+    * p2p/transport.go upgradeSecretConn: env-gated AEGIS_HYBRID_TRANSPORT=1 ->
+      hybrid path (one binary, A/B for C6).
+    * VERIFIED: go test ./p2p/conn/ all PASS incl. existing evil + golden tests
+      UNCHANGED (proof the patch is additive/non-regressive); go build ./p2p/...
+      OK; go vet ./p2p/conn/ clean. Notes: aegis-transport/docs/PHASE_C5_FORK_RESULTS.md.
+  NOTE: read_file/edit/write work on the gitignored fork, but grep_search/
+  code_search/find_by_name are BLOCKED by .gitignore -> use shell grep/rg instead.
+
+- Aegis D3 core DONE (Cosmos SDK fork builds + tests green). Shallow-cloned
+  cosmos-sdk release/v0.50.x -> aegis-forks/cosmos-sdk (gitignored; own .git).
+    * NEW crypto/keys/hybrid package: PrivKey/PubKey implement cryptotypes.
+      PrivKey/PubKey. Classical half COMPOSES the SDK's own crypto/keys/secp256k1
+      (wire-identical); PQ half = cloudflare/circl v1.6.1 ML-DSA-44 (go get added).
+    * KEY DESIGN: PubKey.VerifySignature == true IFF BOTH halves verify -> plugs
+      into the EXISTING x/auth AnteHandler with NO new decorator/SignMode (only a
+      gas case). Address via SDK types/address.Hash + domain tag. PubKey 1345B,
+      Sig 2484B.
+    * circl v1.6.1 compiles fine under the SDK's go1.22.11 toolchain (no go bump).
+    * VERIFIED: go test ./crypto/keys/hybrid/ 9/9 PASS (incl. both-halves-required,
+      deterministic-from-seeds); go vet clean. Doc: aegis-accounts/docs/PHASE_D3_FORK_RESULTS.md.
+  D3 remaining (gated on protoc/buf + devnet): proto/codec registration, keyring
+  algo + CLI, gas case. Documented in the D3 results doc.
+
+- BOTH heavy forks now DONE (C5 + D3). Next: devnet restart (pre-approved
+  wsl --shutdown) to unblock C6 (hybrid-transport RTT) + Fable P4 (MAYO gas
+  ladder). Check non-destructive devnet/docker state FIRST before the shutdown.
+
+
+== 2026-06-16 ==
+
+- Full status audit performed against all memory + upstream repos.
+- Created docs/COMPLETION_PLAN.md — consolidated plan for all remaining work:
+    * Track C: C5 (CometBFT fork patch) + C6 (devnet RTT measurement)
+    * Track D: ADR-007 spec + aegis-accounts/ harness + SDK fork integration
+    * Track Fable: P3 (multi-variant contract) + P4 (benchmark ladder) + P5 (comms)
+    * Infrastructure: devnet WSL2 stability fix
+    * Upstream: cosmwasm#2685, wasmvm#735, juno#1202 tracking
+- Created .windsurf/workflows/completion-plan.md for step-by-step execution.
+- TODO list refreshed: 10 items, priorities assigned, dependencies mapped.
+- Next immediate actions (parallel, no blockers):
+    1. Apply devnet stability fix (wsl --shutdown → relaunch → verify)
+    2. Start C5 CometBFT fork patch application
+    3. Draft ADR-007 spec
+    4. Extend jclaw-credential for MayoVariant
+
+- Risk register captured in plan: Go stdlib ML-DSA availability for D2,
+  CometBFT API drift for C5, MAYO-5 gas for P4, devnet stability.
 
 
 == 2026-05-31 ==

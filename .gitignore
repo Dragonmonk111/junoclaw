@@ -4,6 +4,10 @@ target-wsl/
 *.wasm
 artifacts/
 
+# Aegis upstream fork clones (CometBFT / Cosmos SDK) — large external repos
+# cloned locally to apply the Phase C/D patches; tracked in their own git, not here.
+aegis-forks/
+
 # Build logs
 devnet/*.log
 

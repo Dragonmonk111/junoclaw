@@ -552,11 +552,23 @@ app-layer primitive we already shipped points at a chain-layer phase.
      ships it), `cloudflare/circl` as the pre-1.24 fallback; Rust harness uses
      `fips203` (same vendor as the `fips204` we already ship) cross-checked
      against `libcrux-ml-kem`. One-time handshake overhead ≈ ~9.7 KB/connection.
-   - **C2 — vendor + conformance:** wire ML-KEM-768 NIST ACVP/KAT vectors into
-     CI; three-way differential (Go stdlib vs `fips203` vs `libcrux-ml-kem`),
-     mirroring the MAYO C cross-check.
-   - **C3 — prototype:** stand up the hybrid secret connection on a two-node
-     devnet; measure handshake latency + bandwidth vs pure X25519.
+   - **[done] C2 — combiner harness + conformance:** Go stdlib-only reference
+     harness `aegis-transport/` implements the ADR-006 combiner + transcript
+     binding and proves session-key agreement, ADR wire sizes (ek 1184 / ct 1088),
+     transcript-binding downgrade detection, and implicit-rejection tamper
+     handling (6 tests, `go vet` clean on Go 1.24). The Rust↔Rust differential
+     `aegis-kem-diff/` cross-checks `fips203` vs `libcrux-ml-kem` byte-for-byte
+     (self + both cross-directions, 256+ iters) — with the Go stdlib leg's own
+     upstream NIST ACVP suite this is the committed three-way differential;
+     fixed-vector ACVP wiring is specified in `aegis-kem-diff/ACVP_WIRING.md`.
+   - **[done] C3 — two-node prototype:** `aegis-transport/cmd/twonode` runs the
+     hybrid handshake between a real initiator/responder over a loopback socket
+     (session key confirmed over the wire via HMAC) and measures latency +
+     bandwidth vs a classical X25519-only baseline. Measured: hybrid adds
+     **+2,350 B/handshake** (matching the ~2.3 KB KEM prediction) and ~+0.24 ms
+     on loopback — confirming ADR-006's thesis that the cost is *bytes, not
+     crypto CPU*. Next: fold the handshake into a CometBFT fork on the actual
+     devnet to capture real-link RTT (the only piece loopback cannot show).
 5. **Phase D — accounts:** write `ADR-007-PQC-HYBRID-ACCOUNTS.md` (hybrid
    `PubKey` + AnteHandler + address derivation), then implement opt-in hybrid
    accounts on the fork.

@@ -1,0 +1,25 @@
+[package]
+name = "aegis-kem-diff"
+version = "0.1.0"
+edition = "2021"
+authors = ["Dragonmonk / VairagyaNodes"]
+description = "Project Aegis Phase C/C2b — ML-KEM-768 differential conformance oracle: fips203 vs libcrux-ml-kem, byte-for-byte cross-implementation interop per ADR-006."
+license = "Apache-2.0"
+publish = false
+
+[[bin]]
+name = "aegis-kem-diff"
+path = "src/main.rs"
+
+[dependencies]
+# Primary Rust impl — same author/audit posture as the `fips204` (ML-DSA) crate
+# the rest of Aegis vendors (cosmwasm-crypto-mldsa). Pure Rust, no_std-capable.
+fips203 = "0.4"
+# Formal-verification oracle — Cryspen HACL*/F*-verified ML-KEM (ADR-006 §6).
+libcrux-ml-kem = { version = "0.0.9", features = ["mlkem768"] }
+# RNG only for seeding the two impls' explicit randomness inputs.
+rand = "0.8"
+
+# Isolated from the root workspace (which lists its members explicitly and
+# excludes standalone crates), so `cargo build`/`test` here is independent.
+[workspace]
