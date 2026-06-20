@@ -39,7 +39,7 @@ Building a BFT stack from scratch with PQC at the foundation is a 12-18 month pr
 | Aspect | Details |
 |--------|---------|
 | **Layer** | Smart contract (CosmWasm wasm32) |
-| **Algorithm** | MAYO-1/2/3/5 (NIST Round 4 candidate) — all NIST levels 1/3/5 |
+| **Algorithm** | MAYO-1/2/3/5 (NIST additional-signatures candidate) — all NIST levels 1/3/5 |
 | **Verifier** | Pure Rust, `#![no_std]`, zero dependencies |
 | **Deployment** | Upload wasm → instantiate. Works on ANY CosmWasm chain today. |
 | **Gas cost** | 356k (L1) / 457k (L3) / 799k (L5) per `VerifyMayoAttestation` — measured |
@@ -118,6 +118,21 @@ Contract: `juno1zj39neajvynzv4swf3a33394z84l6nfduy5sntw58re3z7ef9p4q3w4y47`
 | MAYO-3 | L3 | 2,986 | 681 | 265,377 | 457,221 | 0.0343 JUNOX |
 | MAYO-5 | L5 | 5,554 | 964 | 360,814 | 798,803 | 0.0599 JUNOX |
 
+### MAYO-5 vs Falcon-1024 at NIST Level 5
+
+| Property | Falcon-1024 (Marius) | MAYO-5 (JunoClaw) |
+|----------|---------------------|-------------------|
+| **NIST Level** | 5 | 5 |
+| **NIST status** | Selected (FIPS 206) | Additional signatures (in process) |
+| **Signature size** | 1,280 B | **964 B** (25% smaller) |
+| **Public key size** | 1,792 B | 5,554 B |
+| **Verify gas (pure-Wasm)** | N/A (native) | 798,803 |
+| **Verify gas (precompile)** | ~10,000 (native) | 360,902 |
+| **Deployability** | New L1 (6-12 months) | **Live on uni-7 today** |
+| **Wasm-friendly** | Unknown (float/FFT) | Yes (pure integer, no_std) |
+
+**Takeaway:** At NIST Level 5, MAYO-5 signatures are 25% smaller than Falcon-1024's. The tradeoff is a larger public key (5,554 B vs 1,792 B), but since PKs travel in tx payload and are hash-stored on-chain (32 B), this is acceptable for attestation use cases. Gas cost with precompile (361k) is within 2× of a complex DeFi swap — and it works on an existing chain today.
+
 **Cost-per-attestation formula:** `verify_gas × 0.075 ujunox × JUNO_price / 10^6`.
 At $0.10/JUNO: **L1 ≈ $0.0027, L3 ≈ $0.0034, L5 ≈ $0.0060** per quantum-safe
 attestation. At $0.30/JUNO the worst case (L5) is still under 2 cents.
@@ -133,7 +148,7 @@ attestation. At $0.30/JUNO the worst case (L5) is still under 2 cents.
 - Reproduce: `node deploy/benchmark-mayo-variants.cjs` (idempotent; results in
   `deploy/mayo-benchmark-results.json`).
 
-**Key insight:** Marius chose **one fixed point** (Falcon-1024, L5, native-only). We ship **the whole Pareto frontier** — callers pick L1 for cheap high-frequency attestations or L5 for Falcon-equivalent security, per message, on a chain that exists today.
+**Key insight:** Marius chose **one fixed point** (Falcon-1024, L5, native-only). We ship **the whole Pareto frontier** — callers pick L1 for cheap high-frequency attestations or L5 for Falcon-equivalent security, per message, on a chain that exists today. **MAYO-5 at L5 is live on uni-7 now** — 799k gas pure-Wasm, 361k with precompile — proving NIST Level 5 PQC attestations work on an existing Cosmos chain without any fork.
 
 ---
 
@@ -323,7 +338,7 @@ These are **complementary architectures optimizing for different Pareto points**
 
 | Property | Falcon-1024 (Marius) | MAYO-2 (JunoClaw) |
 |----------|---------------------|-------------------|
-| **NIST Round** | 4 (final) | 4 (final) |
+| **NIST status** | Selected (FIPS 206) | Additional signatures (in process) |
 | **Security basis** | Lattice (NTRU) | Multivariate quadratic (Oil & Vinegar) |
 | **NIST Level** | 5 (highest) | 1 (baseline) |
 | **Signature size** | ~1,280 B | **186 B** (7× smaller) |
@@ -358,4 +373,4 @@ These are **complementary architectures optimizing for different Pareto points**
 
 ---
 
-*Last updated: 2026-06-17 (MAYO precompile measured + reproduced on devnet; Aegis C5/C6/D3-core landed)*
+*Last updated: 2026-06-20 (L5 testnet results added; NIST status corrected; Aegis Phase F consensus-safety verified)*

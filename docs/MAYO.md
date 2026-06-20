@@ -7,12 +7,12 @@ JunoClaw integrates [MAYO](https://pqmayo.org/) (Multivariate quAdratic hash-bas
 | Property | Value |
 |----------|-------|
 | **Security basis** | Oil & Vinegar multivariate quadratic equations |
-| **NIST round** | 4 (final) |
+| **NIST status** | Additional signatures (in process) |
 | **Signature size** | 186–964 bytes (smallest: MAYO-2) |
 | **Public key** | 1,420–5,554 bytes |
 | **Secret key** | 24–40 bytes (compact seed) |
 
-MAYO-2 is optimal for on-chain use: **186-byte signatures** minimize tx gas, at the cost of a larger 4,912-byte public key.
+MAYO-2 is optimal for on-chain use: **186-byte signatures** minimize tx gas, at the cost of a larger 4,912-byte public key. For NIST Level 5 security (equivalent to Falcon-1024), **MAYO-5** offers **964-byte signatures** — smaller than Falcon's 1,280 B — at 799k gas (pure-Wasm) or 361k (precompile).
 
 ## Build Requirements
 
@@ -153,15 +153,25 @@ This prevents cross-protocol signature replay (e.g., a moultbook attestation can
 
 ## Live Testnet Results (uni-7, 2026-06-12)
 
+### MAYO-2 (NIST Level 1)
+
 | Operation | Gas Used | Cost (0.075 ujunox) |
 |-----------|----------|---------------------|
 | Bud (create member + MAYO PK) | 336,659 | ~25.2 ujunox |
 | VerifyMayoAttestation (valid) | 355,771 | ~26.7 ujunox |
 | VerifyMayoAttestation (tampered) | Rejected ✅ | — |
 
+### MAYO-5 (NIST Level 5 — Falcon-1024 equivalent)
+
+| Operation | Gas Used | Cost (0.075 ujunox) |
+|-----------|----------|---------------------|
+| Bud (create member + MAYO PK) | 360,814 | ~27.1 ujunox |
+| VerifyMayoAttestation (valid) | 798,803 | ~59.9 ujunox |
+| VerifyMayoAttestation (tampered) | Rejected ✅ | — |
+
 **Contract**: `jclaw-credential` at `juno1z2w067ptpn2f6zpwt207je0kqeqc2eek7jf4p4dpztf24zncnhzqz5el2r`
 
-**Memory**: Pure-Rust verifier peak ~127 KB in wasm32 (within CosmWasm's 512 KB limit).
+**Memory**: Pure-Rust verifier peak ~151 KB for MAYO-5 in wasm32 (within CosmWasm's 512 KB limit).
 
 ## Devnet Precompile Results (junoclaw-bn254-1, 2026-06-17)
 
@@ -187,7 +197,7 @@ Full write-up + tx hashes: `docs/MAYO_PRECOMPILE_BENCHMARK_RESULTS.md`.
 - [x] **Phase 2:** On-chain MAYO verification — pure-Rust `junoclaw-mayo-verify` crate, `#![no_std]`, wasm32-compatible
 - [x] **Phase 3:** Integrate MAYO into `jclaw-credential` — `Bud` with `mayo_pk`, `VerifyMayoAttestation`, `MayoPkHash` query
 - [ ] **Phase 4:** MAYO-signed content attestations in `moultbook-v0`
-- [x] **Phase 5:** MAYO-3 / MAYO-5 support — L3/L5 verified on-chain (457k/799k gas pure-Wasm; precompile 257k/361k). Done 2026-06-17.
+- [x] **Phase 5:** MAYO-3 / MAYO-5 support — L3/L5 verified on-chain (457k/799k gas pure-Wasm; precompile 257k/361k). All four variants (MAYO-1/2/3/5) cross-checked against C reference. Done 2026-06-17.
 - [ ] **Phase 6:** ZK-proof of MAYO verification — Groth16/BN254 circuit for cross-chain portability
 - [ ] **Phase 7:** IBC cross-chain MAYO signatures for PQC-secure relay
 
