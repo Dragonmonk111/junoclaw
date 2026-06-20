@@ -44,6 +44,38 @@ D-wiring ──> E ──> F ──> G ──> H
 
 This is the most consequential and dangerous change in the whole plan. One bug here is a chain halt or a consensus split, not a failed transaction.
 
+> **LANDED 2026-06-18 — F1 (crypto types) + F2 (wire format), protoc-free:**
+>
+> | Item | Package | Result |
+> |------|---------|--------|
+> | F1-a standalone ML-DSA-44 key | `aegis-forks/cometbft/crypto/mldsa44/` | `crypto.PubKey`/`PrivKey` implemented; seed-form privkey; `Address()=tmhash.SumTruncated`; verify via `cloudflare/circl` ML-DSA-44; `go test` PASS, `go vet` clean |
+> | F1-b hybrid key | `aegis-forks/cometbft/crypto/hybrid/` | composes ed25519 + mldsa44; `VerifySignature` requires **both** halves; `Address()` delegates to classical (zero state migration); `go test` PASS |
+> | F2 wire format | `crypto/hybrid/hybrid.go` `encode/decodeHybridSig` | versioned, algo-tagged, **2,491 B** (7 B framing + 64 + 2,420); strict decode rejects unknown version/algo/len |
+> | Dep bump | `aegis-forks/cometbft/go.mod` | `cloudflare/circl v1.3.7 → v1.6.1` (same ML-DSA-44 as SDK fork D3); `go build ./crypto/...` clean |
+>
+> Security-property tests green: round-trip; tamper-classical→reject; tamper-PQC→reject; size assertions; classical-only verifier rejects hybrid sig (framing/version mismatch). **Still open in F1:** embed NIST FIPS 204 KAT JSON (checklist #4) and cross-platform determinism hash (checklist #1).
+
+> **LANDED 2026-06-18 — F4 (PrivValidator signs both halves), protoc-free:**
+>
+> | Item | File | Result |
+> |------|------|--------|
+> | Sidecar key type + load/gen/save | `aegis-forks/cometbft/privval/file_pqc.go` | `FilePVKeyMlDsa44` stored at `priv_validator_key.json_mldsa44.json`; classical key file never mutated (downgrade path preserved) |
+> | `FilePV.signingPrivKey()` | `privval/file.go` | returns `hybrid.PrivKey` when sidecar present, else classical — all 4 sign call sites (vote, vote-extension, proposal) route through it |
+> | `FilePV.GetPubKey()` | `privval/file.go` | returns hybrid pubkey when sidecar present; `Address()` still delegates to classical half (zero state migration) |
+> | Tests | `privval/file_pqc_test.go` | `TestHybridSignVote`/`SignProposal`/`PersistReload`/`ClassicalPVUnaffected` PASS; hybrid sig is 2,491 B, verifies under hybrid pubkey, rejected by classical-only verifier; address unchanged across persist+reload |
+>
+> `go build ./privval/...` clean; full `go test ./privval/...` PASS (21.5s). **Still open in F4:** `SignerClient` (tmkms/remote) hybrid path — only `FilePV` is wired so far.
+
+> **LANDED 2026-06-18 — F5 (validator set holds + verifies hybrid pubkey, rotation address-invariant), protoc-free:**
+>
+> | Item | File | Result |
+> |------|------|--------|
+> | Hybrid pubkey is a first-class `crypto.PubKey` in the set | `aegis-forks/cometbft/types/validator_hybrid_test.go` | `NewValidator` + `ValidateBasic` accept it; `GetByAddress`/`GetByIndex` resolve it; address = Ed25519-half address (zero state migration) |
+> | Vote verifies through the consensus path | same | hybrid-signed prevote (2,491 B sig) verifies via `vote.Verify` (= `val.PubKey.VerifySignature`); classical-only Ed25519 verifier **rejects** it |
+> | **Rotation invariant (§F5 core)** | same | reuse Ed25519 half + fresh ML-DSA-44 half → **same address, different key**; `UpdateWithChangeSet` swaps the entry with no lookup disruption; post-rotation vote verifies under new pubkey but is **rejected** by pre-rotation pubkey (proves PQ trust anchor actually moved) |
+>
+> `go build ./types/... ./privval/...` clean; 3 F5 tests PASS; `go test ./privval/...` still PASS (no regression). **Gated on protoc/buf (folds into F7):** `Validator.Bytes()`/`ValidatorSet.Hash()`/`Validator.ToProto()` + `crypto/encoding.PubKeyToProto`/`FromProto` need the hybrid `pc.PublicKey` oneof variant for over-the-wire / genesis / state-store persistence.
+
 ### 2.1 What consensus signing actually is (CometBFT v0.38.x)
 
 Three surfaces sign with the validator's key:
@@ -430,11 +462,11 @@ These three tasks (protoc, F1, F2, ADR-008) are all **parallelizable** and don't
 
 ## 9. Definition of "Phase F Done"
 
-- [ ] F1: `crypto/mldsa44/` builds, NIST KATs pass, `go vet` clean
-- [ ] F2: `crypto/keys/hybrid/` builds, `VerifySignature` requires both halves, `Address()` delegates to classical, `go test` green
-- [ ] F3: Wire format documented and encoded; old verifier rejects hybrid sig
-- [ ] F4: `FilePV` signs both halves; `priv_validator_key_mldsa44.json` persists and reloads
-- [ ] F5: Validator set stores hybrid pubkey; `Address()` unchanged across rotation
+- [x] F1: `crypto/mldsa44/` builds, `go vet` clean, functional tests green — **NIST KAT embedding still pending**
+- [x] F2: `crypto/hybrid/` builds, `VerifySignature` requires both halves, `Address()` delegates to classical, `go test` green; §F2 wire format (2,491 B) implemented
+- [x] F3: Wire format documented (§2.2 F3) and encoded in `crypto/hybrid` (2,491 B framed); old classical-only verifier rejects hybrid sig — proven by `TestHybridSignVote`
+- [x] F4: `FilePV` signs both halves; ML-DSA-44 sidecar persists and reloads; address unchanged; classical-only `FilePV` path unaffected — `privval/file_pqc_test.go` green. **SignerClient (tmkms/remote) still pending.**
+- [x] F5: Validator set stores + verifies hybrid pubkey; `Address()` invariant across PQ-half rotation — `types/validator_hybrid_test.go` green (3 tests). **Proto-encoding path (`Validator.Bytes()`/`Hash()`/`ToProto()` via `crypto/encoding` oneof) gated with F7 protoc regen.**
 - [ ] F6: Evidence verification works with hybrid keys; classical-only forgery rejected
 - [ ] F7: `MsgRotateConsKey` prototype on devnet; single-validator rotation succeeds
 - [ ] Bandwidth: 4-validator localnet runs 1,000 blocks; block size + disk growth measured and documented

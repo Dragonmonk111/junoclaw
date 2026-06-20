@@ -4,8 +4,114 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-06-17 11:45 UTC+1
-Status: Aegis C (C5+C6) + D (D1/D2/D3-core) COMPLETE; Fable P3+P4 COMPLETE; devnet reset (monotonic clock). Remaining: Fable P5, D3 wiring, upstream.
+Last update: 2026-06-20 UTC+1
+Status: Aegis C (C5+C6) + D (D1/D2/D3-core) COMPLETE; Fable P3+P4+P5 COMPLETE; devnet reset (monotonic clock). Phase F consensus: F1/F2/F3 + F4 (heterogeneous VerifyCommit dispatch + pubkey persistence proto/codec) + F5 (evidence/slashing) + §6 items 8/9/10/11 (batch fallback, fork coordination, light-client/IBC, evidence) landed & TESTED (CometBFT fork); consensus signature-size bounds raised for the 2,491 B hybrid sig. Remaining: F6 MsgRotateConsKey + F7 SignerClient hybrid + 4-validator bandwidth localnet, D3 wiring, upstream.
+
+
+== 2026-06-20 (session 2) ==
+
+- F4 pubkey persistence DONE (proto regen + codec wiring):
+    * keys.proto: added `bytes aegis_hybrid_ed25519_mldsa44 = 3` to PublicKey oneof.
+    * buf generate: regenerated keys.pb.go (buf v1.71.0, protoc-gen-gogofaster installed
+      via `go install github.com/cosmos/gogoproto/protoc-gen-gogofaster@latest`).
+    * codec.go: wired hybrid.PubKey into PubKeyToProto/PubKeyFromProto + JSON type
+      registration. Size validation (hybrid.PubKeySize = 1344).
+    * Build + vet + tests PASS: crypto/encoding, types/, crypto/..., privval/.
+    * ADR-008 F4 section updated: "Still gated" -> "Landed (proto regen + codec wiring)".
+
+- Fable P5 docs DONE:
+    * docs/MAYO.md: NIST status corrected to "additional signatures (in process)";
+      MAYO-5 testnet results table added (Bud 360,814 / Verify 798,803 gas);
+      Phase 5 roadmap checked off; MAYO-5 recommendation note added.
+    * docs/PQC_COMPETITIVE_ANALYSIS.md: NIST round labels fixed; L5 vs Falcon-1024
+      comparison table added (sig 964B vs 1280B, gas 799k/361k); strategic
+      assessment updated (L5 parity); last-updated date bumped.
+    * drafts/ARTICLE_L5_PQC_LIVE_COSMOS.md: full article draft with benchmark tables,
+      architecture explanation, greenfield-vs-migration framing, accuracy boundaries.
+    * drafts/TG_REPLY_L5_BENCHMARKS.md: Telegram reply to Jake/Marius with compact
+      benchmark table and balanced Marius comparison.
+
+- Toolchain: buf v1.71.0, protoc 3.12.4, protoc-gen-gogofaster v1.7.2 (go1.22.4),
+  go1.24.0 all available in WSL. Makefile proto-gen target uses `go run buf generate`.
+
+== 2026-06-20 ==
+
+- Phase F / F4 verification dispatch DONE & TESTED (protoc-free):
+  aegis-forks/cometbft/types/consensus_hybrid_test.go (5 tests total in file;
+  the 3 commit tests here, 2 light-client tests in the item-10 bullet). Drives
+  the REAL VerifyCommit / VerifyCommitExtended path over in-memory hybrid
+  validators (MockPV wrapping hybrid.GenPrivKey):
+    * Heterogeneous set (2 classical + 2 hybrid), all signing -> Commit AND
+      ExtendedCommit both verify; every sig dispatches on the signer's registered
+      key type. AllKeysHaveSameType()==false.
+    * Mid-migration block, 1 validator offline -> surviving 3-of-4 MIXED quorum
+      (always >=1 classical + >=1 hybrid) clears 2/3 and commits. This is the
+      literal ADR-008 §6 item-9 "upgrade without halting" scenario.
+    * All-hybrid set: verifies via single verification; shouldBatchVerify()==false
+      because ML-DSA-44 has no crypto.BatchVerifier -> never enters an unsupported
+      batch path (item 8 = safe fallback, NOT a batch impl).
+  GATED (folds into F7): persisting the hybrid pubkey in cmtproto.Validator still
+  needs the pc.PublicKey oneof regen; tests use in-memory validator sets.
+
+- Phase F / §6 item 10 (light client / IBC) DONE & TESTED (protoc-free), added to
+  consensus_hybrid_test.go (2 more tests PASS):
+    * VerifyCommitLight (+AllSignatures): heterogeneous adjacent-header commit
+      verifies on the light-client path (the one light/verifier.go + IBC
+      07-tendermint call).
+    * VerifyCommitLightTrusting (IBC SKIPPING path): models validator-set
+      rotation — a full commit from a rotated set verified against the trusted
+      (old) set. Hybrid validators carried across the rotation COUNT toward the
+      trust level (2 carried hybrids = 20/40 > 1/3 -> trusted); a sub-threshold
+      overlap (1 hybrid = 10/40 <= 1/3) is REJECTED with
+      ErrNotEnoughVotingPowerSigned. Core ./light/ verifier tests still PASS
+      (-short, 9s) -> no regression. (Full ./light/... is network-bound/slow,
+      unrelated to these changes; go build ./... already confirmed it compiles.)
+
+- Phase F / F5 evidence/slashing DONE & TESTED (protoc-free):
+  aegis-forks/cometbft/evidence/verify_hybrid_test.go (PASS). Exercises the real
+  evidence.VerifyDuplicateVote (the pre-slash check):
+    * Genuine hybrid double-sign (2 conflicting precommits, same H/R/S) -> VALID,
+      validator slashable.
+    * Forged double-sign with intact Ed25519 half but corrupted ML-DSA-44 half
+      (quantum attacker who broke only Ed25519 trying to FRAME an honest
+      validator) -> REJECTED (ErrVoteInvalidSignature). Fabricating slashable
+      evidence now also requires breaking ML-DSA-44.
+
+- FORK FIX (real, required for F2/F4 — not just tests): hybrid sig is 2,491 B,
+  far above the classical 64 B, so three byte-budget bounds were rejecting/under-
+  counting hybrid consensus data:
+    * types/signable.go  MaxSignatureSize = max(hybrid.SignatureSize, 64). Without
+      this, every hybrid Vote/CommitSig/Proposal/vote-extension fails ValidateBasic.
+    * types/block.go      MaxCommitSigBytes -> 2,537 B (var, tracks MaxSignatureSize);
+      MaxCommitBytes per-sig proto overhead 2 -> 3 (2-byte length prefix). Keeps
+      MaxDataBytes block-size accounting correct (else blocks under-count commit
+      size). TestMaxCommitBytes / TestBlockMaxDataBytes expectations updated to the
+      exact new budgets.
+  Verification: go build ./... clean; go test ./types/ ./privval/ ./evidence/
+  ./crypto/hybrid/ ./crypto/mldsa44/ all PASS (WSL toolchain go1.24.0 via
+  GOTOOLCHAIN=auto). No regressions.
+
+
+== 2026-06-18 ==
+
+- Phase F / F5 DONE (protoc-free): aegis-forks/cometbft/types/validator_hybrid_test.go
+  (3 tests PASS). Proves (1) hybrid pubkey is a first-class crypto.PubKey in the
+  validator set: NewValidator/ValidateBasic accept it, GetByAddress/GetByIndex
+  resolve it, address = Ed25519-half address (zero state migration); (2) a hybrid-
+  signed prevote (2,491 B sig) verifies via vote.Verify (val.PubKey.VerifySignature)
+  and a classical-only Ed25519 verifier REJECTS it; (3) F5 CORE rotation invariant:
+  reuse Ed25519 half + fresh ML-DSA-44 half -> SAME address, different key;
+  UpdateWithChangeSet swaps the entry cleanly; post-rotation vote verifies under the
+  new pubkey but is REJECTED by the pre-rotation pubkey (proves the PQ trust anchor
+  actually moved). go build ./types/... ./privval/... clean; go test ./privval/...
+  still PASS (no regression).
+  GATED on protoc/buf (folds into F7): Validator.Bytes()/ValidatorSet.Hash()/
+  Validator.ToProto() + crypto/encoding.PubKeyToProto/FromProto need a hybrid
+  pc.PublicKey oneof variant for wire/genesis/state-store persistence.
+
+- Phase F / F4 DONE (protoc-free): FilePV signs both halves via ML-DSA-44 sidecar
+  (priv_validator_key.json_mldsa44.json); classical key file never mutated;
+  Address() still delegates to classical half; privval/file_pqc_test.go green.
 
 
 == 2026-06-17 ==

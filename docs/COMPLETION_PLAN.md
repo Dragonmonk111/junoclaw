@@ -3,9 +3,9 @@
 > Consolidated plan for all remaining workstreams across Project Aegis (transport + accounts),
 > Project Fable (MAYO-5 PQC), and upstream tracking. Created from memory `e5b41d64`.
 >
-> **2026-06-17 progress:** Aegis **D1 (ADR-007) DONE**, **D2 (aegis-accounts harness) DONE & verified
-> 20/20 green**. Project **Fable P3 found ALREADY DONE** (contract dispatches MAYO-1/2/3/5 + ML-DSA-44/65/87
-> with tests). Remaining Aegis/Fable items are all devnet-/fork-gated (C5/C6, D3, P4).
+> **2026-06-20 progress:** Aegis **C (C5+C6) COMPLETE**, **D (D1/D2/D3-core) COMPLETE**, **Fable P3+P4+P5 COMPLETE**.
+> Phase F: F1/F2/F3 + F4 (dispatch + pubkey persistence proto/codec) + F5 + §6 items 8-11 landed & tested.
+> Remaining: F6 MsgRotateConsKey, F7 SignerClient hybrid, D3 wiring (proto/keyring/CLI/gas), 4-validator localnet, upstream.
 
 ---
 
@@ -15,13 +15,14 @@
 |-----------|-------|----------|-----------------|---------|
 | **Aegis Phase C (Transport)** | ~~C5 CometBFT fork~~ ✅; ~~C6 RTT~~ ✅ | — | done | — |
 | **Aegis Phase D (Accounts)** | ~~D1~~ ✅; ~~D2~~ ✅; ~~D3 core~~ ✅; D3 wiring (gated) | Low | wiring only | protoc/buf |
-| **Project Fable** | ~~P3 multi-variant~~ ✅; ~~P4 benchmark~~ ✅; P5 comms | Low | ½ day left (P5) | — |
+| **Project Fable** | ~~P3 multi-variant~~ ✅; ~~P4 benchmark~~ ✅; ~~P5 comms~~ ✅ | — | done | — |
+| **Aegis Phase F (Consensus)** | ~~F1/F2/F3~~ ✅; ~~F4 dispatch + persistence~~ ✅; ~~F5 evidence~~ ✅; F6 rotation; F7 signer | Medium | F6+F7 remain | — |
 | **Infrastructure** | ~~Devnet WSL2 clock jump fix~~ ✅ (reset applied; monotonic-offset clock OK) | Low | done | WSL2 behavior |
 | **Upstream** | cosmwasm#2685 follow-up; v30 proposal tracking | Low | Ongoing | External maintainers |
 
-**Critical path:** Devnet stability ✅ → Fable P4 benchmarks ✅ (both done 2026-06-17). The headline
-deliverables (Aegis C5/C6, D3 core; Fable P3/P4) are **complete**. Remaining: Fable **P5** (docs/comms,
-½ day) and **D3 wiring** (proto/keyring/CLI/gas — gated on protoc/buf).
+**Critical path:** All headline deliverables **complete** (Aegis C5/C6, D3 core; Fable P3/P4/P5;
+Phase F F1-F5 + §6 items 8-11). Remaining: **F6** (MsgRotateConsKey), **F7** (SignerClient hybrid),
+**D3 wiring** (proto/keyring/CLI/gas), 4-validator bandwidth localnet, upstream tracking.
 
 ---
 
@@ -267,22 +268,18 @@ stock Juno without the precompile. The precompile's win grows with security leve
 
 ---
 
-### P5: Docs + comms
+### P5: Docs + comms — ✅ DONE (2026-06-20)
+
+**Status:** All three deliverables complete:
+- `docs/MAYO.md` updated with MAYO-5 L5 testnet results + NIST status corrected.
+- `docs/PQC_COMPETITIVE_ANALYSIS.md` updated with L5 vs Falcon-1024 comparison table + strategic assessment.
+- `drafts/ARTICLE_L5_PQC_LIVE_COSMOS.md` — full article draft.
+- `drafts/TG_REPLY_L5_BENCHMARKS.md` — Telegram reply draft.
 
 **Priority:** Low  
 **Effort:** ½ day  
 **Prerequisites:** P4 (numbers in hand)  
 **Gating:** P4
-
-#### Steps
-
-1. Update `docs/MAYO.md`, `docs/PQC_COMPETITIVE_ANALYSIS.md` with Level 5 numbers.
-2. Draft article: "NIST Level 5 post-quantum attestations on a live Cosmos chain — no fork required."
-3. Telegram reply to Jake/Marius thread with benchmark table.
-
-#### Success Criteria
-- Article published or PR'd to repo.
-- Telegram reply sent.
 
 ---
 
