@@ -5,7 +5,7 @@ Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
 Last update: 2026-06-21 UTC+1
-Status: Aegis C (C5+C6) + D (D1/D2/D3-core) COMPLETE; Fable P3+P4+P5 COMPLETE; devnet reset (monotonic clock). Phase F consensus: F1/F2/F3 + F4 (dispatch + pubkey persistence proto/codec + FilePV + SignerClient remote-signer hybrid) + F5 (validator set + rotation invariant) + F6 (evidence/slashing) + §6 items 8/9/10/11 landed & TESTED (CometBFT fork). All code-completable, locally-testable Phase F items DONE & green, incl. cross-impl ML-DSA-44 KAT (circl<->fips204) closing determinism checklist #4. Remaining (infra-gated, NOT crypto-gated): MsgRotateConsKey (SDK fork x/staking + multi-val devnet), 4-validator bandwidth localnet (built Juno binary), D3 wiring, cross-CPU/OS verify-hash artifact, upstream. 8 commits pushed to junoclaw:main (+1 local doc commit pending push). CometBFT fork: 6 local commits on branch aegis-phase-cf-hybrid; remote footgun FIXED (origin->upstream, push disabled); NONE pushed — set origin to your fork first.
+Status: Aegis C (C5+C6) + D (D1/D2/D3-core) COMPLETE; Fable P3+P4+P5 COMPLETE; devnet reset (monotonic clock). Phase F consensus: F1/F2/F3 + F4 (dispatch + pubkey persistence proto/codec + FilePV + SignerClient remote-signer hybrid) + F5 (validator set + rotation invariant) + F6 (evidence/slashing) + §6 items 8/9/10/11 landed & TESTED (CometBFT fork). All code-completable, locally-testable Phase F items DONE & green, incl. cross-impl ML-DSA-44 KAT (circl<->fips204) closing determinism checklist #4. D3 codec Any/amino wiring for the hybrid account key DONE & TESTED (SDK fork). Remaining (infra-gated, NOT crypto-gated): MsgRotateConsKey (SDK fork x/staking + multi-val devnet), 4-validator bandwidth localnet (built Juno binary), D keyring/CLI/ante-gas, cross-CPU/OS verify-hash artifact, upstream. main pushed to junoclaw:main (429d06a). Both forks have remote hygiene + aegis branches (cometbft: aegis-phase-cf-hybrid 6 commits; cosmos-sdk: aegis-phase-d3-hybrid 1 commit); FORK PUSHES BLOCKED — Dragonmonk111/cometbft + Dragonmonk111/cosmos-sdk GitHub repos must be created first (gh installed, not authed).
 
 
 == 2026-06-21 (session 3) ==
@@ -43,10 +43,30 @@ Status: Aegis C (C5+C6) + D (D1/D2/D3-core) COMPLETE; Fable P3+P4+P5 COMPLETE; d
   F5 proto path, F6 evidence all marked DONE; determinism item now [~]
   (cross-impl verify done; cross-CPU/OS hash artifact still open); only
   MsgRotateConsKey + 4-validator localnet remain (infra-gated).
-- 7 commits arranged + pushed earlier this session: 4 in CometBFT fork
-  (C5/F4/F2-F4/F5-evidence), 3 in main (P5 docs / Phase F docs / P5 comms);
-  main pushed to origin. Article posted to comms with uni-7 contract addr +
-  Leonardo.ai art prompts + image placement markers.
+- D3 codec wiring DONE & TESTED (SDK fork, protoc path now working):
+    * proto/cosmos/crypto/hybrid/keys.proto (PubKey/PrivKey, single bytes key) ->
+      generated crypto/keys/hybrid/keys.pb.go via buf + protoc-gen-gocosmos
+      (installed module-pinned). Refactored hybrid.go to the generated {Key []byte}
+      structs; PrivKey halves (secp32 || mldsa-priv 2560) reconstructed on use.
+    * crypto/codec/proto.go + amino.go: registered &hybrid.PubKey/&PrivKey as
+      cosmos.crypto.PubKey/PrivKey impls (Any) + amino concrete.
+    * crypto/codec/hybrid_test.go: Any + proto-codec-interface round-trip; sig
+      verifies through round-tripped key; forgery rejected. build+test+vet PASS.
+    * go.mod: cloudflare/circl recorded indirect (codec now reaches hybrid).
+    * STILL PENDING in D: keyring/hd SignatureAlgo + 'keys add --algo' CLI;
+      x/auth/ante gas case for hybrid sig verify.
+- FORK HYGIENE (both forks): cometbft AND cosmos-sdk had origin -> OFFICIAL repos
+  (push enabled) = footgun. Both: origin renamed to upstream (push disabled),
+  origin set to git@github.com:Dragonmonk111/<repo>.git, work on aegis branches
+  (cometbft: aegis-phase-cf-hybrid 6 commits; cosmos-sdk: aegis-phase-d3-hybrid
+  1 commit), AEGIS_CHANGES.md in each.
+- PUSH STATUS: main pushed to origin (Dragonmonk111/junoclaw, 196e673..429d06a)
+  via Windows git (WSL git lacks SSH key access). FORK PUSHES BLOCKED: GitHub
+  repos Dragonmonk111/cometbft and Dragonmonk111/cosmos-sdk DO NOT EXIST yet
+  (gh CLI installed but not authed). Create them (or 'gh auth login') then push
+  the aegis branches from Windows git.
+- Earlier this session: 4 commits in CometBFT fork, 3 in main; article posted to
+  comms with uni-7 contract addr + Leonardo.ai art prompts + image markers.
 
 == 2026-06-20 (session 2) ==
 
