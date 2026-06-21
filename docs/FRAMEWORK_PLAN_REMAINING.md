@@ -471,7 +471,7 @@ These three tasks (protoc, F1, F2, ADR-008) are all **parallelizable** and don't
 
 ## 9. Definition of "Phase F Done"
 
-- [x] F1: `crypto/mldsa44/` builds, `go vet` clean, functional tests green — **NIST KAT embedding still pending**
+- [x] F1: `crypto/mldsa44/` builds, `go vet` clean, functional tests green; **cross-impl KAT DONE** — `crypto/mldsa44/testdata/mldsa44_kat.json` (authoritative `fips204` Rust vectors) proves circl reproduces the `fips204` pubkey byte-for-byte from the same FIPS 204 ξ seed (keygen interop) and verifies `fips204`-produced signatures (`mldsa44_kat_test.go`).
 - [x] F2: `crypto/hybrid/` builds, `VerifySignature` requires both halves, `Address()` delegates to classical, `go test` green; §F2 wire format (2,491 B) implemented
 - [x] F3: Wire format documented (§2.2 F3) and encoded in `crypto/hybrid` (2,491 B framed); old classical-only verifier rejects hybrid sig — proven by `TestHybridSignVote`
 - [x] F4: `FilePV` signs both halves; ML-DSA-44 sidecar persists and reloads; address unchanged; classical-only `FilePV` path unaffected — `privval/file_pqc_test.go` green. **SignerClient (tmkms/remote) DONE** — `privval/signer_client_pqc_test.go` proves the hybrid key+sig transport end-to-end (2026-06-21).
@@ -479,7 +479,7 @@ These three tasks (protoc, F1, F2, ADR-008) are all **parallelizable** and don't
 - [x] F6: Evidence verification works with hybrid keys; classical-only forgery rejected — `evidence/verify_hybrid_test.go` green.
 - [ ] F7: `MsgRotateConsKey` prototype on devnet; single-validator rotation succeeds **(SDK-fork message + devnet — remaining)**
 - [ ] Bandwidth: 4-validator localnet runs 1,000 blocks; block size + disk growth measured and documented **(gated on built Juno binary)**
-- [ ] Determinism: cross-platform `VerifySignature` hash identical; no float in verify path
+- [~] Determinism: **cross-impl verify conformance DONE** — Go `circl` verifies `fips204` (Rust) ML-DSA-44 signatures (KAT above); no float in verify path. **Still open:** a single cross-CPU/OS (x86 vs ARM) `VerifySignature`-output hash artifact.
 - [x] ADR-008 committed and reviewed
 
 **Phase F is done when a 4-validator localnet produces 1,000 consecutive blocks with hybrid signatures, and the bandwidth/determinism numbers are published.**
