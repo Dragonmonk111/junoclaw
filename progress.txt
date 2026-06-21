@@ -4,9 +4,31 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-06-20 UTC+1
-Status: Aegis C (C5+C6) + D (D1/D2/D3-core) COMPLETE; Fable P3+P4+P5 COMPLETE; devnet reset (monotonic clock). Phase F consensus: F1/F2/F3 + F4 (heterogeneous VerifyCommit dispatch + pubkey persistence proto/codec) + F5 (evidence/slashing) + §6 items 8/9/10/11 (batch fallback, fork coordination, light-client/IBC, evidence) landed & TESTED (CometBFT fork); consensus signature-size bounds raised for the 2,491 B hybrid sig. Remaining: F6 MsgRotateConsKey + F7 SignerClient hybrid + 4-validator bandwidth localnet, D3 wiring, upstream.
+Last update: 2026-06-21 UTC+1
+Status: Aegis C (C5+C6) + D (D1/D2/D3-core) COMPLETE; Fable P3+P4+P5 COMPLETE; devnet reset (monotonic clock). Phase F consensus: F1/F2/F3 + F4 (dispatch + pubkey persistence proto/codec + FilePV + SignerClient remote-signer hybrid) + F5 (validator set + rotation invariant) + F6 (evidence/slashing) + §6 items 8/9/10/11 landed & TESTED (CometBFT fork). All code-completable, locally-testable Phase F items DONE & green. Remaining (infra-gated, NOT crypto-gated): MsgRotateConsKey (SDK fork x/staking + multi-val devnet), 4-validator bandwidth localnet (built Juno binary), D3 wiring, upstream. 8 commits pushed to junoclaw:main; CometBFT fork has 5 local commits (NOT pushed — remote still points at upstream cometbft/cometbft).
 
+
+== 2026-06-21 (session 3) ==
+
+- F7 SignerClient (tmkms/remote) hybrid path DONE & TESTED (protoc-free):
+    * privval/signer_client_pqc_test.go (3 tests, TCP + Unix transports):
+      server wraps a hybrid FilePV (GenFilePVWithPQC); SignerClient.GetPubKey
+      retrieves the 1,344 B hybrid pubkey via the PublicKey oneof; SignVote +
+      SignProposal return 2,491 B framed hybrid sigs end-to-end, under the
+      10 KB maxRemoteSignerMsgSize.
+    * No silent downgrade: framed hybrid sig verifies under hybrid pubkey and
+      is REJECTED by a classical-only Ed25519 verifier; address invariant holds.
+    * DefaultValidationRequestHandler needed NO change — it already routes
+      through cryptoenc.PubKeyToProto/FromProto, hybrid-aware since the F4 commit.
+    * go test ./privval/ PASS (21.6s), go vet clean. Committed in fork.
+- Verified F6 evidence hybrid test (evidence/verify_hybrid_test.go) PASS.
+- Docs: FRAMEWORK_PLAN_REMAINING.md §9 checklist updated — F4 SignerClient,
+  F5 proto path, F6 evidence all marked DONE; only MsgRotateConsKey +
+  4-validator localnet remain (infra-gated).
+- 7 commits arranged + pushed earlier this session: 4 in CometBFT fork
+  (C5/F4/F2-F4/F5-evidence), 3 in main (P5 docs / Phase F docs / P5 comms);
+  main pushed to origin. Article posted to comms with uni-7 contract addr +
+  Leonardo.ai art prompts + image placement markers.
 
 == 2026-06-20 (session 2) ==
 

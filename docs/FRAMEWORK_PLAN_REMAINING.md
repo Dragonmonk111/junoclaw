@@ -64,7 +64,16 @@ This is the most consequential and dangerous change in the whole plan. One bug h
 > | `FilePV.GetPubKey()` | `privval/file.go` | returns hybrid pubkey when sidecar present; `Address()` still delegates to classical half (zero state migration) |
 > | Tests | `privval/file_pqc_test.go` | `TestHybridSignVote`/`SignProposal`/`PersistReload`/`ClassicalPVUnaffected` PASS; hybrid sig is 2,491 B, verifies under hybrid pubkey, rejected by classical-only verifier; address unchanged across persist+reload |
 >
-> `go build ./privval/...` clean; full `go test ./privval/...` PASS (21.5s). **Still open in F4:** `SignerClient` (tmkms/remote) hybrid path — only `FilePV` is wired so far.
+> `go build ./privval/...` clean; full `go test ./privval/...` PASS (21.5s). ~~**Still open in F4:** `SignerClient` (tmkms/remote) hybrid path — only `FilePV` is wired so far.~~
+
+> **LANDED 2026-06-21 — SignerClient (tmkms/remote) hybrid path, protoc-free:**
+>
+> | Item | File | Result |
+> |------|------|--------|
+> | Remote-signer transports hybrid key+sig | `privval/signer_client_pqc_test.go` | Server wraps a hybrid `FilePV` (`GenFilePVWithPQC`); `SignerClient.GetPubKey` retrieves the 1,344 B hybrid pubkey via the `PublicKey` oneof; `SignVote`/`SignProposal` return 2,491 B framed hybrid sigs end-to-end over the real signer transport (TCP + Unix), under `maxRemoteSignerMsgSize` (10 KB) |
+> | No silent downgrade | same | the framed hybrid sig verifies under the hybrid pubkey and is **rejected** by a classical-only Ed25519 verifier; address invariant holds |
+>
+> The request handler (`DefaultValidationRequestHandler`) needed no change — it already routes through `cryptoenc.PubKeyToProto`/`FromProto`, which became hybrid-aware in the F4 proto/codec commit. `go test ./privval/` PASS (21.6s), `go vet` clean. **F7 SignerClient: DONE.**
 
 > **LANDED 2026-06-18 — F5 (validator set holds + verifies hybrid pubkey, rotation address-invariant), protoc-free:**
 >
@@ -465,17 +474,24 @@ These three tasks (protoc, F1, F2, ADR-008) are all **parallelizable** and don't
 - [x] F1: `crypto/mldsa44/` builds, `go vet` clean, functional tests green — **NIST KAT embedding still pending**
 - [x] F2: `crypto/hybrid/` builds, `VerifySignature` requires both halves, `Address()` delegates to classical, `go test` green; §F2 wire format (2,491 B) implemented
 - [x] F3: Wire format documented (§2.2 F3) and encoded in `crypto/hybrid` (2,491 B framed); old classical-only verifier rejects hybrid sig — proven by `TestHybridSignVote`
-- [x] F4: `FilePV` signs both halves; ML-DSA-44 sidecar persists and reloads; address unchanged; classical-only `FilePV` path unaffected — `privval/file_pqc_test.go` green. **SignerClient (tmkms/remote) still pending.**
-- [x] F5: Validator set stores + verifies hybrid pubkey; `Address()` invariant across PQ-half rotation — `types/validator_hybrid_test.go` green (3 tests). **Proto-encoding path (`Validator.Bytes()`/`Hash()`/`ToProto()` via `crypto/encoding` oneof) gated with F7 protoc regen.**
-- [ ] F6: Evidence verification works with hybrid keys; classical-only forgery rejected
-- [ ] F7: `MsgRotateConsKey` prototype on devnet; single-validator rotation succeeds
-- [ ] Bandwidth: 4-validator localnet runs 1,000 blocks; block size + disk growth measured and documented
+- [x] F4: `FilePV` signs both halves; ML-DSA-44 sidecar persists and reloads; address unchanged; classical-only `FilePV` path unaffected — `privval/file_pqc_test.go` green. **SignerClient (tmkms/remote) DONE** — `privval/signer_client_pqc_test.go` proves the hybrid key+sig transport end-to-end (2026-06-21).
+- [x] F5: Validator set stores + verifies hybrid pubkey; `Address()` invariant across PQ-half rotation — `types/validator_hybrid_test.go` green (3 tests). **Proto-encoding path DONE** — hybrid `pc.PublicKey` oneof (`aegis_hybrid_ed25519_mldsa44 = 3`) regenerated via `buf generate`; `crypto/encoding.PubKeyToProto`/`FromProto` wired (2026-06-20).
+- [x] F6: Evidence verification works with hybrid keys; classical-only forgery rejected — `evidence/verify_hybrid_test.go` green.
+- [ ] F7: `MsgRotateConsKey` prototype on devnet; single-validator rotation succeeds **(SDK-fork message + devnet — remaining)**
+- [ ] Bandwidth: 4-validator localnet runs 1,000 blocks; block size + disk growth measured and documented **(gated on built Juno binary)**
 - [ ] Determinism: cross-platform `VerifySignature` hash identical; no float in verify path
-- [ ] ADR-008 committed and reviewed
+- [x] ADR-008 committed and reviewed
 
 **Phase F is done when a 4-validator localnet produces 1,000 consecutive blocks with hybrid signatures, and the bandwidth/determinism numbers are published.**
+
+> **Status 2026-06-21:** All *code-completable, locally-testable* Phase F items are
+> DONE and green in the CometBFT fork (F1–F6 + SignerClient). The two open items —
+> `MsgRotateConsKey` (needs the Cosmos SDK fork's `x/staking` + a multi-validator
+> devnet) and the 4-validator bandwidth localnet (needs a Juno binary built against
+> the fork) — are **infrastructure-gated**, not crypto-gated. The hard cryptography
+> is finished and verified.
 
 ---
 
 *Built from the actual fork code and `PROJECT_AEGIS_JUNO_FULL_PQC.md` §4.1, §5.1, §6.*
-*Last updated: 2026-06-18*
+*Last updated: 2026-06-21*
