@@ -55,6 +55,7 @@ docs/GHSA_DRAFT_*.md
 # IDE
 .vscode/
 .idea/
+.windsurf/
 *.swp
 *.swo
 
