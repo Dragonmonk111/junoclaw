@@ -579,6 +579,34 @@ PUBLIC URLs:
 
 
 
+== 2026-06-24 ==
+
+- AEGIS JUNO BINARY BUILT: junod-aegis 158MB ELF x86-64.
+  sha256=0809331d83aae0473ace982a7e9129e8358f4321f905ab4bc2ca49674b9586f1
+  Build: go build -ldflags="-checklinkname=0" ./cmd/junod/
+  Fix required: Go 1.24 linkname hardening blocks bytedance/sonic/loader
+  from pulling runtime.lastmoduledatap; -checklinkname=0 disables that check.
+  Forks wired: Dragonmonk111/cometbft@aegis-phase-cf-hybrid (ML-KEM-768 transport)
+              Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid (ML-DSA-44 hybrid keys, tip 4e6f315)
+
+- AEGIS BINARY FUNCTIONAL LOCALNET: 4-validator WSL localnet confirmed working.
+  commit_bytes=2266 (Ed25519 classical keys, same as baseline — expected).
+  num_sigs=4, consensus live, all 4 nodes reached height 28+.
+  Artifact: aegis-bench/artifacts/localnet-bandwidth-N4-aegis.json
+  NOTE: AEGIS_HYBRID_TRANSPORT=1 set but not confirmed active (env not passed
+  via `nohup env ...`; fix for next run). Hybrid consensus bandwidth requires
+  ML-DSA-44 consensus keys from init (not yet wired).
+
+REMAINING GATES:
+  1. Re-run localnet with `nohup env AEGIS_HYBRID_TRANSPORT=1 $JUNOD start ...`
+     to confirm ML-KEM transport active (check logs for hybrid handshake).
+  2. Wire hybrid consensus keys into `junod init` (or use MsgRotateConsKey F6
+     to rotate validators to ML-DSA-44 keys post-genesis) to get measured
+     hybrid commit_bytes (expected ~12-14KB vs 2266B classical).
+  3. Phase B: run regen-mldsa.sh -> emit patches 20-28 -> rebuild devnet
+     image -> benchmark ML-DSA gas (closes open §5.1 number).
+
+
 NOTE TO FUTURE SELF:
 The discipline is: ship the safe failure mode first, then iterate. The v30
 RetentionWindowHeights = 0 default is the canonical example - unbounded

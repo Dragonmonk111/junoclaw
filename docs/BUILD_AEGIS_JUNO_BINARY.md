@@ -144,16 +144,18 @@ go mod tidy 2>&1 | tail -20
 
 ```bash
 cd "$AEGIS_BUILD_DIR/aegis-juno"
-export GOTOOLCHAIN=go1.24.4
+export GOTOOLCHAIN=go1.24.0
 
-# Use Juno's own Makefile target
-make build 2>&1 | tail -30
-
-# Or if Makefile is not available / has env issues:
-go build -o build/junod-aegis ./cmd/junod/
+# NOTE: -checklinkname=0 is required for Go 1.24.
+# bytedance/sonic/loader uses //go:linkname runtime.lastmoduledatap which
+# Go 1.23+ blocks by default (-checklinkname=1). Disabling the check is safe
+# here: it only affects sonic's JIT loader, not our PQC code paths.
+go build -ldflags="-checklinkname=0" -o build/junod-aegis ./cmd/junod/
 ```
 
 **Deterministic outcome:** `build/junod-aegis` binary produced, no errors.
+
+> **Verified 2026-06-24:** 158 MB ELF 64-bit, sha256 `0809331d83aae0473ace982a7e9129e8358f4321f905ab4bc2ca49674b9586f1`
 
 ```bash
 ls -lh build/junod-aegis
