@@ -146,12 +146,24 @@ We ran it today. Four validators, one machine, ports offset +100 from the produc
 | Metric | Value |
 |--------|-------|
 | Validators | 4 / 4 signing |
-| Block height sampled | 10 |
-| Commit size (JSON/RPC) | 2,266 bytes |
+| Block height sampled | ~30 |
+| Commit size (JSON/RPC) | 2,267 bytes |
 | P2P bytes sent / peer / block | ~2,600 bytes |
 | Consensus reached in | ~15 seconds |
 | Production signing key: before | `6ae8882e...` |
 | Production signing key: after | `6ae8882e...` — **identical** |
+
+### Measured Hybrid-44 at N=4 (live localnet)
+
+| Metric | Classical | Hybrid-44 | Increase |
+|--------|-----------|-----------|----------|
+| Validators | 4 / 4 signing | 4 / 4 signing | — |
+| Block height sampled | ~30 | ~15 | — |
+| Commit size (JSON/RPC) | **2,267 B** | **15,208 B** | **6.71×** |
+| Signature size | 64 B | 2,491 B (hybrid wire) | ~38.9× per sig |
+| Consensus reached | ~15 s | ~15 s | no delay observed |
+
+The dominant term is four hybrid signatures. Each hybrid signature carries both an Ed25519 classical proof and an ML-DSA-44 post-quantum proof, framed by the ADR-008 §F2 wire format. The block body itself barely changes; the commit metadata is where the bytes live.
 
 ### Projected Hybrid-44 at N=100 (aegis-bench model)
 
@@ -165,7 +177,7 @@ We ran it today. Four validators, one machine, ports offset +100 from the produc
 
 **The CPU finding is the most important result.** At 101 μs per ML-DSA-44 verification, a full round of 100 validator signatures takes ~10 ms against a 6-second block time. The chain does not slow down. Bandwidth is the cost — 1.31 TB per year per validator. A commodity server with a 1 Gbps uplink handles this with headroom.
 
-The "PQC consensus is too expensive" argument assumes compute is the bottleneck. It is not.
+The "PQC consensus is too expensive" argument assumes compute is the bottleneck. It is not. The measured 6.71× commit-size increase at N=4 is the real-world bandwidth cost to defend validator consensus against a quantum computer.
 
 ---
 
@@ -212,16 +224,17 @@ The greenfield and migration paths are not rivals — they are Pareto points. Di
 
 | Task | Status |
 |------|--------|
-| Build Aegis Juno binary (replace directives wiring forks) | **Next gate — unblocks everything below** |
-| C6: Measure hybrid transport RTT on devnet | Gated on binary |
-| PQC localnet: repeat bandwidth test with Hybrid-44 sigs | Gated on binary |
-| D3 full wiring: proto/keyring/CLI for hybrid keys in Juno | Gated on binary |
-| Run regen-mldsa.sh → emit wasmvm patches 20-28 | Ready to run |
-| Rebuild devnet with ML-DSA precompile | Above |
-| Benchmark ML-DSA gas (closes §5.1 open number) | Above |
+| Build Aegis Juno binary (replace directives wiring forks) | **Done** — binary SHA-256 `98e6813a...bcacdb` |
+| PQC localnet: repeat bandwidth test with Hybrid-44 sigs | **Done** — 6.71× commit-size increase measured |
+| Run regen-mldsa.sh → emit wasmvm patches 20-28 | **Done** — 00-28 apply cleanly to cosmwasm v2.2.2 |
+| Rebuild devnet with ML-DSA precompile | **Done** — `junoclaw/junod-bn254:devnet` rebuilt |
+| Benchmark ML-DSA gas (closes §5.1 open number) | **Done** — ML-DSA-44/65/87 pure + precompile gas captured |
+| C6: Measure hybrid transport RTT on devnet | Next measurement |
+| IBC light-client hybrid-key migration | Design phase |
+| Normal account key PQC migration | Governance / coordination phase |
 | Cross-arch determinism: ARM64 vs x86_64 verify hash | ARM hardware |
 
-The Aegis Juno binary — applying `replace` directives in Juno's `go.mod` to point at the CometBFT and SDK forks, then `make build` — is the single remaining gate. Once it exists, every downstream measurement follows in sequence.
+The consensus-layer foundation is in place. The remaining work is transport-layer RTT measurement, IBC light-client migration design, and normal-account key migration planning.
 
 ---
 
