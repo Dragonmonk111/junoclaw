@@ -5,7 +5,7 @@ Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
 Last update: 2026-06-24 UTC+1
-Status: Aegis F hybrid consensus keys WIRED INTO junod init + measured. 4-validator localnet: classical commit_bytes=2,267 B, hybrid commit_bytes=15,208 B (6.71x). Forks pushed via fast-export (remote SHAs differ from local): Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=ea7c1af. junoclaw:main=a60b1e9. Pending: wasmvm ML-DSA Phase B (regen-mldsa.sh + devnet benchmark); add 6.71x to article draft. Cleanup done (temp helper scripts, C:\temp\aegis-push, .windsurf/ gitignore). Rebuilt junod-aegis SHA=98e6813ac0dd8f004002a9b1896cea3f13362c4af985d40ffe2c9a73f2bcacdb. No go.mod fork pins; only progress.txt records tips.
+Status: Aegis F hybrid consensus keys WIRED INTO junod init + measured. 4-validator localnet: classical commit_bytes=2,267 B, hybrid commit_bytes=15,208 B (6.71x). Forks pushed via fast-export (remote SHAs differ from local): Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=ea7c1af. junoclaw:main=a60b1e9. Pending: devnet image rebuild (patches 20-28) + ML-DSA-44 vs ML-DSA-65 verify gas benchmark; add 6.71x to article draft. Cleanup done; junod-aegis rebuilt SHA=98e6813ac0dd8f004002a9b1896cea3f13362c4af985d40ffe2c9a73f2bcacdb; Phase B patches 20-28 regenerated and verified clean. No go.mod fork pins; only progress.txt records tips.
 
 
 == 2026-06-24 ==
@@ -37,8 +37,11 @@ Status: Aegis F hybrid consensus keys WIRED INTO junod init + measured. 4-valida
   98e6813ac0dd8f004002a9b1896cea3f13362c4af985d40ffe2c9a73f2bcacdb. Size 158 MB.
   Saved to /root/aegis-localnet-artifacts/junod-aegis; version --long works.
 
-- PENDING: run wasmvm-fork/patches/regen-mldsa.sh (Phase B patches 20-28) + devnet benchmark;
-  add 6.71x to article draft.
+- PHASE B REGEN DONE: ran wasmvm-fork/patches/regen-mldsa.sh. Patches 20-28
+  regenerated; full 00-28 series verified to apply cleanly to cosmwasm v2.2.2.
+
+- PENDING: rebuild devnet image (patches 20-28 included), benchmark ML-DSA-44 vs
+  ML-DSA-65 verify gas; add 6.71x to article draft.
 
 == 2026-06-23 ==
 
