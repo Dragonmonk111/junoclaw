@@ -5,7 +5,7 @@ Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
 Last update: 2026-06-24 UTC+1
-Status: Aegis F hybrid consensus keys WIRED INTO junod init + measured. 4-validator localnet: classical commit_bytes=2,267 B, hybrid commit_bytes=15,208 B (6.71x). Forks pushed via fast-export (remote SHAs differ from local): Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=ea7c1af. junoclaw:main=a60b1e9. Pending: add 6.71x consensus commit-size increase to article draft. Done: junod-aegis rebuilt (SHA=98e6813ac0dd8f004002a9b1896cea3f13362c4af985d40ffe2c9a73f2bcacdb); Phase B ML-DSA patches 20-28 regen + devnet benchmark (ML-DSA-44=260,381/269,604, ML-DSA-65=315,212/328,945 precompile/pure verify gas). No go.mod fork pins; only progress.txt records tips.
+Status: Aegis F hybrid consensus keys WIRED INTO junod init + measured. 4-validator localnet: classical commit_bytes=2,267 B, hybrid commit_bytes=15,208 B (6.71x). Forks pushed via fast-export (remote SHAs differ from local): Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=ea7c1af. junoclaw:main=a60b1e9. All three pending tasks done. Done: junod-aegis rebuilt (SHA=98e6813ac0dd8f004002a9b1896cea3f13362c4af985d40ffe2c9a73f2bcacdb); Phase B ML-DSA patches 20-28 regen + devnet benchmark (ML-DSA-44=260,381/269,604, ML-DSA-65=315,212/328,945 precompile/pure verify gas); article updated with 6.71× commit-size increase. No go.mod fork pins; only progress.txt records tips.
 
 
 == 2026-06-24 ==
@@ -46,7 +46,9 @@ Status: Aegis F hybrid consensus keys WIRED INTO junod init + measured. 4-valida
   ML-DSA-44=260,381, ML-DSA-65=315,212, ML-DSA-87=387,124. Precompile ~1.03-1.05x
   cheaper vs pure. Full results: deploy/mldsa-devnet-benchmark-results.json.
 
-- PENDING: add 6.71x consensus commit-size increase to article draft.
+- ARTICLE UPDATE DONE: added measured 6.71× hybrid commit-size increase to
+  drafts/ARTICLE_AEGIS_CONSENSUS_PQC_2026_06_23.md; updated "What Is Next" table
+  to mark completed tasks.
 
 == 2026-06-23 ==
 
