@@ -5,7 +5,7 @@ Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
 Last update: 2026-06-24 UTC+1
-Status: Aegis F hybrid consensus keys WIRED INTO junod init + measured. 4-validator localnet: classical commit_bytes=2,267 B, hybrid commit_bytes=15,208 B (6.71x). Forks pushed via fast-export (remote SHAs differ from local): Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=ea7c1af. junoclaw:main=feee929. Pending: rebuild junod-aegis from pushed forks for reproducibility; wasmvm ML-DSA Phase B (regen-mldsa.sh + devnet benchmark); add 6.71x to article draft; remove C:\temp\aegis-push temp dir. No go.mod fork pins; only progress.txt records tips.
+Status: Aegis F hybrid consensus keys WIRED INTO junod init + measured. 4-validator localnet: classical commit_bytes=2,267 B, hybrid commit_bytes=15,208 B (6.71x). Forks pushed via fast-export (remote SHAs differ from local): Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=ea7c1af. junoclaw:main=feee929. Pending: rebuild junod-aegis from pushed forks for reproducibility; wasmvm ML-DSA Phase B (regen-mldsa.sh + devnet benchmark); add 6.71x to article draft. Cleanup done (temp helper scripts, C:\temp\aegis-push, .windsurf/ gitignore). No go.mod fork pins; only progress.txt records tips.
 
 
 == 2026-06-24 ==
@@ -28,11 +28,11 @@ Status: Aegis F hybrid consensus keys WIRED INTO junod init + measured. 4-valida
     * junoclaw main: feee929
 
 - CLEANUP: removed temporary helper scripts; added .windsurf/ to .gitignore;
-  committed aegis-bench/cmd/hybrid-consensus-keygen.
+  committed aegis-bench/cmd/hybrid-consensus-keygen; removed C:\temp\aegis-push
+  temp dir (~149 MB export files + scratch repos).
 
 - PENDING: rebuild junod-aegis from pushed forks; run wasmvm-fork/patches/regen-mldsa.sh
-  (Phase B patches 20-28) + devnet benchmark; add 6.71x to article draft;
-  remove C:\temp\aegis-push temp dir.
+  (Phase B patches 20-28) + devnet benchmark; add 6.71x to article draft.
 
 == 2026-06-23 ==
 
