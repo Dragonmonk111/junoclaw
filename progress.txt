@@ -48,7 +48,8 @@ Status: Aegis F hybrid consensus keys WIRED INTO junod init + measured. 4-valida
 
 - ARTICLE UPDATE DONE: added measured 6.71× hybrid commit-size increase to
   drafts/ARTICLE_AEGIS_CONSENSUS_PQC_2026_06_23.md; updated "What Is Next" table
-  to mark completed tasks.
+  to mark completed tasks. Also added short recap article
+  drafts/ARTICLE_AEGIS_TRIPLE_FINISH_2026_06_24.md.
 
 == 2026-06-23 ==
 
