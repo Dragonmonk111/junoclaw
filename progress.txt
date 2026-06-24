@@ -4,9 +4,35 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-06-23 UTC+1
-Status: Aegis C (C5+C6) + D (D1/D2/D3 FULL) COMPLETE; Fable P3+P4+P5 COMPLETE. Phase F consensus DONE & TESTED (CometBFT fork) incl. cross-impl ML-DSA-44 KAT. SDK fork: D3 hybrid account key COMPLETE & TESTED — codec Any/amino + crypto/hd HybridSecp256k1MlDsa44 algo + keyring SupportedAlgos (keys add --algo) + x/auth/ante gas case (secp+MlDsa44VerifyGasCost=5000). F6 MsgRotateConsKey COMPLETE & TESTED — proto+regenerated tx.pb.go, msg.go/codec.go/events.go, keeper RotateConsKey handler (swaps ConsensusPubkey, moves cons-addr index, rejects unknown/dup/disallowed), msg_server_rotate_test.go 3 subtests green. cloudflare/circl now a DIRECT dep. ALL THREE REPOS PUSHED: junoclaw:main (523a1e7); Dragonmonk111/cometbft@aegis-phase-cf-hybrid; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid (tip 4e6f315, AUTHOR-CORRECTED root->Dragonmonk111 <tj.yamlajatt@gmail.com> on 2026-06-23 via rebase --exec reset-author + fast-export push). NOTE: fork remote SHAs differ from local clones (fast-export|fast-import is REQUIRED to bypass a local pack corruption GitHub's index-pack rejects — direct push fails with "did not receive expected object ... index-pack failed"; fast-export rebuilds full non-delta objects in a fresh temp repo, content identical — keep pushing via fast-export). No SDK-fork commit SHA is hard-pinned anywhere in junoclaw (go.mod files use no replace->fork pin; only progress.txt records the tip), so the author rewrite breaks nothing downstream. CI noise fixed: removed sims-*.yml/sims.yml on SDK aegis branch (only failing workflows; cometbft had none). Remaining (infra-gated, NOT crypto- or code-gated): F6 live ABCI propagation + rotation history/queue (multi-val devnet), 4-validator bandwidth localnet (built Juno binary), cross-CPU/OS verify-hash artifact (ARM), upstream tracking (cosmwasm#2685, wasmvm#735, juno#1202). Awen LLM policy: Ollama/local-only, no 3rd-party endpoints, no OpenAI-compat base_url; DeepSeek + Kimi/K2 open weights OK, Sonnet excluded (proprietary).
+Last update: 2026-06-24 UTC+1
+Status: Aegis F hybrid consensus keys WIRED INTO junod init + measured. 4-validator localnet: classical commit_bytes=2,267 B, hybrid commit_bytes=15,208 B (6.71x). Forks pushed via fast-export (remote SHAs differ from local): Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=ea7c1af. junoclaw:main=feee929. Pending: rebuild junod-aegis from pushed forks for reproducibility; wasmvm ML-DSA Phase B (regen-mldsa.sh + devnet benchmark); add 6.71x to article draft; remove C:\temp\aegis-push temp dir. No go.mod fork pins; only progress.txt records tips.
 
+
+== 2026-06-24 ==
+
+- HYBRID CONSENSUS KEYS WIRED into junod init:
+    * New SDK crypto/keys/hybrid_consensus PubKey (Ed25519 32 B + ML-DSA-44 1,312 B = 1,344 B).
+    * SDK codec registration in crypto/codec/proto.go + cmt.go (FromCmtProtoPublicKey/ToCmtProtoPublicKey).
+    * CometBFT ValidatorParams default accepts aegis_hybrid_ed25519_mldsa44.
+    * CLI tool aegis-bench/cmd/hybrid-consensus-keygen generates hybrid keys.
+    * 4-validator localnet runs and produces blocks with hybrid keys.
+
+- BANDWIDTH MEASURED via /commit?height=:
+    * Classical keys: commit_bytes = 2,267 B (height ~30).
+    * Hybrid keys:    commit_bytes = 15,208 B (height ~15).
+    * Increase: 6.71x (dominant term is 4 x 2,491 B hybrid signatures).
+
+- FORK PUSHES via fast-export|fast-import (pack-corruption workaround):
+    * Dragonmonk111/cosmos-sdk aegis-phase-d3-hybrid: ea7c1af
+    * Dragonmonk111/cometbft aegis-phase-cf-hybrid: 7524f93
+    * junoclaw main: feee929
+
+- CLEANUP: removed temporary helper scripts; added .windsurf/ to .gitignore;
+  committed aegis-bench/cmd/hybrid-consensus-keygen.
+
+- PENDING: rebuild junod-aegis from pushed forks; run wasmvm-fork/patches/regen-mldsa.sh
+  (Phase B patches 20-28) + devnet benchmark; add 6.71x to article draft;
+  remove C:\temp\aegis-push temp dir.
 
 == 2026-06-23 ==
 
