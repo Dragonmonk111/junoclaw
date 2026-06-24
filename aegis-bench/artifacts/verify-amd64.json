@@ -1,0 +1,8 @@
+{
+  "go_version": "go1.24.0",
+  "goarch": "amd64",
+  "goos": "linux",
+  "input_sha256": "623000372fa329ff62586b2203c337d33f62b0f9484c5e855614a5892883eba9",
+  "tampered_rejected": true,
+  "verify_ok": true
+}

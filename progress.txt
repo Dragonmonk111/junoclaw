@@ -4,9 +4,40 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-06-21 UTC+1
-Status: Aegis C (C5+C6) + D (D1/D2/D3-core) COMPLETE; Fable P3+P4+P5 COMPLETE; devnet reset (monotonic clock). Phase F consensus: F1/F2/F3 + F4 (dispatch + pubkey persistence proto/codec + FilePV + SignerClient remote-signer hybrid) + F5 (validator set + rotation invariant) + F6 (evidence/slashing) + §6 items 8/9/10/11 landed & TESTED (CometBFT fork). All code-completable, locally-testable Phase F items DONE & green, incl. cross-impl ML-DSA-44 KAT (circl<->fips204) closing determinism checklist #4. D3 codec Any/amino wiring for the hybrid account key DONE & TESTED (SDK fork). Remaining (infra-gated, NOT crypto-gated): MsgRotateConsKey (SDK fork x/staking + multi-val devnet), 4-validator bandwidth localnet (built Juno binary), D keyring/CLI/ante-gas, cross-CPU/OS verify-hash artifact, upstream. main pushed to junoclaw:main (429d06a). Both forks have remote hygiene + aegis branches (cometbft: aegis-phase-cf-hybrid 6 commits; cosmos-sdk: aegis-phase-d3-hybrid 1 commit); FORK PUSHES BLOCKED — Dragonmonk111/cometbft + Dragonmonk111/cosmos-sdk GitHub repos must be created first (gh installed, not authed).
+Last update: 2026-06-23 UTC+1
+Status: Aegis C (C5+C6) + D (D1/D2/D3 FULL) COMPLETE; Fable P3+P4+P5 COMPLETE. Phase F consensus DONE & TESTED (CometBFT fork) incl. cross-impl ML-DSA-44 KAT. SDK fork: D3 hybrid account key COMPLETE & TESTED — codec Any/amino + crypto/hd HybridSecp256k1MlDsa44 algo + keyring SupportedAlgos (keys add --algo) + x/auth/ante gas case (secp+MlDsa44VerifyGasCost=5000). F6 MsgRotateConsKey COMPLETE & TESTED — proto+regenerated tx.pb.go, msg.go/codec.go/events.go, keeper RotateConsKey handler (swaps ConsensusPubkey, moves cons-addr index, rejects unknown/dup/disallowed), msg_server_rotate_test.go 3 subtests green. cloudflare/circl now a DIRECT dep. ALL THREE REPOS PUSHED: junoclaw:main (523a1e7); Dragonmonk111/cometbft@aegis-phase-cf-hybrid; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid (tip 4e6f315, AUTHOR-CORRECTED root->Dragonmonk111 <tj.yamlajatt@gmail.com> on 2026-06-23 via rebase --exec reset-author + fast-export push). NOTE: fork remote SHAs differ from local clones (fast-export|fast-import is REQUIRED to bypass a local pack corruption GitHub's index-pack rejects — direct push fails with "did not receive expected object ... index-pack failed"; fast-export rebuilds full non-delta objects in a fresh temp repo, content identical — keep pushing via fast-export). No SDK-fork commit SHA is hard-pinned anywhere in junoclaw (go.mod files use no replace->fork pin; only progress.txt records the tip), so the author rewrite breaks nothing downstream. CI noise fixed: removed sims-*.yml/sims.yml on SDK aegis branch (only failing workflows; cometbft had none). Remaining (infra-gated, NOT crypto- or code-gated): F6 live ABCI propagation + rotation history/queue (multi-val devnet), 4-validator bandwidth localnet (built Juno binary), cross-CPU/OS verify-hash artifact (ARM), upstream tracking (cosmwasm#2685, wasmvm#735, juno#1202). Awen LLM policy: Ollama/local-only, no 3rd-party endpoints, no OpenAI-compat base_url; DeepSeek + Kimi/K2 open weights OK, Sonnet excluded (proprietary).
 
+
+== 2026-06-23 ==
+
+- SDK FORK AUTHOR REWRITE DONE (root@LAPTOP-QJNRIKAM -> Dragonmonk111
+  <tj.yamlajatt@gmail.com>). 4 aegis commits on aegis-phase-d3-hybrid rebased
+  with `git rebase 5f1e7de --exec 'git commit --amend --reset-author --no-edit'`
+  (GIT_SEQUENCE_EDITOR no-op). Safety: script aborts on dirty tree, wrong
+  branch, or any non-root author in the range. Direct push hit the known local
+  pack corruption ("did not receive expected object ... index-pack failed") so
+  pushed via fast-export|fast-import into a fresh temp repo (cmd /c pipe for
+  byte-clean blobs) -> git push --force. Remote tip now 4e6f315, all 4 commits
+  authored by Dragonmonk111. Pin check first: NO go.mod replace->fork pin
+  anywhere in junoclaw, so the SHA change breaks nothing downstream.
+
+- Upstream tracking doc created: docs/UPSTREAM_TRACKING.md. Resolved the three
+  items: cosmwasm#2685 = BN254 alt_bn128 host-fns proposal (OPEN, awaiting
+  maintainer ABI/feature-flag/gas feedback before PR); wasmvm#735 = companion
+  Go-side wrapping question (follow BLS12-381 VM-internal precedent?); juno#1202
+  = v30 upgrade PR (OPEN, rebase aegis patches onto v30 tags once merged).
+
+- Two infra/hardware-gated PLANS written (deterministic, boxed steps):
+  * docs/VALIDATOR_SAFE_LOCALNET_RUNBOOK.md — 4-validator bandwidth localnet on
+    the VairagyaNodes ext4 host WITHOUT risking the prod validator: separate
+    --home, +100 port offset, prod service stopped during run, prod
+    priv_validator_key.json checksum verified unchanged before restart. Steps
+    0-8 + rollback, each with an explicit "deterministic outcome".
+  * docs/CROSS_ARCH_VERIFY_ARTIFACT_PLAN.md — cross-CPU/OS VerifySignature hash
+    artifact: ARM sourcing (Option1 borrow ffern/Apple Silicon; Option2 rent
+    AWS t4g.nano/Oracle A1/Hetzner CAX11 by the minute, terminate same session,
+    sub-cent, NO continuous plan; Option3 QEMU stop-gap) + the verify-artifact
+    KAT program + diff-must-be-empty acceptance.
 
 == 2026-06-21 (session 3) ==
 
