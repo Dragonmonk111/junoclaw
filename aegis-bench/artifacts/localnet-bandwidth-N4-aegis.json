@@ -1,0 +1,25 @@
+{
+  "block": {
+    "height": "10",
+    "num_txs": 0,
+    "num_sigs": 4
+  },
+  "commit_bytes": 2266,
+  "peers": [
+    {
+      "id": "754c5ca3e42c4559e8224a6fbb9e1a4299fe62f1",
+      "recv_bytes": "22532",
+      "send_bytes": "65308"
+    },
+    {
+      "id": "5ca9981198dda9c2de76f396136c4719cf695e57",
+      "recv_bytes": "32416",
+      "send_bytes": "65415"
+    },
+    {
+      "id": "7598e8d11a5a4f6a4e4ed1fc85b530dd9eac5f3c",
+      "recv_bytes": "10448",
+      "send_bytes": "64549"
+    }
+  ]
+}
