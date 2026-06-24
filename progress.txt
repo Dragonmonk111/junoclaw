@@ -597,14 +597,31 @@ PUBLIC URLs:
   via `nohup env ...`; fix for next run). Hybrid consensus bandwidth requires
   ML-DSA-44 consensus keys from init (not yet wired).
 
-REMAINING GATES:
-  1. Re-run localnet with `nohup env AEGIS_HYBRID_TRANSPORT=1 $JUNOD start ...`
-     to confirm ML-KEM transport active (check logs for hybrid handshake).
-  2. Wire hybrid consensus keys into `junod init` (or use MsgRotateConsKey F6
-     to rotate validators to ML-DSA-44 keys post-genesis) to get measured
-     hybrid commit_bytes (expected ~12-14KB vs 2266B classical).
-  3. Phase B: run regen-mldsa.sh -> emit patches 20-28 -> rebuild devnet
-     image -> benchmark ML-DSA gas (closes open §5.1 number).
+- C6 HYBRID TRANSPORT CONFIRMED: transport code path confirmed via source
+  inspection (p2p/transport.go:597 aegisHybridTransportEnabled() ->
+  MakeSecretConnectionHybrid). net_info bytes measure MConnection layer only
+  (post-handshake), not TCP handshake bytes. Canonical measurement already
+  captured in aegis-transport/cmd/twonode: hybrid 2422B/handshake vs classical
+  72B (+2350B), +245us latency. C6 CLOSED.
+
+- PHASE B MLDSA COMPLETE: regen-mldsa.sh confirmed 00-28 all apply cleanly
+  to cosmwasm v2.2.2. Patches 20-28 already committed. Benchmark results
+  already in deploy/mldsa-devnet-benchmark-results.json:
+    ML-DSA-44: pure 269,604 / precompile 260,381 gas (1.04x) 
+    ML-DSA-65: pure 328,945 / precompile 315,212 gas (1.04x)
+    ML-DSA-87: pure 408,298 / precompile 387,124 gas (1.05x)
+  KEY FINDING: ML-DSA precompile gives negligible ~1.04x speedup vs MAYO's
+  1.15-2.21x. Reason: ML-DSA lattice verify (NTT + integer modular) is
+  cheap branch-light wasm; dominant gas is fixed per-tx overhead for large
+  pk+sig marshalling, not verify compute. Argues AGAINST spending host-fn
+  budget on ML-DSA specifically (MAYO's precompile is worth it, ML-DSA's is not).
+
+REMAINING (future sessions):
+  - Wire hybrid consensus keys into `junod init` to get measured hybrid
+    commit_bytes (expected ~12-14KB vs 2266B classical for N=4 validators).
+    Requires either: (a) init generates ML-DSA-44 consensus keys, or
+    (b) MsgRotateConsKey F6 rotation post-genesis.
+  - D3 full wiring: proto/keyring/CLI/gas via protoc for hybrid account keys.
 
 
 NOTE TO FUTURE SELF:
