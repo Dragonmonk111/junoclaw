@@ -5,7 +5,7 @@ Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
 Last update: 2026-06-25 UTC+1
-Status: Aegis transport-layer RTT measured on VirtualBox VM (4-node junod-aegis localnet, AEGIS_HYBRID_TRANSPORT=1 X25519+ML-KEM-768): classical commit_bytes=2,265 = hybrid commit_bytes=2,265 -> PQC P2P handshake is INVISIBLE at commit level (0 B consensus-bandwidth cost; transport cost is handshake CPU + 1 ML-KEM ct round, not commit bytes). Distinct from hybrid CONSENSUS keys (6.71x / 15,208 B). Production validator (manual junod, /usr/local/bin/junod --home /home/dragonmonk111/.juno) stopped for test, prod priv_validator_key verified UNCHANGED, restarted. Wrote ADR-009 (hybrid-aware IBC 07-tendermint light-client migration, Phase G) + ADR-010 (staged account-key migration: opt-in register -> dual-required -> pqc-only, address-stable). Earlier: Aegis F hybrid consensus keys WIRED + measured; junod-aegis rebuilt (SHA=98e6813ac0dd8f004002a9b1896cea3f13362c4af985d40ffe2c9a73f2bcacdb); Phase B ML-DSA patches 20-28 + benchmark. Forks: Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=ea7c1af. No go.mod fork pins; only progress.txt records tips.
+Status: D3 account wiring COMPLETE in SDK fork: hybrid HD algorithm (crypto/hd/hybrid), keyring default support, x/auth/ante hybrid gas case (300k ML-DSA-44), CLI uses existing --key-type hybrid-secp256k1-mldsa44. SDK fork also wired to Aegis CometBFT fork via go.mod replace (hybrid consensus-key proto now resolves). Tests green: ./crypto/keys/hybrid/... ./crypto/hd/... ./x/auth/ante/... . Forks: Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=2584d80. Transport-layer RTT measured (commit bytes unchanged at 2,265); hybrid consensus keys measured 6.71x (15,208 B). ADR-009 + ADR-010 written. Remaining: F6 MsgRotateConsensusKey, F7 remote signer passthrough, IBC Phase G.
 
 
 == 2026-06-25 ==
@@ -54,6 +54,16 @@ Status: Aegis transport-layer RTT measured on VirtualBox VM (4-node junod-aegis 
   commit-invariance (0 B/block) finding. Updated "What Is Next" (C6 Done; IBC
   & account migration now "Design done" -> ADR-009/ADR-010); fixed stale "PQC
   binary awaits one build step" line; added bench/RTT test repro commands.
+
+- D3 ACCOUNT WIRING COMPLETE (SDK fork pushed to aegis-phase-d3-hybrid@2584d80):
+    * crypto/hd hybrid algo: deterministic BIP39 -> secp256k1 scalar + ML-DSA-44 seed.
+    * crypto/keyring default algos include hd.HybridSecp256k1MlDsa44.
+    * x/auth/ante hybrid gas case: 300k ML-DSA-44 on top of secp256k1 cost.
+    * CLI: existing --key-type hybrid-secp256k1-mldsa44 flag works with keyring.
+    * SDK go.mod replaces CometBFT with Dragonmonk111/cometbft aegis-phase-cf-hybrid
+      so the hybrid consensus-key proto resolves; go.sum tidy; Go 1.24.0.
+    * Fixed Go 1.24 vet errors: non-constant format string in fee.go, hd example names.
+    * Tests green: go test ./crypto/keys/hybrid/... ./crypto/hd/... ./x/auth/ante/...
 
 - GITHUB ACTIONS ARM DETERMINISM WORKFLOW: created .github/workflows/aegis-determinism-arm.yml
   (re-triggered 2026-06-25 after fixing aegis-bench/artifacts gitignore exception).
