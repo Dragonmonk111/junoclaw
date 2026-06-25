@@ -56,6 +56,7 @@ Status: Aegis transport-layer RTT measured on VirtualBox VM (4-node junod-aegis 
   binary awaits one build step" line; added bench/RTT test repro commands.
 
 - GITHUB ACTIONS ARM DETERMINISM WORKFLOW: created .github/workflows/aegis-determinism-arm.yml
+  (re-triggered 2026-06-25 after fixing aegis-bench/artifacts gitignore exception).
   that runs aegis-accounts/cmd/verify-artifact on real x86_64 (ubuntu-24.04) and real ARM64
   (ubuntu-24.04-arm) runners, compares the deterministic JSON fields, and commits the two
   artifacts to aegis-bench/artifacts/ on main (or uploads them as workflow artifacts).
