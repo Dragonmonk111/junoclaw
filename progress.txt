@@ -5,10 +5,23 @@ Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
 Last update: 2026-06-25 UTC+1
-Status: D3 account wiring COMPLETE in SDK fork; F6 MsgRotateConsensusKey proto/server/CLI/tests COMPLETE (rate-limit state still gated). SDK fork pinned to Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=8c388ca. Tests green: ./crypto/keys/hybrid/... ./crypto/hd/... ./x/auth/ante/... ./x/staking/keeper/... (TestMsgRotateConsKey). Forks: Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=8c388ca. Transport-layer RTT measured (commit bytes unchanged at 2,265); hybrid consensus keys measured 6.71x (15,208 B). ADR-009 + ADR-010 written. Remaining: F6 rate-limit state, F7 remote signer passthrough, IBC Phase G.
+Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/tests COMPLETE; F7 hybrid remote-signer passthrough COMPLETE (SignerClient/Server carry 1,344 B pubkey + 2,491 B signatures). SDK fork pinned to Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=8c388ca; CometBFT fork pinned to Dragonmonk111/cometbft@aegis-phase-cf-hybrid=21f2370. Tests green: ./crypto/keys/hybrid/... ./crypto/hd/... ./x/auth/ante/... ./x/staking/keeper/... (TestMsgRotateConsKey) and cometbft/privval (TestSignerHybrid*). Transport-layer RTT measured (commit bytes unchanged at 2,265); hybrid consensus keys measured 6.71x (15,208 B). ADR-009 + ADR-010 written. Remaining: F6 rate-limit state, IBC Phase G.
 
 
 == 2026-06-25 ==
+
+- F7 HYBRID REMOTE SIGNER PASSTHROUGH COMPLETE (CometBFT fork aegis-phase-cf-hybrid
+  local=dc0d51b, remote=21f2370):
+    * Rewrote v0.38.x Aegis commits (C5, F4, F2/F4, F5, F7) to author
+      Dragonmonk111 <tj.yamlajatt@gmail.com>, then fast-forwarded
+      aegis-phase-cf-hybrid to that tip and pushed via fast-export|fast-import
+      (pack-corruption workaround).
+    * privval/signer_client_pqc_test.go: SignerServer wraps a hybrid FilePV
+      (GenFilePVWithPQC); SignerClient retrieves the 1,344 B hybrid pubkey via
+      PubKey oneof and gets back 2,491 B framed hybrid signatures for votes and
+      proposals. Signatures verify under the hybrid pubkey and are rejected by
+      a classical-only Ed25519 verifier.
+    * go test ./privval/ -run TestSignerHybrid -count=1 PASS.
 
 - F6 MsgRotateConsensusKey WIRING COMPLETE (SDK fork aegis-phase-d3-hybrid@8c388ca):
     * Proto already had MsgRotateConsKey / MsgRotateConsKeyResponse and the
