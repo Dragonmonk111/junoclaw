@@ -5,10 +5,27 @@ Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
 Last update: 2026-06-25 UTC+1
-Status: D3 account wiring COMPLETE in SDK fork: hybrid HD algorithm (crypto/hd/hybrid), keyring default support, x/auth/ante hybrid gas case (300k ML-DSA-44), CLI uses existing --key-type hybrid-secp256k1-mldsa44. SDK fork also wired to Aegis CometBFT fork via go.mod replace (hybrid consensus-key proto now resolves). Tests green: ./crypto/keys/hybrid/... ./crypto/hd/... ./x/auth/ante/... . Forks: Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=2584d80. Transport-layer RTT measured (commit bytes unchanged at 2,265); hybrid consensus keys measured 6.71x (15,208 B). ADR-009 + ADR-010 written. Remaining: F6 MsgRotateConsensusKey, F7 remote signer passthrough, IBC Phase G.
+Status: D3 account wiring COMPLETE in SDK fork; F6 MsgRotateConsensusKey proto/server/CLI/tests COMPLETE (rate-limit state still gated). SDK fork pinned to Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=8c388ca. Tests green: ./crypto/keys/hybrid/... ./crypto/hd/... ./x/auth/ante/... ./x/staking/keeper/... (TestMsgRotateConsKey). Forks: Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=8c388ca. Transport-layer RTT measured (commit bytes unchanged at 2,265); hybrid consensus keys measured 6.71x (15,208 B). ADR-009 + ADR-010 written. Remaining: F6 rate-limit state, F7 remote signer passthrough, IBC Phase G.
 
 
 == 2026-06-25 ==
+
+- F6 MsgRotateConsensusKey WIRING COMPLETE (SDK fork aegis-phase-d3-hybrid@8c388ca):
+    * Proto already had MsgRotateConsKey / MsgRotateConsKeyResponse and the
+      Msg/RotateConsKey RPC in proto/cosmos/staking/v1beta1/tx.proto; generated
+      types already in x/staking/types/tx.pb.go.
+    * Message server handler already in x/staking/keeper/msg_server.go: validates
+      valoper, checks consensus params, rejects duplicate consensus addresses, swaps
+      ConsensusPubkey, updates cons-addr -> operator index, emits rotate_consensus_key
+      event.
+    * TestMsgRotateConsKey in x/staking/keeper/msg_server_rotate_test.go passes
+      (unknown validator, successful rotation, rotate-to-used-key rejected).
+    * ADDED CLI: x/staking/client/cli/tx.go NewRotateConsKeyCmd, usage
+      `junod tx staking rotate-cons-key [validator-address] [path-to-pubkey-json]`.
+      Reads a single SDK Any pubkey JSON and submits the MsgRotateConsKey tx.
+      go build + go vet + keeper tests green.
+    * STILL GATED: rate-limit state (ConsensusRotationHeight) on Validator and
+      24h cooldown enforcement; can be added without changing the wire Msg shape.
 
 - TRANSPORT-LAYER RTT TEST RUN on VirtualBox VM (production validator host):
     * Built junod-aegis in VM from forks: ~/aegis-build (cometbft aegis-phase-cf-hybrid
