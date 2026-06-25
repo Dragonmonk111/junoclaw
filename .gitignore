@@ -3,6 +3,8 @@ target/
 target-wsl/
 *.wasm
 artifacts/
+# Exception: committed cross-arch determinism artifacts from CI.
+!aegis-bench/artifacts/
 
 # Aegis upstream fork clones (CometBFT / Cosmos SDK) — large external repos
 # cloned locally to apply the Phase C/D patches; tracked in their own git, not here.
