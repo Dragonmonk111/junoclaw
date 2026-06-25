@@ -4,8 +4,87 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-06-24 UTC+1
-Status: Aegis F hybrid consensus keys WIRED INTO junod init + measured. 4-validator localnet: classical commit_bytes=2,267 B, hybrid commit_bytes=15,208 B (6.71x). Forks pushed via fast-export (remote SHAs differ from local): Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=ea7c1af. junoclaw:main=a60b1e9. All three pending tasks done. Done: junod-aegis rebuilt (SHA=98e6813ac0dd8f004002a9b1896cea3f13362c4af985d40ffe2c9a73f2bcacdb); Phase B ML-DSA patches 20-28 regen + devnet benchmark (ML-DSA-44=260,381/269,604, ML-DSA-65=315,212/328,945 precompile/pure verify gas); article updated with 6.71× commit-size increase. No go.mod fork pins; only progress.txt records tips.
+Last update: 2026-06-25 UTC+1
+Status: Aegis transport-layer RTT measured on VirtualBox VM (4-node junod-aegis localnet, AEGIS_HYBRID_TRANSPORT=1 X25519+ML-KEM-768): classical commit_bytes=2,265 = hybrid commit_bytes=2,265 -> PQC P2P handshake is INVISIBLE at commit level (0 B consensus-bandwidth cost; transport cost is handshake CPU + 1 ML-KEM ct round, not commit bytes). Distinct from hybrid CONSENSUS keys (6.71x / 15,208 B). Production validator (manual junod, /usr/local/bin/junod --home /home/dragonmonk111/.juno) stopped for test, prod priv_validator_key verified UNCHANGED, restarted. Wrote ADR-009 (hybrid-aware IBC 07-tendermint light-client migration, Phase G) + ADR-010 (staged account-key migration: opt-in register -> dual-required -> pqc-only, address-stable). Earlier: Aegis F hybrid consensus keys WIRED + measured; junod-aegis rebuilt (SHA=98e6813ac0dd8f004002a9b1896cea3f13362c4af985d40ffe2c9a73f2bcacdb); Phase B ML-DSA patches 20-28 + benchmark. Forks: Dragonmonk111/cometbft@aegis-phase-cf-hybrid=7524f93; Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=ea7c1af. No go.mod fork pins; only progress.txt records tips.
+
+
+== 2026-06-25 ==
+
+- TRANSPORT-LAYER RTT TEST RUN on VirtualBox VM (production validator host):
+    * Built junod-aegis in VM from forks: ~/aegis-build (cometbft aegis-phase-cf-hybrid
+      + cosmos-sdk aegis-phase-d3-hybrid + juno v29.0.0, replace directives).
+      version --long: cosmos_sdk_version v0.50.13, go1.24.0.
+    * Production validator is a MANUAL process (NOT systemd): /usr/local/bin/junod
+      start --home /home/dragonmonk111/.juno, PID 9249, ports 26656/26657/9090.
+      Stopped via SIGTERM for the test, prod priv_validator_key.json sha256 recorded
+      before/after = UNCHANGED, restarted clean.
+    * 4-node localnet (chain aegis-localnet-1, +100 port offset, loopback peers).
+      Classical run: commit_bytes = 2,265. Hybrid transport run
+      (AEGIS_HYBRID_TRANSPORT=1): commit_bytes = 2,265 -> IDENTICAL.
+    * RESULT: the X25519+ML-KEM-768 P2P handshake adds ZERO bytes at the commit
+      level (it protects the link, not the consensus payload). The real transport
+      cost is handshake CPU + one ML-KEM ciphertext round, best measured by the
+      CometBFT fork's secret_connection_hybrid_test.go, not a loopback localnet.
+    * Gotcha fixed: wiping data/ removed priv_validator_state.json -> node Exit 1
+      ("open .../priv_validator_state.json: no such file or directory"). Fix:
+      recreate data/ + seed {"height":"0","round":0,"step":0} before hybrid restart.
+    * Artifact: ~/aegis-localnet-artifacts/transport-rtt-result.json.
+
+- CROSS-ARCH DETERMINISM CONFIRMED (QEMU): ran aegis-accounts/cmd/verify-artifact
+  native amd64 + cross-built linux/arm64 under qemu-aarch64-static. Both:
+  input_sha256=623000372fa329ff62586b2203c337d33f62b0f9484c5e855614a5892883eba9,
+  verify_ok=true, tampered_rejected=true -> IDENTICAL (only goarch differs).
+  Closes the Phase F cross-CPU/OS determinism checklist item via emulation.
+  Artifacts: aegis-accounts/artifacts/verify-{amd64,arm64}.json. Real-silicon
+  confirmation (Oracle A1 free-tier / Apple Silicon / Graviton) optional hardening,
+  NOT a blocker. No Hetzner/AWS needed — QEMU on the host did it for free.
+
+- TRANSPORT HANDSHAKE BENCHMARK: added p2p/conn/secret_connection_hybrid_bench_test.go
+  (in-memory CPU-only bench) to CometBFT fork. Measured (Ryzen 5 5600H, go1.24,
+  -benchtime 200x): classical handshake 580,413 ns/op (25,253 B, 242 allocs);
+  hybrid 895,061 ns/op (65,645 B, 264 allocs). Delta +315 us CPU, +40 KB heap,
+  1.54x. Real-TCP RTT re-run (TestHybridHandshakeRTT) confirmed: +207us@0RTT,
+  +5.59ms@10ms, +25.74ms@50ms (~0.5 RTT = one extra ML-KEM ct leg); bytes on
+  wire 2,158->5,623 = +3,465 B, one-time per connection. All costs are
+  per-connection at dial, ZERO per-block (localnet commit 2,265=2,265).
+  Results appended to aegis-transport/docs/PHASE_C6_RTT_RESULTS.md (2026-06-25 section).
+
+- ARTICLE HARDENED: drafts/ARTICLE_AEGIS_CONSENSUS_PQC_2026_06_23.md transport
+  section was qualitative-only; added measured CPU/RTT/bytes tables + the
+  commit-invariance (0 B/block) finding. Updated "What Is Next" (C6 Done; IBC
+  & account migration now "Design done" -> ADR-009/ADR-010); fixed stale "PQC
+  binary awaits one build step" line; added bench/RTT test repro commands.
+
+- GITHUB ACTIONS ARM DETERMINISM WORKFLOW: created .github/workflows/aegis-determinism-arm.yml
+  that runs aegis-accounts/cmd/verify-artifact on real x86_64 (ubuntu-24.04) and real ARM64
+  (ubuntu-24.04-arm) runners, compares the deterministic JSON fields, and commits the two
+  artifacts to aegis-bench/artifacts/ on main (or uploads them as workflow artifacts).
+  No cloud account needed; GitHub provides the ARM runner free for public repos.
+
+- DETAILED MAINNET WIRING PLAN: docs/AEGIS_F6_D3_IBC_PHASEG_PLAN.md written. Covers the
+  remaining protoc-gated and IBC work: F6 MsgRotateConsensusKey (proto, msg server, rate
+  limit, CLI), F7 hybrid remote-signer signature passthrough, D3 account keyring/CLI/gas
+  wiring, and IBC Phase G 07-tendermint fork integration with header-size bounds and
+  end-to-end hybrid update/misbehaviour tests. Recommended order: D3 -> F6 -> F7 -> G.
+
+- ADR-009 WRITTEN: docs/ADR-009-PQC-HYBRID-IBC-LIGHTCLIENT.md (Phase G).
+    Hybrid-aware 07-tendermint client: reuses landed VerifyCommitLight/
+    VerifyCommitLightTrusting hybrid dispatch; G1 header-size bound bump, G2
+    dispatch (inherited from CometBFT fork), G3 trust-overlap counting across a
+    consensus-key rotation (matches by ADDRESS, verifies with header's pubkey;
+    F1-b address invariant is the linchpin), G4 misbehaviour, G5 relayer.
+    Classical-half fallback => no flag day, channel stays open through migration.
+    In-place extension, NOT a new 08-pqc-tendermint client type.
+
+- ADR-010 WRITTEN: docs/ADR-010-PQC-ACCOUNT-KEY-MIGRATION.md (Phase D migration).
+    Decouples authenticator from address so EXISTING classical accounts go hybrid
+    WITHOUT changing address/moving funds/re-issuing credentials. Stage ladder:
+    0 CLASSICAL -> 1 REGISTERED (advisory, risk-free) -> 2 DUAL-REQUIRED -> 3 PQC-ONLY.
+    MsgRegisterPqcKey (proof-of-possession via binding_sig over chain_id|addr|secp|mldsa),
+    MsgEnablePqcEnforcement (requires LIVE dual sig => can't lock yourself out),
+    AnteHandler reads per-account stage from new x/pqcauth, downgrade from Stage 2
+    must be dual-signed (closes quantum downgrade-attack). Preserves the
+    address-keyed JunoClaw member roster (orthogonal columns).
 
 
 == 2026-06-24 ==
