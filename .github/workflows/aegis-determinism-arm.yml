@@ -94,16 +94,27 @@ jobs:
         run: |
           set -e
           mkdir -p aegis-bench/artifacts
+          echo "=== downloaded artifact tree ==="
+          find downloaded-artifacts -type f -ls
+
           cp downloaded-artifacts/verify-amd64/verify-amd64.json aegis-bench/artifacts/verify-amd64.json
           cp downloaded-artifacts/verify-arm64/verify-arm64.json aegis-bench/artifacts/verify-arm64.json
+
           echo "=== AMD64 artifact ==="
           cat aegis-bench/artifacts/verify-amd64.json
           echo "=== ARM64 artifact ==="
           cat aegis-bench/artifacts/verify-arm64.json
+
           jq -S 'del(.goos,.goarch,.go_version)' aegis-bench/artifacts/verify-amd64.json > /tmp/a.json
           jq -S 'del(.goos,.goarch,.go_version)' aegis-bench/artifacts/verify-arm64.json > /tmp/b.json
-          diff /tmp/a.json /tmp/b.json
-          echo "CROSS-ARCH DETERMINISM CONFIRMED — real silicon"
+
+          echo "=== deterministic diff (should be empty) ==="
+          if diff -u /tmp/a.json /tmp/b.json; then
+            echo "CROSS-ARCH DETERMINISM CONFIRMED — real silicon"
+          else
+            echo "CROSS-ARCH DETERMINISM FAILED — see diff above"
+            exit 1
+          fi
 
       - name: Commit artifacts to main
         run: |
