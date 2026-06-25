@@ -63,6 +63,37 @@ hybrid **5623** → **+3465 bytes**.
   the X25519-pubkey comparison, saving 1184 B per handshake. Not worth the added
   protocol complexity at these volumes.
 
+## Re-measurement + isolated CPU benchmark (2026-06-25, AMD Ryzen 5 5600H, go1.24.0)
+
+Confirmed the RTT table on a second host and added a dedicated **CPU-only**
+benchmark over the in-memory pipe (no TCP/loopback syscalls), so ns/op is the
+pure handshake crypto + framing cost. Harness:
+`p2p/conn/secret_connection_hybrid_bench_test.go`.
+
+Reproduce:
+`go test ./p2p/conn/ -run '^$' -bench BenchmarkSecretConnHandshake -benchmem -benchtime 200x`
+
+| Handshake (in-mem pipe) | ns/op | µs/op | B/op | allocs/op |
+|-------------------------|------:|------:|-----:|----------:|
+| Classical (X25519)      | 580,413 | 580 | 25,253 | 242 |
+| Hybrid (X25519+ML-KEM-768) | 895,061 | 895 | 65,645 | 264 |
+| **Delta**               | **+314,648** | **+315** | **+40,392** | **+22** |
+
+Hybrid is **1.54×** classical handshake CPU and **+40 KB** transient heap — both
+one-time per connection. The in-memory CPU number (+315 µs) is slightly tighter
+than the zero-RTT TCP number (+207–371 µs across runs) because it excludes
+loopback socket overhead; both confirm sub-millisecond, one-time cost.
+
+Real-TCP RTT re-run (median of 9) matched the original table within noise:
+0 RTT 682µs/889µs (+207µs), 10 ms 11.18/16.77 ms (+5.59 ms),
+50 ms 51.27/77.02 ms (+25.74 ms); bytes-on-wire unchanged (2158 → 5623, +3465).
+
+**Cross-check with the live localnet (2026-06-25):** a 4-node `junod-aegis`
+localnet run classical vs `AEGIS_HYBRID_TRANSPORT=1` produced **identical**
+consensus commits — `commit_bytes = 2,265` in both — confirming the handshake
+adds **zero bytes at the commit/per-block level**. The entire transport cost is
+the one-time per-connection figures above.
+
 ## Relationship to C5
 
 C5 proved the hybrid handshake is correct and downgrade/tamper-resistant in the
