@@ -114,6 +114,33 @@ The combiner is `SHA-256(X25519_secret || ML-KEM_shared_secret)`. Breaking the c
 
 An environment variable gates the upgrade: `AEGIS_HYBRID_TRANSPORT=1`. Operators can enable it per-node without a chain halt.
 
+**We measured it.** Two ways — the pure handshake CPU cost over an in-memory pipe, and the wall-clock cost over real TCP sockets at simulated link latencies (both in the CometBFT fork, `p2p/conn/secret_connection_hybrid_{bench,rtt}_test.go`, AMD Ryzen 5 5600H):
+
+| Handshake | Classical (X25519) | Hybrid (X25519 + ML-KEM-768) | Delta |
+|-----------|-------------------:|-----------------------------:|------:|
+| CPU per connection | 580 µs | 895 µs | **+315 µs (1.54×)** |
+| Heap per connection | 25.3 KB | 65.6 KB | +40.4 KB |
+| Bytes on wire (both peers) | 2,158 B | 5,623 B | **+3,465 B** |
+
+And the round-trip cost over real sockets, median of 9, with injected one-way delay:
+
+| Link RTT | Classical | Hybrid | Delta |
+|---------:|----------:|-------:|------:|
+| 0 (loopback) | 682 µs | 889 µs | +207 µs |
+| 10 ms | 11.18 ms | 16.77 ms | +5.59 ms |
+| 50 ms | 51.27 ms | 77.02 ms | +25.74 ms |
+
+Two things matter here. First, **all of this is paid once per connection, at setup** — not per block, not per vote. A validator dials a handful of persistent peers and then talks to them for days. Second, the latency delta scales at roughly **half the link RTT**: the hybrid handshake adds one extra one-way leg (the ML-KEM-768 ciphertext), so it costs one additional message flight, not a multiplicative blow-up.
+
+**The decisive number came from the live localnet.** We ran the same 4-node `junod-aegis` build twice — classical transport, then `AEGIS_HYBRID_TRANSPORT=1` — and sampled the consensus commit at the same height:
+
+```
+classical transport   commit_bytes = 2,265
+hybrid   transport   commit_bytes = 2,265   (identical, byte-for-byte)
+```
+
+The post-quantum handshake protects the *link*, not the *payload*. It adds **zero bytes to consensus** and **zero per-block cost**. Compare this with hybrid consensus *keys* (next section), which cost 6.71× per commit forever. Quantum-safe transport is the cheapest win in the entire migration — a one-time ~315 µs and ~3.5 KB per peer connection, and nothing thereafter.
+
 ---
 
 ### PQC Attestations on CosmWasm
@@ -124,7 +151,7 @@ Covered in the previous article: MAYO and ML-DSA verification as native wasmvm p
 
 ## The Numbers — Live Localnet Results
 
-We ran it today. Four validators, one machine, ports offset +100 from the production node's defaults. Classical Juno binary (the PQC binary awaits one remaining build step). Here is what we captured:
+We ran it today. Four validators, one machine, ports offset +100 from the production node's defaults — with the `junod-aegis` binary built from the hybrid forks. Here is what we captured:
 
 <!-- IMAGE: Section — "Four Lanterns on the Headland" (16:9) — see Appendix prompt #4
      Studio Ghibli 2D hand-painted panoramic illustration, dusk over a wide
@@ -229,18 +256,20 @@ The greenfield and migration paths are not rivals — they are Pareto points. Di
 | Run regen-mldsa.sh → emit wasmvm patches 20-28 | **Done** — 00-28 apply cleanly to cosmwasm v2.2.2 |
 | Rebuild devnet with ML-DSA precompile | **Done** — `junoclaw/junod-bn254:devnet` rebuilt |
 | Benchmark ML-DSA gas (closes §5.1 open number) | **Done** — ML-DSA-44/65/87 pure + precompile gas captured |
-| C6: Measure hybrid transport RTT on devnet | Next measurement |
-| IBC light-client hybrid-key migration | Design phase |
-| Normal account key PQC migration | Governance / coordination phase |
+| C6: Measure hybrid transport handshake cost | **Done** — +315 µs CPU, +3,465 B/conn one-time; **0 B per block** (commit unchanged 2,265 = 2,265) |
+| IBC light-client hybrid-key migration | **Design done** — ADR-009 (in-place `07-tendermint`, classical-half fallback, no flag day) |
+| Normal account key PQC migration | **Design done** — ADR-010 (staged opt-in ladder, address-stable, no fund move) |
 | Cross-arch determinism: ARM64 vs x86_64 verify hash | ARM hardware |
 
-The consensus-layer foundation is in place. The remaining work is transport-layer RTT measurement, IBC light-client migration design, and normal-account key migration planning.
+The consensus-layer foundation is in place, the transport cost is measured, and the two remaining migrations — IBC light clients (ADR-009) and account keys (ADR-010) — now have committed designs. What is left is the gated fork wiring and cross-architecture determinism verification on ARM hardware.
 
 ---
 
 ## Reproduce
 
 - **Runbook:** `docs/VALIDATOR_SAFE_LOCALNET_RUNBOOK.md`
+- **Transport handshake CPU benchmark:** `go test ./p2p/conn/ -run '^$' -bench BenchmarkSecretConnHandshake -benchmem` (CometBFT fork)
+- **Transport handshake RTT + bytes:** `go test ./p2p/conn/ -run TestHybridHandshakeRTT -v` (CometBFT fork)
 - **aegis-bench model:** `cargo run --release --features timing` in `aegis-bench/`
 - **SDK fork (hybrid keys):** `Dragonmonk111/cosmos-sdk` @ `aegis-phase-d3-hybrid`
 - **CometBFT fork (ML-KEM transport):** `Dragonmonk111/cometbft` @ `aegis-phase-cf-hybrid`
