@@ -80,12 +80,18 @@ in IBC itself** — the IBC client deserializes the validator set through the sa
 CometBFT codec, so once the CometBFT fork's codec knows the hybrid variant, the
 client transparently reconstructs hybrid pubkeys.
 
-The only IBC-side requirement is a **size-bound bump**: the IBC client enforces
-its own `MaxBytes` / header-size limits in `ClientState.Validate` and in the
-relayer's chunking. A header from an all-hybrid 100-validator set carries
-~134 KB of validator pubkeys + ~249 KB of commit signatures. The client's
-header size ceiling must be raised to admit it (mirrors ADR-008's
-`MaxCommitBytes` bump on the consensus side).
+The IBC `07-tendermint` client itself has **no hardcoded `MaxHeaderSize` or
+`MaxCommitSize` constant**. The effective header-size bound is the counterparty
+chain's CometBFT consensus block-size limit, which the Aegis CometBFT fork has
+raised to accommodate hybrid Ed25519+ML-DSA-44 validator sets and commits (a
+conservative ~2 MB ceiling). The `ibc-go` fork activates this via a `go.mod`
+`replace` directive pointing to the Aegis CometBFT fork, so no protocol-level
+IBC change is required.
+
+A header from an all-hybrid 100-validator set carries ~134 KB of validator
+pubkeys + ~249 KB of commit signatures. The only off-chain actor that may need a
+config bump is the **relayer**, which may need to raise its per-message /
+per-tx size limits and chunking thresholds (G5).
 
 ### G2 — Verification dispatch (already proven, now on the IBC surface)
 
@@ -259,10 +265,13 @@ live on A, (2) ADR-009 client upgrade available and deployed by counterparties,
    header) and asserts (a) overlap counts it, (b) the hybrid signature verifies,
    (c) an address-changing rotation safely drops to `ErrNotEnoughVotingPowerSigned`.
    Proves G3 before any fork wiring.
-2. **G-fork (gated on ibc-go fork + devnet):** depend `ibc-go` on the CometBFT
-   fork tag; raise the client header size bound (G1); add an end-to-end
-   `MsgUpdateClient` test through `x/ibc` with a hybrid header; confirm
-   `MsgSubmitMisbehaviour` freezes on a hybrid double-sign (G4).
+2. **G-fork (gated on ibc-go fork + devnet):** depend `ibc-go` on the Aegis
+   CometBFT fork via a `go.mod` `replace` directive; the header size bound (G1)
+   is raised in the fork itself, so no IBC protocol constant changes. Add focused
+   unit tests in `modules/light-clients/07-tendermint` that drive the same
+   `light.Verify` path used by `verifyHeader` over heterogeneous and rotated
+   hybrid validator sets, and prove the double-sign verification predicate that
+   `MsgSubmitMisbehaviour` relies on (G4).
 3. **Relayer note:** document the relayer's required fork-tag bump and size-limit
    config in `RUN_*` ops docs (G5); no relayer code change beyond the vendored
    CometBFT version.
