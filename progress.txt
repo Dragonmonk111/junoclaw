@@ -4,9 +4,28 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-06-25 UTC+1
-Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/tests COMPLETE; F7 hybrid remote-signer passthrough COMPLETE (SignerClient/Server carry 1,344 B pubkey + 2,491 B signatures). SDK fork pinned to Dragonmonk111/cosmos-sdk@aegis-phase-d3-hybrid=8c388ca; CometBFT fork pinned to Dragonmonk111/cometbft@aegis-phase-cf-hybrid=21f2370. Tests green: ./crypto/keys/hybrid/... ./crypto/hd/... ./x/auth/ante/... ./x/staking/keeper/... (TestMsgRotateConsKey) and cometbft/privval (TestSignerHybrid*). Transport-layer RTT measured (commit bytes unchanged at 2,265); hybrid consensus keys measured 6.71x (15,208 B). ADR-009 + ADR-010 written. Remaining: F6 rate-limit state, IBC Phase G.
+Last update: 2026-06-26 UTC+1
+Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/tests COMPLETE; F7 hybrid remote-signer passthrough COMPLETE; IBC Phase G WIRING COMPLETE. ibc-go fork on branch aegis-phase-g-hybrid-client at 0ba19e90, replaces CometBFT + Cosmos SDK with Aegis forks. ADR-009 corrected: 07-tendermint has no hardcoded MaxHeaderSize/MaxCommitSize; bound raised in Aegis CometBFT fork. Hybrid tests pass: TestVerifyHybridHeterogeneousAdjacentCommit, TestVerifyHybridSkippingTrustOverlap, TestVerifyHybridDoubleSignMisbehaviour. Full modules/light-clients/07-tendermint test suite green. Remaining: F6 rate-limit state, push ibc-go branch (origin SSH creds pending).
 
+
+== 2026-06-26 ==
+
+- IBC PHASE G WIRING COMPLETE (ibc-go fork aegis-phase-g-hybrid-client local=0ba19e90):
+    * go.mod + go.sum: replace cometbft and cosmos-sdk with Aegis forks
+      Dragonmonk111/cometbft aegis-phase-cf-hybrid and
+      Dragonmonk111/cosmos-sdk aegis-phase-d3-hybrid.
+    * modules/light-clients/07-tendermint/update.go: ADR-009 comment
+      documenting that the 07-tendermint client has no hardcoded MaxHeaderSize
+      / MaxCommitSize; the effective bound is raised in the Aegis CometBFT fork.
+    * modules/light-clients/07-tendermint/hybrid_update_test.go: three focused
+      unit tests driving the same light.Verify path used by verifyHeader:
+      - TestVerifyHybridHeterogeneousAdjacentCommit (classical + hybrid validators)
+      - TestVerifyHybridSkippingTrustOverlap (rotation classical -> hybrid keeps address)
+      - TestVerifyHybridDoubleSignMisbehaviour (two conflicting hybrid-signed headers)
+    * go test ./modules/light-clients/07-tendermint -count=1 PASS.
+    * docs/ADR-009-PQC-HYBRID-IBC-LIGHTCLIENT.md: corrected G1 bound description
+      and updated implementation plan.
+    * Branch ready to push; origin SSH credential unavailable in this environment.
 
 == 2026-06-25 ==
 
