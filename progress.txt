@@ -5,7 +5,7 @@ Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
 Last update: 2026-06-27 UTC+1
-Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/tests + 24h rotation rate-limit COMPLETE; F7 hybrid remote-signer passthrough COMPLETE; IBC Phase G WIRING COMPLETE. ibc-go fork on branch aegis-phase-g-hybrid-client committed: flakiness fix in hybrid_update_test.go, CRLF working-tree noise cleaned. CometBFT fork committed: secret_connection_hybrid_bench_test.go. CI notifications fixed and pushed: CometBFT workflows Go 1.24, cosmos-sdk test.yml Go 1.24, junoclaw ARM64 determinism QEMU. F6 rate-limit pushed to cosmos-sdk aegis-phase-d3-hybrid. Remaining: create/push ibc-go fork (repo does not exist on GitHub yet), junod-aegis CI not accessible locally.
+Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/tests + 24h rotation rate-limit COMPLETE; F7 hybrid remote-signer passthrough COMPLETE; IBC Phase G WIRING COMPLETE. ibc-go fork on branch aegis-phase-g-hybrid-client committed and pushed: flakiness fix in hybrid_update_test.go, CRLF noise cleaned, CI workflows Go 1.24. CometBFT fork committed and pushed: secret_connection_hybrid_bench_test.go, CI workflows Go 1.24. CI notifications fixed and pushed: CometBFT workflows Go 1.24, cosmos-sdk test.yml Go 1.24, junoclaw ARM64 determinism QEMU. F6 rate-limit pushed to cosmos-sdk aegis-phase-d3-hybrid. All local forks + main repo now pushed. Remaining: junod-aegis CI not accessible locally.
 
 
 == 2026-06-27 ==
@@ -46,11 +46,10 @@ Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/te
     * Pushed to Dragonmonk111/cosmos-sdk aegis-phase-d3-hybrid.
 
 - PUSHED TO GITHUB: cometbft aegis-phase-cf-hybrid, cosmos-sdk
-  aegis-phase-d3-hybrid, junoclaw main. ibc-go fork repo does not exist on
-  GitHub yet; needs to be created before the branch can be pushed.
+  aegis-phase-d3-hybrid, ibc-go aegis-phase-g-hybrid-client, junoclaw main.
+  All local forks and main repo are now clean and mirrored on GitHub.
 
-- NEXT: create/push ibc-go fork (repo does not exist on GitHub yet), address
-  junod-aegis CI if accessible.
+- NEXT: address junod-aegis CI if accessible (not present in this workspace).
 
 == 2026-06-26 ==
 
