@@ -4,9 +4,22 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-06-26 UTC+1
-Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/tests COMPLETE; F7 hybrid remote-signer passthrough COMPLETE; IBC Phase G WIRING COMPLETE. ibc-go fork on branch aegis-phase-g-hybrid-client at 0ba19e90, replaces CometBFT + Cosmos SDK with Aegis forks. ADR-009 corrected: 07-tendermint has no hardcoded MaxHeaderSize/MaxCommitSize; bound raised in Aegis CometBFT fork. Hybrid tests pass: TestVerifyHybridHeterogeneousAdjacentCommit, TestVerifyHybridSkippingTrustOverlap, TestVerifyHybridDoubleSignMisbehaviour. Full modules/light-clients/07-tendermint test suite green. Remaining: F6 rate-limit state, push ibc-go branch (origin SSH creds pending).
+Last update: 2026-06-27 UTC+1
+Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/tests COMPLETE; F7 hybrid remote-signer passthrough COMPLETE; IBC Phase G WIRING COMPLETE. ibc-go fork on branch aegis-phase-g-hybrid-client committed: flakiness fix in hybrid_update_test.go, CRLF working-tree noise cleaned. CometBFT fork committed: secret_connection_hybrid_bench_test.go. Remaining: F6 rate-limit state (ConsensusRotationHeight + 24h cooldown), push ibc-go branch (origin SSH creds pending).
 
+
+== 2026-06-27 ==
+
+- REPO HYGIENE CLEANUP:
+    * ibc-go fork: committed the uncommitted flakiness fix in
+      modules/light-clients/07-tendermint/hybrid_update_test.go.
+    * ibc-go fork: CRLF line-ending noise across ~80 files was causing a dirty
+      working tree; git reset --hard restored a clean working tree.
+    * cometbft fork: committed the untracked transport benchmark
+      p2p/conn/secret_connection_hybrid_bench_test.go.
+    * junoclaw main: updated progress.txt status.
+
+- NEXT: F6 rate-limit state (ConsensusRotationHeight on Validator + 24h cooldown).
 
 == 2026-06-26 ==
 
@@ -20,12 +33,19 @@ Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/te
     * modules/light-clients/07-tendermint/hybrid_update_test.go: three focused
       unit tests driving the same light.Verify path used by verifyHeader:
       - TestVerifyHybridHeterogeneousAdjacentCommit (classical + hybrid validators)
-      - TestVerifyHybridSkippingTrustOverlap (rotation classical -> hybrid keeps address)
+      - TestVerifyHybridSkippingTrustOverlap (carried-over hybrid + brand-new classical validator)
       - TestVerifyHybridDoubleSignMisbehaviour (two conflicting hybrid-signed headers)
     * go test ./modules/light-clients/07-tendermint -count=1 PASS.
     * docs/ADR-009-PQC-HYBRID-IBC-LIGHTCLIENT.md: corrected G1 bound description
       and updated implementation plan.
     * Branch ready to push; origin SSH credential unavailable in this environment.
+    * FLAKINESS FIX: TestVerifyHybridSkippingTrustOverlap now uses a brand-new
+      classical validator (not in trusted set) plus a carried-over hybrid validator
+      instead of a classical->hybrid rotation. The non-deterministic failure was
+      caused by VerifyCommitLightTrusting iterating signatures in validator-set
+      order and returning on the first bad signature; rotated-key signatures fail
+      verification against the trusted set. 50x run of TestVerifyHybrid* passed.
+      Full modules/light-clients/07-tendermint test suite green (31.8s).
 
 == 2026-06-25 ==
 
