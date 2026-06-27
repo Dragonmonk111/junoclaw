@@ -24,6 +24,9 @@ Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/te
       (fuzz-nightly, tests, e2e, e2e-manual, release, release-version,
       pre-release). The aegis-phase-cf-hybrid fork requires Go 1.24 for
       stdlib crypto/mlkem, so the 1.22 workflows were failing to build.
+    * cosmos-sdk fork: bumped test.yml from Go 1.22 to Go 1.24 (8 occurrences).
+    * ibc-go fork: bumped workflows from Go 1.21 to Go 1.24 (callbacks,
+      capability, golangci, golangci-feature, release, test).
     * junoclaw main: switched the ARM64 determinism job from the unavailable
       ubuntu-24.04-arm runner to QEMU user-mode emulation on ubuntu-24.04.
       This keeps the cross-arch ML-DSA-44 determinism proof while the real
