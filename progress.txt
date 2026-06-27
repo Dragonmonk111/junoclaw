@@ -5,7 +5,7 @@ Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
 Last update: 2026-06-27 UTC+1
-Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/tests COMPLETE; F7 hybrid remote-signer passthrough COMPLETE; IBC Phase G WIRING COMPLETE. ibc-go fork on branch aegis-phase-g-hybrid-client committed: flakiness fix in hybrid_update_test.go, CRLF working-tree noise cleaned. CometBFT fork committed: secret_connection_hybrid_bench_test.go. CI notifications fixed and pushed: CometBFT workflows Go 1.24, cosmos-sdk test.yml Go 1.24, junoclaw ARM64 determinism QEMU. Remaining: F6 rate-limit state (ConsensusRotationHeight + 24h cooldown), create/push ibc-go fork (repo does not exist on GitHub yet), junod-aegis CI not accessible locally.
+Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/tests + 24h rotation rate-limit COMPLETE; F7 hybrid remote-signer passthrough COMPLETE; IBC Phase G WIRING COMPLETE. ibc-go fork on branch aegis-phase-g-hybrid-client committed: flakiness fix in hybrid_update_test.go, CRLF working-tree noise cleaned. CometBFT fork committed: secret_connection_hybrid_bench_test.go. CI notifications fixed and pushed: CometBFT workflows Go 1.24, cosmos-sdk test.yml Go 1.24, junoclaw ARM64 determinism QEMU. F6 rate-limit pushed to cosmos-sdk aegis-phase-d3-hybrid. Remaining: create/push ibc-go fork (repo does not exist on GitHub yet), junod-aegis CI not accessible locally.
 
 
 == 2026-06-27 ==
@@ -34,11 +34,23 @@ Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/te
     * junod-aegis CI not accessible from this workspace; apply the same ARM64
       QEMU fix if that repo shares the same workflow.
 
+- F6 RATE-LIMIT STATE (cosmos-sdk aegis-phase-d3-hybrid):
+    * Added Validator.ConsensusRotationHeight and Validator.ConsensusRotationTime
+      to proto + generated code, and wired NewValidator defaults.
+    * Enforced a 24h cooldown in x/staking/keeper.RotateConsKey: a second
+      MsgRotateConsKey for the same validator is rejected until 24h have
+      elapsed since the previous rotation's block time.
+    * Added keeper tests: rotation records height/time, rotation within 24h
+      is rejected, rotation after 24h succeeds. go test ./keeper/ ./types/
+      and go vet pass.
+    * Pushed to Dragonmonk111/cosmos-sdk aegis-phase-d3-hybrid.
+
 - PUSHED TO GITHUB: cometbft aegis-phase-cf-hybrid, cosmos-sdk
   aegis-phase-d3-hybrid, junoclaw main. ibc-go fork repo does not exist on
   GitHub yet; needs to be created before the branch can be pushed.
 
-- NEXT: F6 rate-limit state (ConsensusRotationHeight on Validator + 24h cooldown).
+- NEXT: create/push ibc-go fork (repo does not exist on GitHub yet), address
+  junod-aegis CI if accessible.
 
 == 2026-06-26 ==
 
