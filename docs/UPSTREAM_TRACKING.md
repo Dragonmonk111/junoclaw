@@ -1,6 +1,10 @@
 # Upstream tracking for Aegis / JunoClaw PQC work
 
-Last updated: 2026-06-22
+Last updated: 2026-06-28
+
+> **2026-06-28:** Ready-to-send follow-up ping drafts prepared for all three items:
+> `drafts/UPSTREAM_PING_cosmwasm_2685.md`, `drafts/UPSTREAM_PING_wasmvm_735.md`,
+> `drafts/UPSTREAM_PING_juno_1202.md`. Post on a ~bi-weekly cadence; bump this line when sent.
 
 ## Why this exists
 
