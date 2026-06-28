@@ -4,8 +4,53 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-06-27 UTC+1
-Status: D3 account wiring COMPLETE; F6 MsgRotateConsensusKey proto/server/CLI/tests + 24h rotation rate-limit COMPLETE; F7 hybrid remote-signer passthrough COMPLETE; IBC Phase G WIRING COMPLETE. ibc-go fork on branch aegis-phase-g-hybrid-client committed and pushed: flakiness fix in hybrid_update_test.go, CRLF noise cleaned, CI workflows Go 1.24. CometBFT fork committed and pushed: secret_connection_hybrid_bench_test.go, CI workflows Go 1.24. CI notifications fixed and pushed: CometBFT workflows Go 1.24, cosmos-sdk test.yml Go 1.24, junoclaw ARM64 determinism QEMU. F6 rate-limit pushed to cosmos-sdk aegis-phase-d3-hybrid. All local forks + main repo now pushed. Remaining: junod-aegis CI not accessible locally.
+Last update: 2026-06-28 UTC+1
+Status: junod init NATIVE hybrid consensus key flag COMPLETE (--aegis-hybrid-consensus on junod init now generates the Ed25519+ML-DSA-44 validator key directly; previously only the standalone aegis-bench/cmd/hybrid-consensus-keygen tool could). cosmos-sdk fork aegis-phase-d3-hybrid@2f2f81e and cometbft fork aegis-phase-cf-hybrid@ff4dcefdc083 pushed; SDK go.mod cometbft pin bumped to ff4dcefdc083. Earlier-COMPLETE: D3 account wiring; F6 MsgRotateConsensusKey proto/server/CLI/tests + 24h rate-limit; F7 hybrid remote-signer passthrough; IBC Phase G wiring; CI Go-1.24 bumps across forks; ARM64 determinism via QEMU. All local forks + main repo clean and pushed. Remaining: junod-aegis CI not accessible locally; 4h devnet soak not time-tested; upstream pings (cosmwasm#2685, wasmvm#735, juno#1202).
+
+
+== 2026-06-28 ==
+
+- junod init NATIVE HYBRID CONSENSUS KEY FLAG COMPLETE (resumed interrupted task):
+    * cometbft fork (aegis-phase-cf-hybrid@ff4dcefdc083): added
+      privval.NewFilePVWithPQC(ed, ml, keyFilePath, stateFilePath) — builds a
+      hybrid FilePV (classical key file + ML-DSA-44 sidecar) from EXISTING
+      ed25519+mldsa44 halves, so a recovered mnemonic can deterministically
+      reproduce the hybrid validator key (complements GenFilePVWithPQC which
+      generates random halves).
+    * cosmos-sdk fork (aegis-phase-d3-hybrid@2f2f81e):
+      - x/genutil/utils.go: InitializeNodeValidatorFiles(config, hybrid bool)
+        and InitializeNodeValidatorFilesFromMnemonic(config, mnemonic, hybrid)
+        now take a hybrid flag. Switch on {hybrid, mnemonic?}: random hybrid =>
+        LoadOrGenFilePVWithPQC; mnemonic hybrid => ed via GenPrivKeyFromSecret +
+        ml seed via deriveMlDsa44SeedFromMnemonic => NewFilePVWithPQC + Save.
+      - x/genutil/client/cli/init.go: new --aegis-hybrid-consensus bool flag,
+        read via cmd.Flags().GetBool and passed to the mnemonic initializer.
+      - All callers updated to pass hybrid (gentx.go, collect.go,
+        testnet.go, testutil/network/network.go, init_test.go, utils_test.go
+        => false; init.go => flag value).
+      - go.mod cometbft pin bumped to ff4dcefdc083 (full canonical sha; the
+        short-sha pseudo-version was rejected by `go mod tidy`).
+    * BUG FIXED (root cause of the interrupted build): deriveMlDsa44SeedFromMnemonic
+      used the golang.org/x/crypto/hkdf idiom (hkdf.New + io.ReadFull) but
+      imported Go 1.24 STDLIB crypto/hkdf, which has no New(). Rewrote to
+      stdlib hkdf.Key(sha256.New, secret, nil, "aegis/hybrid-consensus/mldsa44/v1",
+      tmmldsa44.SeedSize); dropped the now-unused io import. info is a string in
+      the stdlib API (was []byte in x/crypto).
+    * TESTS: utils_test.go +TestInitializeNodeValidatorFilesFromMnemonicHybrid
+      (mnemonic => sidecar written, reload via LoadFilePVWithPQC reproduces same
+      pubkey bytes) and +TestInitializeNodeValidatorFilesHybridRandom (random =>
+      sidecar written). go test ./x/genutil/ ./x/genutil/client/cli/ PASS;
+      go build ./... clean; gofmt -w + go vet clean (only pre-existing
+      collect_test.go mock UnmarshalJSON-signature vet note remains, unrelated).
+    * NOTE: hybrid commit-bytes bandwidth was ALREADY measured 2026-06-24
+      (classical 2,267 B vs hybrid 15,208 B, 6.71x); this task just makes the
+      key generation a first-class `junod init` flag instead of a separate tool.
+    * TOOLING: the edit tool's old_string match kept failing on the gitignored
+      SDK init.go; worked around with a small Python replace script (C:\temp),
+      then edit tool worked fine afterwards for utils.go/init_test.go. Direct
+      `git push` to BOTH forks SUCCEEDED this session (no pack corruption) —
+      the PowerShell "NativeCommandError" is just git writing the "To <url>"
+      line to stderr; the refspec update line confirms success.
 
 
 == 2026-06-27 ==
