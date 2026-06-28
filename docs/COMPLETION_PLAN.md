@@ -1,11 +1,15 @@
-# Completion Plan — Remaining Work (updated 2026-06-17)
+# Completion Plan — Remaining Work (updated 2026-06-28)
 
-> Consolidated plan for all remaining workstreams across Project Aegis (transport + accounts),
+> Consolidated plan for all remaining workstreams across Project Aegis (transport + accounts + consensus),
 > Project Fable (MAYO-5 PQC), and upstream tracking. Created from memory `e5b41d64`.
 >
-> **2026-06-20 progress:** Aegis **C (C5+C6) COMPLETE**, **D (D1/D2/D3-core) COMPLETE**, **Fable P3+P4+P5 COMPLETE**.
-> Phase F: F1/F2/F3 + F4 (dispatch + pubkey persistence proto/codec) + F5 + §6 items 8-11 landed & tested.
-> Remaining: F6 MsgRotateConsKey, F7 SignerClient hybrid, D3 wiring (proto/keyring/CLI/gas), 4-validator localnet, upstream.
+> **2026-06-28 progress:** ALL headline engineering COMPLETE & pushed. Aegis **C (C5+C6)**,
+> **D (D1/D2/D3 core + account wiring)**, **F (F1–F7, incl. MsgRotateConsKey + 24h rate-limit + hybrid
+> remote-signer)**, **IBC Phase G** (07-tendermint hybrid client), and **native `junod init
+> --aegis-hybrid-consensus`** all done. Fable **P3+P4+P5** done. Fork tips: cosmos-sdk
+> `aegis-phase-d3-hybrid@5792792`, cometbft `aegis-phase-cf-hybrid@ff4dcefdc083`, ibc-go
+> `aegis-phase-g-hybrid-client`. Remaining: external/infra only (junod-aegis CI not accessible,
+> 4h devnet soak not time-tested, upstream pings).
 
 ---
 
@@ -14,15 +18,19 @@
 | Workstream | Items | Priority | Effort Estimate | Blocker |
 |-----------|-------|----------|-----------------|---------|
 | **Aegis Phase C (Transport)** | ~~C5 CometBFT fork~~ ✅; ~~C6 RTT~~ ✅ | — | done | — |
-| **Aegis Phase D (Accounts)** | ~~D1~~ ✅; ~~D2~~ ✅; ~~D3 core~~ ✅; D3 wiring (gated) | Low | wiring only | protoc/buf |
+| **Aegis Phase D (Accounts)** | ~~D1~~ ✅; ~~D2~~ ✅; ~~D3 core~~ ✅; ~~D3 wiring (proto/codec/keyring/CLI/gas)~~ ✅ | — | done | — |
 | **Project Fable** | ~~P3 multi-variant~~ ✅; ~~P4 benchmark~~ ✅; ~~P5 comms~~ ✅ | — | done | — |
-| **Aegis Phase F (Consensus)** | ~~F1/F2/F3~~ ✅; ~~F4 dispatch + persistence~~ ✅; ~~F5 evidence~~ ✅; F6 rotation; F7 signer | Medium | F6+F7 remain | — |
-| **Infrastructure** | ~~Devnet WSL2 clock jump fix~~ ✅ (reset applied; monotonic-offset clock OK) | Low | done | WSL2 behavior |
-| **Upstream** | cosmwasm#2685 follow-up; v30 proposal tracking | Low | Ongoing | External maintainers |
+| **Aegis Phase F (Consensus)** | ~~F1/F2/F3~~ ✅; ~~F4 dispatch + persistence~~ ✅; ~~F5 evidence~~ ✅; ~~F6 rotation + 24h rate-limit~~ ✅; ~~F7 signer~~ ✅ | — | done | — |
+| **Aegis Phase G (IBC)** | ~~07-tendermint hybrid client + tests~~ ✅ | — | done | — |
+| **junod init** | ~~native `--aegis-hybrid-consensus` flag + sidecar derivation~~ ✅ | — | done | — |
+| **Infrastructure** | ~~Devnet WSL2 clock jump fix~~ ✅; 4h soak not time-tested | Low | soak only | WSL2 behavior |
+| **Upstream** | cosmwasm#2685 follow-up; wasmvm#735; v30 (juno#1202) tracking | Low | Ongoing | External maintainers |
 
-**Critical path:** All headline deliverables **complete** (Aegis C5/C6, D3 core; Fable P3/P4/P5;
-Phase F F1-F5 + §6 items 8-11). Remaining: **F6** (MsgRotateConsKey), **F7** (SignerClient hybrid),
-**D3 wiring** (proto/keyring/CLI/gas), 4-validator bandwidth localnet, upstream tracking.
+**Critical path:** **CLEARED.** All headline deliverables complete and pushed (Aegis C5/C6;
+D1/D2/D3 core + full account wiring; Phase F F1–F7 incl. MsgRotateConsKey + 24h rate-limit +
+hybrid remote-signer; IBC Phase G; native `junod init --aegis-hybrid-consensus`; Fable P3/P4/P5).
+Remaining items are external/infra/passive only: junod-aegis CI (not accessible from this
+workspace), a ≥4h devnet soak, and upstream maintainer pings.
 
 ---
 
@@ -395,23 +403,33 @@ monotonically-advancing clock).
 
 ## 9. Next Actions (Immediate)
 
-1. ~~**C6 hybrid-transport RTT**~~ ✅ DONE — real fork + real TCP RTT measured (`secret_connection_hybrid_rtt_test.go`); see `aegis-transport/docs/PHASE_C6_RTT_RESULTS.md`.
-2. ~~**§6 Devnet stability**~~ ✅ DONE — `down -v` + `wsl --shutdown` + relaunch; clock now monotonic (offset OK).
-3. ~~**P4 Fable benchmark ladder**~~ ✅ DONE — MAYO-2/3/5 gas matrix reproduced (`deploy/mayo-devnet-benchmark-results.json`).
-4. **Fable P5 (comms):** update `docs/MAYO.md` + `docs/PQC_COMPETITIVE_ANALYSIS.md` with L5 numbers; draft article + Telegram reply.
-5. **D3 wiring (gated):** proto/codec + keyring/CLI + gas case (needs protoc/buf).
-6. **§7 Upstream:** schedule a polite ping on cosmwasm#2685 (not urgent).
+All engineering next-actions are **complete**. Only external/infra/passive items remain:
 
-**Done since plan creation:** D1 (ADR-007) ✅, D2 (aegis-accounts, 20/20 green) ✅, P3 (found already done) ✅, **C5 (CometBFT fork build+tests) ✅**, **C6 (hybrid RTT, real fork/TCP) ✅**, **D3 core (SDK crypto/keys/hybrid, 9/9 green) ✅**, **§6 devnet reset ✅**, **P4 (MAYO-2/3/5 ladder reproduced) ✅**.
+1. **junod-aegis CI:** not accessible from this workspace. If/when the repo is reachable, apply the
+   same Go 1.24 workflow bumps + ARM64-via-QEMU determinism job already landed in main `junoclaw`.
+2. **≥4h devnet soak:** run the single-validator devnet for ≥4 hours to confirm no clock-jump stall
+   (monotonic-offset clock has run fine for the full P4 benchmark; long soak not yet time-tested).
+3. **§7 Upstream pings:** polite follow-ups on cosmwasm#2685 and wasmvm#735; track juno#1202 v30
+   timeline (Jake-driven). Non-blocking — our forks are functional.
+
+**Done since plan creation (full list):** D1 (ADR-007) ✅, D2 (aegis-accounts, 20/20 green) ✅,
+P3 ✅, C5 ✅, C6 ✅, D3 core ✅, **D3 full account wiring (proto/codec/keyring/CLI/gas)** ✅,
+§6 devnet reset ✅, P4 ✅, P5 ✅, **F1–F5** ✅, **F6 MsgRotateConsKey + 24h rate-limit** ✅,
+**F7 hybrid remote-signer passthrough** ✅, **IBC Phase G 07-tendermint hybrid client** ✅,
+**native `junod init --aegis-hybrid-consensus`** ✅ (CLI smoke test `TestInitCmdHybridConsensus` +
+library tests green; CometBFT `NewFilePVWithPQC` constructor added).
 
 ---
 
 ## 10. Definition of "Done" for This Plan
 
 - [x] Phase C: CometBFT fork builds ✅ + tests pass ✅ (C5); real-link RTT measured + documented ✅ (C6). **Phase C COMPLETE.**
-- [x] Phase D: ADR-007 spec committed ✅; aegis-accounts/ harness tests green ✅ (20/20); SDK fork core done ✅ (D3 — crypto/keys/hybrid 9/9 green; proto/keyring/CLI/gas wiring gated).
-- [x] Fable: multi-variant contract tests ✅ (P3); benchmark ladder published ✅ + precompile numbers in hand ✅ (P4). Remaining: P5 (docs/comms).
+- [x] Phase D: ADR-007 spec committed ✅; aegis-accounts/ harness tests green ✅ (20/20); SDK fork core ✅ (crypto/keys/hybrid 9/9 green); full account wiring ✅ (proto/codec/keyring/CLI/gas). **Phase D COMPLETE.**
+- [x] Phase F: F1–F5 ✅; F6 MsgRotateConsKey + 24h rate-limit ✅; F7 hybrid remote-signer ✅. **Phase F COMPLETE.**
+- [x] Phase G (IBC): 07-tendermint hybrid client + hybrid update/skipping/misbehaviour tests ✅. **Phase G COMPLETE.**
+- [x] junod init: native `--aegis-hybrid-consensus` flag ✅; deterministic mnemonic derivation + ML-DSA-44 sidecar ✅; CLI + library tests green. **COMPLETE.**
+- [x] Fable: multi-variant contract tests ✅ (P3); benchmark ladder published ✅ + precompile numbers ✅ (P4); docs/comms ✅ (P5). **Fable COMPLETE.**
 - [~] Infrastructure: devnet reset works; validated end-to-end via full P4 run ✅. (≥4-hour soak not yet time-tested.)
 - [ ] Upstream: at least one follow-up ping sent on each open issue.
 
-**Last updated:** 2026-06-17
+**Last updated:** 2026-06-28

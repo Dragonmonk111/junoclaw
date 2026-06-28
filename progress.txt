@@ -5,7 +5,7 @@ Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
 Last update: 2026-06-28 UTC+1
-Status: junod init NATIVE hybrid consensus key flag COMPLETE (--aegis-hybrid-consensus on junod init now generates the Ed25519+ML-DSA-44 validator key directly; previously only the standalone aegis-bench/cmd/hybrid-consensus-keygen tool could). cosmos-sdk fork aegis-phase-d3-hybrid@2f2f81e and cometbft fork aegis-phase-cf-hybrid@ff4dcefdc083 pushed; SDK go.mod cometbft pin bumped to ff4dcefdc083. Earlier-COMPLETE: D3 account wiring; F6 MsgRotateConsensusKey proto/server/CLI/tests + 24h rate-limit; F7 hybrid remote-signer passthrough; IBC Phase G wiring; CI Go-1.24 bumps across forks; ARM64 determinism via QEMU. All local forks + main repo clean and pushed. Remaining: junod-aegis CI not accessible locally; 4h devnet soak not time-tested; upstream pings (cosmwasm#2685, wasmvm#735, juno#1202).
+Status: junod init NATIVE hybrid consensus key flag COMPLETE (--aegis-hybrid-consensus on junod init now generates the Ed25519+ML-DSA-44 validator key directly; previously only the standalone aegis-bench/cmd/hybrid-consensus-keygen tool could). cosmos-sdk fork aegis-phase-d3-hybrid@5792792 and cometbft fork aegis-phase-cf-hybrid@ff4dcefdc083 pushed; SDK go.mod cometbft pin bumped to ff4dcefdc083. Earlier-COMPLETE: D3 account wiring; F6 MsgRotateConsensusKey proto/server/CLI/tests + 24h rate-limit; F7 hybrid remote-signer passthrough; IBC Phase G wiring; CI Go-1.24 bumps across forks; ARM64 determinism via QEMU. All local forks + main repo clean and pushed. Remaining: junod-aegis CI not accessible locally; 4h devnet soak not time-tested; upstream pings (cosmwasm#2685, wasmvm#735, juno#1202).
 
 
 == 2026-06-28 ==
@@ -17,7 +17,7 @@ Status: junod init NATIVE hybrid consensus key flag COMPLETE (--aegis-hybrid-con
       ed25519+mldsa44 halves, so a recovered mnemonic can deterministically
       reproduce the hybrid validator key (complements GenFilePVWithPQC which
       generates random halves).
-    * cosmos-sdk fork (aegis-phase-d3-hybrid@2f2f81e):
+    * cosmos-sdk fork (aegis-phase-d3-hybrid@5792792):
       - x/genutil/utils.go: InitializeNodeValidatorFiles(config, hybrid bool)
         and InitializeNodeValidatorFilesFromMnemonic(config, mnemonic, hybrid)
         now take a hybrid flag. Switch on {hybrid, mnemonic?}: random hybrid =>
