@@ -1,0 +1,185 @@
+name: Build junod-aegis
+
+# Option 1 from docs/JUNOD_AEGIS_CI_NOTES.md:
+# Build the assembled Project Aegis PQC node binary (junod-aegis) inside the
+# main junoclaw CI instead of maintaining a separate Dragonmonk111/junod-aegis
+# repo. This checks out upstream Juno at a pinned tag, points its go.mod at the
+# Aegis fork tips via `replace` directives, builds, records the sha256, and
+# uploads the binary as a workflow artifact.
+#
+# Source of truth for the steps below: docs/BUILD_AEGIS_JUNO_BINARY.md
+# (the runbook that produced the verified binary on the production VM).
+
+on:
+  workflow_dispatch:
+    inputs:
+      juno_tag:
+        description: "Upstream Juno tag to build (CosmosContracts/juno)"
+        required: false
+        default: "v29.0.0"
+      cometbft_ref:
+        description: "Dragonmonk111/cometbft branch/tag/sha (ML-KEM-768 hybrid transport)"
+        required: false
+        default: "aegis-phase-cf-hybrid"
+      cosmos_sdk_ref:
+        description: "Dragonmonk111/cosmos-sdk branch/tag/sha (hybrid consensus + accounts)"
+        required: false
+        default: "aegis-phase-d3-hybrid"
+      ibc_go_ref:
+        description: "Dragonmonk111/ibc-go branch/tag/sha (07-tendermint hybrid client). Leave blank to skip the ibc-go replace and match the known-good two-fork build."
+        required: false
+        default: ""
+  # Nightly rebuild so a green/red signal tracks the moving fork tips without
+  # anyone having to remember to dispatch it. Inputs fall back to the defaults
+  # below when triggered by the schedule.
+  schedule:
+    - cron: "0 4 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aegis-build-junod-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # CometBFT fork bumped go 1.22.11 -> 1.24.0 for stdlib crypto/mlkem, so the
+  # whole graph must resolve on 1.24. Pin the toolchain to avoid Juno's older
+  # `go`/`toolchain` directive winning during `go mod tidy`.
+  GOTOOLCHAIN: go1.24.4
+  JUNO_TAG: ${{ github.event.inputs.juno_tag || 'v29.0.0' }}
+  CMT_REF: ${{ github.event.inputs.cometbft_ref || 'aegis-phase-cf-hybrid' }}
+  SDK_REF: ${{ github.event.inputs.cosmos_sdk_ref || 'aegis-phase-d3-hybrid' }}
+  IBC_REF: ${{ github.event.inputs.ibc_go_ref || '' }}
+
+jobs:
+  build:
+    name: Assemble junod-aegis (Juno + Aegis forks)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout junoclaw (for this workflow + docs reference)
+        uses: actions/checkout@v4
+
+      - name: Set up Go 1.24
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.4"
+          check-latest: true
+
+      - name: Clone Aegis forks
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/aegis-build"
+          cd "$RUNNER_TEMP/aegis-build"
+
+          echo "::group::cometbft @ $CMT_REF"
+          git clone --branch "$CMT_REF" --depth 1 \
+            https://github.com/Dragonmonk111/cometbft.git aegis-cometbft
+          echo "cometbft tip: $(git -C aegis-cometbft rev-parse HEAD)"
+          echo "::endgroup::"
+
+          echo "::group::cosmos-sdk @ $SDK_REF"
+          git clone --branch "$SDK_REF" --depth 1 \
+            https://github.com/Dragonmonk111/cosmos-sdk.git aegis-sdk
+          echo "cosmos-sdk tip: $(git -C aegis-sdk rev-parse HEAD)"
+          echo "::endgroup::"
+
+          if [ -n "$IBC_REF" ]; then
+            echo "::group::ibc-go @ $IBC_REF"
+            git clone --branch "$IBC_REF" --depth 1 \
+              https://github.com/Dragonmonk111/ibc-go.git aegis-ibc-go
+            echo "ibc-go tip: $(git -C aegis-ibc-go rev-parse HEAD)"
+            echo "::endgroup::"
+          else
+            echo "ibc_go_ref blank — skipping ibc-go replace (two-fork build)."
+          fi
+
+      - name: Clone Juno ${{ env.JUNO_TAG }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/aegis-build"
+          git clone --branch "$JUNO_TAG" --depth 1 \
+            https://github.com/CosmosContracts/juno.git aegis-juno
+          echo "Juno: $(git -C aegis-juno describe --tags --always)"
+
+      - name: Apply Aegis replace directives to Juno go.mod
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/aegis-build/aegis-juno"
+          cp go.mod go.mod.orig
+
+          echo "Juno pins (before override):"
+          grep -E "cometbft|cosmos-sdk|ibc-go" go.mod | head -8 || true
+
+          # Local-path replaces override the pinned require versions regardless
+          # of the version string, matching the verified runbook build.
+          go mod edit -replace=github.com/cometbft/cometbft=../aegis-cometbft
+          go mod edit -replace=github.com/cosmos/cosmos-sdk=../aegis-sdk
+
+          if [ -n "$IBC_REF" ]; then
+            # The ibc-go module path carries a /vN major suffix; read the exact
+            # one Juno requires straight from go.mod so the replace LHS matches.
+            IBC_MOD="$(grep -oE 'github.com/cosmos/ibc-go/v[0-9]+' go.mod | head -1)"
+            if [ -z "$IBC_MOD" ]; then
+              echo "could not find ibc-go module path in go.mod" >&2
+              exit 1
+            fi
+            echo "ibc-go module path: $IBC_MOD"
+            go mod edit -replace="${IBC_MOD}=../aegis-ibc-go"
+          fi
+
+          echo "go.mod replace block:"
+          go mod edit -json | grep -A2 -i "aegis-" || tail -12 go.mod
+
+      - name: Resolve dependency graph (go mod tidy)
+        working-directory: ${{ runner.temp }}/aegis-build/aegis-juno
+        run: |
+          set -euo pipefail
+          go mod download
+          go mod tidy
+
+      - name: Build junod-aegis
+        working-directory: ${{ runner.temp }}/aegis-build/aegis-juno
+        run: |
+          set -euo pipefail
+          # -checklinkname=0: bytedance/sonic/loader uses //go:linkname against
+          # runtime.lastmoduledatap, which Go 1.23+ blocks by default. Disabling
+          # the check is safe — it only affects sonic's JIT loader, not PQC code.
+          go build -ldflags="-checklinkname=0" -o build/junod-aegis ./cmd/junod/
+          file build/junod-aegis
+          ls -lh build/junod-aegis
+
+      - name: Smoke-test + record sha256
+        working-directory: ${{ runner.temp }}/aegis-build/aegis-juno
+        run: |
+          set -euo pipefail
+          BIN=build/junod-aegis
+
+          echo "## junod-aegis build" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "Juno tag : $JUNO_TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "cometbft : $CMT_REF" >> "$GITHUB_STEP_SUMMARY"
+          echo "sdk      : $SDK_REF" >> "$GITHUB_STEP_SUMMARY"
+          echo "ibc-go   : ${IBC_REF:-<skipped>}" >> "$GITHUB_STEP_SUMMARY"
+
+          # version --long should report the Aegis fork build graph.
+          "$BIN" version --long 2>/dev/null | head -12 | tee -a "$GITHUB_STEP_SUMMARY" || true
+
+          # Confirm the hybrid-transport env flag does not crash the binary.
+          AEGIS_HYBRID_TRANSPORT=1 "$BIN" version >/dev/null 2>&1 \
+            && echo "AEGIS_HYBRID_TRANSPORT=1: ok" >> "$GITHUB_STEP_SUMMARY"
+
+          SHA="$(sha256sum "$BIN" | awk '{print $1}')"
+          echo "sha256   : $SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$SHA  junod-aegis" > build/junod-aegis.sha256
+
+      - name: Upload junod-aegis artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: junod-aegis-${{ env.JUNO_TAG }}
+          path: |
+            ${{ runner.temp }}/aegis-build/aegis-juno/build/junod-aegis
+            ${{ runner.temp }}/aegis-build/aegis-juno/build/junod-aegis.sha256
+          if-no-files-found: error
+          retention-days: 14

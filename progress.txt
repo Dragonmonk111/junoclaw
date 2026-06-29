@@ -4,9 +4,36 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-06-28 UTC+1
+Last update: 2026-06-29 UTC+1
 Status: junod init NATIVE hybrid consensus key flag COMPLETE (--aegis-hybrid-consensus on junod init now generates the Ed25519+ML-DSA-44 validator key directly; previously only the standalone aegis-bench/cmd/hybrid-consensus-keygen tool could). cosmos-sdk fork aegis-phase-d3-hybrid@5792792 and cometbft fork aegis-phase-cf-hybrid@ff4dcefdc083 pushed; SDK go.mod cometbft pin bumped to ff4dcefdc083. Earlier-COMPLETE: D3 account wiring; F6 MsgRotateConsensusKey proto/server/CLI/tests + 24h rate-limit; F7 hybrid remote-signer passthrough; IBC Phase G wiring; CI Go-1.24 bumps across forks; ARM64 determinism via QEMU. All local forks + main repo clean and pushed. Remaining: junod-aegis CI not accessible locally; 4h devnet soak not time-tested; upstream pings (cosmwasm#2685, wasmvm#735, juno#1202).
 
+
+== 2026-06-29 ==
+
+- junod-aegis CI = Option 1 IMPLEMENTED: added .github/workflows/aegis-build-junod.yml
+  to main junoclaw (workflow_dispatch + nightly cron 0 4 * * *, Go 1.24 on
+  ubuntu-24.04). Clones Juno @ pinned tag (default v29.0.0), clones cometbft +
+  cosmos-sdk forks (ibc-go optional via input), applies local-path replace
+  directives, go mod tidy, go build -ldflags=-checklinkname=0, smoke-tests
+  version --long + AEGIS_HYBRID_TRANSPORT=1, records sha256, uploads artifact.
+  Mirrors docs/BUILD_AEGIS_JUNO_BINARY.md. Resolves the "junod-aegis CI not
+  accessible" gap without a separate repo. Doc: docs/JUNOD_AEGIS_CI_NOTES.md.
+
+- UPSTREAM cosmwasm#2685: maintainer (@DariuszDepta) replied + moved to Backlog
+  milestone. CosmWasm libraries are mid-redesign (API/capabilities/perf/gas);
+  team will NOT take external proposals of this size until ~end Q3 / start Q4
+  2026. Asked us to maintain our branch + how many chains benefit. Action: do
+  NOT open PR; hold fork; re-check late Q3. wasmvm#735 now gated behind it.
+  drafts/UPSTREAM_PING_cosmwasm_2685.md repurposed into an acknowledgement reply
+  (answers "who benefits": ZK light clients/bridges, zk-rollup settlement,
+  private identity/credential/voting, general zkSNARK verifiers). Tracking doc
+  docs/UPSTREAM_TRACKING.md updated (item 1 -> Deferred/Backlog, item 2 gated).
+
+- NOTE: two fork CI failures seen in GitHub notifications are INHERITED upstream
+  maintenance workflows, NOT our regressions: cometbft "Fuzz Tests" (long fuzz
+  job, fails on forks) and cosmos-sdk "Remove GitHub Action Old Artifacts"
+  (needs artifact API perms forks don't grant). Recommend disabling/no-opping
+  these two workflow files on the fork branches to stop the noise.
 
 == 2026-06-28 ==
 

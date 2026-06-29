@@ -1,6 +1,13 @@
 # junod-aegis CI — status, options, and action plan
 
-Last updated: 2026-06-28
+Last updated: 2026-06-29
+
+> **2026-06-29 — Option 1 implemented.** Added `.github/workflows/aegis-build-junod.yml` to the
+> main `junoclaw` repo: `workflow_dispatch` + nightly (`cron 0 4 * * *`), Go 1.24 on
+> `ubuntu-24.04`. It clones Juno at the pinned tag, clones the cometbft + cosmos-sdk forks (ibc-go
+> optional via input), applies local-path `replace` directives, runs `go mod tidy`, builds with
+> `-ldflags=-checklinkname=0`, smoke-tests `version --long` + `AEGIS_HYBRID_TRANSPORT=1`, records
+> the sha256, and uploads the binary as an artifact. Steps mirror `docs/BUILD_AEGIS_JUNO_BINARY.md`.
 
 ## What `junod-aegis` is
 
