@@ -1,5 +1,8 @@
 # Upstream reply draft — CosmWasm/cosmwasm issue #2685
 
+> **POSTED 2026-06-29.** This acknowledgement reply has been sent to #2685. Do not re-post.
+> Next touch: late Q3 2026 (or when a CosmWasm API-redesign discussion opens).
+
 Topic: BN254 (alt_bn128) host functions for Groth16 verification
 Where to post: https://github.com/CosmWasm/cosmwasm/issues/2685
 Tone: polite, low-pressure, respect the maintainers' deferral.

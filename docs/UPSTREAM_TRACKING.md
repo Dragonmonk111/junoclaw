@@ -2,6 +2,11 @@
 
 Last updated: 2026-06-29
 
+> **2026-06-29 (PM):** Acknowledgement reply **POSTED** to #2685 — accepted the deferral, confirmed
+> we'll keep maintaining the fork, and answered the "who else benefits" P.S. (ZK light clients /
+> bridges, zk-rollup settlement, private identity/credential/voting, general zkSNARK verifiers).
+> No PR until #2685 reopens. Next check: late Q3 2026.
+>
 > **2026-06-29:** CosmWasm maintainer (@DariuszDepta) replied on #2685 and moved it to the
 > **Backlog** milestone — the team is mid-redesign of the CosmWasm libraries (API, capabilities,
 > performance, gas) and **will not take external proposals of this size until ~end of Q3 / start
@@ -27,7 +32,7 @@ This file tracks the upstream issues and PRs where we are trying to land (or ali
 
 | # | Repo | Item | Title / topic | Status | Why it matters | Next action | Next check |
 |---|------|------|---------------|--------|----------------|-------------|------------|
-| 1 | CosmWasm/cosmwasm | Issue #2685 | Proposal: BN254 (alt_bn128) host functions for Groth16 verification | **Deferred (Backlog)** | BN254 precompile is the ZK verification path in JunoClaw. Landing it upstream removes the need to maintain a custom `cosmwasm-std-bn254-ext` crate and a patched wasmvm. | Maintainer deferred to ~end Q3 / start Q4 2026 (library redesign in progress); keep the fork. Post the acknowledgement reply (answers "who benefits"); do NOT open a PR yet. | **Late Q3 2026**, or when a CosmWasm API-redesign discussion opens. |
+| 1 | CosmWasm/cosmwasm | Issue #2685 | Proposal: BN254 (alt_bn128) host functions for Groth16 verification | **Deferred (Backlog)** | BN254 precompile is the ZK verification path in JunoClaw. Landing it upstream removes the need to maintain a custom `cosmwasm-std-bn254-ext` crate and a patched wasmvm. | **Reply posted 2026-06-29** (acknowledged deferral, answered "who benefits"). Keep the fork; do NOT open a PR until #2685 reopens. | **Late Q3 2026**, or when a CosmWasm API-redesign discussion opens. |
 | 2 | CosmWasm/wasmvm | Issue #735 | Question: should BN254 host functions also expose Go-side wrappers, or follow the BLS12-381 precedent of staying VM-internal? | Open (gated) | Companion to cosmwasm#2685. The Go-side wiring in wasmvm determines whether our `do_bn254_verify` host function can be upstreamed as a clean patch or needs a different integration pattern. | Now gated behind #2685's deferral — the Go-side shape depends on the cosmwasm API redesign. Hold the wasmvm #735 ping until #2685 reopens; update `docs/WASMVM_BN254_PR_DESCRIPTION.md` once direction is clear. | Late Q3 2026, alongside #2685. |
 | 3 | CosmosContracts/juno | PR #1202 | v30 upgrade | Open (merge pending) | v30 bumps Cosmos SDK, CometBFT, IBC-Go and wasmd/wasmvm versions. Our Aegis fork patches (hybrid consensus, hybrid accounts, MsgRotateConsKey) must be rebased onto the final v30 base. | Monitor merge; run patch-applicability checks with `wasmvm-fork/patches/check-baseline.sh`; rebase Aegis branches onto v30 tags once merged. | After PR #1202 merges to `main`. |
 

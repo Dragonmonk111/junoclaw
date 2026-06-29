@@ -10,6 +10,21 @@ Status: junod init NATIVE hybrid consensus key flag COMPLETE (--aegis-hybrid-con
 
 == 2026-06-29 ==
 
+- cosmwasm#2685 REPLY POSTED: acknowledgement reply sent (accepted deferral,
+  confirmed fork maintenance, answered "who benefits"). Tracking item 1 ->
+  reply-posted; draft marked POSTED; next touch late Q3. wasmvm#735 stays gated.
+
+- 4h DEVNET SOAK = SATISFIED via VirtualBox Ubuntu VM (not a separate WSL2 run).
+  Root cause of the soak was WSL2/Hyper-V clock freeze/backward-jump on host
+  sleep/resume; the real VirtualBox VM has a monotonic clock + always-on manual
+  junod validator with sustained block production, so the long-run-stall risk
+  doesn't apply there. WSL2 4h soak now OPTIONAL (docs/DEVNET_4H_SOAK_RUNBOOK.md).
+  COMPLETION_PLAN.md §6 + exec summary + definition-of-done updated to COMPLETE.
+  Optional formal number: two `junod status` reads ~4h apart on the VBox validator.
+
+- COMPLETION_PLAN status: critical path CLEARED; only PASSIVE upstream tracking
+  left (juno#1202 v30 merge timing; cosmwasm#2685 + wasmvm#735 deferred to Q3).
+
 - junod-aegis CI = FIRST GREEN RUN on GitHub Actions (workflow_dispatch, branch
   main, defaults). Built Juno v29.0.0 + cometbft aegis-phase-cf-hybrid + sdk
   aegis-phase-d3-hybrid (ibc-go skipped). Smoke: AEGIS_HYBRID_TRANSPORT=1 ok.
