@@ -10,6 +10,17 @@ Status: junod init NATIVE hybrid consensus key flag COMPLETE (--aegis-hybrid-con
 
 == 2026-06-29 ==
 
+- junod-aegis CI = FIRST GREEN RUN on GitHub Actions (workflow_dispatch, branch
+  main, defaults). Built Juno v29.0.0 + cometbft aegis-phase-cf-hybrid + sdk
+  aegis-phase-d3-hybrid (ibc-go skipped). Smoke: AEGIS_HYBRID_TRANSPORT=1 ok.
+  Artifact junod-aegis-v29.0.0 uploaded. CI binary sha256:
+  53aaf4c9fc5fc70f4c7a8bf2395407fa7deee913ce9a0bae6d159da84e518c83
+  (differs from the VM-built 98e6813.../0809331... as expected: different build
+  env / module graph snapshot; both link the same fork tips). Two warnings were
+  benign: (1) Node20->Node24 forced on actions (cosmetic); (2) setup-go cache
+  miss (build runs go mod download in RUNNER_TEMP, not the junoclaw checkout).
+  FIX: set cache:false on actions/setup-go to silence the cache warning.
+
 - junod-aegis CI = Option 1 IMPLEMENTED: added .github/workflows/aegis-build-junod.yml
   to main junoclaw (workflow_dispatch + nightly cron 0 4 * * *, Go 1.24 on
   ubuntu-24.04). Clones Juno @ pinned tag (default v29.0.0), clones cometbft +

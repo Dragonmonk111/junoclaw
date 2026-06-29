@@ -2,12 +2,20 @@
 
 Last updated: 2026-06-29
 
-> **2026-06-29 — Option 1 implemented.** Added `.github/workflows/aegis-build-junod.yml` to the
-> main `junoclaw` repo: `workflow_dispatch` + nightly (`cron 0 4 * * *`), Go 1.24 on
-> `ubuntu-24.04`. It clones Juno at the pinned tag, clones the cometbft + cosmos-sdk forks (ibc-go
-> optional via input), applies local-path `replace` directives, runs `go mod tidy`, builds with
-> `-ldflags=-checklinkname=0`, smoke-tests `version --long` + `AEGIS_HYBRID_TRANSPORT=1`, records
-> the sha256, and uploads the binary as an artifact. Steps mirror `docs/BUILD_AEGIS_JUNO_BINARY.md`.
+> **2026-06-29 — Option 1 implemented + first green run.** Added
+> `.github/workflows/aegis-build-junod.yml` to the main `junoclaw` repo: `workflow_dispatch` +
+> nightly (`cron 0 4 * * *`), Go 1.24 on `ubuntu-24.04`. It clones Juno at the pinned tag, clones
+> the cometbft + cosmos-sdk forks (ibc-go optional via input), applies local-path `replace`
+> directives, runs `go mod tidy`, builds with `-ldflags=-checklinkname=0`, smoke-tests
+> `version --long` + `AEGIS_HYBRID_TRANSPORT=1`, records the sha256, and uploads the binary as an
+> artifact. Steps mirror `docs/BUILD_AEGIS_JUNO_BINARY.md`.
+>
+> **First successful run** (Juno v29.0.0, cometbft `aegis-phase-cf-hybrid`, sdk
+> `aegis-phase-d3-hybrid`, ibc-go skipped): artifact `junod-aegis-v29.0.0`, binary sha256
+> `53aaf4c9fc5fc70f4c7a8bf2395407fa7deee913ce9a0bae6d159da84e518c83`, `AEGIS_HYBRID_TRANSPORT=1`
+> smoke ok. The CI sha differs from the VM-built binary (`98e6813…`) — expected, since the build
+> environment and module-graph snapshot differ; both link the same fork tips. Set `cache: false`
+> on `setup-go` afterwards (the build downloads modules in `RUNNER_TEMP`, not the repo checkout).
 
 ## What `junod-aegis` is
 
