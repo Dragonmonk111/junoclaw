@@ -3,6 +3,7 @@
 Build the Juno v29 binary wired to the Project Aegis forks:
 - **CometBFT fork** (`aegis-phase-cf-hybrid`): ML-KEM-768 hybrid transport
 - **Cosmos SDK fork** (`aegis-phase-d3-hybrid`): secp256k1+ML-DSA-44 hybrid keys
+- **IBC-Go fork** (`aegis-phase-g-hybrid-client`): 07-tendermint hybrid client (optional, now default in CI)
 
 Run this on the **VirtualBox Linux VM** (dragonmonk111@dragonmonk111-VirtualBox).
 
@@ -49,6 +50,7 @@ export AEGIS_BUILD_DIR="$HOME/aegis-build"
 export JUNO_TAG="v29.0.0"
 export SDK_BRANCH="aegis-phase-d3-hybrid"
 export CMT_BRANCH="aegis-phase-cf-hybrid"
+export IBC_BRANCH="aegis-phase-g-hybrid-client"  # set blank to skip ibc-go and match the two-fork build
 mkdir -p "$AEGIS_BUILD_DIR"
 ```
 
@@ -68,11 +70,19 @@ echo "CometBFT tip: $(git -C aegis-cometbft rev-parse --short HEAD)"
 git clone --branch "$SDK_BRANCH" --depth 1 \
   https://github.com/Dragonmonk111/cosmos-sdk.git aegis-sdk
 echo "SDK tip: $(git -C aegis-sdk rev-parse --short HEAD)"
+
+# IBC-Go fork (07-tendermint hybrid client) — optional, now default in CI
+if [ -n "$IBC_BRANCH" ]; then
+  git clone --branch "$IBC_BRANCH" --depth 1 \
+    https://github.com/Dragonmonk111/ibc-go.git aegis-ibc-go
+  echo "IBC-Go tip: $(git -C aegis-ibc-go rev-parse --short HEAD)"
+fi
 ```
 
-**Deterministic outcome:** Both tips match the progress.txt records:
+**Deterministic outcome:** All tips match the progress.txt records:
 - CometBFT: `aegis-phase-cf-hybrid` (6 commits ahead of v0.38.x)
 - SDK: `aegis-phase-d3-hybrid` tip `4e6f315`
+- IBC-Go: `aegis-phase-g-hybrid-client` (when cloned)
 
 ---
 
@@ -101,18 +111,22 @@ grep -E "cosmos-sdk|cometbft" go.mod | head -6
 ```
 
 Now add the replace block. The exact existing require lines will be shown above.
-Append to the end of `go.mod`:
+Append to the end of `go.mod`. For the **three-fork build** (default in CI, includes IBC Phase G), use:
 
 ```bash
 cat >> go.mod << 'EOF'
 
-// Project Aegis: local fork overrides (ML-KEM transport + hybrid consensus keys)
+// Project Aegis: local fork overrides (ML-KEM transport + hybrid consensus keys + IBC hybrid client)
 replace (
 	github.com/cometbft/cometbft => ../aegis-cometbft
 	github.com/cosmos/cosmos-sdk => ../aegis-sdk
+	github.com/cosmos/ibc-go/v8 => ../aegis-ibc-go
 )
 EOF
 ```
+
+> If you skipped the ibc-go fork, drop the `github.com/cosmos/ibc-go/v8` line and match the earlier
+> two-fork build. The CI default is the three-fork build.
 
 Verify:
 

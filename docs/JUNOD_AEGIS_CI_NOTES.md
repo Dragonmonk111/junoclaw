@@ -13,9 +13,14 @@ Last updated: 2026-06-29
 > **First successful run** (Juno v29.0.0, cometbft `aegis-phase-cf-hybrid`, sdk
 > `aegis-phase-d3-hybrid`, ibc-go skipped): artifact `junod-aegis-v29.0.0`, binary sha256
 > `53aaf4c9fc5fc70f4c7a8bf2395407fa7deee913ce9a0bae6d159da84e518c83`, `AEGIS_HYBRID_TRANSPORT=1`
-> smoke ok. The CI sha differs from the VM-built binary (`98e6813…`) — expected, since the build
-> environment and module-graph snapshot differ; both link the same fork tips. Set `cache: false`
-> on `setup-go` afterwards (the build downloads modules in `RUNNER_TEMP`, not the repo checkout).
+> smoke ok.
+>
+> **Three-fork run verified** (Juno v29.0.0, cometbft `aegis-phase-cf-hybrid`, sdk
+> `aegis-phase-d3-hybrid`, **ibc-go `aegis-phase-g-hybrid-client`**): artifact
+> `junod-aegis-v29.0.0`, binary sha256 `661adbaf7512d20ac5d820493271f371747c09e361ad14ce706e2c2b28d3b2a5`,
+> `AEGIS_HYBRID_TRANSPORT=1` smoke ok. This is now the **default** (`ibc_go_ref` defaults to the Phase
+> G branch); set it blank to fall back to the two-fork build. The `setup-go` cache warning was
+> silenced by setting `cache: false`; only the harmless Node.js 20 deprecation warning remains.
 
 ## What `junod-aegis` is
 

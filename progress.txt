@@ -5,10 +5,18 @@ Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
 Last update: 2026-06-29 UTC+1
-Status: junod init NATIVE hybrid consensus key flag COMPLETE (--aegis-hybrid-consensus on junod init now generates the Ed25519+ML-DSA-44 validator key directly; previously only the standalone aegis-bench/cmd/hybrid-consensus-keygen tool could). cosmos-sdk fork aegis-phase-d3-hybrid@5792792 and cometbft fork aegis-phase-cf-hybrid@ff4dcefdc083 pushed; SDK go.mod cometbft pin bumped to ff4dcefdc083. Earlier-COMPLETE: D3 account wiring; F6 MsgRotateConsensusKey proto/server/CLI/tests + 24h rate-limit; F7 hybrid remote-signer passthrough; IBC Phase G wiring; CI Go-1.24 bumps across forks; ARM64 determinism via QEMU. All local forks + main repo clean and pushed. Remaining: junod-aegis CI not accessible locally; 4h devnet soak not time-tested; upstream pings (cosmwasm#2685, wasmvm#735, juno#1202).
+Status: junod-aegis CI built green in GitHub Actions (Option 1) with both the two-fork and the full three-fork (ibc-go) configurations; binary sha256s 53aaf4c9... and 661adbaf... recorded. AEGIS_HYBRID_TRANSPORT=1 smoke ok for both. All headline engineering complete (C5/C6 transport, D1/D2/D3 accounts, F1-F7 consensus, IBC Phase G, native --aegis-hybrid-consensus, Fable P3/P4/P5). 4h devnet stability satisfied by the always-on VirtualBox validator (WSL2 soak optional). CosmWasm#2685 reply posted (deferred to Q3). Remaining work is passive: track juno#1202 v30 merge, rebase Aegis patches once it lands, and re-check cosmwasm#2685/wasmvm#735 in late Q3.
 
 
 == 2026-06-29 ==
+
+- junod-aegis CI = THREE-FORK BUILD VERIFIED. Built Juno v29.0.0 + cometbft
+  aegis-phase-cf-hybrid + sdk aegis-phase-d3-hybrid + ibc-go aegis-phase-g-hybrid-client.
+  Smoke: AEGIS_HYBRID_TRANSPORT=1 ok. Artifact junod-aegis-v29.0.0, sha256
+  661adbaf7512d20ac5d820493271f371747c09e361ad14ce706e2c2b28d3b2a5. Only the harmless
+  Node.js 20 deprecation warning remains. Updated .github/workflows/aegis-build-junod.yml
+  so ibc_go_ref defaults to aegis-phase-g-hybrid-client (nightly builds now include the IBC
+  Phase G hybrid client). Updated docs/BUILD_AEGIS_JUNO_BINARY.md to match.
 
 - cosmwasm#2685 REPLY POSTED: acknowledgement reply sent (accepted deferral,
   confirmed fork maintenance, answered "who benefits"). Tracking item 1 ->

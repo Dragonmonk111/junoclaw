@@ -26,9 +26,9 @@ on:
         required: false
         default: "aegis-phase-d3-hybrid"
       ibc_go_ref:
-        description: "Dragonmonk111/ibc-go branch/tag/sha (07-tendermint hybrid client). Leave blank to skip the ibc-go replace and match the known-good two-fork build."
+        description: "Dragonmonk111/ibc-go branch/tag/sha (07-tendermint hybrid client). Default is the verified three-fork build; set blank to skip ibc-go and match the earlier two-fork build."
         required: false
-        default: ""
+        default: "aegis-phase-g-hybrid-client"
   # Nightly rebuild so a green/red signal tracks the moving fork tips without
   # anyone having to remember to dispatch it. Inputs fall back to the defaults
   # below when triggered by the schedule.
@@ -50,7 +50,7 @@ env:
   JUNO_TAG: ${{ github.event.inputs.juno_tag || 'v29.0.0' }}
   CMT_REF: ${{ github.event.inputs.cometbft_ref || 'aegis-phase-cf-hybrid' }}
   SDK_REF: ${{ github.event.inputs.cosmos_sdk_ref || 'aegis-phase-d3-hybrid' }}
-  IBC_REF: ${{ github.event.inputs.ibc_go_ref || '' }}
+  IBC_REF: ${{ github.event.inputs.ibc_go_ref || 'aegis-phase-g-hybrid-client' }}
 
 jobs:
   build:
