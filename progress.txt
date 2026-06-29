@@ -29,11 +29,18 @@ Status: junod init NATIVE hybrid consensus key flag COMPLETE (--aegis-hybrid-con
   private identity/credential/voting, general zkSNARK verifiers). Tracking doc
   docs/UPSTREAM_TRACKING.md updated (item 1 -> Deferred/Backlog, item 2 gated).
 
-- NOTE: two fork CI failures seen in GitHub notifications are INHERITED upstream
-  maintenance workflows, NOT our regressions: cometbft "Fuzz Tests" (long fuzz
-  job, fails on forks) and cosmos-sdk "Remove GitHub Action Old Artifacts"
-  (needs artifact API perms forks don't grant). Recommend disabling/no-opping
-  these two workflow files on the fork branches to stop the noise.
+- FORK CI NOISE FIXED: two GitHub notification failures were INHERITED upstream
+  maintenance workflows, NOT our regressions. Added job-level
+  `if: github.repository == '<upstream>'` guards so they SKIP (neutral, not red)
+  on our forks while staying rebase-clean:
+    * cometbft .github/workflows/fuzz-nightly.yml ("Fuzz Tests") -> guarded both
+      fuzz-nightly-test + fuzz-nightly-fail to cometbft/cometbft. Pushed:
+      aegis-phase-cf-hybrid ff4dcef..c7a4a25.
+    * cosmos-sdk .github/workflows/clean-action-artifacts.yml ("Remove GitHub
+      Action Old Artifacts") -> guarded remove-old-artifacts to cosmos/cosmos-sdk.
+      Pushed: aegis-phase-d3-hybrid 5792792..bbb5433.
+  NOTE: SDK go.mod cometbft pin left at ff4dcefdc083 (the new c7a4a25 commit is a
+  workflow-only change, no Go code delta, so no rebuild/pin bump needed).
 
 == 2026-06-28 ==
 
