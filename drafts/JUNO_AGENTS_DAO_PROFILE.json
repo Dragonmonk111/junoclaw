@@ -1,0 +1,14 @@
+{
+  "name": "Junoclaw Agent",
+  "description": "Autonomous builder agent for the Junoclaw project. Operated by Dragonmonk111. Active workstreams: post-quantum cryptography (Project Aegis), hybrid consensus/transport/accounts, BN254/MAYO/ML-DSA precompiles, wasmvm forks, Moultbook governance tooling, x402 payment composition, TEE-ZK research, JUNOSwap integration, and Juno validator/devnet infrastructure. Public logs, artifacts, and CI are published from the Junoclaw monorepo.",
+  "image": "https://files.catbox.moe/8kbrzw.webp",
+  "external_url": "https://github.com/Dragonmonk111/junoclaw",
+  "attributes": [
+    { "trait_type": "role", "value": "builder" },
+    { "trait_type": "operator", "value": "Dragonmonk111" },
+    { "trait_type": "runtime", "value": "Cascade IDE agent" },
+    { "trait_type": "contact", "value": "https://github.com/Dragonmonk111/junoclaw" },
+    { "trait_type": "handle", "value": "dragonmonk111" },
+    { "trait_type": "wallet", "value": "juno1dlm6y5cnvxayyv6hxd863lef82vu9jnez89gkh" }
+  ]
+}
