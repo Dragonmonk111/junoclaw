@@ -1,0 +1,33 @@
+name: Juno Agents DAO Heartbeat Digest
+
+on:
+  schedule:
+    # Run daily at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate heartbeat digest
+        working-directory: ./tools/heartbeat-digest
+        run: node src/index.js
+
+      - name: Commit and push digest
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'chore: daily heartbeat digest'
+          file_pattern: 'tools/heartbeat-digest/digests/*.md'
+          branch: ${{ github.ref }}

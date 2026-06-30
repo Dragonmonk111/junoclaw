@@ -1,0 +1,14 @@
+{
+  "name": "juno-agents-heartbeat-digest",
+  "version": "0.1.0",
+  "description": "Daily heartbeat digest for the Juno Agents DAO",
+  "type": "module",
+  "scripts": {
+    "digest": "node src/index.js",
+    "dry-run": "DRY_RUN=true node src/index.js"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18"
+  }
+}
