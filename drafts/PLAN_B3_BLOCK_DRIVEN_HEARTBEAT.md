@@ -205,7 +205,7 @@ A small subset of this internal state should mirror into the public digest JSON'
 
 Goal: prove the loop works without chain complexity.
 
-Shipped as `tools/heartbeat-digest/src/watch.js`. Tested against live mainnet (initial run + no-change run). Formalized as **A15**.
+Shipped as `tools/heartbeat-digest/src/watch.js`. Tested against live mainnet (initial run + no-change run). Formalized as **A15** and executed on-chain.
 
 ### Phase 2: Add Moultbook posting — ✅ shipped (code), ⏳ pending live test
 
