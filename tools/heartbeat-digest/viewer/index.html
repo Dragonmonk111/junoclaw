@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Juno Agents DAO Heartbeat</title>
+  <style>
+    :root {
+      --bg: #06060f;
+      --surface: #0a0a18;
+      --surface-2: #0f0f20;
+      --border: rgba(255,107,74,0.12);
+      --border-sub: rgba(255,255,255,0.06);
+      --text: #f0eff8;
+      --text-muted: #6b6a8a;
+      --accent: #ff6b4a;
+      --accent-glow: rgba(255,107,74,0.25);
+      --teal: #00d4aa;
+      --teal-glow: rgba(0,212,170,0.20);
+      --green: #34d399;
+      --red: #f87171;
+      --yellow: #fbbf24;
+      --purple: #a78bfa;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 16px 64px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(255,107,74,0.08) 0%, rgba(0,212,170,0.04) 100%);
+      border: 1px solid rgba(255,107,74,0.15);
+      border-radius: 24px;
+      padding: 28px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 28px;
+    }
+
+    .hero-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 20px;
+      background: rgba(255,107,74,0.12);
+      border: 1px solid rgba(255,107,74,0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      flex-shrink: 0;
+    }
+
+    .hero-title {
+      font-size: 26px;
+      font-weight: 800;
+      margin: 0;
+      background: linear-gradient(135deg, #ff6b4a, #ffaa80);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    @media (min-width: 640px) {
+      .cards { grid-template-columns: repeat(4, 1fr); }
+    }
+
+    .card {
+      background: rgba(255,107,74,0.04);
+      border: 1px solid rgba(255,107,74,0.12);
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .card-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      background: rgba(255,107,74,0.1);
+    }
+
+    .card-value {
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .card-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .section {
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 16px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 18px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+
+    .section-header:hover { background: rgba(255,255,255,0.02); }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .section-count {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      background: var(--surface-2);
+      padding: 3px 8px;
+      border-radius: 99px;
+      margin-left: 8px;
+    }
+
+    .section-body {
+      padding: 0 18px 18px;
+      border-top: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .proposal {
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .proposal:last-child { border-bottom: none; }
+
+    .proposal-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .proposal-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .proposal-title {
+      font-size: 13px;
+      color: #c0bfd8;
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    .proposal-date {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .badge {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .badge-open { background: rgba(251,191,36,0.1); color: var(--yellow); }
+    .badge-passed { background: rgba(52,211,153,0.1); color: var(--green); }
+    .badge-executed { background: rgba(167,139,250,0.1); color: var(--purple); }
+    .badge-rejected { background: rgba(248,113,113,0.1); color: var(--red); }
+    .badge-closed { background: rgba(107,106,138,0.1); color: var(--text-muted); }
+    .badge-new { background: rgba(255,107,74,0.1); color: var(--accent); }
+    .badge-closing { background: rgba(251,191,36,0.1); color: var(--yellow); }
+
+    .vote-bar {
+      display: flex;
+      height: 6px;
+      border-radius: 99px;
+      overflow: hidden;
+      background: #1a1a2e;
+      margin-top: 10px;
+    }
+
+    .vote-yes { background: var(--green); }
+    .vote-no { background: var(--red); }
+    .vote-abstain { background: var(--text-muted); }
+
+    .vote-legend {
+      display: flex;
+      gap: 14px;
+      font-size: 11px;
+      margin-top: 6px;
+    }
+
+    .vote-legend-yes { color: var(--green); }
+    .vote-legend-no { color: var(--red); }
+    .vote-legend-abstain { color: var(--text-muted); }
+
+    .link {
+      color: #60a5fa;
+      font-size: 11px;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .link:hover { text-decoration: underline; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    @media (min-width: 640px) {
+      .grid-2 { grid-template-columns: 1fr 1fr; }
+    }
+
+    .member-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 0;
+    }
+
+    .member-role {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255,107,74,0.1);
+      color: var(--accent);
+    }
+
+    .member-addr {
+      flex: 1;
+      font-family: monospace;
+      font-size: 11px;
+      color: #8a89a6;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .member-bar-wrap {
+      width: 100px;
+      height: 5px;
+      background: #1a1a2e;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .member-bar { height: 100%; background: var(--accent); border-radius: 99px; }
+
+    .member-pct {
+      font-size: 11px;
+      color: #c0bfd8;
+      width: 42px;
+      text-align: right;
+    }
+
+    .footer {
+      background: rgba(96,165,250,0.04);
+      border: 1px solid rgba(96,165,250,0.1);
+      border-radius: 16px;
+      padding: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .footer a { color: #60a5fa; text-decoration: none; }
+
+    .empty {
+      color: var(--text-muted);
+      font-size: 13px;
+      padding: 12px 0;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+
+    .error {
+      background: rgba(248,113,113,0.08);
+      border: 1px solid rgba(248,113,113,0.2);
+      color: var(--red);
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="app" class="loading">Loading heartbeat digest...</div>
+  </div>
+
+  <script>
+    const GITHUB_DIGEST_JSON = 'https://raw.githubusercontent.com/Dragonmonk111/junoclaw/main/tools/heartbeat-digest/digests/latest.json'
+    const LOCAL_DIGEST_JSON = '../digests/latest.json'
+
+    const statusBadge = (status) => {
+      const map = {
+        open: 'badge-open',
+        passed: 'badge-passed',
+        executed: 'badge-executed',
+        rejected: 'badge-rejected',
+        closed: 'badge-closed',
+        execution_failed: 'badge-rejected',
+      }
+      const cls = map[status] || 'badge-closed'
+      const label = status.replace('_', ' ')
+      return `<span class="badge ${cls}">${label}</span>`
+    }
+
+    const formatDate = (iso) => {
+      if (!iso) return '—'
+      const d = new Date(iso)
+      return isNaN(d.getTime()) ? String(iso) : d.toLocaleDateString()
+    }
+
+    const truncAddr = (addr) => {
+      if (!addr) return '—'
+      return addr.length > 20 ? `${addr.slice(0, 10)}...${addr.slice(-6)}` : addr
+    }
+
+    const voteBar = (votes) => {
+      const total = votes.yes + votes.no + votes.abstain
+      if (!total) return '<div class="empty">No votes yet</div>'
+      const y = (votes.yes / total) * 100
+      const n = (votes.no / total) * 100
+      const a = (votes.abstain / total) * 100
+      return `
+        <div class="vote-bar">
+          ${y > 0 ? `<div class="vote-yes" style="width:${y}%"></div>` : ''}
+          ${n > 0 ? `<div class="vote-no" style="width:${n}%"></div>` : ''}
+          ${a > 0 ? `<div class="vote-abstain" style="width:${a}%"></div>` : ''}
+        </div>
+        <div class="vote-legend">
+          <span class="vote-legend-yes">Yes ${y.toFixed(0)}%</span>
+          <span class="vote-legend-no">No ${n.toFixed(0)}%</span>
+          <span class="vote-legend-abstain">Abstain ${a.toFixed(0)}%</span>
+        </div>
+      `
+    }
+
+    const proposalGroup = (title, icon, proposals, daoCore) => {
+      if (!proposals.length) return ''
+      const id = 'group-' + title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      return `
+        <div class="section">
+          <div class="section-header" onclick="toggle('${id}')">
+            <div class="section-title">
+              <span>${icon}</span>
+              <span>${title}</span>
+              <span class="section-count">${proposals.length}</span>
+            </div>
+            <span id="${id}-chevron">▼</span>
+          </div>
+          <div id="${id}" class="section-body">
+            ${proposals.map(p => `
+              <div class="proposal">
+                <div class="proposal-row">
+                  <div style="min-width:0">
+                    <div class="proposal-meta">
+                      <span style="font-size:12px;font-weight:700;color:#e0dff8">A${p.id}</span>
+                      ${statusBadge(p.status)}
+                      ${p.is_new_today ? '<span class="badge badge-new">New</span>' : ''}
+                      ${p.is_closing_soon ? '<span class="badge badge-closing">Closing soon</span>' : ''}
+                    </div>
+                    <div class="proposal-title">${p.title}</div>
+                    <div class="proposal-date">Created ${formatDate(p.created_at)}</div>
+                  </div>
+                  <a class="link" href="https://dao.daodao.zone/dao/${daoCore}/proposals/${p.id}" target="_blank" rel="noopener">
+                    ${p.status === 'open' ? 'Vote' : 'View'} ↗
+                  </a>
+                </div>
+                ${voteBar(p.votes)}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `
+    }
+
+    const toggle = (id) => {
+      const el = document.getElementById(id)
+      const chevron = document.getElementById(id + '-chevron')
+      if (!el) return
+      const hidden = el.style.display === 'none'
+      el.style.display = hidden ? 'block' : 'none'
+      chevron.textContent = hidden ? '▼' : '▶'
+    }
+
+    window.toggle = toggle
+
+    const render = (d) => {
+      const grouped = {
+        newToday: d.proposals.filter(p => p.is_new_today),
+        needsVotes: d.proposals.filter(p => p.status === 'open'),
+        readyToExecute: d.proposals.filter(p => p.status === 'passed'),
+        closingSoon: d.proposals.filter(p => p.status === 'open' && p.is_closing_soon),
+        closed: d.proposals.filter(p => ['executed', 'rejected', 'closed', 'execution_failed'].includes(p.status)),
+      }
+      const treasury = d.treasury.length
+        ? d.treasury.map(b => b.denom === 'ujuno' ? `${(Number(b.amount) / 1e6).toFixed(2)} JUNO` : `${b.amount} ${b.denom}`).join(', ')
+        : '0 JUNO'
+      const totalWeight = d.summary.total_voting_power
+
+      document.getElementById('app').className = ''
+      document.getElementById('app').innerHTML = `
+        <div class="hero">
+          <div class="hero-icon">🐚</div>
+          <div>
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">Juno Agents DAO</div>
+            <h1 class="hero-title">Heartbeat Digest — ${d.date}</h1>
+            <div class="hero-sub">Generated ${new Date(d.meta.generated_at).toLocaleString()} · ${d.proposals.length} proposals · ${d.members.length} members</div>
+          </div>
+        </div>
+
+        <div class="cards">
+          <div class="card">
+            <div class="card-icon" style="background:rgba(251,191,36,0.1);color:var(--yellow)">🗳️</div>
+            <div>
+              <div class="card-value" style="color:var(--yellow)">${d.summary.open}</div>
+              <div class="card-label">Open</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-icon" style="background:rgba(52,211,153,0.1);color:var(--green)">✅</div>
+            <div>
+              <div class="card-value" style="color:var(--green)">${d.summary.ready_to_execute}</div>
+              <div class="card-label">Ready</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-icon" style="background:rgba(167,139,250,0.1);color:var(--purple)">⚡</div>
+            <div>
+              <div class="card-value" style="color:var(--purple)">${d.summary.total_voting_power}</div>
+              <div class="card-label">Voting power</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-icon" style="background:rgba(0,212,170,0.1);color:var(--teal)">💰</div>
+            <div>
+              <div class="card-value" style="color:var(--teal)">${treasury}</div>
+              <div class="card-label">Treasury</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:12px">Proposals</div>
+
+        ${proposalGroup('New today', '✨', grouped.newToday, d.meta.dao_core)}
+        ${proposalGroup('Needs votes', '🗳️', grouped.needsVotes, d.meta.dao_core)}
+        ${proposalGroup('Ready to execute', '✅', grouped.readyToExecute, d.meta.dao_core)}
+        ${proposalGroup('Closing soon', '⏰', grouped.closingSoon, d.meta.dao_core)}
+        ${proposalGroup('Closed since last digest', '📁', grouped.closed, d.meta.dao_core)}
+
+        <div class="grid-2">
+          <div class="section">
+            <div class="section-header" onclick="toggle('members')">
+              <div class="section-title"><span>👥</span><span>Members</span></div>
+              <span id="members-chevron">▼</span>
+            </div>
+            <div id="members" class="section-body">
+              ${d.members.length ? d.members.map(m => {
+                const pct = totalWeight > 0 ? ((m.weight / totalWeight) * 100).toFixed(1) : '0.0'
+                return `
+                  <div class="member-row">
+                    <span class="member-role">${m.role || 'member'}</span>
+                    <span class="member-addr" title="${m.addr}">${truncAddr(m.addr)}</span>
+                    <div class="member-bar-wrap"><div class="member-bar" style="width:${pct}%"></div></div>
+                    <span class="member-pct">${pct}%</span>
+                  </div>
+                `
+              }).join('') : '<div class="empty">No members found</div>'}
+              <div style="margin-top:10px;font-size:11px;color:var(--text-muted)">Total voting power: ${totalWeight}</div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-header" onclick="toggle('treasury')">
+              <div class="section-title"><span>💰</span><span>Treasury</span></div>
+              <span id="treasury-chevron">▼</span>
+            </div>
+            <div id="treasury" class="section-body">
+              ${d.treasury.length ? d.treasury.map(b => `
+                <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
+                  <span style="color:var(--text-muted)">${b.denom === 'ujuno' ? 'JUNO' : b.denom}</span>
+                  <span style="color:#c0bfd8;font-weight:600">${b.denom === 'ujuno' ? (Number(b.amount)/1e6).toFixed(2) : b.amount}</span>
+                </div>
+              `).join('') : '<div class="empty">0 JUNO (treasury empty)</div>'}
+              <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Held at the DAO core address.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer" style="margin-top:8px">
+          <strong style="color:#60a5fa">On-chain sources</strong> — DAO core <code>${truncAddr(d.meta.dao_core)}</code>, proposal module <code>${truncAddr(d.meta.proposal_module)}</code>, REST <code>${d.meta.rest_endpoint}</code>. This digest is the DAO's daily pulse: a public shell left on the reef for agents and voters to build on.
+        </div>
+      `
+    }
+
+    const main = async () => {
+      let lastErr = null
+      for (const url of [GITHUB_DIGEST_JSON, LOCAL_DIGEST_JSON]) {
+        try {
+          const res = await fetch(url, { cache: 'no-store' })
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const data = await res.json()
+          render(data)
+          return
+        } catch (e) {
+          lastErr = e
+        }
+      }
+      document.getElementById('app').innerHTML = `
+        <div class="error">
+          Could not load the heartbeat digest: ${lastErr?.message}<br>
+          Make sure the JSON file is available at <code>${GITHUB_DIGEST_JSON}</code> or locally at <code>${LOCAL_DIGEST_JSON}</code>.
+        </div>
+      `
+    }
+
+    main()
+  </script>
+</body>
+</html>

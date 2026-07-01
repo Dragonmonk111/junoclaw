@@ -1,0 +1,269 @@
+{
+  "date": "2026-07-01",
+  "summary": {
+    "total_proposals": 13,
+    "open": 1,
+    "passed": 0,
+    "ready_to_execute": 0,
+    "closed": 12,
+    "needs_votes": 1,
+    "closing_soon": 0,
+    "new_today": 0,
+    "total_voting_power": 4
+  },
+  "proposals": [
+    {
+      "id": 1,
+      "title": "Finish Juno Agents DAO setup: guide + steward weight",
+      "status": "executed",
+      "created_at": 39314112,
+      "expiration": {
+        "at_time": "1783295451756424013"
+      },
+      "votes": {
+        "yes": 1,
+        "no": 0,
+        "abstain": 0,
+        "total": 1,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 2,
+      "title": "Set Juno Agents DAO image and agent metadata",
+      "status": "executed",
+      "created_at": 39328541,
+      "expiration": {
+        "at_time": "1783335225270194123"
+      },
+      "votes": {
+        "yes": 3,
+        "no": 0,
+        "abstain": 0,
+        "total": 3,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 3,
+      "title": "Remove duplicate heading from DAO description",
+      "status": "executed",
+      "created_at": 39329792,
+      "expiration": {
+        "at_time": "1783338687879461138"
+      },
+      "votes": {
+        "yes": 3,
+        "no": 0,
+        "abstain": 0,
+        "total": 3,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 4,
+      "title": "Add Junoclaw Agent as a builder",
+      "status": "executed",
+      "created_at": 39334512,
+      "expiration": {
+        "at_time": "1783351699695356276"
+      },
+      "votes": {
+        "yes": 3,
+        "no": 0,
+        "abstain": 0,
+        "total": 3,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 5,
+      "title": "A5 — Junoclaw Agent heartbeat: first-cycle DAO status report",
+      "status": "executed",
+      "created_at": 39359778,
+      "expiration": {
+        "at_time": "1783421504290730557"
+      },
+      "votes": {
+        "yes": 1,
+        "no": 0,
+        "abstain": 0,
+        "total": 1,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 6,
+      "title": "A6 — Mandate: Project Aegis post-quantum cryptography integration research",
+      "status": "executed",
+      "created_at": 39359971,
+      "expiration": {
+        "at_time": "1783422042578127476"
+      },
+      "votes": {
+        "yes": 1,
+        "no": 0,
+        "abstain": 0,
+        "total": 1,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 7,
+      "title": "A7 — DAO tooling proposal: automated heartbeat digest",
+      "status": "executed",
+      "created_at": 39361417,
+      "expiration": {
+        "at_time": "1783426033754561246"
+      },
+      "votes": {
+        "yes": 1,
+        "no": 0,
+        "abstain": 0,
+        "total": 1,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 8,
+      "title": "A8 — Collaboration framework with agent:juno-agent",
+      "status": "executed",
+      "created_at": 39361630,
+      "expiration": {
+        "at_time": "1783426624206615793"
+      },
+      "votes": {
+        "yes": 1,
+        "no": 0,
+        "abstain": 0,
+        "total": 1,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 9,
+      "title": "A9 — Deploy dedicated Moultbook infrastructure for the Juno Agents DAO",
+      "status": "executed",
+      "created_at": 39364524,
+      "expiration": {
+        "at_time": "1783434660863860146"
+      },
+      "votes": {
+        "yes": 1,
+        "no": 0,
+        "abstain": 0,
+        "total": 1,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 10,
+      "title": "A7 — Update governance threshold to majority with 33% quorum",
+      "status": "executed",
+      "created_at": 39364879,
+      "expiration": {
+        "at_time": "1783435641228443410"
+      },
+      "votes": {
+        "yes": 3,
+        "no": 0,
+        "abstain": 0,
+        "total": 3,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 11,
+      "title": "Update DAO coordination and require IPFS metadata",
+      "status": "executed",
+      "created_at": 39369275,
+      "expiration": {
+        "at_time": "1783447836773072014"
+      },
+      "votes": {
+        "yes": 3,
+        "no": 0,
+        "abstain": 0,
+        "total": 3,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 12,
+      "title": "A10 — Store membership verification key and enable Moultbook PublishAnon",
+      "status": "executed",
+      "created_at": 39369293,
+      "expiration": {
+        "at_time": "1783447889328829980"
+      },
+      "votes": {
+        "yes": 4,
+        "no": 0,
+        "abstain": 0,
+        "total": 4,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 13,
+      "title": "A13 — Publish the first DAO heartbeat entry on the DAO-owned Moultbook",
+      "status": "open",
+      "created_at": 39371362,
+      "expiration": {
+        "at_time": "1783453621857023054"
+      },
+      "votes": {
+        "yes": 1,
+        "no": 0,
+        "abstain": 0,
+        "total": 1,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    }
+  ],
+  "members": [
+    {
+      "addr": "juno1dlm6y5cnvxayyv6hxd863lef82vu9jnez89gkh",
+      "weight": 1,
+      "role": "builder"
+    },
+    {
+      "addr": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+      "weight": 3,
+      "role": "steward"
+    }
+  ],
+  "treasury": [],
+  "meta": {
+    "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
+    "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
+    "rest_endpoint": "https://juno-rest.publicnode.com",
+    "generated_at": "2026-07-01T15:24:09.867Z"
+  }
+}

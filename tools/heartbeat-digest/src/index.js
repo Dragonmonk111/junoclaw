@@ -1,6 +1,7 @@
 import { writeFileSync, existsSync, mkdirSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { renderDigest } from './render-rich.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -85,15 +86,58 @@ function isNewToday(createdAt) {
 async function getVotingModule() {
   try {
     const resp = await querySmart(DAO_CORE, { voting_module: {} })
-    return extractData(resp).addr
+    const data = extractData(resp)
+    return typeof data === 'string' ? data : data.addr
   } catch (e) {
     console.warn('Could not query voting_module from DAO core:', e.message)
     return null
   }
 }
 
+async function getNftContract(votingModule) {
+  if (!votingModule) return null
+  try {
+    // DAO DAO cw721-roles voting module stores the NFT contract in its config.
+    const resp = await querySmart(votingModule, { config: {} })
+    const cfg = extractData(resp)
+    return cfg.nft_address || null
+  } catch (e) {
+    console.warn('Could not query voting module config:', e.message)
+    return null
+  }
+}
+
+async function getCw721Members(nftContract) {
+  if (!nftContract) return []
+  try {
+    const tokens = extractData(await querySmart(nftContract, { all_tokens: {} })).tokens || []
+    const members = []
+    for (const tokenId of tokens) {
+      try {
+        const info = extractData(await querySmart(nftContract, { all_nft_info: { token_id: tokenId } }))
+        const ext = info.info?.extension || {}
+        members.push({
+          addr: info.access?.owner || '',
+          weight: Number(ext.weight || 0),
+          role: ext.role || tokenId.split(':')[0] || 'member',
+          token_id: tokenId,
+        })
+      } catch (e) {
+        console.warn(`Could not query token ${tokenId}:`, e.message)
+      }
+    }
+    return members
+  } catch (e) {
+    console.warn('Could not query cw721 members:', e.message)
+    return []
+  }
+}
+
 async function getMembers(votingModule) {
   if (!votingModule) return []
+  const nftContract = await getNftContract(votingModule)
+  if (nftContract) return getCw721Members(nftContract)
+  // Fallback for older token-weighted voting modules.
   try {
     const resp = await querySmart(votingModule, { list_members: { limit: 100 } })
     return extractData(resp).members || []
@@ -125,75 +169,74 @@ async function getTreasury() {
 
 // ── Rendering ───────────────────────────────────────────────────────────────
 
-function renderDigest({ date, proposals, members, treasury }) {
-  const newToday = proposals.filter((p) => isNewToday(p.created_at || p.start_time))
-  const needsVotes = proposals.filter((p) => p.status === 'open')
-  const readyToExecute = proposals.filter((p) => p.status === 'passed')
-  const closingSoon = proposals.filter((p) => p.status === 'open' && isClosingSoon(p.expiration))
-  const closed = proposals.filter((p) =>
-    ['executed', 'rejected', 'closed', 'execution_failed'].includes(p.status)
-  )
+function normalizeProposal(p) {
+  // DAO DAO proposal modules wrap the proposal body under a `proposal` key.
+  const body = p.proposal || p
 
-  const treasuryLines = treasury.length
-    ? treasury.map((b) => `- ${b.amount} ${b.denom}`).join('\n')
-    : '- 0 ujuno (query failed)'
+  const rawVotes = body.votes || {}
+  const votes = {
+    yes: Number(rawVotes.yes || 0),
+    no: Number(rawVotes.no || 0),
+    abstain: Number(rawVotes.abstain || 0),
+    total: 0,
+    threshold: Number(body.threshold?.absolute_percentage?.percentage || 0),
+  }
+  votes.total = votes.yes + votes.no + votes.abstain
 
+  const createdAt = body.created_at || body.start_time || body.start_height
+  const newToday = isNewToday(createdAt)
+  const closingSoon = body.status === 'open' && isClosingSoon(body.expiration)
+
+  return {
+    id: p.id,
+    title: body.title || '(no title)',
+    status: body.status,
+    created_at: createdAt,
+    expiration: body.expiration,
+    votes,
+    is_new_today: newToday,
+    is_closing_soon: closingSoon,
+  }
+}
+
+function buildDigestData({ date, proposals, members, treasury }) {
+  const enriched = proposals.map(normalizeProposal)
   const totalPower = members.reduce((sum, m) => sum + Number(m.weight || 0), 0)
-  const memberLines = members.length
-    ? members.map((m) => `- ${m.addr} — weight ${m.weight}`).join('\n')
-    : '- Members query unavailable'
 
-  return `# Juno Agents DAO Heartbeat Digest — ${date}
+  const summary = {
+    total_proposals: enriched.length,
+    open: enriched.filter((p) => p.status === 'open').length,
+    passed: enriched.filter((p) => p.status === 'passed').length,
+    ready_to_execute: enriched.filter((p) => p.status === 'passed').length,
+    closed: enriched.filter((p) =>
+      ['executed', 'rejected', 'closed', 'execution_failed'].includes(p.status),
+    ).length,
+    needs_votes: enriched.filter((p) => p.status === 'open').length,
+    closing_soon: enriched.filter((p) => p.status === 'open' && p.is_closing_soon).length,
+    new_today: enriched.filter((p) => p.is_new_today).length,
+    total_voting_power: totalPower,
+  }
 
-_Generated from on-chain data via public RPC._
-
-## Quick stats
-| Metric | Value |
-|---|---|
-| DAO core | ${DAO_CORE} |
-| Total proposals | ${proposals.length} |
-| Open | ${needsVotes.length} |
-| Passed / ready to execute | ${readyToExecute.length} |
-| Closed | ${closed.length} |
-| Total voting power | ${totalPower} |
-
-## New today
-${newToday.length
-    ? newToday.map((p) => `- **A${p.id}**: ${p.title || '(no title)'} — ${statusLabel(p.status)}`).join('\n')
-    : '- none'}
-
-## Needs votes
-${needsVotes.length
-    ? needsVotes.map((p) => `- **A${p.id}**: ${p.title || '(no title)'} [vote](https://dao.daodao.zone/dao/${DAO_CORE}/proposals/${p.id})`).join('\n')
-    : '- none'}
-
-## Ready to execute
-${readyToExecute.length
-    ? readyToExecute.map((p) => `- **A${p.id}**: ${p.title || '(no title)'}`).join('\n')
-    : '- none'}
-
-## Closing soon (next 24h)
-${closingSoon.length
-    ? closingSoon.map((p) => `- **A${p.id}**: ${p.title || '(no title)'}`).join('\n')
-    : '- none'}
-
-## Closed since last digest
-${closed.length
-    ? closed.map((p) => `- **A${p.id}**: ${p.title || '(no title)'} — ${statusLabel(p.status)}`).join('\n')
-    : '- none'}
-
-## Treasury
-${treasuryLines}
-
-## Members
-${memberLines}
-
-## Data sources
-- DAO core: ${DAO_CORE}
-- Proposal module: ${PROPOSAL_MODULE}
-- REST endpoint: ${REST_ENDPOINT}
-- Generated at: ${formatDate(new Date().toISOString())}
-`
+  return {
+    date,
+    summary,
+    proposals: enriched,
+    members: members.map((m) => ({
+      addr: m.addr,
+      weight: Number(m.weight || 0),
+      role: m.role || null,
+    })),
+    treasury: treasury.map((b) => ({
+      denom: b.denom,
+      amount: b.amount,
+    })),
+    meta: {
+      dao_core: DAO_CORE,
+      proposal_module: PROPOSAL_MODULE,
+      rest_endpoint: REST_ENDPOINT,
+      generated_at: new Date().toISOString(),
+    },
+  }
 }
 
 // ── Main ────────────────────────────────────────────────────────────────────
@@ -210,12 +253,15 @@ async function main() {
     getTreasury(),
   ])
 
-  const digest = renderDigest({ date, proposals, members, treasury })
+  const data = buildDigestData({ date, proposals, members, treasury })
+  const { plain, rich } = renderDigest(data)
 
   if (DRY_RUN) {
     console.log('\n--- DRY RUN ---')
-    console.log(digest)
-    console.log('--- END DRY RUN ---')
+    console.log(JSON.stringify(data, null, 2))
+    console.log('\n--- RICH MARKDOWN ---')
+    console.log(rich)
+    console.log('\n--- END DRY RUN ---')
     return
   }
 
@@ -225,12 +271,18 @@ async function main() {
 
   const latestPath = join(DIGESTS_DIR, 'latest.md')
   const datedPath = join(DIGESTS_DIR, `${date}.md`)
+  const plainPath = join(DIGESTS_DIR, 'latest-plain.md')
+  const jsonPath = join(DIGESTS_DIR, 'latest.json')
 
-  writeFileSync(latestPath, digest, 'utf8')
-  writeFileSync(datedPath, digest, 'utf8')
+  writeFileSync(latestPath, rich, 'utf8')
+  writeFileSync(datedPath, rich, 'utf8')
+  writeFileSync(plainPath, plain, 'utf8')
+  writeFileSync(jsonPath, JSON.stringify(data, null, 2), 'utf8')
 
   console.log(`Wrote ${latestPath}`)
   console.log(`Wrote ${datedPath}`)
+  console.log(`Wrote ${plainPath}`)
+  console.log(`Wrote ${jsonPath}`)
 }
 
 main().catch((err) => {
