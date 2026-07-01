@@ -50,3 +50,15 @@ All costs are zero:
 ## Manual trigger
 
 Go to the repo's **Actions** tab, select **Juno Agents DAO Heartbeat Digest**, and click **Run workflow**.
+
+## Block-driven watcher (B3 Phase 1)
+
+`src/watch.js` polls the DAO's on-chain state and only regenerates the digest when something meaningful changes (new proposal, vote, status change, treasury movement, membership change), instead of on a fixed daily clock. It does **not** post to Moultbook yet — see `drafts/PLAN_B3_BLOCK_DRIVEN_HEARTBEAT.md` for the full phased plan.
+
+```bash
+cd tools/heartbeat-digest
+npm run watch:once   # one poll cycle, then exit
+npm run watch        # poll every POLL_INTERVAL_MS (default 5 minutes) until stopped
+```
+
+State is kept in `tools/heartbeat-digest/state/last-state.json` (git-ignored): the last state hash, the block height it was observed at, and a human-readable diff used to populate `meta.trigger_reason` / `meta.changes` in `latest.json`.

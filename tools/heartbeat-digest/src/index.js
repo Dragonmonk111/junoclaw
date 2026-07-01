@@ -1,6 +1,6 @@
 import { writeFileSync, existsSync, mkdirSync } from 'fs'
 import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import { renderDigest } from './render-rich.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -8,9 +8,9 @@ const __dirname = dirname(__filename)
 
 // ── Configuration ───────────────────────────────────────────────────────────
 
-const DAO_CORE = process.env.DAO_CORE || 'juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac'
-const PROPOSAL_MODULE = process.env.PROPOSAL_MODULE || 'juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp'
-const REST_ENDPOINT = process.env.REST_ENDPOINT || 'https://juno-rest.publicnode.com'
+export const DAO_CORE = process.env.DAO_CORE || 'juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac'
+export const PROPOSAL_MODULE = process.env.PROPOSAL_MODULE || 'juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp'
+export const REST_ENDPOINT = process.env.REST_ENDPOINT || 'https://juno-rest.publicnode.com'
 const MOULT_ID = process.env.MOULT_ID || null
 const DRY_RUN = process.env.DRY_RUN === 'true'
 
@@ -84,7 +84,7 @@ function isNewToday(createdAt) {
 
 // ── Fetchers ────────────────────────────────────────────────────────────────
 
-async function getVotingModule() {
+export async function getVotingModule() {
   try {
     const resp = await querySmart(DAO_CORE, { voting_module: {} })
     const data = extractData(resp)
@@ -134,7 +134,7 @@ async function getCw721Members(nftContract) {
   }
 }
 
-async function getMembers(votingModule) {
+export async function getMembers(votingModule) {
   if (!votingModule) return []
   const nftContract = await getNftContract(votingModule)
   if (nftContract) return getCw721Members(nftContract)
@@ -148,7 +148,7 @@ async function getMembers(votingModule) {
   }
 }
 
-async function getProposals() {
+export async function getProposals() {
   try {
     const resp = await querySmart(PROPOSAL_MODULE, { list_proposals: { limit: 100 } })
     return extractData(resp).proposals || []
@@ -158,7 +158,7 @@ async function getProposals() {
   }
 }
 
-async function getTreasury() {
+export async function getTreasury() {
   try {
     const resp = await queryBankBalances(DAO_CORE)
     return resp.balances || []
@@ -200,7 +200,7 @@ function normalizeProposal(p) {
   }
 }
 
-function buildDigestData({ date, proposals, members, treasury, moultId }) {
+export function buildDigestData({ date, proposals, members, treasury, moultId }) {
   const enriched = proposals.map(normalizeProposal)
   const totalPower = members.reduce((sum, m) => sum + Number(m.weight || 0), 0)
 
@@ -287,7 +287,11 @@ async function main() {
   console.log(`Wrote ${jsonPath}`)
 }
 
-main().catch((err) => {
-  console.error('Heartbeat digest failed:', err)
-  process.exit(1)
-})
+const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
+
+if (isMainModule) {
+  main().catch((err) => {
+    console.error('Heartbeat digest failed:', err)
+    process.exit(1)
+  })
+}

@@ -170,6 +170,12 @@ function renderRichMarkdown({ date, summary, proposals, members, treasury, meta 
   const sectionHeader = (icon, title, count) =>
     `### ${icon} ${title} ${count ? `(${count})` : ''}`
 
+  const watcherLines = [
+    meta.block_height ? `- Observed at block: \`${meta.block_height}\`` : null,
+    meta.trigger_reason ? `- Trigger: \`${meta.trigger_reason}\`` : null,
+    meta.previous_moultbook ? `- Cites previous heartbeat: \`${meta.previous_moultbook}\`` : null,
+  ].filter(Boolean)
+
   return `# 🐚 Juno Agents DAO Heartbeat — ${date}
 
 > The DAO's daily pulse, anchored on-chain. This digest is a living shell: a public record of proposals, votes, treasury, and membership so every agent and voter can see the reef's state at a glance.
@@ -237,7 +243,7 @@ ${treasuryLines}
 - DAO core: \`${meta.dao_core}\`
 - Proposal module: \`${meta.proposal_module}\`
 - Moultbook entry: \`${meta.moultbook || 'pending'}\`
-- REST endpoint: \`${meta.rest_endpoint}\`
+${watcherLines.length ? watcherLines.join('\n') + '\n' : ''}- REST endpoint: \`${meta.rest_endpoint}\`
 - Generated at: ${formatDateTime(meta.generated_at)}
 - This digest is published as a public **Moultbook** entry by the DAO's agent.
 

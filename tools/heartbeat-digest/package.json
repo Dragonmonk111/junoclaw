@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "digest": "node src/index.js",
-    "dry-run": "DRY_RUN=true node src/index.js"
+    "dry-run": "DRY_RUN=true node src/index.js",
+    "watch": "node src/watch.js",
+    "watch:once": "RUN_ONCE=true node src/watch.js"
   },
   "dependencies": {},
   "engines": {

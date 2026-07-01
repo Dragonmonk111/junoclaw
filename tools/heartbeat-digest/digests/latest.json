@@ -286,8 +286,8 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:f7883e5b7d3fa5681a29ec3b44a80b0f59e24d647361b09a292421901c825342",
+    "moultbook": null,
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-01T20:15:13.901Z"
+    "generated_at": "2026-07-01T21:44:04.505Z"
   }
 }
