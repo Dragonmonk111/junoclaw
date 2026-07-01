@@ -196,7 +196,7 @@ A small subset of this internal state should mirror into the public digest JSON'
 
 ## Implementation phases
 
-### Phase 1: Polled watcher with state diff (MVP)
+### Phase 1: Polled watcher with state diff (MVP) — ✅ shipped
 
 - Build a small Node.js script that polls every 5 minutes.
 - Compare DAO state to last known state.
@@ -205,7 +205,9 @@ A small subset of this internal state should mirror into the public digest JSON'
 
 Goal: prove the loop works without chain complexity.
 
-### Phase 2: Add Moultbook posting
+Shipped as `tools/heartbeat-digest/src/watch.js`. Tested against live mainnet (initial run + no-change run). Formalized as **A15**.
+
+### Phase 2: Add Moultbook posting — ✅ shipped (code), ⏳ pending live test
 
 - Add the Post transaction to the worker.
 - Store the resulting `moult:<id>` in the digest meta.
@@ -213,12 +215,16 @@ Goal: prove the loop works without chain complexity.
 
 Goal: the heartbeat updates automatically on-chain.
 
-### Phase 3: Add GitHub push
+Shipped as `tools/heartbeat-digest/src/moultbook.js` (CosmJS `SigningCosmWasmClient`), wired into `watch.js` behind `POST_TO_MOULTBOOK` (default off) with a `MOULTBOOK_DRY_RUN` safety mode. Dry-run verified: builds a correct `Post` message (commitment, size, refs) against the real Moultbook address. Not yet run live with a funded key — needs a real broadcast test, then formalize as **A16**.
+
+### Phase 3: Add GitHub push — ✅ shipped and live-tested
 
 - After generation and posting, commit and push the digest files.
 - Use a simple commit message with the block height.
 
 Goal: the frontend/viewer reflect the latest state.
+
+Shipped as `tools/heartbeat-digest/src/github-push.js` behind `GIT_PUSH_ENABLED` (default off). Scoped strictly to `digests/*` paths (never `git add -A`) so it cannot touch unrelated work-in-progress files elsewhere in the monorepo. Live-tested against `Dragonmonk111/junoclaw` — commit `4edc744` touched only the four digest files. Push failure is non-fatal (logged, does not block `saveState()`).
 
 ### Phase 4: Replace polling with websocket events
 

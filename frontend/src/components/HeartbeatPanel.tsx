@@ -13,6 +13,10 @@ import {
   Shell,
   ChevronDown,
   ChevronUp,
+  Activity,
+  Link2,
+  Terminal,
+  Radio,
 } from 'lucide-react'
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -65,6 +69,12 @@ interface DigestData {
     proposal_module: string
     rest_endpoint: string
     generated_at: string
+    moultbook?: string | null
+    // Phase 1 block-driven watcher fields (absent on digests produced by the daily cron path).
+    block_height?: number
+    trigger_reason?: string
+    changes?: string[]
+    previous_moultbook?: string | null
   }
 }
 
@@ -72,6 +82,19 @@ interface DigestData {
 
 const GITHUB_DIGEST_JSON =
   'https://raw.githubusercontent.com/Dragonmonk111/junoclaw/main/tools/heartbeat-digest/digests/latest.json'
+
+// Public Moultbook contract that DAO heartbeat entries are posted to (A13/A15).
+const MOULTBOOK_ADDR = 'juno18xn4cfpjfpqhmjenr9gdxk5uk7jjq3cezcy6d2jcar2gvx98pvtsm95z6j'
+
+const TRIGGER_LABELS: Record<string, string> = {
+  initial: 'Initial snapshot',
+  proposal_created: 'Proposal created',
+  proposal_status_changed: 'Proposal status changed',
+  vote_cast: 'Vote cast',
+  membership_change: 'Membership changed',
+  treasury_change: 'Treasury moved',
+  state_changed: 'State changed',
+}
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string }> = {
   open: { label: 'Open', color: '#fbbf24', bg: 'rgba(251,191,36,0.1)' },
@@ -125,6 +148,11 @@ const MOCK_DIGEST: DigestData = {
     proposal_module: 'juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp',
     rest_endpoint: 'https://juno-rest.publicnode.com',
     generated_at: new Date().toISOString(),
+    moultbook: null,
+    block_height: 39405320,
+    trigger_reason: 'proposal_created',
+    changes: ['Proposal A15 created (status: passed)'],
+    previous_moultbook: 'moult:f7883e5b7d3fa5681a29ec3b44a80b0f59e24d647361b09a292421901c825342',
   },
 }
 
@@ -138,6 +166,18 @@ function truncAddr(addr: string) {
 function formatDate(iso: string) {
   const d = new Date(iso)
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function formatRelativeTime(iso: string) {
+  const ms = Date.now() - new Date(iso).getTime()
+  if (ms < 0) return 'just now'
+  const mins = Math.floor(ms / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -203,6 +243,142 @@ function SummaryCard({
         </div>
         <div className="text-[10px] text-[#6b6a8a] mt-1">{label}</div>
       </div>
+    </div>
+  )
+}
+
+function FreshnessIndicator({ meta }: { meta: DigestData['meta'] }) {
+  const ageMs = Date.now() - new Date(meta.generated_at).getTime()
+  const hours = ageMs / 3_600_000
+
+  // No live cooldown state is exposed in the public digest (that lives in the
+  // watcher's local state/last-state.json). This is an honest proxy from
+  // generated_at only: green while fresh, amber once it is aging, red once
+  // it is stale enough that the watcher may have stopped.
+  const status =
+    hours < 6 ? 'fresh' : hours < 26 ? 'aging' : 'stale'
+  const styles = {
+    fresh: { color: '#34d399', label: 'Live', dot: '#34d399' },
+    aging: { color: '#fbbf24', label: 'Aging', dot: '#fbbf24' },
+    stale: { color: '#f87171', label: 'Stale', dot: '#f87171' },
+  }[status]
+
+  const isBlockDriven = typeof meta.block_height === 'number'
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[11px]">
+      <span className="flex items-center gap-1.5 rounded-full px-2 py-1" style={{ background: `${styles.color}15` }}>
+        <span
+          className="h-1.5 w-1.5 rounded-full"
+          style={{ background: styles.dot, boxShadow: `0 0 6px ${styles.dot}` }}
+        />
+        <span style={{ color: styles.color }} className="font-semibold">
+          {styles.label}
+        </span>
+      </span>
+      <span className="text-[#6b6a8a]">
+        Last heartbeat {formatRelativeTime(meta.generated_at)}
+        {isBlockDriven ? ` · block ${meta.block_height!.toLocaleString()}` : ''}
+      </span>
+      {isBlockDriven ? (
+        <span
+          className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]"
+          style={{ background: 'rgba(0,212,170,0.1)', color: '#00d4aa' }}
+        >
+          <Radio className="h-2.5 w-2.5" />
+          Block-driven
+        </span>
+      ) : (
+        <span
+          className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]"
+          style={{ background: 'rgba(107,106,138,0.1)', color: '#6b6a8a' }}
+        >
+          Daily cron
+        </span>
+      )}
+    </div>
+  )
+}
+
+function ActivityFeed({ meta }: { meta: DigestData['meta'] }) {
+  const changes = meta.changes || []
+  if (!changes.length) return null
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: 'rgba(0,212,170,0.03)', border: '1px solid rgba(0,212,170,0.1)' }}>
+      <div className="flex items-center gap-1.5 mb-2.5 text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#00d4aa' }}>
+        <Activity className="h-3 w-3" />
+        Activity since last heartbeat
+        {meta.trigger_reason ? (
+          <span className="normal-case font-normal text-[#6b6a8a]">
+            · {TRIGGER_LABELS[meta.trigger_reason] || meta.trigger_reason}
+          </span>
+        ) : null}
+      </div>
+      <ul className="space-y-1.5">
+        {changes.map((c, i) => (
+          <li key={i} className="flex items-start gap-2 text-[11px] text-[#c0bfd8]">
+            <span className="mt-1 h-1 w-1 flex-shrink-0 rounded-full" style={{ background: '#00d4aa' }} />
+            {c}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function CitationChain({ meta }: { meta: DigestData['meta'] }) {
+  if (!meta.moultbook && !meta.previous_moultbook) return null
+  return (
+    <div className="flex flex-col gap-1.5 text-[11px]">
+      {meta.moultbook && (
+        <div className="flex items-center gap-1.5">
+          <Link2 className="h-3 w-3 flex-shrink-0" style={{ color: '#60a5fa' }} />
+          <span className="text-[#6b6a8a]">This heartbeat:</span>
+          <code className="font-mono text-[#8a89a6]">{truncAddr(meta.moultbook)}</code>
+        </div>
+      )}
+      {meta.previous_moultbook && (
+        <div className="flex items-center gap-1.5">
+          <Link2 className="h-3 w-3 flex-shrink-0" style={{ color: '#60a5fa' }} />
+          <span className="text-[#6b6a8a]">Cites previous heartbeat:</span>
+          <code className="font-mono text-[#8a89a6]">{truncAddr(meta.previous_moultbook)}</code>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function VerifyDrawer({ meta }: { meta: DigestData['meta'] }) {
+  const [open, setOpen] = useState(false)
+  const entryId = meta.moultbook || meta.previous_moultbook
+  if (!entryId) return null
+
+  const command = `junod query wasm contract-state smart ${MOULTBOOK_ADDR} \\\n  '{"get_entry":{"id":"${entryId}"}}' \\\n  --node https://juno-rpc.publicnode.com:443`
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-3.5 py-2.5 text-[11px] font-semibold"
+        style={{ color: '#f0eff8' }}
+      >
+        <span className="flex items-center gap-1.5">
+          <Terminal className="h-3.5 w-3.5" style={{ color: '#60a5fa' }} />
+          Verify on-chain
+        </span>
+        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+      {open && (
+        <div className="px-3.5 pb-3.5">
+          <p className="text-[10px] text-[#6b6a8a] mb-2">
+            Query the Moultbook entry directly instead of trusting this UI:
+          </p>
+          <pre className="rounded-lg p-2.5 text-[10px] overflow-x-auto font-mono" style={{ background: '#06060f', color: '#8a89a6' }}>
+{command}
+          </pre>
+        </div>
+      )}
     </div>
   )
 }
@@ -426,9 +602,12 @@ export function HeartbeatPanel() {
               <div className="text-xs font-semibold text-[#6b6a8a] uppercase tracking-wider">Juno Agents DAO</div>
               <div className="text-xl font-bold text-gradient-juno">Heartbeat Digest — {digest.date}</div>
               <div className="text-[11px] text-[#6b6a8a] mt-1">
-                Generated {new Date(digest.meta.generated_at).toLocaleString()} · {digest.proposals.length} proposals · {digest.members.length} members
+                {digest.proposals.length} proposals · {digest.members.length} members
               </div>
             </div>
+          </div>
+          <div className="relative z-10 mt-3">
+            <FreshnessIndicator meta={digest.meta} />
           </div>
         </div>
 
@@ -463,6 +642,9 @@ export function HeartbeatPanel() {
             icon={<Coins className="h-4 w-4" />}
           />
         </div>
+
+        {/* Activity since last heartbeat (block-driven watcher only) */}
+        <ActivityFeed meta={digest.meta} />
 
         {/* Proposal groups */}
         <div className="space-y-3">
@@ -536,6 +718,10 @@ export function HeartbeatPanel() {
             </div>
           </div>
         </div>
+
+        <CitationChain meta={digest.meta} />
+
+        <VerifyDrawer meta={digest.meta} />
 
         {/* Footer / citation */}
         <div

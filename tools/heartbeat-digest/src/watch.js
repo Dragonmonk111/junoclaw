@@ -25,6 +25,8 @@ import {
   buildDigestData,
 } from './index.js'
 import { renderDigest } from './render-rich.js'
+import { postDigestToMoultbook } from './moultbook.js'
+import { pushDigest, isGitPushEnabled } from './github-push.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -37,6 +39,7 @@ const STATE_PATH = join(STATE_DIR, 'last-state.json')
 
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 5 * 60 * 1000) // 5 minutes
 const RUN_ONCE = process.env.RUN_ONCE === 'true'
+const POST_TO_MOULTBOOK = process.env.POST_TO_MOULTBOOK === 'true'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -191,16 +194,40 @@ async function runOnce() {
   writeFileSync(join(DIGESTS_DIR, 'latest.md'), rich, 'utf8')
   writeFileSync(join(DIGESTS_DIR, `${date}.md`), rich, 'utf8')
   writeFileSync(join(DIGESTS_DIR, 'latest-plain.md'), plain, 'utf8')
+  console.log(`[watch] digest markdown written → ${join(DIGESTS_DIR, 'latest.md')}`)
+
+  let lastDigestMoultId = lastState?.last_digest_moult_id || null
+
+  if (POST_TO_MOULTBOOK) {
+    const post = await postDigestToMoultbook(rich, lastDigestMoultId)
+    if (post.txHash) {
+      console.log(`[watch] Moultbook Post broadcast: ${post.txHash}`)
+    }
+    if (post.moultId) {
+      data.meta.moultbook = post.moultId
+      lastDigestMoultId = post.moultId
+      console.log(`[watch] Moultbook entry: ${post.moultId}`)
+    } else if (post.dryRun) {
+      console.log('[watch] Moultbook dry-run: no entry created')
+    }
+  }
+
   writeFileSync(join(DIGESTS_DIR, 'latest.json'), JSON.stringify(data, null, 2), 'utf8')
-  console.log(`[watch] digest regenerated → ${join(DIGESTS_DIR, 'latest.json')}`)
+  console.log(`[watch] digest JSON written → ${join(DIGESTS_DIR, 'latest.json')}`)
+
+  const push = pushDigest({ date, blockHeight, triggerReason: trigger_reason })
+  if (push.pushed) {
+    console.log(`[watch] pushed to GitHub: ${push.commit}`)
+  } else if (push.reason === 'error') {
+    console.warn(`[watch] GitHub push failed (non-fatal): ${push.error}`)
+  }
 
   saveState({
     block_height: blockHeight,
     state_hash: stateHash,
     state,
     trigger_reason,
-    // Phase 1 does not post to Moultbook yet — carry the previous id forward untouched.
-    last_digest_moult_id: lastState?.last_digest_moult_id || null,
+    last_digest_moult_id: lastDigestMoultId,
     last_generated_at: new Date().toISOString(),
   })
 }
@@ -209,6 +236,8 @@ async function main() {
   console.log(`[watch] Heartbeat watcher starting for ${DAO_CORE}`)
   console.log(`[watch] Proposal module: ${PROPOSAL_MODULE}`)
   console.log(`[watch] REST endpoint: ${REST_ENDPOINT}`)
+  console.log(`[watch] Moultbook posting: ${POST_TO_MOULTBOOK ? 'enabled' : 'disabled'}`)
+  console.log(`[watch] GitHub push: ${isGitPushEnabled() ? 'enabled' : 'disabled'}`)
 
   await runOnce().catch((err) => console.error('[watch] cycle failed:', err.message))
 
