@@ -7,7 +7,7 @@
     "digest": "node src/index.js",
     "dry-run": "DRY_RUN=true node src/index.js",
     "watch": "node src/watch.js",
-    "watch:once": "RUN_ONCE=true node src/watch.js",
+    "watch:once": "node src/watch.js --once",
     "generate-wallet": "node src/generate-wallet.js"
   },
   "dependencies": {

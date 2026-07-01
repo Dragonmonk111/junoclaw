@@ -6,7 +6,7 @@
  * heartbeat digest when that hash actually changes. No Moultbook posting
  * yet — see PLAN_B3_BLOCK_DRIVEN_HEARTBEAT.md for Phase 2+.
  *
- * Run once and exit:   RUN_ONCE=true node src/watch.js
+ * Run once and exit:   node src/watch.js --once
  * Run continuously:    node src/watch.js   (Ctrl+C to stop)
  */
 
@@ -38,7 +38,7 @@ const STATE_DIR = join(__dirname, '..', 'state')
 const STATE_PATH = join(STATE_DIR, 'last-state.json')
 
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 5 * 60 * 1000) // 5 minutes
-const RUN_ONCE = process.env.RUN_ONCE === 'true'
+const RUN_ONCE = process.env.RUN_ONCE === 'true' || process.argv.includes('--once')
 const POST_TO_MOULTBOOK = process.env.POST_TO_MOULTBOOK === 'true'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
