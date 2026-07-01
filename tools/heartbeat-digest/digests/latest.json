@@ -1,10 +1,10 @@
 {
   "date": "2026-07-01",
   "summary": {
-    "total_proposals": 14,
+    "total_proposals": 15,
     "open": 0,
-    "passed": 0,
-    "ready_to_execute": 0,
+    "passed": 1,
+    "ready_to_execute": 1,
     "closed": 14,
     "needs_votes": 0,
     "closing_soon": 0,
@@ -263,6 +263,24 @@
       },
       "is_new_today": false,
       "is_closing_soon": false
+    },
+    {
+      "id": 15,
+      "title": "A15 — DAO tooling upgrade: block-driven heartbeat watcher (Phase 1)",
+      "status": "passed",
+      "created_at": 39405106,
+      "expiration": {
+        "at_time": "1783547239431606647"
+      },
+      "votes": {
+        "yes": 4,
+        "no": 0,
+        "abstain": 0,
+        "total": 4,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
     }
   ],
   "members": [
@@ -288,6 +306,12 @@
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
     "moultbook": null,
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-01T21:44:04.505Z"
+    "generated_at": "2026-07-01T23:11:25.530Z",
+    "block_height": 39406603,
+    "trigger_reason": "initial",
+    "changes": [
+      "Initial state snapshot"
+    ],
+    "previous_moultbook": null
   }
 }
