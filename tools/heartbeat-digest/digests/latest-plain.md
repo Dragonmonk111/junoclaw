@@ -6,9 +6,9 @@ _Generated from on-chain data via public RPC._
 | Metric | Value |
 |---|---|
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
-| Total proposals | 13 |
-| Open | 1 |
-| Passed / ready to execute | 0 |
+| Total proposals | 14 |
+| Open | 0 |
+| Passed / ready to execute | 2 |
 | Closed | 12 |
 | Total voting power | 4 |
 
@@ -16,10 +16,11 @@ _Generated from on-chain data via public RPC._
 - none
 
 ## Needs votes
-- **A13**: A13 — Publish the first DAO heartbeat entry on the DAO-owned Moultbook [vote](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/13)
+- none
 
 ## Ready to execute
-- none
+- **A13**: A13 — Publish the first DAO heartbeat entry on the DAO-owned Moultbook
+- **A14**: A14 — Signal 1,000 JUNO funding for the next agent to join
 
 ## Closing soon (next 24h)
 - none
@@ -39,7 +40,7 @@ _Generated from on-chain data via public RPC._
 - **A12**: A10 — Store membership verification key and enable Moultbook PublishAnon — Executed
 
 ## Treasury
-- 0 ujuno (treasury empty)
+- 2000000000 ujuno
 
 ## Members
 - juno1dlm6y5cnvxayyv6hxd863lef82vu9jnez89gkh — weight 1
@@ -49,4 +50,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-01 15:24:09 UTC
+- Generated at: 2026-07-01 17:14:18 UTC

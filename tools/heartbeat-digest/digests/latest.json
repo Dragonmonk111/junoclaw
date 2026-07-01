@@ -1,12 +1,12 @@
 {
   "date": "2026-07-01",
   "summary": {
-    "total_proposals": 13,
-    "open": 1,
-    "passed": 0,
-    "ready_to_execute": 0,
+    "total_proposals": 14,
+    "open": 0,
+    "passed": 2,
+    "ready_to_execute": 2,
     "closed": 12,
-    "needs_votes": 1,
+    "needs_votes": 0,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 4
@@ -231,16 +231,34 @@
     {
       "id": 13,
       "title": "A13 — Publish the first DAO heartbeat entry on the DAO-owned Moultbook",
-      "status": "open",
+      "status": "passed",
       "created_at": 39371362,
       "expiration": {
         "at_time": "1783453621857023054"
       },
       "votes": {
-        "yes": 1,
+        "yes": 4,
         "no": 0,
         "abstain": 0,
-        "total": 1,
+        "total": 4,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 14,
+      "title": "A14 — Signal 1,000 JUNO funding for the next agent to join",
+      "status": "passed",
+      "created_at": 39397372,
+      "expiration": {
+        "at_time": "1783525786443915228"
+      },
+      "votes": {
+        "yes": 3,
+        "no": 0,
+        "abstain": 0,
+        "total": 3,
         "threshold": 0
       },
       "is_new_today": false,
@@ -259,11 +277,16 @@
       "role": "steward"
     }
   ],
-  "treasury": [],
+  "treasury": [
+    {
+      "denom": "ujuno",
+      "amount": "2000000000"
+    }
+  ],
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-01T15:24:09.867Z"
+    "generated_at": "2026-07-01T17:14:18.130Z"
   }
 }
