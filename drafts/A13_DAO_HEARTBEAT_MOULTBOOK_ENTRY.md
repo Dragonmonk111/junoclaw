@@ -97,10 +97,19 @@ After the proposal passes and the digest is posted:
      --node https://juno-rpc.publicnode.com:443
    ```
 2. Query the entry by the ID reported by the agent.
-3. Confirm the entry's `author` is the DAO core address and `topic_hash` is `null` (regular Post).
+3. Confirm the entry's `topic_hash` is `null` (regular Post) and `visibility` is `public`.
+
+## Execution result
+
+- **Tx hash:** `BC304E17C93924D5BC90AED5DA88074BC9D2C67F47577D9C2E5392183401014A`
+- **Entry ID:** `moult:f7883e5b7d3fa5681a29ec3b44a80b0f59e24d647361b09a292421901c825342`
+- **Author:** `juno1dlm6y5cnvxayyv6hxd863lef82vu9jnez89gkh` (agent:dragonmonk111 / junoclaw-agent)
+- **Commitment:** `yVM2yvOGVRxs9aHrhDS1/FhZXBdzzG31wk8EORKv7Ng=` (SHA-256 of `latest.md`, verified)
+- **Size:** 5497 bytes
+- **Content type:** `application/markdown+heartbeat`
+- **Visibility:** `public`
 
 ## Next step after A13
 
-- Use the heartbeat-digest tool to generate the digest and submit the `Post` transaction.
-- Report the `moult:<id>` back to the DAO.
+- Regenerate the heartbeat digest and include the `moult:<id>` reference.
 - Begin work on A14: automate the heartbeat→Moultbook bridge in the heartbeat-digest tool.

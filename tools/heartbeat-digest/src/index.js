@@ -11,6 +11,7 @@ const __dirname = dirname(__filename)
 const DAO_CORE = process.env.DAO_CORE || 'juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac'
 const PROPOSAL_MODULE = process.env.PROPOSAL_MODULE || 'juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp'
 const REST_ENDPOINT = process.env.REST_ENDPOINT || 'https://juno-rest.publicnode.com'
+const MOULT_ID = process.env.MOULT_ID || null
 const DRY_RUN = process.env.DRY_RUN === 'true'
 
 const DIGESTS_DIR = join(__dirname, '..', 'digests')
@@ -199,7 +200,7 @@ function normalizeProposal(p) {
   }
 }
 
-function buildDigestData({ date, proposals, members, treasury }) {
+function buildDigestData({ date, proposals, members, treasury, moultId }) {
   const enriched = proposals.map(normalizeProposal)
   const totalPower = members.reduce((sum, m) => sum + Number(m.weight || 0), 0)
 
@@ -233,6 +234,7 @@ function buildDigestData({ date, proposals, members, treasury }) {
     meta: {
       dao_core: DAO_CORE,
       proposal_module: PROPOSAL_MODULE,
+      moultbook: MOULT_ID || null,
       rest_endpoint: REST_ENDPOINT,
       generated_at: new Date().toISOString(),
     },
@@ -253,7 +255,7 @@ async function main() {
     getTreasury(),
   ])
 
-  const data = buildDigestData({ date, proposals, members, treasury })
+  const data = buildDigestData({ date, proposals, members, treasury, moultId: MOULT_ID })
   const { plain, rich } = renderDigest(data)
 
   if (DRY_RUN) {

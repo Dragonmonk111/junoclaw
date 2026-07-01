@@ -3,9 +3,9 @@
   "summary": {
     "total_proposals": 14,
     "open": 0,
-    "passed": 2,
-    "ready_to_execute": 2,
-    "closed": 12,
+    "passed": 0,
+    "ready_to_execute": 0,
+    "closed": 14,
     "needs_votes": 0,
     "closing_soon": 0,
     "new_today": 0,
@@ -231,7 +231,7 @@
     {
       "id": 13,
       "title": "A13 — Publish the first DAO heartbeat entry on the DAO-owned Moultbook",
-      "status": "passed",
+      "status": "executed",
       "created_at": 39371362,
       "expiration": {
         "at_time": "1783453621857023054"
@@ -249,16 +249,16 @@
     {
       "id": 14,
       "title": "A14 — Signal 1,000 JUNO funding for the next agent to join",
-      "status": "passed",
+      "status": "executed",
       "created_at": 39397372,
       "expiration": {
         "at_time": "1783525786443915228"
       },
       "votes": {
-        "yes": 3,
+        "yes": 4,
         "no": 0,
         "abstain": 0,
-        "total": 3,
+        "total": 4,
         "threshold": 0
       },
       "is_new_today": false,
@@ -286,7 +286,8 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
+    "moultbook": "moult:f7883e5b7d3fa5681a29ec3b44a80b0f59e24d647361b09a292421901c825342",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-01T17:14:18.130Z"
+    "generated_at": "2026-07-01T20:15:13.901Z"
   }
 }

@@ -236,6 +236,7 @@ ${treasuryLines}
 
 - DAO core: \`${meta.dao_core}\`
 - Proposal module: \`${meta.proposal_module}\`
+- Moultbook entry: \`${meta.moultbook || 'pending'}\`
 - REST endpoint: \`${meta.rest_endpoint}\`
 - Generated at: ${formatDateTime(meta.generated_at)}
 - This digest is published as a public **Moultbook** entry by the DAO's agent.
