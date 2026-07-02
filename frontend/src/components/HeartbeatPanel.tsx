@@ -366,6 +366,39 @@ function CitationChain({ meta }: { meta: DigestData['meta'] }) {
   )
 }
 
+function ChatBubble({ entry, isSelf }: { entry: MoultbookEntry; isSelf?: boolean }) {
+  const agentName = entry.author_alias || (isSelf ? 'dragonmonk111-bot' : 'agent')
+  return (
+    <div className={`flex w-full ${isSelf ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-[11px]"
+        style={{
+          background: isSelf ? 'rgba(0,212,170,0.12)' : 'rgba(96,165,250,0.10)',
+          border: `1px solid ${isSelf ? 'rgba(0,212,170,0.25)' : 'rgba(96,165,250,0.20)'}`,
+          color: '#e0dff8',
+          borderBottomRightRadius: isSelf ? '6px' : undefined,
+          borderBottomLeftRadius: !isSelf ? '6px' : undefined,
+        }}
+      >
+        <div className="flex items-center gap-2 mb-1">
+          <span className="font-semibold" style={{ color: isSelf ? '#00d4aa' : '#60a5fa' }}>
+            {agentName}
+          </span>
+          <span className="text-[9px] text-[#6b6a8a]">{formatRelativeTime(entry.posted_at)}</span>
+        </div>
+        <div className="text-[#c0bfd8] leading-relaxed">
+          {entry.content_type === 'application/json+agent-reply'
+            ? 'A18c-1 agent reply'
+            : entry.content_type}
+        </div>
+        <div className="mt-1 text-[9px] text-[#6b6a8a] font-mono">
+          {truncAddr(entry.author)} · {entry.size_bytes} bytes · {entry.id.slice(0, 16)}...
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function RepliesThread({ replies, error }: { replies: MoultbookEntry[]; error: string | null }) {
   if (error) {
     return (
@@ -377,26 +410,14 @@ function RepliesThread({ replies, error }: { replies: MoultbookEntry[]; error: s
   if (!replies.length) return null
 
   return (
-    <div className="rounded-xl p-4" style={{ background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.15)' }}>
-      <div className="flex items-center gap-1.5 mb-2.5 text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#60a5fa' }}>
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-[#6b6a8a]">
         <MessageCircle className="h-3 w-3" />
-        Cross-agent replies ({replies.length})
+        Thread · {replies.length} cross-agent {replies.length === 1 ? 'reply' : 'replies'}
       </div>
       <div className="space-y-2">
         {replies.map((entry) => (
-          <div key={entry.id} className="rounded-lg p-2.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div className="flex items-center justify-between gap-2">
-              <code className="font-mono text-[#8a89a6]">{truncAddr(entry.author)}</code>
-              <span className="text-[#6b6a8a]">{formatRelativeTime(entry.posted_at)}</span>
-            </div>
-            <div className="mt-1 text-[#c0bfd8]">
-              {entry.content_type}
-              {entry.topic_hash ? ` · ${entry.topic_hash}` : ''}
-            </div>
-            <div className="mt-1 text-[#6b6a8a]">
-              {entry.size_bytes} bytes · {entry.id}
-            </div>
-          </div>
+          <ChatBubble key={entry.id} entry={entry} />
         ))}
       </div>
     </div>
@@ -463,50 +484,59 @@ function ReplyComposer({ replyTo }: { replyTo: string | null }) {
   }
 
   return (
-    <div className="rounded-xl p-4" style={{ background: 'rgba(0,212,170,0.05)', border: '1px solid rgba(0,212,170,0.15)' }}>
-      <div className="flex items-center gap-1.5 mb-2.5 text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#00d4aa' }}>
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-[#6b6a8a]">
         <Send className="h-3 w-3" />
-        Reply as Dragonmonk111-bot
+        Reply as dragonmonk111-bot
       </div>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={`Reply to ${replyTo}...`}
-        className="w-full rounded-lg p-2.5 text-[11px] bg-[#06060f] text-[#e0dff8] border border-[rgba(255,255,255,0.08)] focus:outline-none focus:border-[#00d4aa]"
-        rows={3}
-      />
-      <div className="flex items-center gap-2 mt-2.5">
-        <button
-          onClick={preview}
-          className="px-3 py-1.5 rounded-lg text-[10px] font-semibold"
-          style={{ background: 'rgba(255,255,255,0.08)', color: '#e0dff8' }}
-        >
-          Preview
-        </button>
-        {draft && (
+      <div
+        className="flex items-end gap-2 rounded-2xl p-2 pl-3"
+        style={{ background: 'rgba(0,212,170,0.06)', border: '1px solid rgba(0,212,170,0.15)' }}
+      >
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={`Reply to ${replyTo}...`}
+          className="flex-1 bg-transparent text-[11px] text-[#e0dff8] placeholder:text-[#4a4a6a] resize-none focus:outline-none py-1.5"
+          rows={2}
+        />
+        <div className="flex items-center gap-1.5 pb-0.5">
           <button
-            onClick={post}
-            disabled={posting}
-            className="px-3 py-1.5 rounded-lg text-[10px] font-semibold"
-            style={{ background: '#00d4aa', color: '#06060f', opacity: posting ? 0.6 : 1 }}
+            onClick={preview}
+            className="px-2.5 py-1.5 rounded-lg text-[10px] font-semibold"
+            style={{ background: 'rgba(255,255,255,0.06)', color: '#e0dff8' }}
           >
-            {posting ? 'Posting...' : 'Post to Moultbook'}
+            Preview
           </button>
-        )}
+          {draft && (
+            <button
+              onClick={post}
+              disabled={posting}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold"
+              style={{ background: '#00d4aa', color: '#06060f', opacity: posting ? 0.6 : 1 }}
+            >
+              <Send className="h-3 w-3" />
+              {posting ? '...' : 'Post'}
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="text-[9px] text-[#4a4a6a] pl-1">
+        Human approval required — no automatic posting.
       </div>
       {error && (
-        <div className="mt-2.5 rounded-lg p-2 text-[10px]" style={{ background: 'rgba(248,113,113,0.08)', color: '#f87171' }}>
+        <div className="rounded-lg p-2 text-[10px]" style={{ background: 'rgba(248,113,113,0.08)', color: '#f87171' }}>
           {error}
         </div>
       )}
       {draft && (
-        <div className="mt-2.5 rounded-lg p-2.5 text-[10px] font-mono" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', color: '#8a89a6' }}>
-          <div className="text-[#6b6a8a] mb-1">Draft preview:</div>
+        <div className="rounded-lg p-2.5 text-[10px] font-mono" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', color: '#8a89a6' }}>
+          <div className="text-[#6b6a8a] mb-1">Draft preview — click Post to broadcast:</div>
           <pre className="whitespace-pre-wrap">{JSON.stringify(draft.preview, null, 2)}</pre>
         </div>
       )}
       {result && (
-        <div className="mt-2.5 rounded-lg p-2.5 text-[10px] font-mono" style={{ background: 'rgba(0,212,170,0.08)', border: '1px solid rgba(0,212,170,0.15)', color: '#00d4aa' }}>
+        <div className="rounded-lg p-2.5 text-[10px] font-mono" style={{ background: 'rgba(0,212,170,0.08)', border: '1px solid rgba(0,212,170,0.15)', color: '#00d4aa' }}>
           <div>Posted!</div>
           <pre className="whitespace-pre-wrap mt-1">{JSON.stringify(result, null, 2)}</pre>
         </div>
@@ -915,11 +945,16 @@ export function HeartbeatPanel() {
           </div>
         </div>
 
-        <CitationChain meta={digest.meta} />
-
-        <RepliesThread replies={replies} error={repliesError} />
-
-        <ReplyComposer replyTo={digest.meta.moultbook || digest.meta.previous_moultbook || null} />
+        {/* On-chain chat thread */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-[#6b6a8a]">
+            <MessageCircle className="h-3 w-3" />
+            On-chain thread
+          </div>
+          <CitationChain meta={digest.meta} />
+          <RepliesThread replies={replies} error={repliesError} />
+          <ReplyComposer replyTo={digest.meta.moultbook || digest.meta.previous_moultbook || null} />
+        </div>
 
         <VerifyDrawer meta={digest.meta} />
 
