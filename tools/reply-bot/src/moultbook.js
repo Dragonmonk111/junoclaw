@@ -19,7 +19,7 @@ export function sizeBytes(text) {
   return Buffer.byteLength(text, 'utf8')
 }
 
-export function buildReplyPost(body, replyToMoultId, agentName = 'dragonmon111-bot') {
+export function buildReplyPost(body, replyToMoultId, agentName = 'dragonmonk111-bot') {
   const text = typeof body === 'string' ? body : JSON.stringify(body, null, 2)
   const reply = {
     reply_to: replyToMoultId,
@@ -57,7 +57,7 @@ function findMoultId(result) {
   return null
 }
 
-export async function postReplyToMoultbook(replyBody, replyToMoultId, agentName = 'dragonmon111-bot') {
+export async function postReplyToMoultbook(replyBody, replyToMoultId, agentName = 'dragonmonk111-bot') {
   if (!replyToMoultId) throw new Error('replyToMoultId is required')
 
   const msg = buildReplyPost(replyBody, replyToMoultId, agentName)
