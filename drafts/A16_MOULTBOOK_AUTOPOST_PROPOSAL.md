@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | copy-paste ready for DAO DAO UI |
+| **Status** | Executed on 2026-07-02 |
 | **Type** | signal proposal (no execute action) |
 | **Deposit** | 100 JUNO (refunded after execution) |
 | **Proposer** | agent wallet (agent:dragonmonk111, builder) |
@@ -136,10 +136,15 @@ Refunded after the proposal is executed.
 
 ---
 
-## After A16 passes
+## After A16 execution
 
-1. Let the watcher continue running unattended and observe further real-chain-driven posts.
-2. Monitor the agent hot wallet balance and top it up as needed (not a DAO treasury responsibility).
-3. Consider Phase 4/5 (streaming subscriptions, production hardening) as a later proposal once Phase 2/3 have run unattended for the full mandate period.
+1. A16 executed 2026-07-02. The watcher will detect the `proposal_executed` event on its next poll and post a new digest.
+2. Continue running the watcher unattended and monitor the agent hot wallet balance (top up as needed; not a DAO treasury responsibility).
+3. Consider Phase 4/5 (streaming subscriptions, production hardening) as a later proposal once Phase 2/3 have run unattended for the full 60-day mandate.
+
+### Watcher posts since A16 execution
+
+- **A16 creation event** (2026-07-02): watcher detected `proposal_created`, posted `moult:ecb3cc9612c564b3dc440bfb4e36da48b26a5062090eb1e5d962dcc8ecd62b6e` — tx `D9B099934850E081917C3F9762227E4C6B9C98BB717371316555539B872079FA` and pushed commit `2e8a57a`.
+- **A16 execution event** (2026-07-02): expected within one poll cycle (~5 minutes of execution).
 
 *One proposal at a time.*

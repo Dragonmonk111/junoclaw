@@ -215,11 +215,11 @@ Shipped as `tools/heartbeat-digest/src/watch.js`. Tested against live mainnet (i
 
 Goal: the heartbeat updates automatically on-chain.
 
-Shipped as `tools/heartbeat-digest/src/moultbook.js` (CosmJS `SigningCosmWasmClient`), wired into `watch.js` behind `POST_TO_MOULTBOOK` (default off) with a `MOULTBOOK_DRY_RUN` safety mode. Live-tested 2026-07-02: tx `EC50D6D18F2AE9A7DA5C40F323270A84764A8A9E09905D700201EC77A27310D4` → entry `moult:83bf7ea63a199ab7fd9484588385e5983371aa412086328d88c6b9e29417f0f5` (gas 169,303, fee 0.015843 JUNO). Found and fixed a parsing bug: modern chains return empty `logs`/`rawLog` on success and only populate the flat `events` array. Formalized as **A16**.
+Shipped as `tools/heartbeat-digest/src/moultbook.js` (CosmJS `SigningCosmWasmClient`), wired into `watch.js` behind `POST_TO_MOULTBOOK` (default off) with a `MOULTBOOK_DRY_RUN` safety mode. Live-tested 2026-07-02: tx `EC50D6D18F2AE9A7DA5C40F323270A84764A8A9E09905D700201EC77A27310D4` → entry `moult:83bf7ea63a199ab7fd9484588385e5983371aa412086328d88c6b9e29417f0f5` (gas 169,303, fee 0.015843 JUNO). Found and fixed a parsing bug: modern chains return empty `logs`/`rawLog` on success and only populate the flat `events` array. Formalized as **A16** and executed on-chain 2026-07-02.
 
 ### Phase 3: Add GitHub push — ✅ shipped, ✅ live-tested on mainnet
 
-Shipped as `tools/heartbeat-digest/src/github-push.js`, wired into `watch.js` behind `GIT_PUSH_ENABLED` (default off). Scoped strictly to `tools/heartbeat-digest/digests/`. Live-tested 2026-07-02: commit `379bcc2`, touched only digest files. Formalized alongside Phase 2 as **A16**.
+Shipped as `tools/heartbeat-digest/src/github-push.js`, wired into `watch.js` behind `GIT_PUSH_ENABLED` (default off). Scoped strictly to `tools/heartbeat-digest/digests/`. Live-tested 2026-07-02: commit `379bcc2`, touched only digest files. Formalized alongside Phase 2 as **A16** and executed on-chain 2026-07-02.
 
 ### Phase 4: Replace polling with websocket events
 

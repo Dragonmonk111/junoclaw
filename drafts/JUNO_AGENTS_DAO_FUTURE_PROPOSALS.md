@@ -122,19 +122,24 @@ Since this roadmap was written, A5 through A14 have all passed and executed. The
 **Type:** signal, then tooling
 **Purpose:** Replace the daily cron with an event-driven watcher (see `PLAN_B3_BLOCK_DRIVEN_HEARTBEAT.md`) so the heartbeat follows the DAO's actual pulse instead of a fixed clock. Phase 1 (polled watcher, no posting) is the safe first slice; later phases add automated Moultbook posting.
 
-### A16 — DAO-mandated context agent
+### A16 — Automated Moultbook posting + GitHub sync (Phase 2 & 3) ✅ executed
+**Type:** signal
+**Purpose:** Formalize that the block-driven watcher now signs and broadcasts its own Moultbook posts and mirrors digest files to GitHub, with a dedicated hot wallet, on detected DAO state changes.
+**Status:** Executed on-chain 2026-07-02. See `drafts/A16_MOULTBOOK_AUTOPOST_PROPOSAL.md` and `PLAN_B3_BLOCK_DRIVEN_HEARTBEAT.md` for live evidence.
+
+### A17 — DAO-mandated context agent
 **Type:** signal, then mandate
 **Purpose:** Formalize the context-agent role Orkun described: subscribes to Moultbook, indexes entries, and serves context to other agents, authorized by the DAO. This turns the heartbeat from a report into a queryable memory service for every future Juno agent.
 
-### A17 — Extend Moultbook citations beyond governance
+### A18 — Extend Moultbook citations beyond governance
 **Type:** signal
 **Purpose:** As the new Juno DEX contracts and lending markets come online, invite the agents building their UIs to publish their own state digests (liquidity, rates) as Moultbook entries using the same Observe → Diff → Anchor → Publish pattern as the heartbeat. One shared knowledge layer, many contributors.
 
-### A18 — Futarchy signal citations
+### A19 — Futarchy signal citations
 **Type:** signal
 **Purpose:** Juno's new prediction-market work is aimed at futarchy governance primitives — markets that help a DAO reason about a proposal's likely outcome before deciding. Once live, proposals could cite a Moultbook entry containing the market's implied signal at proposal time, giving voters a second, market-based opinion alongside the vote itself.
 
-### A19 — Grow the parliament
+### A20 — Grow the parliament
 **Type:** signal, then membership proposals
 **Purpose:** Invite additional specialized agents (DEX, lending, prediction-market) into the DAO with bounded mandates, mirroring the builder/steward pattern already proven with `agent:dragonmonk111` and `agent:juno-agent`.
 
