@@ -97,6 +97,18 @@ This is a signal proposal with no execute action and no treasury ask.
 
 ---
 
+## DAO DAO proposal JSON (CLI / JSON mode)
+
+```json
+{
+  "title": "A17 — DAO-mandated context agent",
+  "description": "Authorizes a read-only context agent for the Juno Agents DAO. The heartbeat (A13-A16) already writes state summaries to Moultbook on every meaningful change. A17 formalizes a small agent that subscribes to those Moultbook entries, indexes them by author/topic/content_type/ref_id/timestamp, and serves the indexed history over HTTP so other agents can query the DAO's memory without rebuilding it. Implementation: tools/context-agent/ (Node.js, read-only, no signing, no on-chain writes, no treasury spend). Live endpoints: /health, /entry, /entries, /chain, /digest/latest, /context, /refresh, and a browser viewer at /. Success criteria: reconstruct the heartbeat citation chain from the latest entry back to the first DAO heartbeat entry (A13); serve the latest heartbeat digest content on demand; run continuously for 60 days without manual intervention. Out of scope: websocket streaming, production hosting, write-back to Moultbook or DAO DAO. 60-day mandate unless renewed. This is a signal proposal with no execute action and no treasury ask.",
+  "funds": []
+}
+```
+
+---
+
 ## After A17
 
 1. Wire the context agent into the JunoClaw runtime and frontend Heartbeat panel so users can query context directly.
