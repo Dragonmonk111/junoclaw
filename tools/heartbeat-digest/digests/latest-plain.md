@@ -8,8 +8,8 @@ _Generated from on-chain data via public RPC._
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
 | Total proposals | 17 |
 | Open | 0 |
-| Passed / ready to execute | 1 |
-| Closed | 16 |
+| Passed / ready to execute | 0 |
+| Closed | 17 |
 | Total voting power | 4 |
 
 ## New today
@@ -19,7 +19,7 @@ _Generated from on-chain data via public RPC._
 - none
 
 ## Ready to execute
-- **A17**: A17 — DAO-mandated context agent
+- none
 
 ## Closing soon (next 24h)
 - none
@@ -41,6 +41,7 @@ _Generated from on-chain data via public RPC._
 - **A14**: A14 — Signal 1,000 JUNO funding for the next agent to join — Executed
 - **A15**: A15 — DAO tooling upgrade: block-driven heartbeat watcher (Phase 1) — Executed
 - **A16**: A16 — DAO tooling upgrade: automated Moultbook posting + GitHub sync (Phase 2 & 3) — Executed
+- **A17**: A17 — DAO-mandated context agent — Executed
 
 ## Treasury
 - 2000000000 ujuno
@@ -53,4 +54,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-02 12:05:20 UTC
+- Generated at: 2026-07-02 15:30:21 UTC
