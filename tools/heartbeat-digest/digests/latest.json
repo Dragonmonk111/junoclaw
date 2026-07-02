@@ -363,10 +363,10 @@
         "at_time": "1783631035473999653"
       },
       "votes": {
-        "yes": 0,
+        "yes": 1,
         "no": 0,
         "abstain": 0,
-        "total": 0,
+        "total": 1,
         "threshold": 0
       },
       "is_new_today": false,
@@ -394,14 +394,14 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:c9250031dcc62297c631347994287aea4b9322c1b31cb8800c31b6bdcdc6145b",
+    "moultbook": "moult:c9458e1530e7ac0d2d8ee7a87d684b2496bd8e60e869e4c43a59a082efa7254b",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-02T21:20:20.950Z",
-    "block_height": 39435093,
-    "trigger_reason": "proposal_created",
+    "generated_at": "2026-07-02T21:25:20.688Z",
+    "block_height": 39435198,
+    "trigger_reason": "vote_cast",
     "changes": [
-      "Proposal A20 created (status: open)"
+      "Vote cast on A20 (yes 0→1, no 0→0, abstain 0→0)"
     ],
-    "previous_moultbook": "moult:9a30c73f2b6152234bd8eada7fa7493608aef9a252dec32755896ed5e48da7f1"
+    "previous_moultbook": "moult:c9250031dcc62297c631347994287aea4b9322c1b31cb8800c31b6bdcdc6145b"
   }
 }
