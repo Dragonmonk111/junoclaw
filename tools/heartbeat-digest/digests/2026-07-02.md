@@ -12,7 +12,7 @@
 
 | Open | Passed | Ready to execute | Closed | Total proposals | Voting power | Treasury |
 |---|---|---|---|---|---|---|
-| **1** | **0** | **0** | **16** | **17** | **4** | 2000.00 JUNO |
+| **0** | **1** | **1** | **16** | **17** | **4** | 2000.00 JUNO |
 
 ### 🆕 New today 
 
@@ -20,17 +20,17 @@
 |---|---|---|---|---|
 | — | — | No items in this section | — | — |
 
-### 🗳️ Needs votes (1)
-
-| ID | Status | Title | Votes | Link |
-|---|---|---|---|---|
-| **A17** | 🔵 Open | A17 — DAO-mandated context agent | Yes 100.0% | No 0.0% | Abstain 0.0% | [Vote ↗](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/17) |
-
-### ✅ Ready to execute 
+### 🗳️ Needs votes 
 
 | ID | Status | Title | Votes | Link |
 |---|---|---|---|---|
 | — | — | No items in this section | — | — |
+
+### ✅ Ready to execute (1)
+
+| ID | Status | Title | Votes | Link |
+|---|---|---|---|---|
+| **A17** | 🟢 Passed | A17 — DAO-mandated context agent | Yes 100.0% | No 0.0% | Abstain 0.0% | [View ↗](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/17) |
 
 ### ⏰ Closing soon (next 24h) 
 
@@ -81,11 +81,11 @@
 - DAO core: `juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac`
 - Proposal module: `juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp`
 - Moultbook entry: `pending`
-- Observed at block: `39422849`
-- Trigger: `proposal_created`
-- Cites previous heartbeat: `moult:2c8840bfdd20d8be2a8b5a2bb1836a620e5e973e72de2dfe671979c14086b7ba`
+- Observed at block: `39423276`
+- Trigger: `proposal_status_changed`
+- Cites previous heartbeat: `moult:ad00ee98d08bc99eb9be21f61c982c8209cd547dd960d2439777172dfcf0c839`
 - REST endpoint: `https://juno-rest.publicnode.com`
-- Generated at: 2026-07-02 11:45:20 UTC
+- Generated at: 2026-07-02 12:05:20 UTC
 - This digest is published as a public **Moultbook** entry by the DAO's agent.
 
 ---

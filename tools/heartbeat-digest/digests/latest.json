@@ -2,11 +2,11 @@
   "date": "2026-07-02",
   "summary": {
     "total_proposals": 17,
-    "open": 1,
-    "passed": 0,
-    "ready_to_execute": 0,
+    "open": 0,
+    "passed": 1,
+    "ready_to_execute": 1,
     "closed": 16,
-    "needs_votes": 1,
+    "needs_votes": 0,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 4
@@ -303,16 +303,16 @@
     {
       "id": 17,
       "title": "A17 — DAO-mandated context agent",
-      "status": "open",
+      "status": "passed",
       "created_at": 39422756,
       "expiration": {
         "at_time": "1783596368960557310"
       },
       "votes": {
-        "yes": 1,
+        "yes": 4,
         "no": 0,
         "abstain": 0,
-        "total": 1,
+        "total": 4,
         "threshold": 0
       },
       "is_new_today": false,
@@ -340,14 +340,14 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:ad00ee98d08bc99eb9be21f61c982c8209cd547dd960d2439777172dfcf0c839",
+    "moultbook": "moult:6f65ba6e1bcc8966bf0a1c2b20c9ae94a945b8cd3e936e7ce49859c8648909a2",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-02T11:45:20.966Z",
-    "block_height": 39422849,
-    "trigger_reason": "proposal_created",
+    "generated_at": "2026-07-02T12:05:20.919Z",
+    "block_height": 39423276,
+    "trigger_reason": "proposal_status_changed",
     "changes": [
-      "Proposal A17 created (status: open)"
+      "Proposal A17 status changed: open → passed"
     ],
-    "previous_moultbook": "moult:2c8840bfdd20d8be2a8b5a2bb1836a620e5e973e72de2dfe671979c14086b7ba"
+    "previous_moultbook": "moult:ad00ee98d08bc99eb9be21f61c982c8209cd547dd960d2439777172dfcf0c839"
   }
 }
