@@ -24,6 +24,8 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
+reqwest = { workspace = true }
+urlencoding = "2.1"
 base64 = "0.22"
 
 # Cosmos / Juno on-chain signing (guarded; see chain.rs + SigningConfig)

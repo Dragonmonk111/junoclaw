@@ -16,9 +16,11 @@ use plugin_llm::LlmProviderRegistry;
 use plugin_shell::ShellPlugin;
 
 pub mod chain;
+pub mod context_agent;
 pub mod moultbook_operator;
 
 use chain::ChainClient;
+use context_agent::ContextAgentClient;
 
 pub struct Runtime {
     _config: JunoClawConfig,
@@ -34,6 +36,7 @@ pub struct Runtime {
     /// Guarded on-chain client. `Some` when `chain.enabled`; reads always work,
     /// writes are gated behind the `signing_paused` kill-switch inside the client.
     chain: Option<Arc<ChainClient>>,
+    context_agent: Option<ContextAgentClient>,
 }
 
 impl Runtime {
@@ -106,7 +109,20 @@ impl Runtime {
             pending_approvals: Arc::new(RwLock::new(HashMap::new())),
             data_dir,
             chain,
+            context_agent: None,
         };
+
+        let context_agent = {
+            let client = ContextAgentClient::from_env();
+            if client.probe().await {
+                Some(client)
+            } else {
+                None
+            }
+        };
+
+        let mut runtime = runtime;
+        runtime.context_agent = context_agent;
 
         info!(
             "Runtime ready. LLM provider: {}, chain: {}",
@@ -634,6 +650,33 @@ impl Runtime {
                     .map_err(|e| anyhow::anyhow!("{}", e))?;
                 Ok(out.combined())
             }
+            "context_query" => {
+                let query = args.get("query")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("context_query requires 'query' argument"))?;
+                let client = self.context_agent.as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("context agent not connected"))?;
+                let result = match query {
+                    "latest_digest" | "digest" => client.latest_digest().await
+                        .map(|d| serde_json::to_string_pretty(&d).unwrap_or_default()),
+                    "heartbeat_chain" | "chain" => client.chain(None, 20).await
+                        .map(|c| serde_json::to_string_pretty(&c).unwrap_or_default()),
+                    _ => {
+                        if query.starts_with("entry ") {
+                            let id = &query[6..];
+                            client.entry(id).await
+                                .map(|e| serde_json::to_string_pretty(&e).unwrap_or_default())
+                        } else if query.starts_with("topic ") {
+                            let topic = &query[6..];
+                            client.entries(None, Some(topic), None, None, 20).await
+                                .map(|e| serde_json::to_string_pretty(&e).unwrap_or_default())
+                        } else {
+                            anyhow::bail!("Unknown context_query '{}'", query)
+                        }
+                    }
+                };
+                result.map_err(|e| anyhow::anyhow!("context_query failed: {}", e))
+            }
             other => Err(anyhow::anyhow!("Unknown tool: {}", other)),
         }
     }
@@ -651,6 +694,7 @@ The block must be valid JSON. DO NOT add any text inside the tags other than JSO
 Available tools:
 - run_shell: Run a shell command. Args: {"command": "<cmd>"}
 - run_python: Run a Python script. Args: {"script": "<python code>"}
+- context_query: Query the DAO-mandated context agent for Moultbook heartbeat history. Args: {"query": "latest_digest" | "heartbeat_chain" | "entry <moult_id>" | "topic <topic_hash>"}
 
 Examples:
 <tool_call>
@@ -659,6 +703,10 @@ Examples:
 
 <tool_call>
 {"tool": "run_python", "script": "import sys\nprint(sys.version)"}
+</tool_call>
+
+<tool_call>
+{"tool": "context_query", "query": "latest_digest"}
 </tool_call>
 
 After receiving a tool result, continue your response naturally.
