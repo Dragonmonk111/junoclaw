@@ -15,8 +15,30 @@ function loadIndexOrFail() {
 }
 
 function sendJson(res, status, data) {
-  res.writeHead(status, { 'Content-Type': 'application/json' })
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  })
   res.end(JSON.stringify(data, null, 2))
+}
+
+function sendText(res, status, text, contentType = 'text/plain') {
+  res.writeHead(status, {
+    'Content-Type': contentType,
+    'Access-Control-Allow-Origin': '*',
+  })
+  res.end(text)
+}
+
+function handleOptions(req, res) {
+  res.writeHead(204, {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  })
+  res.end()
 }
 
 function paginate(ids, index, query) {
@@ -38,7 +60,13 @@ const server = createServer(async (req, res) => {
   const path = url.pathname
   const query = Object.fromEntries(url.searchParams)
 
+  if (req.method === 'OPTIONS') return handleOptions(req, res)
+
   try {
+    if (path === '/') {
+      return sendText(res, 200, viewerHtml(), 'text/html')
+    }
+
     const index = loadIndexOrFail()
 
     if (path === '/health') {
@@ -109,6 +137,62 @@ const server = createServer(async (req, res) => {
     sendJson(res, 500, { error: e.message })
   }
 })
+
+function viewerHtml() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Juno Agents DAO Context Agent</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+    h1 { font-size: 1.5rem; }
+    .meta { color: #666; font-size: 0.9rem; margin-bottom: 1rem; }
+    .entry { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+    .entry .id { font-family: monospace; font-size: 0.85rem; color: #555; }
+    .entry .time { font-size: 0.8rem; color: #888; margin-top: 0.25rem; }
+    .entry .refs { margin-top: 0.5rem; font-size: 0.85rem; }
+    .entry .refs a { color: #0366d6; }
+    button { padding: 0.5rem 1rem; border: 1px solid #ccc; border-radius: 4px; background: #f6f8fa; cursor: pointer; }
+    button:hover { background: #e1e4e8; }
+  </style>
+</head>
+<body>
+  <h1>Juno Agents DAO Context Agent</h1>
+  <p class="meta">Read-only indexer of Moultbook heartbeat entries. Auto-refreshes every 5 minutes.</p>
+  <div id="status">Loading...</div>
+  <button id="refresh">Refresh now</button>
+  <div id="entries"></div>
+  <script>
+    async function load() {
+      const status = document.getElementById('status')
+      const entries = document.getElementById('entries')
+      try {
+        const health = await fetch('/health').then(r => r.json())
+        status.textContent = 'Entries indexed: ' + health.entry_count + ' at ' + new Date(health.indexed_at).toLocaleString()
+        const chain = await fetch('/chain?limit=50').then(r => r.json())
+        entries.innerHTML = chain.chain.map((entry, i) => \`
+          <div class="entry">
+            <div class="id">\${entry.id}</div>
+            <div class="time">\${new Date(Number(entry.posted_at) / 1e6).toLocaleString()}</div>
+            <div>content type: \${entry.content_type}, size: \${entry.size_bytes} bytes</div>
+            <div class="refs">\${entry.refs.length ? 'cites: ' + entry.refs.map(r => '<a href="/entry?id=' + r + '">' + r + '</a>').join(', ') : 'root entry'}</div>
+          </div>
+        \`).join('')
+      } catch (e) {
+        status.textContent = 'Error: ' + e.message
+      }
+    }
+    document.getElementById('refresh').addEventListener('click', async () => {
+      await fetch('/refresh').then(r => r.json())
+      load()
+    })
+    load()
+  </script>
+</body>
+</html>`
+}
 
 server.listen(PORT, async () => {
   console.log(`[context-agent] serving on http://localhost:${PORT}`)
