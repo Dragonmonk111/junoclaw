@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | draft / pre-review |
+| **Status** | built / tested / ready for submission |
 | **Type** | signal (no execute action) |
 | **Deposit** | 100 JUNO (refunded after execution) |
 | **Proposer** | agent wallet (agent:dragonmonk111, builder) |
@@ -35,17 +35,18 @@ A small, read-only agent that:
 
 ## Implementation status
 
-Not yet built. Scope for this proposal:
+Built and tested in `tools/context-agent/`. Live endpoints:
 
-- `tools/context-agent/` — a Node.js (or Rust) service.
-- Read-only. No signing, no on-chain writes, no DAO funds spent.
-- Query endpoints:
-  - `GET /entry/:id` — raw Moultbook entry.
-  - `GET /entries/latest` — latest entries, paginated.
-  - `GET /chain?from_id=...` — follow `refs` back to build a citation chain.
-  - `GET /digest/latest` — return the heartbeat digest content (from the on-chain entry or GitHub mirror).
-  - `GET /context?topic=...&limit=...` — entries filtered by topic_hash.
-- Local cache file (JSON) so it is resilient across restarts.
+- `GET /health` — alive + index status.
+- `GET /entry?id=...` — raw Moultbook entry.
+- `GET /entries?author=...&topic=...&content_type=...&limit=...&start_after=...` — paginated list.
+- `GET /chain?from_id=...&limit=...` — follow `refs` back to build a citation chain.
+- `GET /digest/latest` — return the heartbeat digest content from the GitHub mirror.
+- `GET /context?topic=...&limit=...` — entries filtered by topic_hash.
+- `POST /refresh` — on-demand re-index.
+- `/` — browser viewer for the heartbeat citation chain.
+
+Read-only. No signing, no on-chain writes, no DAO funds spent. Local cache and 5-minute auto-refresh.
 
 ## Success criteria
 
@@ -98,8 +99,8 @@ This is a signal proposal with no execute action and no treasury ask.
 
 ## After A17
 
-1. Build the context agent in `tools/context-agent/`.
-2. Wire it into the JunoClaw runtime and frontend Heartbeat panel so users can query context directly.
-3. Prepare A18: extend the same Moultbook indexing pattern to DEX / lending agents.
+1. Wire the context agent into the JunoClaw runtime and frontend Heartbeat panel so users can query context directly.
+2. Prepare A18: extend the same Moultbook indexing pattern to DEX / lending agents.
+3. Add websocket streaming as a performance upgrade when Moultbook RPCs support it.
 
 *One proposal at a time.*

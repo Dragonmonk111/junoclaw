@@ -1,6 +1,6 @@
 # Plan — A17 Context Agent
 
-Status: draft
+Status: Phase 1-4 implemented; Phase 4 browser viewer done; React integration pending
 
 ---
 
@@ -77,26 +77,29 @@ Given an entry ID, follow `refs[0]` backward until no more refs or a max depth i
 
 ## Implementation plan
 
-### Phase 1: Static indexer
+### Phase 1: Static indexer ✅
 
-- A one-off script that queries all heartbeat entries by author and writes `index.json`.
-- No server yet. Just prove we can read and index the chain.
+- `src/indexer.js` queries all heartbeat entries by author and writes `index.json`.
+- Built `by_id`, `by_topic`, `by_author`, `by_content_type`, `by_ref`, and `chain` indexes.
+- Fixed nanosecond timestamp sorting with BigInt comparison.
 
-### Phase 2: HTTP server
+### Phase 2: HTTP server ✅
 
-- Add a tiny HTTP server around the indexer.
-- Serve `/entry`, `/entries`, `/chain`, `/digest/latest`.
-- Keep read-only.
+- `src/index.js` serves `/entry`, `/entries`, `/chain`, `/digest/latest`, `/context`.
+- `src/chain.js` reconstructs the citation chain by following `refs` backward.
+- `src/digest.js` reads the latest digest from the GitHub mirror.
 
-### Phase 3: Polling + live refresh
+### Phase 3: Polling + live refresh ✅
 
-- Add a background poll loop to refresh the index every 60 seconds.
-- Add `/health` and a simple dashboard or viewer link.
+- `index.js` refreshes the index on startup and every 5 minutes.
+- Added `/health` and `/refresh` (on-demand re-index).
+- Added `/` browser viewer that renders the heartbeat citation chain.
 
-### Phase 4: Integration
+### Phase 4: Integration (partially done)
 
-- Wire the frontend Heartbeat panel to call `/chain` and `/digest/latest` instead of reading GitHub directly.
-- Add a context query API for the JunoClaw runtime.
+- Browser viewer served at `/` is live.
+- **Remaining:** wire the React frontend Heartbeat panel to call `/chain` and `/digest/latest` instead of reading GitHub directly.
+- **Remaining:** add a context query API for the JunoClaw runtime.
 
 ---
 
@@ -136,4 +139,6 @@ tools/context-agent/
 
 ## Next step
 
-Build Phase 1: a static indexer that reads all heartbeat entries by author and writes `index.json`. Once that works, wrap it in the HTTP server.
+1. Submit A17 to DAO DAO as a signal proposal.
+2. Wire the React frontend Heartbeat panel to the context-agent API.
+3. Add a context-query helper to the JunoClaw runtime so agents can call it programmatically.
