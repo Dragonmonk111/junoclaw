@@ -83,6 +83,8 @@ interface DigestData {
 const GITHUB_DIGEST_JSON =
   'https://raw.githubusercontent.com/Dragonmonk111/junoclaw/main/tools/heartbeat-digest/digests/latest.json'
 
+const CONTEXT_AGENT_DIGEST = 'http://localhost:3000/digest/latest'
+
 // Public Moultbook contract that DAO heartbeat entries are posted to (A13/A15).
 const MOULTBOOK_ADDR = 'juno18xn4cfpjfpqhmjenr9gdxk5uk7jjq3cezcy6d2jcar2gvx98pvtsm95z6j'
 
@@ -500,13 +502,20 @@ export function HeartbeatPanel() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(GITHUB_DIGEST_JSON, { cache: 'no-store' })
+      // Prefer the local A17 context agent if it is running.
+      let res = await fetch(CONTEXT_AGENT_DIGEST, { cache: 'no-store' })
+      let source = 'context-agent'
+      if (!res.ok) {
+        res = await fetch(GITHUB_DIGEST_JSON, { cache: 'no-store' })
+        source = 'github'
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
+      const payload = await res.json()
+      const data = payload.json || payload
       setDigest(data)
-      setLastRefresh('github')
+      setLastRefresh(source)
     } catch (e) {
-      console.warn('Could not load digest from GitHub, using mock data:', e)
+      console.warn('Could not load digest from context agent or GitHub, using mock data:', e)
       setError('Failed to fetch latest digest. Showing mock data.')
       setDigest(MOCK_DIGEST)
       setLastRefresh('mock')
@@ -557,7 +566,11 @@ export function HeartbeatPanel() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-[#6b6a8a]">
-            {lastRefresh === 'github' ? `Loaded ${formatDate(digest.date)}` : 'Mock data'}
+            {lastRefresh === 'github'
+              ? `Loaded ${formatDate(digest.date)}`
+              : lastRefresh === 'context-agent'
+                ? `Context agent · ${formatDate(digest.date)}`
+                : 'Mock data'}
           </span>
           <button
             onClick={loadDigest}
