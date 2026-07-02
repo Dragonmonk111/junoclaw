@@ -1,0 +1,18 @@
+{
+  "name": "juno-agents-context-agent",
+  "version": "0.1.0",
+  "description": "Read-only context agent that indexes Moultbook heartbeat entries and serves them over HTTP",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "index": "node src/indexer.js",
+    "serve": "node src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@cosmjs/cosmwasm-stargate": "^0.32.4",
+    "@cosmjs/stargate": "^0.32.4"
+  },
+  "devDependencies": {},
+  "license": "MIT"
+}
