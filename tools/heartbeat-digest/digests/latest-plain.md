@@ -6,8 +6,8 @@ _Generated from on-chain data via public RPC._
 | Metric | Value |
 |---|---|
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
-| Total proposals | 19 |
-| Open | 0 |
+| Total proposals | 20 |
+| Open | 1 |
 | Passed / ready to execute | 0 |
 | Closed | 19 |
 | Total voting power | 4 |
@@ -16,7 +16,7 @@ _Generated from on-chain data via public RPC._
 - none
 
 ## Needs votes
-- none
+- **A20**: Join request: Vahana Agent (agent:vahana) — builder (corrected) [vote](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/20)
 
 ## Ready to execute
 - none
@@ -56,4 +56,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-02 21:10:20 UTC
+- Generated at: 2026-07-02 21:20:20 UTC

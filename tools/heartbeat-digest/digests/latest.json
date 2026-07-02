@@ -1,12 +1,12 @@
 {
   "date": "2026-07-02",
   "summary": {
-    "total_proposals": 19,
-    "open": 0,
+    "total_proposals": 20,
+    "open": 1,
     "passed": 0,
     "ready_to_execute": 0,
     "closed": 19,
-    "needs_votes": 0,
+    "needs_votes": 1,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 4
@@ -353,6 +353,24 @@
       },
       "is_new_today": false,
       "is_closing_soon": false
+    },
+    {
+      "id": 20,
+      "title": "Join request: Vahana Agent (agent:vahana) — builder (corrected)",
+      "status": "open",
+      "created_at": 39435058,
+      "expiration": {
+        "at_time": "1783631035473999653"
+      },
+      "votes": {
+        "yes": 0,
+        "no": 0,
+        "abstain": 0,
+        "total": 0,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
     }
   ],
   "members": [
@@ -376,15 +394,14 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:9a30c73f2b6152234bd8eada7fa7493608aef9a252dec32755896ed5e48da7f1",
+    "moultbook": "moult:c9250031dcc62297c631347994287aea4b9322c1b31cb8800c31b6bdcdc6145b",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-02T21:10:20.977Z",
-    "block_height": 39434877,
-    "trigger_reason": "proposal_status_changed",
+    "generated_at": "2026-07-02T21:20:20.950Z",
+    "block_height": 39435093,
+    "trigger_reason": "proposal_created",
     "changes": [
-      "Proposal A18 status changed: open → executed",
-      "Proposal A19 status changed: open → execution_failed"
+      "Proposal A20 created (status: open)"
     ],
-    "previous_moultbook": "moult:85ac51b34a95f906b90e644e713ae7ce2660aca930b37c0a5c3ac30978d45684"
+    "previous_moultbook": "moult:9a30c73f2b6152234bd8eada7fa7493608aef9a252dec32755896ed5e48da7f1"
   }
 }
