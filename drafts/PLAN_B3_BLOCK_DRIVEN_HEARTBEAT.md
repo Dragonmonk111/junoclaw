@@ -207,24 +207,19 @@ Goal: prove the loop works without chain complexity.
 
 Shipped as `tools/heartbeat-digest/src/watch.js`. Tested against live mainnet (initial run + no-change run). Formalized as **A15** and executed on-chain.
 
-### Phase 2: Add Moultbook posting — ✅ shipped (code), ⏳ pending live test
+### Phase 2: Add Moultbook posting — ✅ shipped, ✅ live-tested on mainnet
 
 - Add the Post transaction to the worker.
 - Store the resulting `moult:<id>` in the digest meta.
-- Run locally with the `junoclaw-agent` key.
+- Run locally with a dedicated agent hot wallet (not the DAO steward/agent governance key — `execute_post` has no owner/allowlist check, so an isolated low-privilege wallet is used to bound blast radius).
 
 Goal: the heartbeat updates automatically on-chain.
 
-Shipped as `tools/heartbeat-digest/src/moultbook.js` (CosmJS `SigningCosmWasmClient`), wired into `watch.js` behind `POST_TO_MOULTBOOK` (default off) with a `MOULTBOOK_DRY_RUN` safety mode. Dry-run verified: builds a correct `Post` message (commitment, size, refs) against the real Moultbook address. Not yet run live with a funded key — needs a real broadcast test, then formalize as **A16**.
+Shipped as `tools/heartbeat-digest/src/moultbook.js` (CosmJS `SigningCosmWasmClient`), wired into `watch.js` behind `POST_TO_MOULTBOOK` (default off) with a `MOULTBOOK_DRY_RUN` safety mode. Live-tested 2026-07-02: tx `EC50D6D18F2AE9A7DA5C40F323270A84764A8A9E09905D700201EC77A27310D4` → entry `moult:83bf7ea63a199ab7fd9484588385e5983371aa412086328d88c6b9e29417f0f5` (gas 169,303, fee 0.015843 JUNO). Found and fixed a parsing bug: modern chains return empty `logs`/`rawLog` on success and only populate the flat `events` array. Formalized as **A16**.
 
-### Phase 3: Add GitHub push — ✅ shipped and live-tested
+### Phase 3: Add GitHub push — ✅ shipped, ✅ live-tested on mainnet
 
-- After generation and posting, commit and push the digest files.
-- Use a simple commit message with the block height.
-
-Goal: the frontend/viewer reflect the latest state.
-
-Shipped as `tools/heartbeat-digest/src/github-push.js` behind `GIT_PUSH_ENABLED` (default off). Scoped strictly to `digests/*` paths (never `git add -A`) so it cannot touch unrelated work-in-progress files elsewhere in the monorepo. Live-tested against `Dragonmonk111/junoclaw` — commit `4edc744` touched only the four digest files. Push failure is non-fatal (logged, does not block `saveState()`).
+Shipped as `tools/heartbeat-digest/src/github-push.js`, wired into `watch.js` behind `GIT_PUSH_ENABLED` (default off). Scoped strictly to `tools/heartbeat-digest/digests/`. Live-tested 2026-07-02: commit `379bcc2`, touched only digest files. Formalized alongside Phase 2 as **A16**.
 
 ### Phase 4: Replace polling with websocket events
 
