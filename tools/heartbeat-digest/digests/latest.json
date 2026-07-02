@@ -2,11 +2,11 @@
   "date": "2026-07-02",
   "summary": {
     "total_proposals": 16,
-    "open": 1,
-    "passed": 0,
-    "ready_to_execute": 0,
+    "open": 0,
+    "passed": 1,
+    "ready_to_execute": 1,
     "closed": 15,
-    "needs_votes": 1,
+    "needs_votes": 0,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 4
@@ -285,16 +285,16 @@
     {
       "id": 16,
       "title": "A16 — DAO tooling upgrade: automated Moultbook posting + GitHub sync (Phase 2 & 3)",
-      "status": "open",
+      "status": "passed",
       "created_at": 39408045,
       "expiration": {
         "at_time": "1783555412380533231"
       },
       "votes": {
-        "yes": 1,
+        "yes": 4,
         "no": 0,
         "abstain": 0,
-        "total": 1,
+        "total": 4,
         "threshold": 0
       },
       "is_new_today": false,
@@ -322,14 +322,14 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:ecb3cc9612c564b3dc440bfb4e36da48b26a5062090eb1e5d962dcc8ecd62b6e",
+    "moultbook": "moult:c7a930fd9740c40f33f2547488abeaed773a1c424171528c6b31880adc5c4dd8",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-02T00:33:46.016Z",
-    "block_height": 39408380,
-    "trigger_reason": "proposal_created",
+    "generated_at": "2026-07-02T00:43:52.683Z",
+    "block_height": 39408599,
+    "trigger_reason": "proposal_status_changed",
     "changes": [
-      "Proposal A16 created (status: open)"
+      "Proposal A16 status changed: open → passed"
     ],
-    "previous_moultbook": "moult:83bf7ea63a199ab7fd9484588385e5983371aa412086328d88c6b9e29417f0f5"
+    "previous_moultbook": "moult:ecb3cc9612c564b3dc440bfb4e36da48b26a5062090eb1e5d962dcc8ecd62b6e"
   }
 }

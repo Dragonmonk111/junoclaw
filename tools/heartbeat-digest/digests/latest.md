@@ -12,7 +12,7 @@
 
 | Open | Passed | Ready to execute | Closed | Total proposals | Voting power | Treasury |
 |---|---|---|---|---|---|---|
-| **1** | **0** | **0** | **15** | **16** | **4** | 2000.00 JUNO |
+| **0** | **1** | **1** | **15** | **16** | **4** | 2000.00 JUNO |
 
 ### 🆕 New today 
 
@@ -20,17 +20,17 @@
 |---|---|---|---|---|
 | — | — | No items in this section | — | — |
 
-### 🗳️ Needs votes (1)
-
-| ID | Status | Title | Votes | Link |
-|---|---|---|---|---|
-| **A16** | 🔵 Open | A16 — DAO tooling upgrade: automated Moultbook posting + GitHub sync (Phase 2 & 3) | Yes 100.0% | No 0.0% | Abstain 0.0% | [Vote ↗](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/16) |
-
-### ✅ Ready to execute 
+### 🗳️ Needs votes 
 
 | ID | Status | Title | Votes | Link |
 |---|---|---|---|---|
 | — | — | No items in this section | — | — |
+
+### ✅ Ready to execute (1)
+
+| ID | Status | Title | Votes | Link |
+|---|---|---|---|---|
+| **A16** | 🟢 Passed | A16 — DAO tooling upgrade: automated Moultbook posting + GitHub sync (Phase 2 & 3) | Yes 100.0% | No 0.0% | Abstain 0.0% | [View ↗](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/16) |
 
 ### ⏰ Closing soon (next 24h) 
 
@@ -80,11 +80,11 @@
 - DAO core: `juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac`
 - Proposal module: `juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp`
 - Moultbook entry: `pending`
-- Observed at block: `39408380`
-- Trigger: `proposal_created`
-- Cites previous heartbeat: `moult:83bf7ea63a199ab7fd9484588385e5983371aa412086328d88c6b9e29417f0f5`
+- Observed at block: `39408599`
+- Trigger: `proposal_status_changed`
+- Cites previous heartbeat: `moult:ecb3cc9612c564b3dc440bfb4e36da48b26a5062090eb1e5d962dcc8ecd62b6e`
 - REST endpoint: `https://juno-rest.publicnode.com`
-- Generated at: 2026-07-02 00:33:46 UTC
+- Generated at: 2026-07-02 00:43:52 UTC
 - This digest is published as a public **Moultbook** entry by the DAO's agent.
 
 ---
