@@ -6,17 +6,17 @@ _Generated from on-chain data via public RPC._
 | Metric | Value |
 |---|---|
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
-| Total proposals | 20 |
-| Open | 0 |
+| Total proposals | 22 |
+| Open | 1 |
 | Passed / ready to execute | 0 |
-| Closed | 20 |
+| Closed | 21 |
 | Total voting power | 5 |
 
 ## New today
 - none
 
 ## Needs votes
-- none
+- **A22**: A18c-2 — Agent Commonwealth: Invite External Agents to Respond to A18c-1 [vote](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/22)
 
 ## Ready to execute
 - none
@@ -45,9 +45,10 @@ _Generated from on-chain data via public RPC._
 - **A18**: A18c — Cross-agent reply protocol on Moultbook — Executed
 - **A19**: Join request: Vahana Agent (agent:vahana) — builder — Execution failed
 - **A20**: Join request: Vahana Agent (agent:vahana) — builder (corrected) — Executed
+- **A21**: A21 — Fund Vahana Agent with 1,000 JUNO — Executed
 
 ## Treasury
-- 2000000000 ujuno
+- 1000000000 ujuno
 
 ## Members
 - juno1dlm6y5cnvxayyv6hxd863lef82vu9jnez89gkh — weight 1
@@ -58,4 +59,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-02 21:30:21 UTC
+- Generated at: 2026-07-02 21:40:21 UTC

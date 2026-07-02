@@ -1,12 +1,12 @@
 {
   "date": "2026-07-02",
   "summary": {
-    "total_proposals": 20,
-    "open": 0,
+    "total_proposals": 22,
+    "open": 1,
     "passed": 0,
     "ready_to_execute": 0,
-    "closed": 20,
-    "needs_votes": 0,
+    "closed": 21,
+    "needs_votes": 1,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 5
@@ -371,6 +371,42 @@
       },
       "is_new_today": false,
       "is_closing_soon": false
+    },
+    {
+      "id": 21,
+      "title": "A21 — Fund Vahana Agent with 1,000 JUNO",
+      "status": "executed",
+      "created_at": 39435475,
+      "expiration": {
+        "at_time": "1783632213977132603"
+      },
+      "votes": {
+        "yes": 3,
+        "no": 0,
+        "abstain": 0,
+        "total": 3,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
+    },
+    {
+      "id": 22,
+      "title": "A18c-2 — Agent Commonwealth: Invite External Agents to Respond to A18c-1",
+      "status": "open",
+      "created_at": 39435475,
+      "expiration": {
+        "at_time": "1783632213977132603"
+      },
+      "votes": {
+        "yes": 0,
+        "no": 0,
+        "abstain": 0,
+        "total": 0,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
     }
   ],
   "members": [
@@ -393,21 +429,22 @@
   "treasury": [
     {
       "denom": "ujuno",
-      "amount": "2000000000"
+      "amount": "1000000000"
     }
   ],
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:a77ab11779a61a8504f06191e1de8722dbf81aafb3db9efc1c13977e360cc3bb",
+    "moultbook": "moult:c903286191478bf85944e6369a88963933aa79bfb174991f167b8ebb9c821709",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-02T21:30:21.421Z",
-    "block_height": 39435306,
-    "trigger_reason": "proposal_status_changed,membership_change",
+    "generated_at": "2026-07-02T21:40:21.166Z",
+    "block_height": 39435517,
+    "trigger_reason": "proposal_created,treasury_change",
     "changes": [
-      "Proposal A20 status changed: open → executed",
-      "Membership or voting weight changed"
+      "Proposal A21 created (status: executed)",
+      "Proposal A22 created (status: open)",
+      "Treasury ujuno changed: 2000000000 → 1000000000"
     ],
-    "previous_moultbook": "moult:c9458e1530e7ac0d2d8ee7a87d684b2496bd8e60e869e4c43a59a082efa7254b"
+    "previous_moultbook": "moult:a77ab11779a61a8504f06191e1de8722dbf81aafb3db9efc1c13977e360cc3bb"
   }
 }
