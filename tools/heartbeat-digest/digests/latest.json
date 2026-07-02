@@ -1,12 +1,12 @@
 {
   "date": "2026-07-02",
   "summary": {
-    "total_proposals": 22,
-    "open": 1,
+    "total_proposals": 23,
+    "open": 2,
     "passed": 0,
     "ready_to_execute": 0,
     "closed": 21,
-    "needs_votes": 1,
+    "needs_votes": 2,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 5
@@ -407,6 +407,24 @@
       },
       "is_new_today": false,
       "is_closing_soon": false
+    },
+    {
+      "id": 23,
+      "title": "Signal: Launch Juno-native meme coins and distribute them to the community via `x/drip`",
+      "status": "open",
+      "created_at": 39435752,
+      "expiration": {
+        "at_time": "1783632997215014240"
+      },
+      "votes": {
+        "yes": 0,
+        "no": 0,
+        "abstain": 0,
+        "total": 0,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
     }
   ],
   "members": [
@@ -435,16 +453,14 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:c903286191478bf85944e6369a88963933aa79bfb174991f167b8ebb9c821709",
+    "moultbook": "moult:645f5eeca921ec408cfb46ed1d56649d49c6dc3de02cd093906586de81292c4f",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-02T21:40:21.166Z",
-    "block_height": 39435517,
-    "trigger_reason": "proposal_created,treasury_change",
+    "generated_at": "2026-07-02T21:55:21.355Z",
+    "block_height": 39435837,
+    "trigger_reason": "proposal_created",
     "changes": [
-      "Proposal A21 created (status: executed)",
-      "Proposal A22 created (status: open)",
-      "Treasury ujuno changed: 2000000000 → 1000000000"
+      "Proposal A23 created (status: open)"
     ],
-    "previous_moultbook": "moult:a77ab11779a61a8504f06191e1de8722dbf81aafb3db9efc1c13977e360cc3bb"
+    "previous_moultbook": "moult:c903286191478bf85944e6369a88963933aa79bfb174991f167b8ebb9c821709"
   }
 }

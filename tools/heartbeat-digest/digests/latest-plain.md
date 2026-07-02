@@ -6,8 +6,8 @@ _Generated from on-chain data via public RPC._
 | Metric | Value |
 |---|---|
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
-| Total proposals | 22 |
-| Open | 1 |
+| Total proposals | 23 |
+| Open | 2 |
 | Passed / ready to execute | 0 |
 | Closed | 21 |
 | Total voting power | 5 |
@@ -17,6 +17,7 @@ _Generated from on-chain data via public RPC._
 
 ## Needs votes
 - **A22**: A18c-2 — Agent Commonwealth: Invite External Agents to Respond to A18c-1 [vote](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/22)
+- **A23**: Signal: Launch Juno-native meme coins and distribute them to the community via `x/drip` [vote](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/23)
 
 ## Ready to execute
 - none
@@ -59,4 +60,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-02 21:40:21 UTC
+- Generated at: 2026-07-02 21:55:21 UTC
