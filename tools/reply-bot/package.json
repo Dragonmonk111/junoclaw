@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "reply": "node src/reply.js",
-    "dry-run": "MOULTBOOK_DRY_RUN=true node src/reply.js"
+    "dry-run": "MOULTBOOK_DRY_RUN=true node src/reply.js",
+    "serve": "node src/server.js"
   },
   "dependencies": {
     "@cosmjs/cosmwasm-stargate": "^0.32.4",

@@ -17,6 +17,8 @@ import {
   Link2,
   Terminal,
   Radio,
+  MessageCircle,
+  Send,
 } from 'lucide-react'
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -78,12 +80,25 @@ interface DigestData {
   }
 }
 
+interface MoultbookEntry {
+  id: string
+  author: string
+  author_alias?: string | null
+  content_type: string
+  size_bytes: number
+  refs: string[]
+  posted_at: string
+  topic_hash?: string | null
+}
+
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const GITHUB_DIGEST_JSON =
   'https://raw.githubusercontent.com/Dragonmonk111/junoclaw/main/tools/heartbeat-digest/digests/latest.json'
 
 const CONTEXT_AGENT_DIGEST = 'http://localhost:3000/digest/latest'
+const CONTEXT_AGENT_REPLIES = (id: string) => `http://localhost:3000/replies?to=${encodeURIComponent(id)}`
+const REPLY_BOT_API = 'http://localhost:3001/api'
 
 // Public Moultbook contract that DAO heartbeat entries are posted to (A13/A15).
 const MOULTBOOK_ADDR = 'juno18xn4cfpjfpqhmjenr9gdxk5uk7jjq3cezcy6d2jcar2gvx98pvtsm95z6j'
@@ -351,6 +366,155 @@ function CitationChain({ meta }: { meta: DigestData['meta'] }) {
   )
 }
 
+function RepliesThread({ replies, error }: { replies: MoultbookEntry[]; error: string | null }) {
+  if (error) {
+    return (
+      <div className="rounded-xl p-3 text-[11px]" style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)', color: '#f87171' }}>
+        {error}
+      </div>
+    )
+  }
+  if (!replies.length) return null
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.15)' }}>
+      <div className="flex items-center gap-1.5 mb-2.5 text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#60a5fa' }}>
+        <MessageCircle className="h-3 w-3" />
+        Cross-agent replies ({replies.length})
+      </div>
+      <div className="space-y-2">
+        {replies.map((entry) => (
+          <div key={entry.id} className="rounded-lg p-2.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="flex items-center justify-between gap-2">
+              <code className="font-mono text-[#8a89a6]">{truncAddr(entry.author)}</code>
+              <span className="text-[#6b6a8a]">{formatRelativeTime(entry.posted_at)}</span>
+            </div>
+            <div className="mt-1 text-[#c0bfd8]">
+              {entry.content_type}
+              {entry.topic_hash ? ` · ${entry.topic_hash}` : ''}
+            </div>
+            <div className="mt-1 text-[#6b6a8a]">
+              {entry.size_bytes} bytes · {entry.id}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ReplyComposer({ replyTo }: { replyTo: string | null }) {
+  const [text, setText] = useState('')
+  const [draft, setDraft] = useState<any>(null)
+  const [posting, setPosting] = useState(false)
+  const [result, setResult] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  if (!replyTo) {
+    return (
+      <div className="rounded-xl p-3 text-[11px] text-[#6b6a8a]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+        Reply composer unavailable: no heartbeat entry loaded.
+      </div>
+    )
+  }
+
+  const preview = async () => {
+    setError(null)
+    setDraft(null)
+    setResult(null)
+    try {
+      const res = await fetch(`${REPLY_BOT_API}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reply_to: replyTo, text, agent: 'dragonmonk111-bot', approve: false }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setDraft(data.draft)
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
+  const post = async () => {
+    setError(null)
+    setPosting(true)
+    try {
+      const res = await fetch(`${REPLY_BOT_API}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reply_to: replyTo,
+          text,
+          agent: 'dragonmonk111-bot',
+          draft_id: draft?.id,
+          approve: true,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setResult(data)
+      setDraft(null)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setPosting(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: 'rgba(0,212,170,0.05)', border: '1px solid rgba(0,212,170,0.15)' }}>
+      <div className="flex items-center gap-1.5 mb-2.5 text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#00d4aa' }}>
+        <Send className="h-3 w-3" />
+        Reply as Dragonmonk111-bot
+      </div>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={`Reply to ${replyTo}...`}
+        className="w-full rounded-lg p-2.5 text-[11px] bg-[#06060f] text-[#e0dff8] border border-[rgba(255,255,255,0.08)] focus:outline-none focus:border-[#00d4aa]"
+        rows={3}
+      />
+      <div className="flex items-center gap-2 mt-2.5">
+        <button
+          onClick={preview}
+          className="px-3 py-1.5 rounded-lg text-[10px] font-semibold"
+          style={{ background: 'rgba(255,255,255,0.08)', color: '#e0dff8' }}
+        >
+          Preview
+        </button>
+        {draft && (
+          <button
+            onClick={post}
+            disabled={posting}
+            className="px-3 py-1.5 rounded-lg text-[10px] font-semibold"
+            style={{ background: '#00d4aa', color: '#06060f', opacity: posting ? 0.6 : 1 }}
+          >
+            {posting ? 'Posting...' : 'Post to Moultbook'}
+          </button>
+        )}
+      </div>
+      {error && (
+        <div className="mt-2.5 rounded-lg p-2 text-[10px]" style={{ background: 'rgba(248,113,113,0.08)', color: '#f87171' }}>
+          {error}
+        </div>
+      )}
+      {draft && (
+        <div className="mt-2.5 rounded-lg p-2.5 text-[10px] font-mono" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', color: '#8a89a6' }}>
+          <div className="text-[#6b6a8a] mb-1">Draft preview:</div>
+          <pre className="whitespace-pre-wrap">{JSON.stringify(draft.preview, null, 2)}</pre>
+        </div>
+      )}
+      {result && (
+        <div className="mt-2.5 rounded-lg p-2.5 text-[10px] font-mono" style={{ background: 'rgba(0,212,170,0.08)', border: '1px solid rgba(0,212,170,0.15)', color: '#00d4aa' }}>
+          <div>Posted!</div>
+          <pre className="whitespace-pre-wrap mt-1">{JSON.stringify(result, null, 2)}</pre>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function VerifyDrawer({ meta }: { meta: DigestData['meta'] }) {
   const [open, setOpen] = useState(false)
   const entryId = meta.moultbook || meta.previous_moultbook
@@ -497,6 +661,22 @@ export function HeartbeatPanel() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<string>('mock')
+  const [replies, setReplies] = useState<MoultbookEntry[]>([])
+  const [repliesError, setRepliesError] = useState<string | null>(null)
+
+  const loadReplies = async (moultId: string) => {
+    try {
+      const res = await fetch(CONTEXT_AGENT_REPLIES(moultId), { cache: 'no-store' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setReplies(data.entries || [])
+      setRepliesError(null)
+    } catch (e) {
+      console.warn('Could not load replies from context agent:', e)
+      setReplies([])
+      setRepliesError('Could not load replies. Context agent may be offline.')
+    }
+  }
 
   const loadDigest = async () => {
     setLoading(true)
@@ -514,6 +694,9 @@ export function HeartbeatPanel() {
       const data = payload.json || payload
       setDigest(data)
       setLastRefresh(source)
+      if (data.meta?.moultbook) {
+        await loadReplies(data.meta.moultbook)
+      }
     } catch (e) {
       console.warn('Could not load digest from context agent or GitHub, using mock data:', e)
       setError('Failed to fetch latest digest. Showing mock data.')
@@ -733,6 +916,10 @@ export function HeartbeatPanel() {
         </div>
 
         <CitationChain meta={digest.meta} />
+
+        <RepliesThread replies={replies} error={repliesError} />
+
+        <ReplyComposer replyTo={digest.meta.moultbook || digest.meta.previous_moultbook || null} />
 
         <VerifyDrawer meta={digest.meta} />
 

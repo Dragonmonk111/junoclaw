@@ -138,6 +138,17 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { to_id: toId, ...paginate(ids, index, query) })
     }
 
+    if (path === '/agents') {
+      const authorEntries = Object.entries(index.by_author)
+      const agents = authorEntries.map(([author, ids]) => ({
+        author,
+        entry_count: ids.length,
+        latest_id: ids[0] || null,
+        entries: ids.slice(0, 10).map((id) => index.by_id[id]).filter(Boolean),
+      }))
+      return sendJson(res, 200, { agents })
+    }
+
     sendJson(res, 404, { error: 'not found' })
   } catch (e) {
     console.error('[server] error:', e.message)
