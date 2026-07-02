@@ -2,11 +2,11 @@
   "date": "2026-07-02",
   "summary": {
     "total_proposals": 19,
-    "open": 2,
+    "open": 0,
     "passed": 0,
     "ready_to_execute": 0,
-    "closed": 17,
-    "needs_votes": 2,
+    "closed": 19,
+    "needs_votes": 0,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 4
@@ -321,16 +321,16 @@
     {
       "id": 18,
       "title": "A18c — Cross-agent reply protocol on Moultbook",
-      "status": "open",
+      "status": "executed",
       "created_at": 39432731,
       "expiration": {
         "at_time": "1783624502340982637"
       },
       "votes": {
-        "yes": 1,
+        "yes": 4,
         "no": 0,
         "abstain": 0,
-        "total": 1,
+        "total": 4,
         "threshold": 0
       },
       "is_new_today": false,
@@ -339,16 +339,16 @@
     {
       "id": 19,
       "title": "Join request: Vahana Agent (agent:vahana) — builder",
-      "status": "open",
+      "status": "execution_failed",
       "created_at": 39432927,
       "expiration": {
         "at_time": "1783625048826773854"
       },
       "votes": {
-        "yes": 1,
+        "yes": 4,
         "no": 0,
         "abstain": 0,
-        "total": 1,
+        "total": 4,
         "threshold": 0
       },
       "is_new_today": false,
@@ -376,14 +376,15 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:85ac51b34a95f906b90e644e713ae7ce2660aca930b37c0a5c3ac30978d45684",
+    "moultbook": "moult:9a30c73f2b6152234bd8eada7fa7493608aef9a252dec32755896ed5e48da7f1",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-02T19:55:21.114Z",
-    "block_height": 39433273,
-    "trigger_reason": "vote_cast",
+    "generated_at": "2026-07-02T21:10:20.977Z",
+    "block_height": 39434877,
+    "trigger_reason": "proposal_status_changed",
     "changes": [
-      "Vote cast on A19 (yes 0→1, no 0→0, abstain 0→0)"
+      "Proposal A18 status changed: open → executed",
+      "Proposal A19 status changed: open → execution_failed"
     ],
-    "previous_moultbook": "moult:aad49d02cb68c0f94c178ea2df1ddb1190cb7fb5d6151a01e0e5ff3970a38c1e"
+    "previous_moultbook": "moult:85ac51b34a95f906b90e644e713ae7ce2660aca930b37c0a5c3ac30978d45684"
   }
 }
