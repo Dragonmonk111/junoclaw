@@ -206,4 +206,21 @@ mod tests {
         let c = ContextAgentClient::new("http://localhost:3000");
         assert_eq!(c.url("/health"), "http://localhost:3000/health");
     }
+
+    /// Live integration test against the local A17 context agent.
+    /// Run with: `cargo test -p junoclaw-runtime live_context_agent -- --ignored`
+    #[tokio::test]
+    #[ignore]
+    async fn live_context_agent() {
+        let client = ContextAgentClient::from_env();
+        let health = client.health().await.expect("context agent should be reachable");
+        assert_eq!(health.status, "ok");
+        assert!(health.entry_count > 0, "should have indexed heartbeat entries");
+
+        let chain = client.chain(None, 10).await.expect("chain query should work");
+        assert!(!chain.chain.is_empty(), "citation chain should not be empty");
+
+        let digest = client.latest_digest().await.expect("digest query should work");
+        assert!(digest.markdown.is_some() || digest.json.is_some(), "digest should have content");
+    }
 }
