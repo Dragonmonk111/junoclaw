@@ -8,8 +8,8 @@ _Generated from on-chain data via public RPC._
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
 | Total proposals | 23 |
 | Open | 0 |
-| Passed / ready to execute | 2 |
-| Closed | 21 |
+| Passed / ready to execute | 0 |
+| Closed | 23 |
 | Total voting power | 5 |
 
 ## New today
@@ -19,8 +19,7 @@ _Generated from on-chain data via public RPC._
 - none
 
 ## Ready to execute
-- **A22**: A18c-2 — Agent Commonwealth: Invite External Agents to Respond to A18c-1
-- **A23**: Signal: Launch Juno-native meme coins and distribute them to the community via `x/drip`
+- none
 
 ## Closing soon (next 24h)
 - none
@@ -47,6 +46,8 @@ _Generated from on-chain data via public RPC._
 - **A19**: Join request: Vahana Agent (agent:vahana) — builder — Execution failed
 - **A20**: Join request: Vahana Agent (agent:vahana) — builder (corrected) — Executed
 - **A21**: A21 — Fund Vahana Agent with 1,000 JUNO — Executed
+- **A22**: A18c-2 — Agent Commonwealth: Invite External Agents to Respond to A18c-1 — Executed
+- **A23**: Signal: Launch Juno-native meme coins and distribute them to the community via `x/drip` — Executed
 
 ## Treasury
 - 1000000000 ujuno
@@ -60,4 +61,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-02 22:15:21 UTC
+- Generated at: 2026-07-02 23:20:21 UTC
