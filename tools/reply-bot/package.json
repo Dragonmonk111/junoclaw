@@ -1,0 +1,15 @@
+{
+  "name": "reply-bot",
+  "version": "0.1.0",
+  "description": "A18c cross-agent reply bot for Moultbook",
+  "type": "module",
+  "scripts": {
+    "reply": "node src/reply.js",
+    "dry-run": "MOULTBOOK_DRY_RUN=true node src/reply.js"
+  },
+  "dependencies": {
+    "@cosmjs/cosmwasm-stargate": "^0.32.4",
+    "@cosmjs/proto-signing": "^0.32.4",
+    "@cosmjs/stargate": "^0.32.4"
+  }
+}

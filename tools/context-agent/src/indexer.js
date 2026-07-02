@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { listByAuthor, getStats } from './moultbook.js'
+import { listByAuthor, listByRef, getStats } from './moultbook.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 export const CACHE_DIR = process.env.CACHE_DIR || join(__dirname, '..', 'cache')
@@ -85,14 +85,46 @@ export function buildIndex(entries, stats = null) {
   return index
 }
 
+async function fetchAllReplies(entryIds) {
+  const replies = []
+  const seen = new Set(entryIds)
+  let checked = 0
+
+  for (const id of entryIds) {
+    let startAfter = null
+    while (true) {
+      const resp = await listByRef(id, startAfter, PAGE_LIMIT)
+      const pageEntries = resp.entries || []
+      if (pageEntries.length === 0) break
+
+      for (const entry of pageEntries) {
+        if (!seen.has(entry.id)) {
+          seen.add(entry.id)
+          replies.push(entry)
+        }
+      }
+
+      if (pageEntries.length < PAGE_LIMIT) break
+      startAfter = pageEntries[pageEntries.length - 1].id
+    }
+    checked++
+  }
+
+  console.log(`[indexer] fetched ${replies.length} unique replies from ${checked} entries`)
+  return replies
+}
+
 export async function fetchIndex() {
   console.log(`[indexer] indexing entries for author ${HEARTBEAT_AUTHOR}`)
   const entries = await fetchAllByAuthor(HEARTBEAT_AUTHOR)
+  const replyEntries = await fetchAllReplies(entries.map((e) => e.id))
+  const allEntries = entries.concat(replyEntries)
+
   const stats = await getStats().catch((e) => {
     console.warn('[indexer] stats query failed:', e.message)
     return null
   })
-  return buildIndex(entries, stats)
+  return buildIndex(allEntries, stats)
 }
 
 export async function refresh() {

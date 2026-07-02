@@ -131,6 +131,13 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, paginate(ids, index, query))
     }
 
+    if (path === '/replies') {
+      const toId = query.to
+      if (!toId) return sendJson(res, 400, { error: 'to query param required' })
+      const ids = index.by_ref[toId] || []
+      return sendJson(res, 200, { to_id: toId, ...paginate(ids, index, query) })
+    }
+
     sendJson(res, 404, { error: 'not found' })
   } catch (e) {
     console.error('[server] error:', e.message)
