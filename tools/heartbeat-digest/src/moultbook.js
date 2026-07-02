@@ -55,17 +55,19 @@ export function buildPostMsg(markdown, previousMoultId = null) {
 // ── Event parsing ────────────────────────────────────────────────────────────
 
 function findMoultId(result) {
-  // CosmJS returns parsed logs by default. Look for the wasm event emitted by
-  // the contract: action=post, id=moult:..., author=...
-  const logs = result.logs || []
-  for (const log of logs) {
-    for (const event of log.events || []) {
-      if (event.type === 'wasm') {
-        const action = event.attributes.find((a) => a.key === 'action')
-        const idAttr = event.attributes.find((a) => a.key === 'id')
-        if (action?.value === 'post' && idAttr?.value?.startsWith('moult:')) {
-          return idAttr.value
-        }
+  // Look for the wasm event emitted by the contract: action=post, id=moult:...
+  // Some chains omit rawLog/logs on success (post SDK 0.47+) and only
+  // populate the flat `events` array on the ExecuteResult, so check both.
+  const eventSources = [
+    ...(result.logs || []).flatMap((log) => log.events || []),
+    ...(result.events || []),
+  ]
+  for (const event of eventSources) {
+    if (event.type === 'wasm') {
+      const action = event.attributes.find((a) => a.key === 'action')
+      const idAttr = event.attributes.find((a) => a.key === 'id')
+      if (action?.value === 'post' && idAttr?.value?.startsWith('moult:')) {
+        return idAttr.value
       }
     }
   }
