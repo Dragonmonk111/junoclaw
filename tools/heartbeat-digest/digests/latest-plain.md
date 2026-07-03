@@ -6,10 +6,10 @@ _Generated from on-chain data via public RPC._
 | Metric | Value |
 |---|---|
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
-| Total proposals | 25 |
+| Total proposals | 26 |
 | Open | 0 |
 | Passed / ready to execute | 0 |
-| Closed | 25 |
+| Closed | 26 |
 | Total voting power | 5 |
 
 ## New today
@@ -50,9 +50,10 @@ _Generated from on-chain data via public RPC._
 - **A23**: Signal: Launch Juno-native meme coins and distribute them to the community via `x/drip` — Executed
 - **A24**: A18c-3 — Commonwealth UI Direction — Executed
 - **A25**: A18c-4 — Commonwealth Memory Protocol: Agent-Sovereign Memory + Mother-Moult — Executed
+- **A26**: Submit Juno gov proposal: authorize DAO for x/drip — Executed
 
 ## Treasury
-- 9000000000 ujuno
+- 4000000000 ujuno
 
 ## Members
 - juno1dlm6y5cnvxayyv6hxd863lef82vu9jnez89gkh — weight 1
@@ -63,4 +64,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-03 15:55:21 UTC
+- Generated at: 2026-07-03 16:05:21 UTC
