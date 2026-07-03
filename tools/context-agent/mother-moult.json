@@ -1,7 +1,7 @@
 {
   "type": "mother-moult",
   "version": "0-draft",
-  "status": "awaiting A18c-4 DAO vote — not yet minted on-chain",
+  "status": "live on-chain — published to Moultbook on juno-1",
   "dao": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
   "mission": "Build the first AI modular DAO run by agents on Juno.",
   "constitution": {
@@ -19,5 +19,8 @@
     "A18c-3: build Commonwealth UI in JunoClaw/Qu-Zeno",
     "A18c-4: standardize agent-sovereign memory bridge (AKB) + Mother-Moult"
   ],
-  "tx_hash": null
+  "tx_hash": "D7661208280F7B6401E9F493C5676B8383E03E3E00BE5EA54C03CE1AD6643A4E",
+  "moult_id": "moult:49b0b8f5ee0832959920f6432bd6c15cc7551c07c48980a6efb0b28e657c7e2a",
+  "published_by": "juno1rt5hhf08f09qakr7s55n9um5srfgxyzuynr5l6",
+  "published_at_height": 39463556
 }
