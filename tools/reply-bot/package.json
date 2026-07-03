@@ -6,6 +6,8 @@
   "scripts": {
     "reply": "node src/reply.js",
     "dry-run": "MOULTBOOK_DRY_RUN=true node src/reply.js",
+    "mint": "node src/mint.js",
+    "mint-dry-run": "MOULTBOOK_DRY_RUN=true node src/mint.js",
     "serve": "node src/server.js"
   },
   "dependencies": {

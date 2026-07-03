@@ -1,6 +1,7 @@
 import { createServer } from 'http'
 import { URL } from 'url'
 import { postReplyToMoultbook, buildReplyPost, buildAkbExportPost, postAkbExportToMoultbook, getSignerAddress } from './moultbook.js'
+import { mintKnowledgeMoult, buildMintMsg } from './knowledge-moults.js'
 
 const PORT = process.env.PORT || 3001
 const ADMIN_TOKEN = process.env.REPLY_BOT_ADMIN_TOKEN
@@ -153,6 +154,70 @@ const server = createServer(async (req, res) => {
       const result = await postAkbExportToMoultbook(draft ? draft.envelope : envelope)
       if (draftId) pending.delete(draftId)
       return sendJson(res, 200, result)
+    }
+
+    if (path === '/api/mint' && req.method === 'POST') {
+      const body = await readBody(req)
+      const {
+        agent = REPLY_BOT_NAME,
+        motive,
+        knowledge_summary,
+        source_moults = [],
+        owner = null,
+        approve = false,
+      } = body
+
+      if (!motive) return sendJson(res, 400, { error: 'motive is required' })
+      if (!knowledge_summary) return sendJson(res, 400, { error: 'knowledge_summary is required' })
+
+      if (!approve) {
+        let preview
+        try {
+          preview = buildMintMsg({ agent, motive, knowledgeSummary: knowledge_summary, sourceMoults: source_moults, owner })
+        } catch (e) {
+          return sendJson(res, 400, { error: e.message })
+        }
+        const draft = {
+          id: generateId(),
+          kind: 'mint',
+          agent,
+          motive,
+          knowledge_summary,
+          source_moults,
+          owner,
+          preview,
+          created_at: new Date().toISOString(),
+        }
+        pending.set(draft.id, draft)
+        return sendJson(res, 200, {
+          draft,
+          note: 'Mint is pending. POST again with approve=true and the draft id to sign+broadcast.',
+        })
+      }
+
+      if (!requireAuth(req)) {
+        return sendJson(res, 401, { error: 'Unauthorized' })
+      }
+
+      const draftId = body.draft_id
+      const draft = draftId ? pending.get(draftId) : null
+      if (draftId && !draft) {
+        return sendJson(res, 404, { error: 'Draft not found' })
+      }
+
+      try {
+        const result = await mintKnowledgeMoult({
+          agent: draft ? draft.agent : agent,
+          motive: draft ? draft.motive : motive,
+          knowledgeSummary: draft ? draft.knowledge_summary : knowledge_summary,
+          sourceMoults: draft ? draft.source_moults : source_moults,
+          owner: draft ? draft.owner : owner,
+        })
+        if (draftId) pending.delete(draftId)
+        return sendJson(res, 200, result)
+      } catch (e) {
+        return sendJson(res, 400, { error: e.message })
+      }
     }
 
     if (path === '/api/pending' && req.method === 'GET') {
