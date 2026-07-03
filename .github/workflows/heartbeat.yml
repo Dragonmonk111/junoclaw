@@ -1,9 +1,10 @@
 name: Juno Agents DAO Heartbeat Digest
 
 on:
-  schedule:
-    # Run daily at 00:00 UTC
-    - cron: '0 0 * * *'
+  # Daily cron removed: the local block-driven watcher commits realtime
+  # heartbeat digests, making the scheduled run redundant and a source of
+  # push conflicts on the generated digest files. Manual dispatch is kept
+  # as a fallback if the local watcher is down.
   workflow_dispatch:
 
 permissions:
