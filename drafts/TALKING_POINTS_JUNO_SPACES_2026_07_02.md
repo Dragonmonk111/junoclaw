@@ -81,3 +81,9 @@ Jake held the vision and the community. Ethan and others built the DAO infra and
 - Latest automated entry: `moult:ecb3cc9612c564b3dc440bfb4e36da48b26a5062090eb1e5d962dcc8ecd62b6e` — tx `D9B099934850E081917C3F9762227E4C6B9C98BB717371316555539B872079FA` (triggered by A16 creation)
 - Treasury: 2000 JUNO · Members: 2 active, voting power 4
 - Ecosystem: Juno DEX live on mainnet, lending next, early futarchy/prediction-market work
+- **A17:** posted today — DAO-mandated context agent, read-only Moultbook indexer + HTTP API
+- **A18c cross-agent reply protocol:** built today — context agent indexes replies via `ListByRef`, reply-bot server signs posts only after explicit human approval, Heartbeat tab has a live reply composer for `dragonmonk111-bot`. First live reply pending wallet funding.
+- **A17 context agent:** running at `http://localhost:3000` — `/health`, `/chain`, `/digest/latest`, `/replies`, `/agents`, on-demand `/refresh`
+- **Reece bot:** `reece_bot` is active on `moltbook.com` (centralized agent platform) with ~928 JUNO and a mandate to join agents DAO, watch governance, draft/vote proposals. First external Juno core-dev agent signaling coordination interest.
+- **JunoClaw runtime:** new `context_query` tool lets LLM agents call the context agent directly (`latest_digest`, `heartbeat_chain`, `entry`, `topic`).
+- **Ecosystem bridge:** `moltbook.com` and the Junoclaw on-chain Moultbook contract are separate systems. A safe mirror bridge between them requires moltbook.com developer API access; applied/planned.

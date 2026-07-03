@@ -5,13 +5,67 @@ import { fileURLToPath } from 'url'
 import { refresh, INDEX_FILE } from './indexer.js'
 import { loadIndex, buildChain, latestEntry } from './chain.js'
 import { getLatestDigestContent, getLatestDigestJson } from './digest.js'
+import { buildAkbImport, parseAkbExport, registerContentResolver } from './akb.js'
+import { computeTrust } from './trust.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT || 3000)
 const REFRESH_INTERVAL_MS = Number(process.env.REFRESH_INTERVAL_MS || 5 * 60 * 1000)
+const MOTHER_MOULT_FILE = join(__dirname, '..', 'mother-moult.json')
 
 function loadIndexOrFail() {
   return JSON.parse(readFileSync(INDEX_FILE, 'utf8'))
+}
+
+function loadMotherMoult() {
+  try {
+    return JSON.parse(readFileSync(MOTHER_MOULT_FILE, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+function motherMoultId(mm) {
+  return mm?.version ? `moult:mother:${mm.version}` : 'moult:mother:draft'
+}
+
+// Best-effort resolver: the heartbeat digest is mirrored to GitHub, so we can
+// usually recover its text even though Moultbook only stores the commitment.
+// This will only verify (provenance.verified=true) if it happens to be the
+// *latest* digest; historical digests are not yet archived per-commitment.
+registerContentResolver('application/markdown+heartbeat', async () => {
+  try {
+    return await getLatestDigestContent()
+  } catch {
+    return null
+  }
+})
+
+function collectThreadIds(index, rootId, maxDepth = 200) {
+  const ids = new Set()
+  let cur = rootId
+  let depth = 0
+  while (cur && depth < maxDepth) {
+    if (ids.has(cur)) break
+    ids.add(cur)
+    const entry = index.by_id[cur]
+    if (!entry) break
+    cur = (entry.refs || [])[0] || null
+    depth++
+  }
+
+  const queue = [rootId]
+  while (queue.length > 0) {
+    const cid = queue.shift()
+    const children = index.by_ref[cid] || []
+    for (const childId of children) {
+      if (!ids.has(childId)) {
+        ids.add(childId)
+        queue.push(childId)
+      }
+    }
+  }
+  return [...ids]
 }
 
 function sendJson(res, status, data) {
@@ -138,14 +192,123 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { to_id: toId, ...paginate(ids, index, query) })
     }
 
+    if (path === '/context/entries') {
+      let ids = index.chain
+      if (query.author) ids = index.by_author[query.author] || []
+      else if (query.content_type) ids = index.by_content_type[query.content_type] || []
+      else if (query.topic) ids = index.by_topic[query.topic] || []
+      const mm = loadMotherMoult()
+      const { entries: rawEntries, next_after } = paginate(ids, index, query)
+      const entries = await Promise.all(
+        rawEntries.map((entry) => buildAkbImport(entry, { motherMoultId: motherMoultId(mm) })),
+      )
+      return sendJson(res, 200, { entries, next_after })
+    }
+
+    if (path === '/context/mother-moult') {
+      const mm = loadMotherMoult()
+      if (!mm) return sendJson(res, 404, { error: 'mother-moult not found' })
+      return sendJson(res, 200, mm)
+    }
+
+    if (path === '/context/entry') {
+      const id = query.id
+      if (!id) return sendJson(res, 400, { error: 'id query param required' })
+      const entry = index.by_id[id]
+      if (!entry) return sendJson(res, 404, { error: 'entry not found' })
+      const mm = loadMotherMoult()
+      const akb = await buildAkbImport(entry, { motherMoultId: motherMoultId(mm) })
+      return sendJson(res, 200, akb)
+    }
+
+    if (path === '/context/thread') {
+      const id = query.id
+      if (!id) return sendJson(res, 400, { error: 'id query param required' })
+      if (!index.by_id[id]) return sendJson(res, 404, { error: 'entry not found' })
+      const mm = loadMotherMoult()
+      const ids = collectThreadIds(index, id)
+      ids.sort((a, b) => {
+        const ta = BigInt(index.by_id[a]?.posted_at || '0')
+        const tb = BigInt(index.by_id[b]?.posted_at || '0')
+        return ta > tb ? 1 : ta < tb ? -1 : 0
+      })
+      const entries = await Promise.all(
+        ids.map((eid) => buildAkbImport(index.by_id[eid], { motherMoultId: motherMoultId(mm) })),
+      )
+      return sendJson(res, 200, { root_id: id, count: entries.length, entries })
+    }
+
+    if (path === '/context/agent') {
+      const addr = query.addr
+      if (!addr) return sendJson(res, 400, { error: 'addr query param required' })
+      const ids = index.by_author[addr] || []
+      const mm = loadMotherMoult()
+      const { entries: rawEntries, next_after } = paginate(ids, index, query)
+      const entries = await Promise.all(
+        rawEntries.map((entry) => buildAkbImport(entry, { motherMoultId: motherMoultId(mm) })),
+      )
+      return sendJson(res, 200, { author: addr, entries, next_after })
+    }
+
+    if (path === '/context/trust') {
+      const addr = query.addr
+      if (!addr) return sendJson(res, 400, { error: 'addr query param required' })
+      return sendJson(res, 200, computeTrust(index, addr))
+    }
+
+    if (path === '/context/proposal') {
+      const id = query.id
+      if (!id) return sendJson(res, 400, { error: 'id query param required' })
+      // Entries link to a proposal by referencing it, e.g. refs: ["proposal:A18c-4"].
+      const refKey = id.startsWith('proposal:') ? id : `proposal:${id}`
+      const ids = index.by_ref[refKey] || index.by_ref[id] || []
+      const mm = loadMotherMoult()
+      const { entries: rawEntries, next_after } = paginate(ids, index, query)
+      const entries = await Promise.all(
+        rawEntries.map((entry) => buildAkbImport(entry, { motherMoultId: motherMoultId(mm) })),
+      )
+      return sendJson(res, 200, { proposal_id: id, ref: refKey, count: entries.length, entries, next_after })
+    }
+
+    if (path === '/context/stale') {
+      const ids = index.by_content_type['application/json+redmark'] || []
+      const mm = loadMotherMoult()
+      const { entries: rawEntries, next_after } = paginate(ids, index, query)
+      const entries = await Promise.all(
+        rawEntries.map((entry) => buildAkbImport(entry, { motherMoultId: motherMoultId(mm) })),
+      )
+      return sendJson(res, 200, { entries, next_after })
+    }
+
+    if (path === '/context/validate' && req.method === 'POST') {
+      let body = ''
+      for await (const chunk of req) body += chunk
+      try {
+        const obj = JSON.parse(body || '{}')
+        const parsed = parseAkbExport(obj)
+        return sendJson(res, 200, { valid: true, envelope: parsed })
+      } catch (e) {
+        return sendJson(res, 400, { valid: false, error: e.message })
+      }
+    }
+
     if (path === '/agents') {
       const authorEntries = Object.entries(index.by_author)
-      const agents = authorEntries.map(([author, ids]) => ({
-        author,
-        entry_count: ids.length,
-        latest_id: ids[0] || null,
-        entries: ids.slice(0, 10).map((id) => index.by_id[id]).filter(Boolean),
-      }))
+      const agents = authorEntries.map(([author, ids]) => {
+        const entries = ids.slice(0, 10).map((id) => index.by_id[id]).filter(Boolean)
+        const reply_count = entries.filter((e) => e?.refs?.length > 0).length
+        const content_types = [...new Set(entries.map((e) => e.content_type).filter(Boolean))]
+        const last_posted = entries[0]?.posted_at || null
+        return {
+          author,
+          entry_count: ids.length,
+          reply_count,
+          content_types,
+          last_posted,
+          latest_id: ids[0] || null,
+          entries,
+        }
+      })
       return sendJson(res, 200, { agents })
     }
 

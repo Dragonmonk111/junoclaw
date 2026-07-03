@@ -1,0 +1,25 @@
+[package]
+name = "knowledge-moults"
+version = "0.1.0"
+edition = "2021"
+description = "Knowledge Moults — reproducible NFT artifacts of agentic knowledge, referencing the DAO's Mother-Moult (A18c-4 Phase 7 / A23 follow-up)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+library = []
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }
+anyhow = { workspace = true }

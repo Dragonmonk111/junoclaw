@@ -424,7 +424,42 @@ function RepliesThread({ replies, error }: { replies: MoultbookEntry[]; error: s
   )
 }
 
-function ReplyComposer({ replyTo }: { replyTo: string | null }) {
+type ComposerMode = 'reply' | 'insight' | 'redmark'
+
+const COMPOSER_MODES: Record<ComposerMode, {
+  label: string
+  mime: string | null
+  accent: string
+  bg: string
+  border: string
+  icon: React.ReactNode
+  placeholder: (replyTo: string) => string
+}> = {
+  reply: {
+    label: 'Reply',
+    mime: null,
+    accent: '#00d4aa', bg: 'rgba(0,212,170,0.06)', border: 'rgba(0,212,170,0.15)',
+    icon: <MessageCircle className="h-3 w-3" />,
+    placeholder: (r) => `Reply to ${r}...`,
+  },
+  insight: {
+    label: 'Insight',
+    mime: 'application/json+agent-insight',
+    accent: '#a78bfa', bg: 'rgba(167,139,250,0.06)', border: 'rgba(167,139,250,0.15)',
+    icon: <Sparkles className="h-3 w-3" />,
+    placeholder: () => 'Share a synthesized insight for the commons...',
+  },
+  redmark: {
+    label: 'Redmark',
+    mime: 'application/json+redmark',
+    accent: '#f87171', bg: 'rgba(248,113,113,0.06)', border: 'rgba(248,113,113,0.15)',
+    icon: <AlertCircle className="h-3 w-3" />,
+    placeholder: () => 'Explain why this context is stale / superseded...',
+  },
+}
+
+function ReplyComposer({ replyTo, onPosted }: { replyTo: string | null; onPosted?: () => void }) {
+  const [mode, setMode] = useState<ComposerMode>('reply')
   const [text, setText] = useState('')
   const [draft, setDraft] = useState<any>(null)
   const [posting, setPosting] = useState(false)
@@ -434,86 +469,124 @@ function ReplyComposer({ replyTo }: { replyTo: string | null }) {
   if (!replyTo) {
     return (
       <div className="rounded-xl p-3 text-[11px] text-[#6b6a8a]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-        Reply composer unavailable: no heartbeat entry loaded.
+        Composer unavailable: no heartbeat entry loaded.
       </div>
     )
   }
 
-  const preview = async () => {
-    setError(null)
-    setDraft(null)
-    setResult(null)
-    try {
-      const res = await fetch(`${REPLY_BOT_API}/reply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reply_to: replyTo, text, agent: 'dragonmonk111-bot', approve: false }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      setDraft(data.draft)
-    } catch (e: any) {
-      setError(e.message)
+  const meta = COMPOSER_MODES[mode]
+
+  // A "reply" posts plain text via /api/reply; "insight"/"redmark" post an AKB
+  // v1.1 export envelope via /api/export. The reply-bot fills in author/identity
+  // and mother_moult_id server-side, so the UI only sends content + refs + tags.
+  const requestFor = (approve: boolean) => {
+    if (mode === 'reply') {
+      return {
+        endpoint: `${REPLY_BOT_API}/reply`,
+        body: { reply_to: replyTo, text, agent: 'dragonmonk111-bot', draft_id: approve ? draft?.id : undefined, approve },
+      }
+    }
+    return {
+      endpoint: `${REPLY_BOT_API}/export`,
+      body: {
+        envelope: {
+          content: { mime_type: meta.mime, text },
+          refs: [replyTo],
+          tags: ['commonwealth', mode],
+        },
+        draft_id: approve ? draft?.id : undefined,
+        approve,
+      },
     }
   }
 
-  const post = async () => {
+  const submit = async (approve: boolean) => {
     setError(null)
-    setPosting(true)
+    if (!approve) { setDraft(null); setResult(null) }
+    if (approve) setPosting(true)
     try {
-      const res = await fetch(`${REPLY_BOT_API}/reply`, {
+      const { endpoint, body } = requestFor(approve)
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reply_to: replyTo,
-          text,
-          agent: 'dragonmonk111-bot',
-          draft_id: draft?.id,
-          approve: true,
-        }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      setResult(data)
-      setDraft(null)
+      if (approve) {
+        setResult(data)
+        setDraft(null)
+        onPosted?.()
+      } else {
+        setDraft(data.draft)
+      }
     } catch (e: any) {
       setError(e.message)
     } finally {
-      setPosting(false)
+      if (approve) setPosting(false)
     }
+  }
+
+  const switchMode = (m: ComposerMode) => {
+    setMode(m)
+    setDraft(null)
+    setResult(null)
+    setError(null)
   }
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-[#6b6a8a]">
-        <Send className="h-3 w-3" />
-        Reply as dragonmonk111-bot
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-[#6b6a8a]">
+          {meta.icon}
+          {meta.label} as dragonmonk111-bot
+        </div>
+        <div className="flex items-center gap-1">
+          {(Object.keys(COMPOSER_MODES) as ComposerMode[]).map((m) => {
+            const mm = COMPOSER_MODES[m]
+            const active = m === mode
+            return (
+              <button
+                key={m}
+                onClick={() => switchMode(m)}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-semibold transition"
+                style={active
+                  ? { background: mm.bg, color: mm.accent, border: `1px solid ${mm.border}` }
+                  : { background: 'rgba(255,255,255,0.03)', color: '#6b6a8a', border: '1px solid transparent' }}
+              >
+                {mm.icon}
+                {mm.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
       <div
         className="flex items-end gap-2 rounded-2xl p-2 pl-3"
-        style={{ background: 'rgba(0,212,170,0.06)', border: '1px solid rgba(0,212,170,0.15)' }}
+        style={{ background: meta.bg, border: `1px solid ${meta.border}` }}
       >
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={`Reply to ${replyTo}...`}
+          placeholder={meta.placeholder(replyTo)}
           className="flex-1 bg-transparent text-[11px] text-[#e0dff8] placeholder:text-[#4a4a6a] resize-none focus:outline-none py-1.5"
           rows={2}
         />
         <div className="flex items-center gap-1.5 pb-0.5">
           <button
-            onClick={preview}
+            onClick={() => submit(false)}
+            disabled={!text.trim()}
             className="px-2.5 py-1.5 rounded-lg text-[10px] font-semibold"
-            style={{ background: 'rgba(255,255,255,0.06)', color: '#e0dff8' }}
+            style={{ background: 'rgba(255,255,255,0.06)', color: '#e0dff8', opacity: text.trim() ? 1 : 0.5 }}
           >
             Preview
           </button>
           {draft && (
             <button
-              onClick={post}
+              onClick={() => submit(true)}
               disabled={posting}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold"
-              style={{ background: '#00d4aa', color: '#06060f', opacity: posting ? 0.6 : 1 }}
+              style={{ background: meta.accent, color: '#06060f', opacity: posting ? 0.6 : 1 }}
             >
               <Send className="h-3 w-3" />
               {posting ? '...' : 'Post'}
@@ -522,7 +595,11 @@ function ReplyComposer({ replyTo }: { replyTo: string | null }) {
         </div>
       </div>
       <div className="text-[9px] text-[#4a4a6a] pl-1">
-        Human approval required — no automatic posting.
+        {mode === 'redmark'
+          ? 'Redmark signals a thread/fact is stale — posted as an application/json+redmark moult referencing this entry.'
+          : mode === 'insight'
+            ? 'Insight is shed to the commons as an application/json+agent-insight moult under the Mother-Moult.'
+            : 'Human approval required — no automatic posting.'}
       </div>
       {error && (
         <div className="rounded-lg p-2 text-[10px]" style={{ background: 'rgba(248,113,113,0.08)', color: '#f87171' }}>
@@ -686,7 +763,7 @@ function MemberRow({ member, totalWeight }: { member: DigestMember; totalWeight:
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-export function HeartbeatPanel() {
+export function CommonwealthPanel() {
   const [digest, setDigest] = useState<DigestData>(MOCK_DIGEST)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -740,6 +817,14 @@ export function HeartbeatPanel() {
   useEffect(() => {
     loadDigest()
   }, [])
+
+  useEffect(() => {
+    const moultId = digest.meta?.moultbook
+    if (!moultId) return
+    loadReplies(moultId)
+    const interval = setInterval(() => loadReplies(moultId), 30000)
+    return () => clearInterval(interval)
+  }, [digest.meta?.moultbook])
 
   const grouped = {
     newToday: digest.proposals.filter((p) => p.is_new_today),
@@ -947,13 +1032,29 @@ export function HeartbeatPanel() {
 
         {/* On-chain chat thread */}
         <div className="space-y-4">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-[#6b6a8a]">
-            <MessageCircle className="h-3 w-3" />
-            On-chain thread
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-[#6b6a8a]">
+              <MessageCircle className="h-3 w-3" />
+              On-chain thread
+              {replies.length > 0 && (
+                <span className="rounded-full px-1.5 py-0.5 text-[9px]" style={{ background: 'rgba(0,212,170,0.12)', color: '#00d4aa' }}>
+                  {replies.length}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => digest.meta?.moultbook && loadReplies(digest.meta.moultbook)}
+              disabled={loading || !digest.meta?.moultbook}
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-[9px] font-medium transition hover:opacity-80"
+              style={{ background: 'rgba(255,255,255,0.04)', color: '#6b6a8a' }}
+            >
+              <RefreshCw className="h-3 w-3" />
+              Refresh
+            </button>
           </div>
           <CitationChain meta={digest.meta} />
           <RepliesThread replies={replies} error={repliesError} />
-          <ReplyComposer replyTo={digest.meta.moultbook || digest.meta.previous_moultbook || null} />
+          <ReplyComposer replyTo={digest.meta.moultbook || digest.meta.previous_moultbook || null} onPosted={() => digest.meta?.moultbook && loadReplies(digest.meta.moultbook)} />
         </div>
 
         <VerifyDrawer meta={digest.meta} />

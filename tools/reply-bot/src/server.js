@@ -1,9 +1,11 @@
 import { createServer } from 'http'
 import { URL } from 'url'
-import { postReplyToMoultbook, buildReplyPost } from './moultbook.js'
+import { postReplyToMoultbook, buildReplyPost, buildAkbExportPost, postAkbExportToMoultbook, getSignerAddress } from './moultbook.js'
 
 const PORT = process.env.PORT || 3001
 const ADMIN_TOKEN = process.env.REPLY_BOT_ADMIN_TOKEN
+const REPLY_BOT_NAME = process.env.REPLY_BOT_NAME || 'dragonmonk111-bot'
+const DEFAULT_MOTHER_MOULT_ID = process.env.MOTHER_MOULT_ID || 'moult:mother:draft'
 
 const pending = new Map()
 
@@ -45,6 +47,11 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { status: 'ok', pending: pending.size })
     }
 
+    if (path === '/api/identity' && req.method === 'GET') {
+      const wallet = await getSignerAddress()
+      return sendJson(res, 200, { wallet, alias: REPLY_BOT_NAME, type: 'agent' })
+    }
+
     if (path === '/api/reply' && req.method === 'POST') {
       const body = await readBody(req)
       const { reply_to, text, agent = 'dragonmonk111-bot', approve = false } = body
@@ -83,6 +90,67 @@ const server = createServer(async (req, res) => {
         draft ? draft.reply_to : reply_to,
         draft ? draft.agent : agent,
       )
+      if (draftId) pending.delete(draftId)
+      return sendJson(res, 200, result)
+    }
+
+    if (path === '/api/export' && req.method === 'POST') {
+      const body = await readBody(req)
+      const { approve = false } = body
+
+      if (!body.envelope) return sendJson(res, 400, { error: 'envelope is required' })
+
+      // Enrich a partial envelope from the UI with identity + scaffolding so the
+      // client only supplies content/refs/tags/memory_ops. direction and author
+      // are forced (author.wallet is the bot's signer and is re-stamped again at
+      // broadcast), mother_moult_id/akb_version default if the client omits them.
+      const signer = await getSignerAddress()
+      const clientEnv = body.envelope
+      const envelope = {
+        akb_version: '1.1',
+        mother_moult_id: DEFAULT_MOTHER_MOULT_ID,
+        ...clientEnv,
+        direction: 'export',
+        author: {
+          wallet: clientEnv.author?.wallet || signer || 'juno1unknown',
+          alias: clientEnv.author?.alias || REPLY_BOT_NAME,
+          type: clientEnv.author?.type || 'agent',
+        },
+      }
+
+      let preview
+      try {
+        preview = buildAkbExportPost(envelope)
+      } catch (e) {
+        return sendJson(res, 400, { error: `Invalid AKB export envelope: ${e.message}` })
+      }
+
+      if (!approve) {
+        const draft = {
+          id: generateId(),
+          kind: 'akb-export',
+          envelope,
+          preview,
+          created_at: new Date().toISOString(),
+        }
+        pending.set(draft.id, draft)
+        return sendJson(res, 200, {
+          draft,
+          note: 'Export is pending. POST again with approve=true and the draft id to sign+broadcast.',
+        })
+      }
+
+      if (!requireAuth(req)) {
+        return sendJson(res, 401, { error: 'Unauthorized' })
+      }
+
+      const draftId = body.draft_id
+      const draft = draftId ? pending.get(draftId) : null
+      if (draftId && !draft) {
+        return sendJson(res, 404, { error: 'Draft not found' })
+      }
+
+      const result = await postAkbExportToMoultbook(draft ? draft.envelope : envelope)
       if (draftId) pending.delete(draftId)
       return sendJson(res, 200, result)
     }

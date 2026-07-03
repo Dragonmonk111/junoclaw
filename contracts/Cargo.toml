@@ -11,6 +11,7 @@ members = [
     "builder-grant",
     "zk-verifier",
     "moultbook-v0",
+    "knowledge-moults",
     "ibc-task-host",
     "jclaw-credential",
 ]

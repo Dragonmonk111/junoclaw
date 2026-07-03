@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { join, dirname } from 'path'
-import { fileURLToPath } from 'url'
-import { listByAuthor, listByRef, getStats } from './moultbook.js'
+import { fileURLToPath, pathToFileURL } from 'url'
+import { listByAuthor, listByRef, getStats, getDisclosure } from './moultbook.js'
+import { buildVoteIndex } from './dao.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 export const CACHE_DIR = process.env.CACHE_DIR || join(__dirname, '..', 'cache')
@@ -79,18 +80,63 @@ export function buildIndex(entries, stats = null) {
     by_content_type: byContentType,
     by_ref: byRef,
     chain,
+    // Augmented asynchronously by fetchIndex (best-effort); empty here so the
+    // shape is stable for direct buildIndex() callers (tests, etc.).
+    disclosures: {},
+    by_disclosed_primary: {},
+    by_voter: {},
   }
 
   if (stats) index.meta.moultbook_stats = stats
   return index
 }
 
+// Best-effort: for each indexed anonymous (PublishAnon / ZkProof-attested)
+// entry, ask the contract whether its moult-key was voluntarily disclosed to a
+// primary identity, and build the reverse index primary_wallet -> [entry_id].
+// The on-chain DISCLOSURES map is keyed by entry_id only, so this is the reverse
+// lookup the trust layer needs. Only covers entries already in the index.
+async function augmentDisclosures(index, entries) {
+  const disclosures = {}
+  const byPrimary = {}
+  const anon = entries.filter((e) => e.attestation_ref?.zk_proof)
+  for (const e of anon) {
+    try {
+      const d = await getDisclosure(e.id)
+      const primary = d?.primary_key
+      if (primary) {
+        disclosures[e.id] = primary
+        ;(byPrimary[primary] ||= []).push(e.id)
+      }
+    } catch {
+      // best-effort; a failed disclosure lookup must not break indexing
+    }
+  }
+  index.disclosures = disclosures
+  index.by_disclosed_primary = byPrimary
+  console.log(`[indexer] disclosures: ${Object.keys(disclosures).length} of ${anon.length} anon entries`)
+}
+
+async function augmentVotes(index) {
+  try {
+    const { by_voter, proposal_count } = await buildVoteIndex()
+    index.by_voter = by_voter
+    index.meta.dao_proposal_count = proposal_count
+    console.log(`[indexer] votes: ${Object.keys(by_voter).length} voters across ${proposal_count} proposals`)
+  } catch (e) {
+    console.warn('[indexer] vote index failed:', e.message)
+    index.by_voter = {}
+  }
+}
+
 async function fetchAllReplies(entryIds) {
   const replies = []
   const seen = new Set(entryIds)
+  const queue = [...entryIds]
   let checked = 0
 
-  for (const id of entryIds) {
+  while (queue.length > 0) {
+    const id = queue.shift()
     let startAfter = null
     while (true) {
       const resp = await listByRef(id, startAfter, PAGE_LIMIT)
@@ -101,6 +147,7 @@ async function fetchAllReplies(entryIds) {
         if (!seen.has(entry.id)) {
           seen.add(entry.id)
           replies.push(entry)
+          queue.push(entry.id)
         }
       }
 
@@ -124,7 +171,10 @@ export async function fetchIndex() {
     console.warn('[indexer] stats query failed:', e.message)
     return null
   })
-  return buildIndex(allEntries, stats)
+  const index = buildIndex(allEntries, stats)
+  await augmentDisclosures(index, allEntries)
+  await augmentVotes(index)
+  return index
 }
 
 export async function refresh() {
@@ -139,7 +189,7 @@ async function main() {
   await refresh()
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((e) => {
     console.error('[indexer] failed:', e)
     process.exit(1)

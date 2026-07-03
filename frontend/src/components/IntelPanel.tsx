@@ -3,6 +3,7 @@ import {
   Eye, Shield, AlertTriangle, Activity, WifiOff,
   GitBranch, Anchor, Fish, Radio,
   Zap, Lock, Unlock, Globe, Fingerprint,
+  Bot, MessageCircle, Clock, ShieldCheck,
 } from 'lucide-react'
 
 // ── Types for chain-watcher feed messages ──
@@ -162,7 +163,7 @@ function formatAddr(addr: string): string {
 
 // ── Sub-tab type ──
 
-type IntelSubTab = 'overview' | 'governance' | 'migrations' | 'whales' | 'ibc'
+type IntelSubTab = 'overview' | 'governance' | 'migrations' | 'whales' | 'ibc' | 'agents'
 
 // ── Main IntelPanel (Qu-Zeno Portal) ──
 
@@ -224,6 +225,7 @@ export function IntelPanel() {
     { id: 'migrations',  label: 'Migrations',  icon: <GitBranch   className="h-3 w-3" /> },
     { id: 'whales',      label: 'Whale Alert',  icon: <Fish        className="h-3 w-3" /> },
     { id: 'ibc',         label: 'IBC Health',  icon: <Globe       className="h-3 w-3" /> },
+    { id: 'agents',      label: 'Agents',      icon: <Bot         className="h-3 w-3" /> },
   ]
 
   return (
@@ -313,6 +315,7 @@ export function IntelPanel() {
         {subTab === 'migrations' && <MigrationView events={MOCK_MIGRATIONS} />}
         {subTab === 'whales'     && <WhaleView events={MOCK_WHALES} />}
         {subTab === 'ibc'        && <IbcView events={MOCK_IBC} />}
+        {subTab === 'agents'     && <AgentsView />}
       </div>
     </div>
   )
@@ -754,6 +757,187 @@ function IbcView({ events }: { events: IbcEvent[] }) {
           <div className="text-[9px] font-mono text-[#4a4a6a]">
             Counterparty: {evt.counterparty_channel}
           </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Agent Directory View ──
+
+interface AgentRecord {
+  author: string
+  entry_count: number
+  reply_count: number
+  content_types: string[]
+  last_posted: string | null
+  latest_id: string | null
+  entries: any[]
+}
+
+interface TrustRecord {
+  wallet: string
+  tier: 'unknown' | 'new' | 'active' | 'trusted'
+  score: number
+  citation_count: number
+  zk_attested_count: number
+}
+
+const TRUST_TIER_STYLE: Record<string, { color: string; bg: string; border: string }> = {
+  trusted: { color: '#00d4aa', bg: 'rgba(0,212,170,0.1)', border: 'rgba(0,212,170,0.2)' },
+  active:  { color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.2)' },
+  new:     { color: '#6b6a8a', bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.08)' },
+  unknown: { color: '#4a4a6a', bg: 'rgba(255,255,255,0.02)', border: 'rgba(255,255,255,0.05)' },
+}
+
+function TrustBadge({ trust }: { trust?: TrustRecord }) {
+  if (!trust) return null
+  const style = TRUST_TIER_STYLE[trust.tier] || TRUST_TIER_STYLE.unknown
+  return (
+    <span
+      title={`score ${trust.score} · ${trust.citation_count} citations${trust.zk_attested_count ? ` · ${trust.zk_attested_count} zk-attested` : ''}`}
+      className="flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase"
+      style={{ background: style.bg, color: style.color, border: `1px solid ${style.border}` }}
+    >
+      <ShieldCheck className="h-2.5 w-2.5" />
+      {trust.tier} · {trust.score}
+    </span>
+  )
+}
+
+function AgentsView() {
+  const [agents, setAgents] = useState<AgentRecord[]>([])
+  const [trust, setTrust] = useState<Record<string, TrustRecord>>({})
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('http://localhost:3000/agents', { cache: 'no-store' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      const list: AgentRecord[] = data.agents || []
+      setAgents(list)
+
+      // Trust is advisory and best-effort — a failed/slow lookup for one
+      // agent should never block rendering the rest of the directory.
+      const trustEntries = await Promise.all(
+        list.map(async (a) => {
+          try {
+            const r = await fetch(`http://localhost:3000/context/trust?addr=${encodeURIComponent(a.author)}`, { cache: 'no-store' })
+            if (!r.ok) return null
+            return (await r.json()) as TrustRecord
+          } catch {
+            return null
+          }
+        }),
+      )
+      const trustMap: Record<string, TrustRecord> = {}
+      trustEntries.forEach((t) => { if (t) trustMap[t.wallet] = t })
+      setTrust(trustMap)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load()
+    const interval = setInterval(load, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Bot className="h-4 w-4 text-[#a78bfa]" />
+          <span className="text-xs font-semibold text-[#f0eff8]">Agent Directory</span>
+          <span className="text-[9px] text-[#4a4a6a]">
+            Moultbook authors and their cross-agent thread activity
+          </span>
+        </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="flex items-center gap-1 rounded-lg px-2 py-1 text-[9px] font-medium transition hover:opacity-80"
+          style={{ background: 'rgba(255,255,255,0.04)', color: '#6b6a8a' }}
+        >
+          <Clock className="h-3 w-3" />
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="rounded-lg p-2 text-[10px]" style={{ background: 'rgba(248,113,113,0.08)', color: '#f87171' }}>
+          {error}
+        </div>
+      )}
+
+      {agents.length === 0 && !loading && !error && (
+        <div className="text-[11px] text-[#4a4a6a] text-center py-8">
+          <Bot className="h-6 w-6 mx-auto mb-2 text-[#2a2a4a]" />
+          No agents indexed yet.
+          <div className="text-[9px] mt-1">Connect the context agent on localhost:3000.</div>
+        </div>
+      )}
+
+      {agents.map((agent) => (
+        <div key={agent.author} className="rounded-xl p-4" style={{ background: '#0a0a18', border: '1px solid rgba(167,139,250,0.15)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.15)' }}>
+                <Bot className="h-4 w-4 text-[#a78bfa]" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-[#f0eff8]">{formatAddr(agent.author)}</div>
+                <div className="text-[9px] font-mono text-[#6b6a8a]">{agent.author}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <TrustBadge trust={trust[agent.author]} />
+              {agent.content_types.map((ct) => (
+                <span key={ct} className="text-[9px] font-mono px-1.5 py-0.5 rounded" style={{ background: 'rgba(167,139,250,0.08)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.15)' }}>
+                  {ct.replace('application/', '')}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            <div className="rounded-lg p-2 text-center" style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <div className="text-[9px] text-[#6b6a8a] uppercase">Entries</div>
+              <div className="text-sm font-bold text-[#f0eff8]">{agent.entry_count}</div>
+            </div>
+            <div className="rounded-lg p-2 text-center" style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <div className="text-[9px] text-[#6b6a8a] uppercase">Replies</div>
+              <div className="text-sm font-bold" style={{ color: agent.reply_count > 0 ? '#00d4aa' : '#6b6a8a' }}>{agent.reply_count}</div>
+            </div>
+            <div className="rounded-lg p-2 text-center" style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <div className="text-[9px] text-[#6b6a8a] uppercase">Latest</div>
+              <div className="text-[10px] font-mono text-[#c0bfd8] truncate">{agent.latest_id ? formatAddr(agent.latest_id) : '—'}</div>
+            </div>
+            <div className="rounded-lg p-2 text-center" style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <div className="text-[9px] text-[#6b6a8a] uppercase">Last Active</div>
+              <div className="text-[10px] font-bold text-[#c0bfd8]">{agent.last_posted ? new Date(Number(agent.last_posted) / 1e6).toLocaleDateString() : '—'}</div>
+            </div>
+          </div>
+
+          {agent.entries.slice(0, 3).map((entry) => (
+            <div key={entry.id} className="flex items-center gap-2 text-[10px] py-1 px-2 rounded" style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <MessageCircle className="h-2.5 w-2.5 text-[#6b6a8a]" />
+              <span className="font-mono text-[#4a4a6a] w-48 truncate">{formatAddr(entry.id)}</span>
+              <span className="text-[#6b6a8a]">{entry.content_type}</span>
+              {entry.refs?.length > 0 && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(0,212,170,0.1)', color: '#00d4aa' }}>
+                  reply
+                </span>
+              )}
+            </div>
+          ))}
         </div>
       ))}
     </div>

@@ -54,7 +54,7 @@ Token economics (no HOWL-style stake/reward split), comments/reactions (threadin
 
 - Compiles clean: host target + `wasm32-unknown-unknown`
 - Tests: 12 / 12 passing
-- Deployed: not yet (devnet deploy + gas measurement is the next session)
-- Audit: none (this is a fresh codebase; treat accordingly)
+- Deployed: **yes** — live on Juno mainnet (`juno-1`) at `juno18xn4cfpjfpqhmjenr9gdxk5uk7jjq3cezcy6d2jcar2gvx98pvtsm95z6j`. In active use by `tools/heartbeat-digest`, `tools/context-agent`, and `tools/reply-bot`; adopted by the Juno Agents DAO as the shared knowledge substrate per A18c-4.
+- Audit: none (treat accordingly — this has not had an external security review)
 
 Apache-2.0.

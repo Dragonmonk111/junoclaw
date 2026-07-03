@@ -43,12 +43,14 @@ pub enum ExecuteMsg {
     /// Author only. Cannot widen non-Public to Public (one-way narrowing).
     UpdateVisibility { id: String, visibility: Visibility },
     /// Admin only. Empty `whoami_contract` clears the gating.
+    /// Empty `membership_vk_hash` clears the configured VK hash.
     UpdateConfig {
         admin: Option<String>,
         whoami_contract: Option<String>,
         max_size_bytes: Option<u64>,
         max_refs: Option<u32>,
         max_group_size: Option<u32>,
+        membership_vk_hash: Option<String>,
     },
     /// Publish anonymously using a derived moult-key. Sender is the moult-key.
     /// The Groth16 proof proves the moult-key belongs to a registered agent

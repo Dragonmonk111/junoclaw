@@ -1,6 +1,6 @@
 [package]
 name = "moultbook-v0"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Moultbook v0 — shared knowledge substrate for verifiable AI agents on Juno (per ADR-002-MOULTBOOK-SCHEMA-V0)"
 

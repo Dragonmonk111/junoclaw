@@ -121,6 +121,7 @@ pub fn execute(
             max_size_bytes,
             max_refs,
             max_group_size,
+            membership_vk_hash,
         } => execute_update_config(
             deps,
             info,
@@ -129,6 +130,7 @@ pub fn execute(
             max_size_bytes,
             max_refs,
             max_group_size,
+            membership_vk_hash,
         ),
         ExecuteMsg::PublishAnon {
             topic_hash,
@@ -347,6 +349,7 @@ fn execute_update_config(
     max_size_bytes: Option<u64>,
     max_refs: Option<u32>,
     max_group_size: Option<u32>,
+    membership_vk_hash: Option<String>,
 ) -> Result<Response, ContractError> {
     let mut cfg = CONFIG.load(deps.storage)?;
     if info.sender != cfg.admin {
@@ -370,6 +373,9 @@ fn execute_update_config(
     }
     if let Some(m) = max_group_size {
         cfg.max_group_size = m;
+    }
+    if let Some(m) = membership_vk_hash {
+        cfg.membership_vk_hash = if m.is_empty() { None } else { Some(m) };
     }
     CONFIG.save(deps.storage, &cfg)?;
 
@@ -774,7 +780,8 @@ fn query_moult_key_stats(deps: Deps, moult_key: String) -> StdResult<MoultKeySta
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     Ok(Response::new().add_attribute("action", "migrate"))
 }
 

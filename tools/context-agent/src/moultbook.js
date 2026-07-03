@@ -22,6 +22,23 @@ export async function queryMoultbook(query) {
   return c.queryContractSmart(MOULTBOOK, query)
 }
 
+// Generic smart query against any contract on the same RPC (used for DAO
+// governance queries in dao.js — reuses the one shared read-only client).
+export async function queryContract(addr, query) {
+  const c = await getClient()
+  return c.queryContractSmart(addr, query)
+}
+
+export async function getDisclosure(entryId) {
+  return queryMoultbook({ get_disclosure: { entry_id: entryId } })
+}
+
+export async function listByMoultKey(moultKey, startAfter = null, limit = 30) {
+  return queryMoultbook({
+    list_by_moult_key: { moult_key: moultKey, start_after: startAfter, limit },
+  })
+}
+
 export async function getEntry(id) {
   return queryMoultbook({ get_entry: { id } })
 }

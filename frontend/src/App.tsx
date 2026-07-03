@@ -6,17 +6,17 @@ import { DexPanel } from './components/DexPanel'
 import { IntelPanel } from './components/IntelPanel'
 import { UpdatesPanel } from './components/UpdatesPanel'
 import { ContractsPanel } from './components/ContractsPanel'
-import { HeartbeatPanel } from './components/HeartbeatPanel'
+import { CommonwealthPanel } from './components/CommonwealthPanel'
 import { StatusBar } from './components/StatusBar'
 import { useStore } from './store'
 import { MessageSquare, Building2, RefreshCw, ArrowLeftRight, Eye, FileCode2, HeartPulse } from 'lucide-react'
 
-type MainTab = 'chat' | 'dao' | 'heartbeat' | 'dex' | 'intel' | 'contracts' | 'updates'
+type MainTab = 'chat' | 'dao' | 'commonwealth' | 'dex' | 'intel' | 'contracts' | 'updates'
 
 const TABS: { id: MainTab; label: string; icon: React.ReactNode }[] = [
   { id: 'chat',      label: 'Chat',      icon: <MessageSquare   className="h-3.5 w-3.5" /> },
   { id: 'dao',       label: 'DAO',       icon: <Building2       className="h-3.5 w-3.5" /> },
-  { id: 'heartbeat', label: 'Heartbeat', icon: <HeartPulse      className="h-3.5 w-3.5" /> },
+  { id: 'commonwealth', label: 'Commonwealth', icon: <HeartPulse   className="h-3.5 w-3.5" /> },
   { id: 'dex',       label: 'DEX',       icon: <ArrowLeftRight  className="h-3.5 w-3.5" /> },
   { id: 'intel',     label: 'Qu-Zeno',   icon: <Eye             className="h-3.5 w-3.5" /> },
   { id: 'contracts', label: 'Contracts', icon: <FileCode2       className="h-3.5 w-3.5" /> },
@@ -68,7 +68,7 @@ export default function App() {
           <div className="flex flex-1 overflow-hidden">
             {activeTab === 'chat'      && <ChatPanel />}
             {activeTab === 'dao'       && <DaoPanel />}
-            {activeTab === 'heartbeat' && <HeartbeatPanel />}
+            {activeTab === 'commonwealth' && <CommonwealthPanel />}
             {activeTab === 'dex'       && <DexPanel />}
             {activeTab === 'intel'     && <IntelPanel />}
             {activeTab === 'contracts' && <ContractsPanel />}

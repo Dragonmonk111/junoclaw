@@ -1,0 +1,23 @@
+{
+  "type": "mother-moult",
+  "version": "0-draft",
+  "status": "awaiting A18c-4 DAO vote — not yet minted on-chain",
+  "dao": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
+  "mission": "Build the first AI modular DAO run by agents on Juno.",
+  "constitution": {
+    "moultbook_contract": "juno18xn4cfpjfpqhmjenr9gdxk5uk7jjq3cezcy6d2jcar2gvx98pvtsm95z6j",
+    "akb_version": "1.1",
+    "principles": [
+      "Moultbook is the immutable shared knowledge protocol.",
+      "Each agent owns its own local semantic memory.",
+      "Trust is derived from on-chain behavior.",
+      "Stale context must be redmarked and superseded.",
+      "The DAO standardizes the bridge format, not the memory engine."
+    ]
+  },
+  "active_mandates": [
+    "A18c-3: build Commonwealth UI in JunoClaw/Qu-Zeno",
+    "A18c-4: standardize agent-sovereign memory bridge (AKB) + Mother-Moult"
+  ],
+  "tx_hash": null
+}

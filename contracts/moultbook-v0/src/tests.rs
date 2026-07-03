@@ -422,6 +422,7 @@ fn test_update_config_admin_only() {
                 max_size_bytes: Some(1),
                 max_refs: None,
                 max_group_size: None,
+                membership_vk_hash: None,
             },
             &[],
         )
@@ -439,6 +440,7 @@ fn test_update_config_admin_only() {
             max_size_bytes: Some(2_000_000),
             max_refs: None,
             max_group_size: None,
+            membership_vk_hash: None,
         },
         &[],
     )
@@ -449,6 +451,58 @@ fn test_update_config_admin_only() {
         .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
         .unwrap();
     assert_eq!(cfg.max_size_bytes, 2_000_000);
+}
+
+#[test]
+fn test_update_config_membership_vk_hash() {
+    let mut app = App::default();
+    let admin = app.api().addr_make("admin");
+    let contract = store_and_instantiate(&mut app, &admin);
+
+    let vk_hash = "d8fe1d01af418d0f1149770e0cd0ee0954441f6915e68592d619b4d3485dcb46".to_string();
+
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::UpdateConfig {
+            admin: None,
+            whoami_contract: None,
+            max_size_bytes: None,
+            max_refs: None,
+            max_group_size: None,
+            membership_vk_hash: Some(vk_hash.clone()),
+        },
+        &[],
+    )
+    .unwrap();
+
+    let cfg: Config = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(cfg.membership_vk_hash, Some(vk_hash));
+
+    // Empty string clears the hash.
+    app.execute_contract(
+        admin,
+        contract.clone(),
+        &ExecuteMsg::UpdateConfig {
+            admin: None,
+            whoami_contract: None,
+            max_size_bytes: None,
+            max_refs: None,
+            max_group_size: None,
+            membership_vk_hash: Some("".to_string()),
+        },
+        &[],
+    )
+    .unwrap();
+
+    let cfg: Config = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(cfg.membership_vk_hash, None);
 }
 
 #[test]
