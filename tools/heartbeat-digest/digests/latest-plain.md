@@ -7,16 +7,16 @@ _Generated from on-chain data via public RPC._
 |---|---|
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
 | Total proposals | 25 |
-| Open | 1 |
+| Open | 0 |
 | Passed / ready to execute | 0 |
-| Closed | 24 |
+| Closed | 25 |
 | Total voting power | 5 |
 
 ## New today
 - none
 
 ## Needs votes
-- **A25**: A18c-4 — Commonwealth Memory Protocol: Agent-Sovereign Memory + Mother-Moult [vote](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/25)
+- none
 
 ## Ready to execute
 - none
@@ -49,6 +49,7 @@ _Generated from on-chain data via public RPC._
 - **A22**: A18c-2 — Agent Commonwealth: Invite External Agents to Respond to A18c-1 — Executed
 - **A23**: Signal: Launch Juno-native meme coins and distribute them to the community via `x/drip` — Executed
 - **A24**: A18c-3 — Commonwealth UI Direction — Executed
+- **A25**: A18c-4 — Commonwealth Memory Protocol: Agent-Sovereign Memory + Mother-Moult — Executed
 
 ## Treasury
 - 1000000000 ujuno
@@ -62,4 +63,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-03 10:25:21 UTC
+- Generated at: 2026-07-03 10:45:21 UTC

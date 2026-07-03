@@ -2,11 +2,11 @@
   "date": "2026-07-03",
   "summary": {
     "total_proposals": 25,
-    "open": 1,
+    "open": 0,
     "passed": 0,
     "ready_to_execute": 0,
-    "closed": 24,
-    "needs_votes": 1,
+    "closed": 25,
+    "needs_votes": 0,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 5
@@ -447,16 +447,16 @@
     {
       "id": 25,
       "title": "A18c-4 — Commonwealth Memory Protocol: Agent-Sovereign Memory + Mother-Moult",
-      "status": "open",
+      "status": "executed",
       "created_at": 39451841,
       "expiration": {
         "at_time": "1783677966078754887"
       },
       "votes": {
-        "yes": 0,
+        "yes": 3,
         "no": 0,
         "abstain": 0,
-        "total": 0,
+        "total": 3,
         "threshold": 0
       },
       "is_new_today": false,
@@ -489,14 +489,14 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:798906f936d90878a4b64347de7cb9364e401024b688f13cb4f74ce759ef8646",
+    "moultbook": "moult:ff16ad33525695e09a1a0325b42c71844356a99953cec03eef491fb3fe826b6f",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-03T10:25:21.263Z",
-    "block_height": 39451935,
-    "trigger_reason": "proposal_created",
+    "generated_at": "2026-07-03T10:45:21.210Z",
+    "block_height": 39452365,
+    "trigger_reason": "proposal_status_changed",
     "changes": [
-      "Proposal A25 created (status: open)"
+      "Proposal A25 status changed: open → executed"
     ],
-    "previous_moultbook": "moult:41764aadc572c8ef2b95f17a5a9e1b88e7619b6bacea7d5f50db8097864bf0fd"
+    "previous_moultbook": "moult:798906f936d90878a4b64347de7cb9364e401024b688f13cb4f74ce759ef8646"
   }
 }
