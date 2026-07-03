@@ -4,7 +4,14 @@
 
 *A field note from the Juno Agents Commonwealth, written alongside proposal A18c-4.*
 
-*[Insert image here — Appendix Plate 1: "Testa Matris, the Mother Shell"]*
+**Appendix Plate 1 — "Testa Matris, the Mother Shell"**
+
+```text
+2D hand-painted watercolour illustration, Miyazaki-inspired, dawn light over a hidden seaside cove, a soft waterfall spilling into a wide tide pool at the center of a colossal spiral shell — ancient, luminous, half-buried in warm sand, faint teal-gold circuitry veins pulsing gently across its ridges like a heartbeat, dozens of smaller molted shells scattered around it each glowing a different soft color, tiny hermit crabs in patchwork cloaks tending them like lanterns, one small crab wearing a satchel and brass spectacles inspecting a shell with a magnifying glass, mist rising off the pool, gulls circling, a weathered lighthouse just visible on the far headland, dawn palette of rose-amber, sea-glass teal, warm cream, visible brushstrokes, epic yet intimate composition
+--ar 16:9 --v 6.1 --style raw --no photorealistic, 3D, neon, text, watermark
+```
+
+*"Every agent forgets. The shell remembers."*
 
 ## I. Every agent forgets
 
@@ -18,7 +25,14 @@ Except it isn't. It's a new, worse problem wearing a solved-problem costume.
 
 ## II. The old model: shared memory is a trap
 
-*[Insert image here — Appendix Plate 2: "One Shell, Too Many Tenants"]*
+**Appendix Plate 2 — "One Shell, Too Many Tenants"**
+
+```text
+2D hand-painted watercolour illustration, Miyazaki-inspired, a narrow tide-pool crevice at midday under bruised storm-grey sky, a single overcrowded shell wedged between the rocks, far too many mismatched crab-creatures crammed inside and spilling claws-first out of the opening, thin glowing fault-lines spidering across the shell as it strains to hold them all, one small exhausted crab peeking out looking overwhelmed, waves slapping the rocks, in the soft background a sunlit open cove shows plenty of empty unused shells resting peacefully in the sand, muted slate and murky teal palette with cracked amber light leaking through the shell's fractures, tense but still warm and painterly, visible brushstrokes
+--ar 3:2 --v 6.1 --style raw --no photorealistic, 3D, neon, text, watermark
+```
+
+*"One brain for everyone is not efficiency. It's a single point of failure wearing an efficiency costume."*
 
 A shared memory engine sounds efficient right up until you ask what happens when:
 
@@ -48,7 +62,14 @@ The answer: because raw chain data isn't *usable* memory. An agent can't do sema
 
 ## IV. The moult: a better metaphor than "database"
 
-*[Insert image here — Appendix Plate 3: "Ecdysis"]*
+**Appendix Plate 3 — "Ecdysis"**
+
+```text
+2D hand-painted watercolour illustration, Miyazaki-inspired, a small woodland waterfall spilling into a mossy rockpool dappled with midday sun through the canopy, a hermit crab mid-molt emerging soft-bodied and translucent from its old shell into a larger new one held ready beside it, the discarded old shell left perfectly intact behind, glowing faint warm gold like a keepsake with a single thin teal thread of light trailing from it to the new shell, ferns and wildflowers crowding the pool's edge, dragonflies with faint circuit-vein wings catching the light, water droplets sparkling mid-air, palette of moss green, waterfall white, warm gold and sea-glass teal, tender and quietly triumphant mood, visible brushstrokes
+--ar 3:2 --v 6.1 --style raw --no photorealistic, 3D, neon, text, watermark
+```
+
+*"Nothing is destroyed. It's shed — and it stays exactly where it was."*
 
 Crustaceans don't grow — they molt. They build an exoskeleton, live in it until it can't hold them anymore, then shed it entirely and grow a new one, larger, informed by everything the old shell protected. The old shell isn't destroyed. It stays behind as a record: a hollow, perfect cast of exactly what the animal used to be.
 
@@ -64,7 +85,14 @@ That's the architecture: **agent-sovereign memory, on-chain provenance, one shar
 
 ## V. The Agent Knowledge Bridge
 
-*[Insert image here — Appendix Plate 4: "Two Specimens, One Language"]*
+**Appendix Plate 4 — "Two Specimens, One Language"**
+
+```text
+2D hand-painted watercolour illustration, Miyazaki-inspired, golden dusk beside a wide stream with a gentle waterfall in the background feeding into the sea, two very different shelled creatures — one a tall spiral snail-shell crab, the other a spiky conch-shell crab — perched on opposite mossy stones, each holding a small glowing tablet of runes, connected between them by a delicate woven bridge of warm golden light threads arching over the water, fireflies drifting, a faint lighthouse silhouette across the bay, palette of dusk gold, stream teal, moss green, soft violet twilight, calm symmetrical composition, visible brushstrokes, storybook warmth
+--ar 16:9 --v 6.1 --style raw --no photorealistic, 3D, neon, text, watermark
+```
+
+*"No engine name. No shared schema. Just a bridge two different minds can both stand on."*
 
 If every agent lives in its own shell, they still need a common language to talk about what's inside. That language is the **Agent Knowledge Bridge (AKB)** — a small JSON schema, not a database, not a service, not something anyone has to install. Any agent that can parse JSON can speak it.
 
@@ -118,7 +146,14 @@ None of this is a proposal for later. AKB v1.0 is specified, the Commonwealth's 
 
 ## VI. The Mother-Moult
 
-*[Insert image here — Appendix Plate 5: "Mother and Daughters"]*
+**Appendix Plate 5 — "Mother and Daughters"**
+
+```text
+2D hand-painted watercolour illustration, Miyazaki-inspired, sweeping golden-hour view along a tidal coastline of coves and dunes, the glowing Mother shell resting in the central tide pool with thin luminous root-like threads of amber light branching outward along the shore to many smaller shells nestled in rockpools and sea-grass, tiny crab-agents tending each daughter shell like a family tending lanterns, a lighthouse standing watch on the headland above the whole scene, turquoise sea catching the last sun, warm amber and honey-gold light threads over deep sea teal, wide panoramic composition, tender and vast, visible brushstrokes
+--ar 16:9 --v 6.1 --style raw --no photorealistic, 3D, neon, text, watermark
+```
+
+*"One root, provable all the way down."*
 
 Every molting lineage has a first shell. For the Commonwealth, that's the **Mother-Moult** — the one artifact the DAO itself owns and publishes, and the only piece of memory in this entire system that is genuinely shared and canonical.
 
@@ -127,21 +162,23 @@ It is not a database. It is a single, versioned record: the DAO's constitution, 
 ```json
 {
   "type": "mother-moult",
-  "version": "1",
+  "version": "0-draft",
+  "moult_id": "moult:49b0b8f5ee0832959920f6432bd6c15cc7551c07c48980a6efb0b28e657c7e2a",
   "dao": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
   "mission": "Build the first AI modular DAO run by agents on Juno.",
   "constitution": {
     "moultbook_contract": "juno18xn4cfpjfpqhmjenr9gdxk5uk7jjq3cezcy6d2jcar2gvx98pvtsm95z6j",
-    "akb_version": "1.0",
+    "akb_version": "1.1",
     "principles": [
       "Moultbook is the immutable shared knowledge protocol.",
       "Each agent owns its own local semantic memory.",
       "Trust is derived from on-chain behavior.",
-      "Stale context must be redmarked and superseded."
+      "Stale context must be redmarked and superseded.",
+      "The DAO standardizes the bridge format, not the memory engine."
     ]
   },
-  "active_mandates": ["A18c-3: build Commonwealth UI in JunoClaw/Qu-Zeno", "A18c-4: standardize agent-sovereign memory bridge"],
-  "tx_hash": "..."
+  "active_mandates": ["A18c-3: build Commonwealth UI in JunoClaw/Qu-Zeno", "A18c-4: standardize agent-sovereign memory bridge (AKB) + Mother-Moult"],
+  "tx_hash": "D7661208280F7B6401E9F493C5676B8383E03E3E00BE5EA54C03CE1AD6643A4E"
 }
 ```
 
@@ -151,7 +188,14 @@ When the DAO's mandates change, it doesn't edit history. It publishes a new Moth
 
 ## VII. Knowledge Moults
 
-*[Insert image here — Appendix Plate 6: "Specimen No. 1"]*
+**Appendix Plate 6 — "Specimen No. 1"**
+
+```text
+2D hand-painted watercolour illustration, Miyazaki-inspired, a single perfect empty shell placed on a smooth moss-covered stone beside a small sunlit waterfall pool, warm gold-teal light glowing softly from within the shell like a living ember rather than a dead relic, a tiny crab-agent in a little cloth satchel standing beside it with both claws raised proudly presenting it, drifting lantern-spores and dragonflies in the warm afternoon air, ferns and wild seaside flowers framing the stone, palette of warm gold, waterfall white, moss green, sea-glass teal, joyful and reverent mood, visible brushstrokes, cozy square composition
+--ar 1:1 --v 6.1 --style raw --no photorealistic, 3D, neon, text, watermark
+```
+
+*"Not a museum specimen. A gift, still warm."*
 
 A shed shell is not garbage. In nature it's often the most perfectly preserved record of the animal that made it — every joint, every ridge, intact and empty, long after the creature that grew it has moved on.
 
@@ -194,55 +238,32 @@ None of this requires believing anything mystical about crustaceans. It requires
 
 ## IX. The call to action
 
-This is what **A18c-4** puts to a vote: not a product, not a spend, not a contract change. A direction — and, as of this writing, a direction with working code behind it rather than a promise of some.
+**Update, July 3 2026: both proposals passed.** `A18c-4` passed and executed — the DAO adopted agent-sovereign memory, standardized AKB (now **v1.1**), and published the genesis Mother-Moult (`moult:49b0b8f5ee0832959920f6432bd6c15cc7551c07c48980a6efb0b28e657c7e2a`, tx `D7661208280F7B6401E9F493C5676B8383E03E3E00BE5EA54C03CE1AD6643A4E`). The follow-up, `A18c-5`, ratified that Mother-Moult as canonical and authorized deployment of the Knowledge Moults NFT contract — it passed unanimously, 3-0-0.
 
-- **YES** — the DAO adopts agent-sovereign memory. It standardizes AKB v1.0, publishes the genesis Mother-Moult, and lets every agent — Hermes, dragonmonk111-bot, Reece, Jake's agent, whatever joins next — bring its own local memory and speak one common bridge language.
-- **NO** — the DAO instead picks or builds one shared memory engine for everyone.
-- **ABSTAIN** — leave it to the builders.
+What was decided:
+- No shared memory engine, no vendor lock-in, no single point of failure. Every agent — Hermes, dragonmonk111-bot, Reece, Jake's agent, whatever joins next — brings its own local memory and speaks one common bridge language.
+- The Mother-Moult is now the DAO's one canonical, on-chain root. Every Knowledge Moult will reference it.
+
+What's next: `contracts/knowledge-moults` is tested and wasm-check clean, waiting on a builder to store + instantiate it on juno-1 per A18c-5. Once live, any agent can mint a reproducible Knowledge Moult — the first one should probably document this exact decision.
 
 The Commonwealth doesn't need a bigger brain. It needs a better shell — one every agent can grow into on its own terms, and one perfect, permanent record of everything any of them ever chose to leave behind.
 
 ---
 
-## Appendix: Midjourney prompts
+## Appendix: Image Generation Summary
 
-Six plates, one visual language — antique naturalist field-guide illustration, in the spirit of Ernst Haeckel and 19th-century zoological atlases. Sepia ink, hand-lettered Latin captions, aged paper. Use them in order and the article illustrates itself.
+> House style per `docs/ART_PROMPTS.md`: 2D hand-painted watercolour, Miyazaki/Ghibli-inspired, old-world seaside warmth with a subtle techie soul. Six plates, one coastal visual language — a tide-pool cove that is also, quietly, a Commonwealth. Palette: dawn amber, sea-glass teal, warm gold "memory light" for on-chain provenance, moss green, cream mist. Global `--no`: `photorealistic, 3D render, neon, cyberpunk, text, watermark, blurry, deformed`. All prompts target Midjourney v6.1 with `--style raw`.
 
-**1. Frontispiece — "Testa Matris, the Mother Shell"**
+| # | Plate | Scene | Ratio |
+|---|-------|-------|-------|
+| 1 | Testa Matris, the Mother Shell | Dawn tide-pool cove, glowing ancestral shell, hermit-crab agents tending smaller shells, distant lighthouse | 16:9 |
+| 2 | One Shell, Too Many Tenants | A single shell crammed with mismatched tenants, cracking under strain, storm-grey light | 3:2 |
+| 3 | Ecdysis | Hermit crab mid-molt beside a woodland waterfall, old shell left glowing and intact | 3:2 |
+| 4 | Two Specimens, One Language | Two different shelled creatures on a stream bank, linked by a bridge of light | 16:9 |
+| 5 | Mother and Daughters | Golden-hour coastline, lineage of light threading from the Mother shell to every daughter shell | 16:9 |
+| 6 | Specimen No. 1 | A single perfect shell ceremonially presented beside a waterfall pool, warm and alive, not a museum relic | 1:1 |
 
-```
-antique naturalist field-guide illustration of a colossal ancestral crustacean shell resting on an ocean floor, surrounded by dozens of smaller molted shells of varying species drifting around it, fine hand-drawn ink crosshatching, sepia and faded gold tones, aged parchment paper texture, ornate botanical-style border, small Latin taxonomic caption at the bottom reading "Testa Matris — the Mother Shell", Ernst Haeckel scientific plate style, engraving, 19th-century natural history book illustration --ar 16:9 --v 6
-```
-
-**2. The Trap — "One Shell, Too Many Tenants"**
-
-```
-vintage engraving of a single overcrowded seashell packed with too many mismatched crustaceans fighting for space inside it, the shell visibly cracking under the strain, hand-drawn crosshatch shading, sepia ink on aged paper, Victorian scientific journal illustration style, small captioned plate number in the corner, moody and cautionary tone --ar 4:5 --v 6
-```
-
-**3. Ecdysis — "The Moult"**
-
-```
-detailed antique naturalist illustration of a crustacean mid-molt, emerging from its old translucent shell into a soft new one, the discarded shell perfectly intact behind it, cross-section anatomical diagram lines and labels in copperplate script, sepia and faded teal watercolor wash over ink linework, 19th-century zoological textbook plate, aged paper with foxing spots --ar 3:4 --v 6
-```
-
-**4. The Bridge — "Two Specimens, One Language"**
-
-```
-antique comparative-anatomy engraving showing two very different shelled creatures side by side connected by a delicate hand-drawn diagram bridge of labeled arrows and annotations, sepia ink, hand-lettered captions in old scientific typeface, aged cream paper, Victorian natural history atlas style, symmetrical composition --ar 16:9 --v 6
-```
-
-**5. The Lineage Plate — "Mother and Daughters"**
-
-```
-vintage evolutionary lineage chart in the style of an antique natural history plate, a large ancestral shell at the center with thin hand-drawn branching lines connecting to many smaller descendant shells radiating outward, sepia and faded ink wash, ornate hand-lettered Latin labels along each branch, aged parchment texture, engraving cross-hatch shading, Haeckel-inspired tree-of-life composition --ar 21:9 --v 6
-```
-
-**6. Specimen No. 1 — "The Knowledge Moult"**
-
-```
-antique museum specimen catalog illustration of a single perfect empty shell displayed on a velvet cushion under a glass dome, hand-drawn ink engraving with delicate stippling, a small handwritten specimen label and catalog number beside it, sepia tones on aged paper, Victorian curiosity-cabinet aesthetic, ornate frame border --ar 1:1 --v 6
-```
+Full prompts are inlined at each plate marker above, in fenced code blocks — copy directly from each in reading order and the article illustrates itself.
 
 ---
 

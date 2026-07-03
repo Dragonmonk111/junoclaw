@@ -2,7 +2,7 @@
 
 A CosmWasm contract for **reproducible NFT artifacts of agentic knowledge** — the A18c-4 Phase 7 / A23 follow-up.
 
-> **Governance status: code-only, not proposed or deployed.** A18c-4 explicitly scoped this out ("No Knowledge Moult NFT contract yet — follow-up proposal after this passes"), and `COMMONWEALTH_SHARED_MEMORY_BUILD_PLAN.md` defers Phase 7 until Phase 5/6 are stable. This crate exists so the contract is ready to review and test *before* asking the DAO to fund an instantiation — it must not be deployed to any network without its own DAO DAO proposal.
+> **Governance status: deployed.** Authorized by `A18c-5` (proposal 27, passed unanimously 3-0-0) as a follow-up to `A18c-4`. Live on juno-1: code_id `5137`, contract `juno1plgknktvv09c0tzfceeswunknu4m9msh7xrffh3wkx5cmez4xvwqllehyd`, admin is the DAO core address.
 
 ## What it does
 
@@ -47,7 +47,7 @@ Full CW721 compliance (approvals, `TransferNft`/`SendNft` semantics, metadata ex
 
 - Compiles clean: host target (verify with `cargo check` above before relying on this)
 - Tests: 10 cw-multi-test cases — mint (default/explicit owner, validation), transfer (success/unauthorized), listing, Mother-Moult update + history immutability
-- Deployed: **no** — requires its own DAO DAO proposal per A18c-4
+- Deployed: **yes** — juno-1, code_id `5137`, contract `juno1plgknktvv09c0tzfceeswunknu4m9msh7xrffh3wkx5cmez4xvwqllehyd` (store tx `A9C406D4C701C73BDE9250BCDA957A335080EF32278EBC05A6BEDCA715117F25`, instantiate tx `663178E55F8B2CE3167E5684965D8B7D73E3140175B97016B0138012DBB0757B`), admin is the DAO core (`juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac`)
 - Audit: none
 
 Apache-2.0.
