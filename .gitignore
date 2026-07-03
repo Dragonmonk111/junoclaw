@@ -87,6 +87,7 @@ mcp/*.js
 
 # Session memory / internal notes — not for public repo
 memory/
+/TODO.md
 
 # Private DM drafts and outreach — contains personal comms
 docs/JAKE_DM_*.md

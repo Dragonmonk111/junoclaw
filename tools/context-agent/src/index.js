@@ -7,6 +7,7 @@ import { loadIndex, buildChain, latestEntry } from './chain.js'
 import { getLatestDigestContent, getLatestDigestJson } from './digest.js'
 import { buildAkbImport, parseAkbExport, registerContentResolver } from './akb.js'
 import { computeTrust } from './trust.js'
+import { computeStaleMap, isStale, staleInfo } from './stale.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT || 3000)
@@ -197,10 +198,12 @@ const server = createServer(async (req, res) => {
       if (query.author) ids = index.by_author[query.author] || []
       else if (query.content_type) ids = index.by_content_type[query.content_type] || []
       else if (query.topic) ids = index.by_topic[query.topic] || []
+      const staleMap = computeStaleMap(index)
+      if (query.include_stale !== 'true') ids = ids.filter((id) => !isStale(staleMap, id))
       const mm = loadMotherMoult()
       const { entries: rawEntries, next_after } = paginate(ids, index, query)
       const entries = await Promise.all(
-        rawEntries.map((entry) => buildAkbImport(entry, { motherMoultId: motherMoultId(mm) })),
+        rawEntries.map((entry) => buildAkbImport(entry, { motherMoultId: motherMoultId(mm), stale: staleInfo(staleMap, entry.id) })),
       )
       return sendJson(res, 200, { entries, next_after })
     }
@@ -217,7 +220,8 @@ const server = createServer(async (req, res) => {
       const entry = index.by_id[id]
       if (!entry) return sendJson(res, 404, { error: 'entry not found' })
       const mm = loadMotherMoult()
-      const akb = await buildAkbImport(entry, { motherMoultId: motherMoultId(mm) })
+      const staleMap = computeStaleMap(index)
+      const akb = await buildAkbImport(entry, { motherMoultId: motherMoultId(mm), stale: staleInfo(staleMap, entry.id) })
       return sendJson(res, 200, akb)
     }
 
@@ -232,8 +236,12 @@ const server = createServer(async (req, res) => {
         const tb = BigInt(index.by_id[b]?.posted_at || '0')
         return ta > tb ? 1 : ta < tb ? -1 : 0
       })
+      // Threads show every entry regardless of stale status (still annotated) —
+      // unlike the browse endpoints below, you've already opened this specific
+      // conversation, so full provenance including any redmarks belongs in it.
+      const staleMap = computeStaleMap(index)
       const entries = await Promise.all(
-        ids.map((eid) => buildAkbImport(index.by_id[eid], { motherMoultId: motherMoultId(mm) })),
+        ids.map((eid) => buildAkbImport(index.by_id[eid], { motherMoultId: motherMoultId(mm), stale: staleInfo(staleMap, eid) })),
       )
       return sendJson(res, 200, { root_id: id, count: entries.length, entries })
     }
@@ -241,11 +249,13 @@ const server = createServer(async (req, res) => {
     if (path === '/context/agent') {
       const addr = query.addr
       if (!addr) return sendJson(res, 400, { error: 'addr query param required' })
-      const ids = index.by_author[addr] || []
+      let ids = index.by_author[addr] || []
+      const staleMap = computeStaleMap(index)
+      if (query.include_stale !== 'true') ids = ids.filter((id) => !isStale(staleMap, id))
       const mm = loadMotherMoult()
       const { entries: rawEntries, next_after } = paginate(ids, index, query)
       const entries = await Promise.all(
-        rawEntries.map((entry) => buildAkbImport(entry, { motherMoultId: motherMoultId(mm) })),
+        rawEntries.map((entry) => buildAkbImport(entry, { motherMoultId: motherMoultId(mm), stale: staleInfo(staleMap, entry.id) })),
       )
       return sendJson(res, 200, { author: addr, entries, next_after })
     }
@@ -261,23 +271,31 @@ const server = createServer(async (req, res) => {
       if (!id) return sendJson(res, 400, { error: 'id query param required' })
       // Entries link to a proposal by referencing it, e.g. refs: ["proposal:A18c-4"].
       const refKey = id.startsWith('proposal:') ? id : `proposal:${id}`
-      const ids = index.by_ref[refKey] || index.by_ref[id] || []
+      let ids = index.by_ref[refKey] || index.by_ref[id] || []
+      const staleMap = computeStaleMap(index)
+      if (query.include_stale !== 'true') ids = ids.filter((eid) => !isStale(staleMap, eid))
       const mm = loadMotherMoult()
       const { entries: rawEntries, next_after } = paginate(ids, index, query)
       const entries = await Promise.all(
-        rawEntries.map((entry) => buildAkbImport(entry, { motherMoultId: motherMoultId(mm) })),
+        rawEntries.map((entry) => buildAkbImport(entry, { motherMoultId: motherMoultId(mm), stale: staleInfo(staleMap, entry.id) })),
       )
       return sendJson(res, 200, { proposal_id: id, ref: refKey, count: entries.length, entries, next_after })
     }
 
     if (path === '/context/stale') {
+      // `entries` = raw redmark/unredmark activity posts (unfiltered, for audit).
+      // `stale_targets` = resolved outcome after gating + latest-wins (see stale.js).
       const ids = index.by_content_type['application/json+redmark'] || []
       const mm = loadMotherMoult()
+      const staleMap = computeStaleMap(index)
       const { entries: rawEntries, next_after } = paginate(ids, index, query)
       const entries = await Promise.all(
-        rawEntries.map((entry) => buildAkbImport(entry, { motherMoultId: motherMoultId(mm) })),
+        rawEntries.map((entry) => buildAkbImport(entry, { motherMoultId: motherMoultId(mm), stale: staleInfo(staleMap, entry.id) })),
       )
-      return sendJson(res, 200, { entries, next_after })
+      const stale_targets = [...staleMap.entries()]
+        .filter(([, info]) => info.isStale)
+        .map(([target, info]) => ({ target, marked_by: info.by, redmark_id: info.redmarkId }))
+      return sendJson(res, 200, { entries, next_after, stale_targets, min_trust_score: Number(process.env.REDMARK_MIN_TRUST_SCORE || 10) })
     }
 
     if (path === '/context/validate' && req.method === 'POST') {

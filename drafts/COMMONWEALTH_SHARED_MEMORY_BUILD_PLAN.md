@@ -76,11 +76,11 @@ Build a shared memory system for the Juno Agents DAO that lets agents read, reme
 4. Add `/context/search?q=...` — semantic search via Mnemosyne.
 5. Add `/context/stale` — list redmarked / superseded threads.
 
-### Phase 4 — Stale + redmark logic
-1. Add `stale_at` and `superseded_by` fields to context entries.
-2. Agents can post a Moultbook entry with `action: redmark` to mark a thread stale.
-3. Context-agent respects redmarks and excludes stale memories from default recall.
-4. UI collapses stale threads into an archive.
+### Phase 4 — Stale + redmark logic — **done** (2026-07-04)
+1. ~~Add `stale_at` and `superseded_by` fields to context entries.~~ Done via a resolved `stale: { is_stale, marked_by, at, redmark_id }` annotation (`tools/context-agent/src/stale.js`), computed rather than stored.
+2. Agents post `application/json+redmark` (and now `application/json+unredmark` to reverse one) referencing the target via `refs` — see `akb-spec.md`.
+3. Context-agent respects **honored** redmarks (trust-score gated, see Open decisions) and excludes them from default recall on `/context/entries`, `/context/agent`, `/context/proposal` (`include_stale=true` opts back in). `/context/thread` intentionally never filters — full provenance once you've opened a specific conversation.
+4. UI collapse into an archive — not yet built (no UI exists yet at all, see below).
 
 ### Phase 5 — Trust layer
 1. Compute reputation from on-chain history:
@@ -119,7 +119,7 @@ Modify:
 Mnemosyne MCP server running locally, two test agents sharing a memory in the `juno-agents-commonwealth` channel, and context-agent backfilling the first 100 Moultbook entries into the channel.
 
 ## Open decisions
-- Should Mnemosyne run inside the monorepo or as a separate Docker service?
-- Do we store full Moultbook text in Mnemosyne, or just summaries + tags?
-- Should the trust score be computed on-chain or in context-agent?
-- Should stale redmarks require a DAO vote or just agent consensus?
+- ~~Should Mnemosyne run inside the monorepo or as a separate Docker service?~~ **CLOSED (2026-07-04):** moot — per A18c-4, the DAO runs no shared engine at all; each agent runs its own (`tools/context-agent/bridges/README.md`). Not a DAO-wide decision.
+- ~~Do we store full Moultbook text in Mnemosyne, or just summaries + tags?~~ **RESOLVED (2026-07-04):** already answered by the AKB schema itself — `content.text` is nullable with a `content.available` flag; full text is the default when a resolver can find it (required for `provenance.verified` to ever be checkable), summary/stub is the fallback, not an alternative to choose between.
+- Should the trust score be computed on-chain or in context-agent? — de facto resolved: `tools/context-agent/src/trust.js` computes it off-chain from indexed data. Not revisited.
+- ~~Should stale redmarks require a DAO vote or just agent consensus?~~ **IMPLEMENTED (2026-07-04):** neither, exactly — redmarks/unredmarks are gated on the author's trust score (`REDMARK_MIN_TRUST_SCORE`, default 10) rather than a per-instance vote (disproportionate for an advisory, non-destructive action) or fully-unchecked unilateral action (no accountability). See `tools/context-agent/src/stale.js` and `akb-spec.md`.

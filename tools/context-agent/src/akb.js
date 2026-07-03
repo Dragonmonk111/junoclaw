@@ -53,7 +53,7 @@ const MOULTBOOK_CONTRACT =
  * Build an AKB v1.1 "import" envelope from an indexed Moultbook entry.
  * See tools/context-agent/src/akb-spec.md for the full schema.
  */
-export async function buildAkbImport(entry, { motherMoultId } = {}) {
+export async function buildAkbImport(entry, { motherMoultId, stale } = {}) {
   const resolver = resolvers.get(entry.content_type)
   let text = null
   if (resolver) {
@@ -100,6 +100,10 @@ export async function buildAkbImport(entry, { motherMoultId } = {}) {
       // through as-is from contracts/moultbook-v0 state.rs::AttestationRef.
       attestation_ref: entry.attestation_ref || null,
     },
+    // Resolved by tools/context-agent/src/stale.js (Phase 4 redmark logic).
+    // Advisory only — is_stale=true means a trusted redmark currently targets
+    // this entry; the entry itself is never mutated or deleted.
+    stale: stale || { is_stale: false, marked_by: null, at: null, redmark_id: null },
   }
 }
 
