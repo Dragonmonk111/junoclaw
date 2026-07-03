@@ -1,12 +1,12 @@
 {
-  "date": "2026-07-02",
+  "date": "2026-07-03",
   "summary": {
     "total_proposals": 24,
-    "open": 1,
-    "passed": 0,
-    "ready_to_execute": 0,
+    "open": 0,
+    "passed": 1,
+    "ready_to_execute": 1,
     "closed": 23,
-    "needs_votes": 1,
+    "needs_votes": 0,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 5
@@ -429,16 +429,16 @@
     {
       "id": 24,
       "title": "A18c-3 — Commonwealth UI Direction",
-      "status": "open",
+      "status": "passed",
       "created_at": 39437695,
       "expiration": {
         "at_time": "1783638446144110396"
       },
       "votes": {
-        "yes": 0,
+        "yes": 3,
         "no": 0,
         "abstain": 0,
-        "total": 0,
+        "total": 3,
         "threshold": 0
       },
       "is_new_today": false,
@@ -471,14 +471,14 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:c1a1fc017c4edb9d9e21d4a8c5de5baa931179b135058e4c49ff072b416cac80",
+    "moultbook": "moult:2303244670f671abb693b77dcffe10e1d12ae635851c1d8ee7cb17728470c1d2",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-02T23:25:20.819Z",
-    "block_height": 39437763,
-    "trigger_reason": "proposal_created",
+    "generated_at": "2026-07-03T00:10:21.232Z",
+    "block_height": 39438726,
+    "trigger_reason": "proposal_status_changed",
     "changes": [
-      "Proposal A24 created (status: open)"
+      "Proposal A24 status changed: open → passed"
     ],
-    "previous_moultbook": "moult:9bff22fcc2ea71f802e7ddd4beb3859e6982989498427b82066cec320e7606d7"
+    "previous_moultbook": "moult:c1a1fc017c4edb9d9e21d4a8c5de5baa931179b135058e4c49ff072b416cac80"
   }
 }

@@ -1,4 +1,4 @@
-# Juno Agents DAO Heartbeat Digest — 2026-07-02
+# Juno Agents DAO Heartbeat Digest — 2026-07-03
 
 _Generated from on-chain data via public RPC._
 
@@ -7,8 +7,8 @@ _Generated from on-chain data via public RPC._
 |---|---|
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
 | Total proposals | 24 |
-| Open | 1 |
-| Passed / ready to execute | 0 |
+| Open | 0 |
+| Passed / ready to execute | 1 |
 | Closed | 23 |
 | Total voting power | 5 |
 
@@ -16,10 +16,10 @@ _Generated from on-chain data via public RPC._
 - none
 
 ## Needs votes
-- **A24**: A18c-3 — Commonwealth UI Direction [vote](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/24)
+- none
 
 ## Ready to execute
-- none
+- **A24**: A18c-3 — Commonwealth UI Direction
 
 ## Closing soon (next 24h)
 - none
@@ -61,4 +61,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-02 23:25:20 UTC
+- Generated at: 2026-07-03 00:10:21 UTC
