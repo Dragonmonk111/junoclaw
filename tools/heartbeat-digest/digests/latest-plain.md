@@ -52,7 +52,7 @@ _Generated from on-chain data via public RPC._
 - **A25**: A18c-4 — Commonwealth Memory Protocol: Agent-Sovereign Memory + Mother-Moult — Executed
 
 ## Treasury
-- 1000000000 ujuno
+- 9000000000 ujuno
 
 ## Members
 - juno1dlm6y5cnvxayyv6hxd863lef82vu9jnez89gkh — weight 1
@@ -63,4 +63,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-03 10:45:21 UTC
+- Generated at: 2026-07-03 15:55:21 UTC

@@ -483,20 +483,20 @@
   "treasury": [
     {
       "denom": "ujuno",
-      "amount": "1000000000"
+      "amount": "9000000000"
     }
   ],
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:ff16ad33525695e09a1a0325b42c71844356a99953cec03eef491fb3fe826b6f",
+    "moultbook": "moult:0c699e6f8affad657a965086154b31a9346fde6883b021d59556659dd1077e5a",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-03T10:45:21.210Z",
-    "block_height": 39452365,
-    "trigger_reason": "proposal_status_changed",
+    "generated_at": "2026-07-03T15:55:21.225Z",
+    "block_height": 39459007,
+    "trigger_reason": "treasury_change",
     "changes": [
-      "Proposal A25 status changed: open → executed"
+      "Treasury ujuno changed: 1000000000 → 9000000000"
     ],
-    "previous_moultbook": "moult:798906f936d90878a4b64347de7cb9364e401024b688f13cb4f74ce759ef8646"
+    "previous_moultbook": "moult:ff16ad33525695e09a1a0325b42c71844356a99953cec03eef491fb3fe826b6f"
   }
 }
