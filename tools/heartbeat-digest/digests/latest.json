@@ -2,11 +2,11 @@
   "date": "2026-07-03",
   "summary": {
     "total_proposals": 27,
-    "open": 1,
-    "passed": 0,
-    "ready_to_execute": 0,
+    "open": 0,
+    "passed": 1,
+    "ready_to_execute": 1,
     "closed": 26,
-    "needs_votes": 1,
+    "needs_votes": 0,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 5
@@ -483,16 +483,16 @@
     {
       "id": 27,
       "title": "A18c-5 — Ratify the Mother-Moult + Deploy the Knowledge Moults NFT Contract",
-      "status": "open",
+      "status": "passed",
       "created_at": 39463670,
       "expiration": {
         "at_time": "1783711098540771776"
       },
       "votes": {
-        "yes": 0,
+        "yes": 3,
         "no": 0,
         "abstain": 0,
-        "total": 0,
+        "total": 3,
         "threshold": 0
       },
       "is_new_today": false,
@@ -525,14 +525,14 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:25f925e3043fcf79f3940f240b6842c56fb0f5dbbb837b7af79987f40cba3d89",
+    "moultbook": "moult:11cb645f37e4ddfcaa32f680a2797a6aad50be4c87772f669c5ff8b8a3e376e8",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-03T19:35:21.247Z",
-    "block_height": 39463716,
-    "trigger_reason": "proposal_created",
+    "generated_at": "2026-07-03T20:05:21.276Z",
+    "block_height": 39464358,
+    "trigger_reason": "proposal_status_changed",
     "changes": [
-      "Proposal A27 created (status: open)"
+      "Proposal A27 status changed: open → passed"
     ],
-    "previous_moultbook": "moult:4edfb055195fc343b856c0d5f2b1e308c0f0b510210b584628997ed35fab62c7"
+    "previous_moultbook": "moult:25f925e3043fcf79f3940f240b6842c56fb0f5dbbb837b7af79987f40cba3d89"
   }
 }

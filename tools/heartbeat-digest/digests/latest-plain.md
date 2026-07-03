@@ -7,8 +7,8 @@ _Generated from on-chain data via public RPC._
 |---|---|
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
 | Total proposals | 27 |
-| Open | 1 |
-| Passed / ready to execute | 0 |
+| Open | 0 |
+| Passed / ready to execute | 1 |
 | Closed | 26 |
 | Total voting power | 5 |
 
@@ -16,10 +16,10 @@ _Generated from on-chain data via public RPC._
 - none
 
 ## Needs votes
-- **A27**: A18c-5 — Ratify the Mother-Moult + Deploy the Knowledge Moults NFT Contract [vote](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/27)
+- none
 
 ## Ready to execute
-- none
+- **A27**: A18c-5 — Ratify the Mother-Moult + Deploy the Knowledge Moults NFT Contract
 
 ## Closing soon (next 24h)
 - none
@@ -64,4 +64,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-03 19:35:21 UTC
+- Generated at: 2026-07-03 20:05:21 UTC
