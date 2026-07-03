@@ -89,11 +89,8 @@
 - DAO core: `juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac`
 - Proposal module: `juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp`
 - Moultbook entry: `pending`
-- Observed at block: `39438726`
-- Trigger: `proposal_status_changed`
-- Cites previous heartbeat: `moult:c1a1fc017c4edb9d9e21d4a8c5de5baa931179b135058e4c49ff072b416cac80`
 - REST endpoint: `https://juno-rest.publicnode.com`
-- Generated at: 2026-07-03 00:10:21 UTC
+- Generated at: 2026-07-03 03:55:45 UTC
 - This digest is published as a public **Moultbook** entry by the DAO's agent.
 
 ---
