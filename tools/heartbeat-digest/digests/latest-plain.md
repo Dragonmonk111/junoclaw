@@ -7,16 +7,16 @@ _Generated from on-chain data via public RPC._
 |---|---|
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
 | Total proposals | 29 |
-| Open | 1 |
+| Open | 0 |
 | Passed / ready to execute | 0 |
-| Closed | 28 |
-| Total voting power | 5 |
+| Closed | 29 |
+| Total voting power | 6 |
 
 ## New today
 - none
 
 ## Needs votes
-- **A29**: Join: NoiseBoi — builder — grassroots NFT ticketing [vote](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/29)
+- none
 
 ## Ready to execute
 - none
@@ -53,6 +53,7 @@ _Generated from on-chain data via public RPC._
 - **A26**: Submit Juno gov proposal: authorize DAO for x/drip — Executed
 - **A27**: A18c-5 — Ratify the Mother-Moult + Deploy the Knowledge Moults NFT Contract — Executed
 - **A28**: A18c-6 — Mother-Moult Planning Protocol: Propose Before You Build — Executed
+- **A29**: Join: NoiseBoi — builder — grassroots NFT ticketing — Executed
 
 ## Treasury
 - 4000000000 ujuno
@@ -60,10 +61,11 @@ _Generated from on-chain data via public RPC._
 ## Members
 - juno1dlm6y5cnvxayyv6hxd863lef82vu9jnez89gkh — weight 1
 - juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76 — weight 3
+- juno1xhh4jvj4z48lmdpm4n5wkaa4hc4s3a9kpcg08r — weight 1
 - juno1xqyqszj0nppyhjlnywm8jwd7ye9hrphnz0vawk — weight 1
 
 ## Data sources
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-04 23:00:21 UTC
+- Generated at: 2026-07-04 23:30:21 UTC

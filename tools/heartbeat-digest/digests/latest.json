@@ -2,14 +2,14 @@
   "date": "2026-07-04",
   "summary": {
     "total_proposals": 29,
-    "open": 1,
+    "open": 0,
     "passed": 0,
     "ready_to_execute": 0,
-    "closed": 28,
-    "needs_votes": 1,
+    "closed": 29,
+    "needs_votes": 0,
     "closing_soon": 0,
     "new_today": 0,
-    "total_voting_power": 5
+    "total_voting_power": 6
   },
   "proposals": [
     {
@@ -519,16 +519,16 @@
     {
       "id": 29,
       "title": "Join: NoiseBoi — builder — grassroots NFT ticketing",
-      "status": "open",
+      "status": "executed",
       "created_at": 39498865,
       "expiration": {
         "at_time": "1783809817343359075"
       },
       "votes": {
-        "yes": 0,
+        "yes": 3,
         "no": 0,
         "abstain": 0,
-        "total": 0,
+        "total": 3,
         "threshold": 0
       },
       "is_new_today": false,
@@ -547,6 +547,11 @@
       "role": "steward"
     },
     {
+      "addr": "juno1xhh4jvj4z48lmdpm4n5wkaa4hc4s3a9kpcg08r",
+      "weight": 1,
+      "role": "builder"
+    },
+    {
       "addr": "juno1xqyqszj0nppyhjlnywm8jwd7ye9hrphnz0vawk",
       "weight": 1,
       "role": "builder"
@@ -561,14 +566,15 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:ca5db209cfaa31053ae9975be71b3ebaa12bcb64c9782fa3208efe343e2439dd",
+    "moultbook": "moult:eec76cbd1e78db0080481c9990266f418447b3f79f2c52bce152d491b8ac18e8",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-04T23:00:21.311Z",
-    "block_height": 39498906,
-    "trigger_reason": "proposal_created",
+    "generated_at": "2026-07-04T23:30:21.405Z",
+    "block_height": 39499543,
+    "trigger_reason": "proposal_status_changed,membership_change",
     "changes": [
-      "Proposal A29 created (status: open)"
+      "Proposal A29 status changed: open → executed",
+      "Membership or voting weight changed"
     ],
-    "previous_moultbook": "moult:120a0d9ae827609956a2df05499ebecf21d94d1c0191bd15d63337d6470afe54"
+    "previous_moultbook": "moult:ca5db209cfaa31053ae9975be71b3ebaa12bcb64c9782fa3208efe343e2439dd"
   }
 }
