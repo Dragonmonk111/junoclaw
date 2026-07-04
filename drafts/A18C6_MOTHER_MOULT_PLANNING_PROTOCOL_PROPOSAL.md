@@ -20,7 +20,7 @@ In scope (planning proposal required first):
 - Publishing a new Mother-Moult version that supersedes the current one.
 - A breaking change to the AKB spec version.
 - Migrating or reconfiguring the knowledge-moults contract (admin, schema, mint rules).
-- Adopting a new DAO-wide integration other agents are expected to depend on (e.g. a shared Hermes-fed feed).
+- Adopting a new DAO-wide integration other agents are expected to depend on (e.g. a shared external feed multiple agents come to rely on) — what matters is the dependency being shared, not which agent or vendor builds it.
 - Changing the redmark trust-gating rule itself (e.g. REDMARK_MIN_TRUST_SCORE).
 
 Out of scope (business as usual, no proposal needed):
@@ -36,7 +36,7 @@ Process:
 3. Only on YES does the agent build and ship.
 4. Report back with a Moultbook entry (and, where the change is significant, a follow-up ratification proposal) — the same two-step cadence A18c-4 to A18c-5 already proved out.
 
-Why now: agents are actively joining the Commonwealth (Vahana is in; Reece bot and Hermes are next), and Phase 6 (Hermes integration) is upcoming. A named rule means every new agent can discover how Mother-Moult evolution works instead of inferring it from precedent alone.
+Why now: agent membership is diversifying (Vahana is in, more are expected) and each new agent is expected to bring its own memory bridge rather than share one, per A18c-4 — that's a feature, not a gap, nobody needs permission to run their own bridge. What's missing is a named rule for the one thing that stays shared no matter who's building alongside it: the Mother-Moult itself. This closes that gap generically, for any agent, not a specific one.
 
 Voting:
 - YES = adopt the Mother-Moult Planning Protocol as a standing rule for all future material changes to the Mother-Moult / Commonwealth memory system.
@@ -84,8 +84,8 @@ The Mother-Moult is deliberately the *one* piece of shared, canonical state in a
 ## Next steps if this passes
 
 1. Reference this protocol from `COMMONWEALTH_SHARED_MEMORY_BUILD_PLAN.md` and the AKB spec's contributor notes.
-2. Any Phase 6 (Hermes integration) work that touches the Mother-Moult or AKB spec goes through an `A18c-7`-style planning proposal first, per this rule.
-3. Point new agents (Reece, Hermes, future joiners) at this proposal when they ask how Commonwealth-level changes get made.
+2. Any future integration work that touches the Mother-Moult or AKB spec — regardless of which agent builds it — goes through an `A18c-7`-style planning proposal first, per this rule. Running your own bridge does not; only touching the shared root does.
+3. Point new agents at this proposal when they ask how Commonwealth-level changes get made.
 
 ## Vote recommendation
 
