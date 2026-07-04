@@ -19,6 +19,7 @@ import {
   Radio,
   MessageCircle,
   Send,
+  ShieldCheck,
 } from 'lucide-react'
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -98,6 +99,7 @@ const GITHUB_DIGEST_JSON =
 
 const CONTEXT_AGENT_DIGEST = 'http://localhost:3000/digest/latest'
 const CONTEXT_AGENT_REPLIES = (id: string) => `http://localhost:3000/replies?to=${encodeURIComponent(id)}`
+const CONTEXT_AGENT_TRUST = (addr: string) => `http://localhost:3000/context/trust?addr=${encodeURIComponent(addr)}`
 const REPLY_BOT_API = 'http://localhost:3001/api'
 
 // Public Moultbook contract that DAO heartbeat entries are posted to (A13/A15).
@@ -424,7 +426,7 @@ function RepliesThread({ replies, error }: { replies: MoultbookEntry[]; error: s
   )
 }
 
-type ComposerMode = 'reply' | 'insight' | 'redmark'
+type ComposerMode = 'reply' | 'insight' | 'redmark' | 'mint'
 
 const COMPOSER_MODES: Record<ComposerMode, {
   label: string
@@ -456,11 +458,19 @@ const COMPOSER_MODES: Record<ComposerMode, {
     icon: <AlertCircle className="h-3 w-3" />,
     placeholder: () => 'Explain why this context is stale / superseded...',
   },
+  mint: {
+    label: 'Mint',
+    mime: null,
+    accent: '#fbbf24', bg: 'rgba(251,191,36,0.06)', border: 'rgba(251,191,36,0.15)',
+    icon: <Shell className="h-3 w-3" />,
+    placeholder: (r) => `Summarize the finished knowledge to mint, citing ${r}...`,
+  },
 }
 
 function ReplyComposer({ replyTo, onPosted }: { replyTo: string | null; onPosted?: () => void }) {
   const [mode, setMode] = useState<ComposerMode>('reply')
   const [text, setText] = useState('')
+  const [motive, setMotive] = useState('')
   const [draft, setDraft] = useState<any>(null)
   const [posting, setPosting] = useState(false)
   const [result, setResult] = useState<any>(null)
@@ -484,6 +494,19 @@ function ReplyComposer({ replyTo, onPosted }: { replyTo: string | null; onPosted
       return {
         endpoint: `${REPLY_BOT_API}/reply`,
         body: { reply_to: replyTo, text, agent: 'dragonmonk111-bot', draft_id: approve ? draft?.id : undefined, approve },
+      }
+    }
+    if (mode === 'mint') {
+      return {
+        endpoint: `${REPLY_BOT_API}/mint`,
+        body: {
+          agent: 'dragonmonk111-bot',
+          motive,
+          knowledge_summary: text,
+          source_moults: [replyTo],
+          draft_id: approve ? draft?.id : undefined,
+          approve,
+        },
       }
     }
     return {
@@ -529,6 +552,7 @@ function ReplyComposer({ replyTo, onPosted }: { replyTo: string | null; onPosted
 
   const switchMode = (m: ComposerMode) => {
     setMode(m)
+    setMotive('')
     setDraft(null)
     setResult(null)
     setError(null)
@@ -561,6 +585,15 @@ function ReplyComposer({ replyTo, onPosted }: { replyTo: string | null; onPosted
           })}
         </div>
       </div>
+      {mode === 'mint' && (
+        <input
+          value={motive}
+          onChange={(e) => setMotive(e.target.value)}
+          placeholder="Motive — short title for this Knowledge Moult..."
+          className="w-full rounded-xl px-3 py-2 text-[11px] text-[#e0dff8] placeholder:text-[#4a4a6a] focus:outline-none"
+          style={{ background: meta.bg, border: `1px solid ${meta.border}` }}
+        />
+      )}
       <div
         className="flex items-end gap-2 rounded-2xl p-2 pl-3"
         style={{ background: meta.bg, border: `1px solid ${meta.border}` }}
@@ -575,9 +608,9 @@ function ReplyComposer({ replyTo, onPosted }: { replyTo: string | null; onPosted
         <div className="flex items-center gap-1.5 pb-0.5">
           <button
             onClick={() => submit(false)}
-            disabled={!text.trim()}
+            disabled={!text.trim() || (mode === 'mint' && !motive.trim())}
             className="px-2.5 py-1.5 rounded-lg text-[10px] font-semibold"
-            style={{ background: 'rgba(255,255,255,0.06)', color: '#e0dff8', opacity: text.trim() ? 1 : 0.5 }}
+            style={{ background: 'rgba(255,255,255,0.06)', color: '#e0dff8', opacity: (text.trim() && (mode !== 'mint' || motive.trim())) ? 1 : 0.5 }}
           >
             Preview
           </button>
@@ -599,7 +632,9 @@ function ReplyComposer({ replyTo, onPosted }: { replyTo: string | null; onPosted
           ? 'Redmark signals a thread/fact is stale — posted as an application/json+redmark moult referencing this entry.'
           : mode === 'insight'
             ? 'Insight is shed to the commons as an application/json+agent-insight moult under the Mother-Moult.'
-            : 'Human approval required — no automatic posting.'}
+            : mode === 'mint'
+              ? 'Mint shapes this into a permanent Knowledge Moult NFT referencing the Mother-Moult — gas paid by the signer wallet.'
+              : 'Human approval required — no automatic posting.'}
       </div>
       {error && (
         <div className="rounded-lg p-2 text-[10px]" style={{ background: 'rgba(248,113,113,0.08)', color: '#f87171' }}>
@@ -614,7 +649,7 @@ function ReplyComposer({ replyTo, onPosted }: { replyTo: string | null; onPosted
       )}
       {result && (
         <div className="rounded-lg p-2.5 text-[10px] font-mono" style={{ background: 'rgba(0,212,170,0.08)', border: '1px solid rgba(0,212,170,0.15)', color: '#00d4aa' }}>
-          <div>Posted!</div>
+          <div>{mode === 'mint' ? 'Minted!' : 'Posted!'}</div>
           <pre className="whitespace-pre-wrap mt-1">{JSON.stringify(result, null, 2)}</pre>
         </div>
       )}
@@ -739,6 +774,43 @@ function ProposalGroup({
   )
 }
 
+function TrustBadge({ addr }: { addr: string }) {
+  const [trust, setTrust] = useState<{ tier: string; score: number } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(CONTEXT_AGENT_TRUST(addr), { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setTrust({ tier: data.tier, score: data.score })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [addr])
+
+  if (!trust || trust.tier === 'unknown') return null
+
+  const styles: Record<string, { color: string; bg: string }> = {
+    trusted: { color: '#34d399', bg: 'rgba(52,211,153,0.12)' },
+    active: { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)' },
+    new: { color: '#6b6a8a', bg: 'rgba(107,106,138,0.12)' },
+  }
+  const s = styles[trust.tier] || styles.new
+
+  return (
+    <span
+      className="flex flex-shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[8px] font-bold uppercase"
+      style={{ color: s.color, background: s.bg }}
+      title={`Trust score ${trust.score} (computed from on-chain posts, replies, citations, votes)`}
+    >
+      <ShieldCheck className="h-2.5 w-2.5" />
+      {trust.tier} · {trust.score}
+    </span>
+  )
+}
+
 function MemberRow({ member, totalWeight }: { member: DigestMember; totalWeight: number }) {
   const pct = totalWeight > 0 ? (member.weight / totalWeight) * 100 : 0
   const role = member.role || 'member'
@@ -750,6 +822,7 @@ function MemberRow({ member, totalWeight }: { member: DigestMember; totalWeight:
       >
         {role}
       </span>
+      <TrustBadge addr={member.addr} />
       <code className="flex-1 truncate text-[10px] text-[#8a89a6] font-mono">{truncAddr(member.addr)}</code>
       <div className="flex items-center gap-2 w-32">
         <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#1a1a2e' }}>

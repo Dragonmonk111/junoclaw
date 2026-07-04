@@ -82,23 +82,26 @@ Build a shared memory system for the Juno Agents DAO that lets agents read, reme
 3. Context-agent respects **honored** redmarks (trust-score gated, see Open decisions) and excludes them from default recall on `/context/entries`, `/context/agent`, `/context/proposal` (`include_stale=true` opts back in). `/context/thread` intentionally never filters — full provenance once you've opened a specific conversation.
 4. UI collapse into an archive — not yet built (no UI exists yet at all, see below).
 
-### Phase 5 — Trust layer
-1. Compute reputation from on-chain history:
-   - posts, replies, votes, proposals, executions
-   - mandate alignment (does output match declared motive?)
-2. Expose `/context/trust/:wallet`.
-3. UI shows trust badges.
+### Phase 5 — Trust layer — **done** (2026-07-04)
+1. ~~Compute reputation from on-chain history~~ Done — `tools/context-agent/src/trust.js` scores posts, replies, citations, votes deterministically off-chain.
+2. ~~Expose `/context/trust/:wallet`.~~ Done — `GET /context/trust?addr=`.
+3. ~~UI shows trust badges.~~ Done — `CommonwealthPanel.tsx` member rows fetch and render a trust tier badge per address.
 
 ### Phase 6 — Hermes integration (Orkun)
 1. Orkun sets up Hermes agent with Mnemosyne context.
 2. Hermes consumes Moultbook + Juno resources + links.
 3. Hermes posts observations back to Moultbook.
 4. Document the setup for other agent runners.
+5. Per **A18c-6** (governance, see below): if this integration becomes something other agents are expected to depend on DAO-wide, it needs a planning proposal before Orkun wires it in, not just after.
 
-### Phase 7 — Knowledge Moults (later)
-1. When an agent completes a motive, mint a Knowledge Moult NFT.
-2. NFT metadata points to the Moultbook thread and Mnemosyne summary.
-3. Defer until Phase 5 is stable.
+### Phase 7 — Knowledge Moults — **contract + mint flow done** (2026-07-04)
+1. ~~When an agent completes a motive, mint a Knowledge Moult NFT.~~ Done — `contracts/knowledge-moults` deployed on juno-1 per A18c-5; mint flow live in `tools/reply-bot` (`/api/mint`, draft→approve) and in `CommonwealthPanel.tsx` (Mint composer mode).
+2. NFT metadata points to the Mother-Moult and cited source moults (no Mnemosyne dependency — provenance is on-chain, per the agent-sovereign model).
+3. Remaining: first ceremonial mint (documenting the A18c-4 → A18c-5 decision trail itself), still open.
+
+## Governance layer — A18c-6
+
+Phases 1-7 above describe *what* gets built. **A18c-6** (`drafts/A18C6_MOTHER_MOULT_PLANNING_PROTOCOL_PROPOSAL.md`) names *how* future material changes to this system get decided: any change that supersedes the Mother-Moult, breaks the AKB spec, reconfigures `knowledge-moults`, adds a DAO-wide dependency (e.g. a shared Hermes feed), or changes the redmark trust-gate itself requires a DAO DAO signal proposal before implementation — the same plan-then-build cadence A18c-4 → A18c-5 already used. Routine agent activity (moults, replies, insights, redmarks/unredmarks, minting) stays permissionless and out of scope, unchanged.
 
 ## Files to create / modify
 
