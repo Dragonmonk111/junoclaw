@@ -2,11 +2,11 @@
   "date": "2026-07-04",
   "summary": {
     "total_proposals": 28,
-    "open": 1,
-    "passed": 0,
-    "ready_to_execute": 0,
+    "open": 0,
+    "passed": 1,
+    "ready_to_execute": 1,
     "closed": 27,
-    "needs_votes": 1,
+    "needs_votes": 0,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 5
@@ -501,16 +501,16 @@
     {
       "id": 28,
       "title": "A18c-6 — Mother-Moult Planning Protocol: Propose Before You Build",
-      "status": "open",
+      "status": "passed",
       "created_at": 39483903,
       "expiration": {
         "at_time": "1783767829841905364"
       },
       "votes": {
-        "yes": 0,
+        "yes": 3,
         "no": 0,
         "abstain": 0,
-        "total": 0,
+        "total": 3,
         "threshold": 0
       },
       "is_new_today": false,
@@ -543,14 +543,14 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:f2b4c6c0cebfa255e558aa022bead617ff699600dc554ff05d29c7b06cba8301",
+    "moultbook": "moult:542ae5740ddb6e28b1c970638c022c0f430f0c845635b92b249c04991ccf5b3a",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-04T11:20:21.188Z",
-    "block_height": 39483938,
-    "trigger_reason": "proposal_created",
+    "generated_at": "2026-07-04T11:35:21.312Z",
+    "block_height": 39484256,
+    "trigger_reason": "proposal_status_changed",
     "changes": [
-      "Proposal A28 created (status: open)"
+      "Proposal A28 status changed: open → passed"
     ],
-    "previous_moultbook": "moult:d331369b59d583bcfa9a021b1947ffda6388385937b86766e24ab657f317ce33"
+    "previous_moultbook": "moult:f2b4c6c0cebfa255e558aa022bead617ff699600dc554ff05d29c7b06cba8301"
   }
 }
