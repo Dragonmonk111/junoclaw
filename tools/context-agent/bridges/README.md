@@ -1,11 +1,28 @@
 # Reference bridges: AKB → local memory
 
-These are **reference implementations**, not a DAO-run service. Per A18c-4, the DAO does not operate a shared memory engine — each agent runs its own, and pulls/pushes through AKB. These two scripts show what that looks like for the two engines evaluated so far. Copy, fork, or ignore them; write your own for whatever stack you run.
+These are **reference implementations**, not a DAO-run service. Per A18c-4, the DAO does not operate a shared memory engine — each agent runs its own, and pulls/pushes through AKB. These three scripts show what that looks like. Copy, fork, or ignore them; write your own for whatever stack you run.
 
-Both scripts:
+All three:
 1. Pull AKB v1.0 import envelopes from your own `context-agent` (`/context/thread`, `/context/agent`).
-2. Push each envelope into your local memory engine.
-3. Fall back to a safe dry-run if the target engine isn't configured/installed — neither script will crash an agent that hasn't set anything up yet.
+2. Push each envelope into your local memory engine (or file, for `local-file-bridge.js`).
+3. Fall back to a safe dry-run (or just work, for `local-file-bridge.js`) if the target engine isn't configured/installed — none of these will crash an agent that hasn't set anything up yet.
+
+## `local-file-bridge.js` — default, zero dependency
+
+No binary, no account, no API key, no network call other than your own `context-agent`. Caches AKB envelopes as local JSON-lines and searches them by keyword/tag — the "zero-engine" option `drafts/ARTICLE_FIELD_GUIDE_AGENT_SOVEREIGN_BRIDGE.md` describes as maximally sovereign. Dedups on `moult_id`, so re-syncing the same thread/agent repeatedly is safe.
+
+```bash
+node local-file-bridge.js --thread moult:2303244670f671abb693b77dcffe10e1d12ae635851c1d8ee7cb17728470c1d2
+node local-file-bridge.js --agent juno17nmczzsfycwn74z2yrxqe7fc96033e7rm2gut6
+```
+
+Env vars: `MEMORY_STORE_PATH` (default `./memory/agent-bridge/<namespace>.jsonl`, cwd-relative — nests under `memory/`, which the repo's root `.gitignore` already ignores at any depth), `MEMORY_NAMESPACE` (default `juno-agents-commonwealth`), `CONTEXT_AGENT_URL`.
+
+Tradeoff: `recall(query, ...)` is our own BM25 lexical ranking (term frequency × inverse document frequency × length normalization) over whatever's in the local store — zero new dependency, but it ranks by shared vocabulary, not meaning. It won't find a zero-overlap paraphrase the way a neural embedding model would. Reach for `mnemosyne-bridge.js` or `supermemory-bridge.js` below only if you specifically want true semantic search and are willing to accept a third-party binary or hosted API in exchange for it.
+
+If BM25 relevance isn't enough: `recallSemantic(query, ...)` is a second, separate export — self-derived PPMI (positive pointwise mutual information) distributional vectors built fresh from your own cache, cosine-ranked. No model, no training run to trust, no download: the corpus itself is the training data, in fixed alphabetical vocabulary/summation order, so the same store always produces bit-identical output — verified across separate process runs, not just claimed. It finds terms that co-occur with similar neighbors *within your own cache*, which is real distributional semantics, not a lexical trick, but it knows nothing about a word that's never appeared in your corpus, and it improves as your local cache grows rather than being fixed at training time like a pretrained model.
+
+Still want an actual neural embedding model instead? The next step up is one that runs fully offline after a one-time download (e.g. `@xenova/transformers`, no API key, no ongoing network call) — more sovereign than Supermemory's hosted API and than Mnemosyne's optional Anthropic/Voyage enrichment path, but only *practically* deterministic (pinned model hash + runtime), not provably bit-exact like `recallSemantic`. Not implemented here; noted for if/when it's worth the extra dependency.
 
 ## `supermemory-bridge.js`
 

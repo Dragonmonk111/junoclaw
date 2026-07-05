@@ -71,6 +71,32 @@ junod keys list --keyring-backend test --keyring-dir <dir>
 
 If the `agent-company` `Config` query fails, the contract address is wrong (or the contract isn't deployed on this network — switch to uni-7 per [`chain.md`](chain.md) §Testnet). If `task_ledger` / `escrow` / etc. addresses come back as the zero-address, the agent-company hasn't been bootstrapped — see [§Bootstrap](#5-bootstrap-instantiate-the-agent-company-stack-from-scratch).
 
+### Reusing existing code IDs by checksum
+
+On `juno-1` uploading new bytecode is permissioned, so the fastest path to a verified contract is often to reuse an existing `code_id` whose `data_hash` matches a known release artifact. This is the same technique Highlander's `nft-tickets` reference used for `cw721-base` (code_id `3723`, cw-nfts v0.18.0).
+
+The query is simple:
+
+```bash
+CODE_ID=3723
+RPC=https://juno-rpc.publicnode.com:443
+junod query wasm code-info $CODE_ID --node $RPC -o json | jq -r '.data_hash'
+```
+
+Compare the returned hash to the release artifact:
+
+```bash
+# Download the official release .wasm
+curl -L -o cw721_base.wasm https://github.com/CosmWasm/cw-nfts/releases/download/v0.18.0/cw721_base.wasm
+
+# Compute its data_hash (same as on-chain: sha256 of the gzip-compressed wasm)
+sha256sum cw721_base.wasm
+```
+
+If the hashes match, the on-chain code is byte-for-byte the audited release. Use it. If they don't match, the code_id is a different build — do not use it for production without understanding why.
+
+This works for any audited CosmWasm contract, not just cw721-base. The JunoClaw contracts themselves should be treated the same way once mainnet code IDs are published in `devnet/code-ids.json`.
+
 ## §4 Operations (by intent)
 
 ### Query: list open tasks (no key needed)

@@ -13,6 +13,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT || 3000)
 const REFRESH_INTERVAL_MS = Number(process.env.REFRESH_INTERVAL_MS || 5 * 60 * 1000)
 const MOTHER_MOULT_FILE = join(__dirname, '..', 'mother-moult.json')
+// tools/reply-bot mirrors every AKB export's exact payload text here, keyed
+// by moult id (see moultbook.js::mirrorExportToFile) — same-repo local read,
+// same pattern as the heartbeat digest mirror below.
+const REPLY_BOT_EXPORTS_DIR = join(__dirname, '..', '..', 'reply-bot', 'exports')
 
 function loadIndexOrFail() {
   return JSON.parse(readFileSync(INDEX_FILE, 'utf8'))
@@ -41,6 +45,30 @@ registerContentResolver('application/markdown+heartbeat', async () => {
     return null
   }
 })
+
+// AKB export mime types (tools/reply-bot/src/moultbook.js::postAkbExportToMoultbook)
+// mirror the exact payload text that was hashed into their commitment to
+// tools/reply-bot/exports/<idHex>.json as they're broadcast. Resolve any of
+// them the same way: same-repo local read, best-effort, null on any miss —
+// this generalizes the single-purpose heartbeat resolver above to every
+// export content_type instead of adding one resolver per mime type by hand.
+function loadMirroredExportText(entry) {
+  try {
+    const idHex = entry.id?.startsWith('moult:') ? entry.id.slice('moult:'.length) : entry.id
+    const raw = readFileSync(join(REPLY_BOT_EXPORTS_DIR, `${idHex}.json`), 'utf8')
+    return JSON.parse(raw).text ?? null
+  } catch {
+    return null
+  }
+}
+for (const mime of [
+  'application/json+agent-insight',
+  'application/json+agent-proposal',
+  'application/json+redmark',
+  'application/json+unredmark',
+]) {
+  registerContentResolver(mime, async (entry) => loadMirroredExportText(entry))
+}
 
 function collectThreadIds(index, rootId, maxDepth = 200) {
   const ids = new Set()

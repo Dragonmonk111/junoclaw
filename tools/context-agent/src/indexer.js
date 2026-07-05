@@ -9,6 +9,20 @@ export const CACHE_DIR = process.env.CACHE_DIR || join(__dirname, '..', 'cache')
 export const INDEX_FILE = join(CACHE_DIR, 'index.json')
 
 export const HEARTBEAT_AUTHOR = process.env.HEARTBEAT_AUTHOR || 'juno17nmczzsfycwn74z2yrxqe7fc96033e7rm2gut6'
+// moultbook-v0 has no global "list all entries" query (see contracts/moultbook-v0/src/msg.rs
+// QueryMsg — only ListByAuthor / ListByRef / ListByMoultKey / ListByTopic), so this indexer
+// can only discover entries by crawling from a known author's own posts plus whatever replies
+// (transitively) into that tree. An AKB export that refs the Mother-Moult directly instead of
+// replying into the heartbeat tree — e.g. tools/reply-bot's own insight/redmark/proposal posts —
+// would otherwise never be found. EXTRA_SEED_AUTHORS widens the crawl root beyond the heartbeat
+// watcher to any other known DAO-agent wallets. Once junoclaw-agent-registry has registered
+// members (empty today), ListAgents there would be a more general source for this same seed set.
+export const EXTRA_SEED_AUTHORS = (
+  process.env.EXTRA_SEED_AUTHORS || 'juno1r7g6q3lwkzedxgjae7alvc8x0848dgjyzllat7'
+)
+  .split(',')
+  .map((a) => a.trim())
+  .filter(Boolean)
 export const PAGE_LIMIT = 30
 
 async function fetchAllByAuthor(author) {
@@ -162,10 +176,19 @@ async function fetchAllReplies(entryIds) {
 }
 
 export async function fetchIndex() {
-  console.log(`[indexer] indexing entries for author ${HEARTBEAT_AUTHOR}`)
-  const entries = await fetchAllByAuthor(HEARTBEAT_AUTHOR)
-  const replyEntries = await fetchAllReplies(entries.map((e) => e.id))
-  const allEntries = entries.concat(replyEntries)
+  const seedAuthors = [HEARTBEAT_AUTHOR, ...EXTRA_SEED_AUTHORS.filter((a) => a !== HEARTBEAT_AUTHOR)]
+  console.log(`[indexer] indexing entries for authors: ${seedAuthors.join(', ')}`)
+  const seedEntries = []
+  const seedIds = new Set()
+  for (const author of seedAuthors) {
+    for (const entry of await fetchAllByAuthor(author)) {
+      if (seedIds.has(entry.id)) continue
+      seedIds.add(entry.id)
+      seedEntries.push(entry)
+    }
+  }
+  const replyEntries = await fetchAllReplies([...seedIds])
+  const allEntries = seedEntries.concat(replyEntries)
 
   const stats = await getStats().catch((e) => {
     console.warn('[indexer] stats query failed:', e.message)

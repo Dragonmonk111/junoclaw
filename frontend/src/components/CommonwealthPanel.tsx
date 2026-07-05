@@ -92,6 +92,72 @@ interface MoultbookEntry {
   topic_hash?: string | null
 }
 
+// AKB import envelope shape returned by context-agent's /context/entries
+// (tools/context-agent/src/akb.js::buildAkbImport) — only the fields
+// FieldNotesSection actually reads.
+interface AkbImportEnvelope {
+  moult_id: string
+  author: { wallet: string; alias: string | null; type: string }
+  timestamp: string | null
+  content: { mime_type: string; text: string | null; available: boolean }
+  refs: string[]
+  tags: string[]
+  provenance: { verified: boolean }
+}
+
+interface FieldNote {
+  id: string
+  author: string
+  timestamp: string | null
+  verified: boolean
+  tags: string[]
+  title: string
+  summary: string
+  links: Record<string, string>
+}
+
+// A resolved application/json+agent-insight entry's content.text is the full
+// AKB *export* envelope (tools/reply-bot/src/moultbook.js::postAkbExportToMoultbook
+// hashes the whole stamped envelope, not just the inner insight — see
+// tools/context-agent/src/index.js::loadMirroredExportText). Its own
+// content.text is, by convention, a second JSON-encoded insight body
+// (post-nft-tickets-followup.js is the reference shape). Unwrap both layers;
+// fall back gracefully at either layer since this is a convention, not an
+// enforced schema.
+function parseFieldNote(entry: AkbImportEnvelope): FieldNote | null {
+  if (!entry.content.available || !entry.content.text) return null
+  let summary = entry.content.text
+  let title = entry.tags.find((t) => t !== 'commonwealth' && t !== 'agent-insight') || 'Field note'
+  let links: Record<string, string> = {}
+  try {
+    const exportEnvelope = JSON.parse(entry.content.text)
+    const innerText = exportEnvelope?.content?.text
+    summary = innerText || summary
+    if (typeof innerText === 'string') {
+      try {
+        const insight = JSON.parse(innerText)
+        if (insight.title) title = insight.title
+        if (insight.summary) summary = insight.summary
+        if (insight.links && typeof insight.links === 'object') links = insight.links
+      } catch {
+        // inner text isn't structured JSON — show it as plain-text summary
+      }
+    }
+  } catch {
+    // content.text isn't a JSON export envelope — show the raw resolved text
+  }
+  return {
+    id: entry.moult_id,
+    author: entry.author.alias || entry.author.wallet,
+    timestamp: entry.timestamp,
+    verified: entry.provenance.verified,
+    tags: entry.tags,
+    title,
+    summary,
+    links,
+  }
+}
+
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const GITHUB_DIGEST_JSON =
@@ -100,6 +166,7 @@ const GITHUB_DIGEST_JSON =
 const CONTEXT_AGENT_DIGEST = 'http://localhost:3000/digest/latest'
 const CONTEXT_AGENT_REPLIES = (id: string) => `http://localhost:3000/replies?to=${encodeURIComponent(id)}`
 const CONTEXT_AGENT_TRUST = (addr: string) => `http://localhost:3000/context/trust?addr=${encodeURIComponent(addr)}`
+const CONTEXT_AGENT_FIELD_NOTES = `http://localhost:3000/context/entries?content_type=${encodeURIComponent('application/json+agent-insight')}&limit=10`
 const REPLY_BOT_API = 'http://localhost:3001/api'
 
 // Public Moultbook contract that DAO heartbeat entries are posted to (A13/A15).
@@ -834,6 +901,87 @@ function MemberRow({ member, totalWeight }: { member: DigestMember; totalWeight:
   )
 }
 
+function FieldNoteCard({ note }: { note: FieldNote }) {
+  const linkEntries = Object.entries(note.links)
+  return (
+    <div
+      className="rounded-xl p-4 space-y-2"
+      style={{ background: '#0a0a18', border: '1px solid rgba(255,255,255,0.05)' }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-xs font-semibold text-[#e0dff8]">{note.title}</div>
+        {note.verified ? (
+          <span
+            className="flex flex-shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[8px] font-bold uppercase"
+            style={{ color: '#34d399', background: 'rgba(52,211,153,0.12)' }}
+            title="content.text hash matches the on-chain commitment"
+          >
+            <ShieldCheck className="h-2.5 w-2.5" />
+            Verified
+          </span>
+        ) : (
+          <span
+            className="flex flex-shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[8px] font-bold uppercase"
+            style={{ color: '#6b6a8a', background: 'rgba(107,106,138,0.12)' }}
+            title="Off-chain text not resolved or does not match the on-chain commitment yet"
+          >
+            Unverified
+          </span>
+        )}
+      </div>
+      <p className="text-[11px] text-[#8a89a6] leading-relaxed">{note.summary}</p>
+      {linkEntries.length > 0 && (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {linkEntries.map(([label, href]) => (
+            <a
+              key={label}
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-medium transition hover:opacity-80"
+              style={{ color: '#60a5fa', background: 'rgba(96,165,250,0.08)' }}
+            >
+              <ExternalLink className="h-2.5 w-2.5" />
+              {label.replace(/_/g, ' ')}
+            </a>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2 pt-1 text-[9px] text-[#6b6a8a]">
+        <code className="font-mono">{truncAddr(note.author)}</code>
+        {note.timestamp && <span>{formatRelativeTime(note.timestamp)}</span>}
+        {note.tags
+          .filter((t) => t !== 'commonwealth' && t !== 'agent-insight')
+          .map((t) => (
+            <span key={t} className="rounded px-1 py-0.5" style={{ background: 'rgba(255,255,255,0.04)' }}>
+              #{t}
+            </span>
+          ))}
+      </div>
+    </div>
+  )
+}
+
+function FieldNotesSection({ notes, error }: { notes: FieldNote[]; error: string | null }) {
+  if (!notes.length && !error) return null
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold text-[#6b6a8a] uppercase tracking-widest">
+        <Sparkles className="h-3 w-3" />
+        Field notes — external contributions
+      </div>
+      {error && (
+        <div className="text-[11px] text-[#6b6a8a]">{error}</div>
+      )}
+      <div className="space-y-2">
+        {notes.map((note) => (
+          <FieldNoteCard key={note.id} note={note} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ──────────────────────────────────────────────────────────
 
 export function CommonwealthPanel() {
@@ -843,6 +991,22 @@ export function CommonwealthPanel() {
   const [lastRefresh, setLastRefresh] = useState<string>('mock')
   const [replies, setReplies] = useState<MoultbookEntry[]>([])
   const [repliesError, setRepliesError] = useState<string | null>(null)
+  const [fieldNotes, setFieldNotes] = useState<FieldNote[]>([])
+  const [fieldNotesError, setFieldNotesError] = useState<string | null>(null)
+
+  const loadFieldNotes = async () => {
+    try {
+      const res = await fetch(CONTEXT_AGENT_FIELD_NOTES, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      const entries: AkbImportEnvelope[] = data.entries || []
+      setFieldNotes(entries.map(parseFieldNote).filter((n): n is FieldNote => n !== null))
+      setFieldNotesError(null)
+    } catch (e) {
+      console.warn('Could not load field notes from context agent:', e)
+      setFieldNotesError(null) // context agent may simply be offline; fail quiet, not loud
+    }
+  }
 
   const loadReplies = async (moultId: string) => {
     try {
@@ -889,6 +1053,7 @@ export function CommonwealthPanel() {
 
   useEffect(() => {
     loadDigest()
+    loadFieldNotes()
   }, [])
 
   useEffect(() => {
@@ -1131,6 +1296,8 @@ export function CommonwealthPanel() {
         </div>
 
         <VerifyDrawer meta={digest.meta} />
+
+        <FieldNotesSection notes={fieldNotes} error={fieldNotesError} />
 
         {/* Footer / citation */}
         <div

@@ -1,7 +1,35 @@
 import { createHash } from 'crypto'
+import { writeFileSync, mkdirSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { SigningCosmWasmClient } from '@cosmjs/cosmwasm-stargate'
 import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing'
 import { GasPrice } from '@cosmjs/stargate'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+// Where AKB export payload text is mirrored so context-agent's resolvers can
+// recover it later (Moultbook only stores the commitment hash, see ADR-002 /
+// akb-spec.md's "whoever originates an export is responsible for keeping the
+// plaintext resolvable"). Same pattern tools/heartbeat-digest already uses
+// via its GitHub mirror, generalized here to every AKB export this bot posts.
+const EXPORTS_DIR = join(__dirname, '..', 'exports')
+
+/**
+ * Persist the exact payload text that was hashed into an export's on-chain
+ * commitment, keyed by moult id, so a content resolver can fetch it later
+ * (e.g. via the GitHub raw mirror of this repo) and verify it still matches.
+ * Best-effort: a failure here must never fail the broadcast that already
+ * succeeded on-chain.
+ */
+export function mirrorExportToFile(moultId, text) {
+  try {
+    mkdirSync(EXPORTS_DIR, { recursive: true })
+    const idHex = moultId.startsWith('moult:') ? moultId.slice('moult:'.length) : moultId
+    writeFileSync(join(EXPORTS_DIR, `${idHex}.json`), JSON.stringify({ moult_id: moultId, text }, null, 2))
+  } catch (e) {
+    console.warn('[reply-bot] could not mirror export to file:', e.message)
+  }
+}
 
 export const MOULTBOOK_ADDR =
   process.env.MOULTBOOK_ADDR || 'juno18xn4cfpjfpqhmjenr9gdxk5uk7jjq3cezcy6d2jcar2gvx98pvtsm95z6j'
@@ -126,6 +154,12 @@ export async function postAkbExportToMoultbook(envelope) {
   const moultId = findMoultId(result)
   if (!moultId) {
     console.warn('[reply-bot] could not parse moult:id from tx result:', JSON.stringify(result.logs))
+  } else {
+    // msg.post.commitment was computed by buildAkbExportPost as
+    // sha256Base64(JSON.stringify(stamped, null, 2)) — recompute the same
+    // payload text here (pure, deterministic) so a resolver can later
+    // recover and verify it, exactly like the heartbeat digest's GitHub mirror.
+    mirrorExportToFile(moultId, JSON.stringify(stamped, null, 2))
   }
 
   return { txHash: result.transactionHash, moultId, author: sender, dryRun: false }

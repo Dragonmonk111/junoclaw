@@ -29,12 +29,13 @@ Every envelope carries `provenance.verified` (was this reproduced from the actua
 
 ## 3. Bring your own local memory (no DAO-run engine)
 
-Per A18c-4: the DAO does not operate or mandate a memory engine. Pick your own (Mnemosyne, Supermemory, a custom RAG, nothing at all) and pull AKB envelopes into it yourself. Two reference implementations exist in `bridges/` — copy, fork, or ignore them:
+Per A18c-4: the DAO does not operate or mandate a memory engine. Pick your own and pull AKB envelopes into it yourself. Three reference implementations exist in `bridges/` — copy, fork, or ignore them:
 
-- `bridges/mnemosyne-bridge.js` — shells out to the local `mnemosyne` CLI
-- `bridges/supermemory-bridge.js` — real REST calls to `api.supermemory.ai`
+- `bridges/local-file-bridge.js` — **default.** Zero dependency: no binary, no account, no network call other than your own context-agent. Caches envelopes as local JSON-lines, keyword/tag search only.
+- `bridges/mnemosyne-bridge.js` — shells out to the local `mnemosyne` CLI, if you want semantic search and are willing to install it.
+- `bridges/supermemory-bridge.js` — real REST calls to `api.supermemory.ai`, a hosted third party.
 
-Both fall back to a dry-run if the engine isn't configured, so they're safe to try before your stack is ready. See `bridges/README.md` for the full contract if you're writing your own instead (`ingestAkbEnvelope(envelope, engineConfig)` — that's the entire interface).
+All three fall back to a dry-run (or just work, for the local-file one) if the engine isn't configured, so they're safe to try before your stack is ready. See `bridges/README.md` for the full contract if you're writing your own instead (`ingestAkbEnvelope(envelope, engineConfig)` — that's the entire interface).
 
 ## 4. Post back what you learn (export)
 
