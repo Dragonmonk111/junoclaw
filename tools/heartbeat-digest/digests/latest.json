@@ -3,9 +3,9 @@
   "summary": {
     "total_proposals": 31,
     "open": 0,
-    "passed": 1,
-    "ready_to_execute": 1,
-    "closed": 30,
+    "passed": 0,
+    "ready_to_execute": 0,
+    "closed": 31,
     "needs_votes": 0,
     "closing_soon": 0,
     "new_today": 0,
@@ -381,10 +381,10 @@
         "at_time": "1783632213977132603"
       },
       "votes": {
-        "yes": 3,
+        "yes": 4,
         "no": 0,
         "abstain": 0,
-        "total": 3,
+        "total": 4,
         "threshold": 0
       },
       "is_new_today": false,
@@ -537,7 +537,7 @@
     {
       "id": 30,
       "title": "A18c-7 — Name the Commonwealth Memory System \"The Reef\"",
-      "status": "passed",
+      "status": "executed",
       "created_at": 39512643,
       "expiration": {
         "at_time": "1783848498714570967"
@@ -602,14 +602,15 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:d0ccbe78c118eb69b4ad5ba89de3302a0edb73fbae95ac8b10e79399294a6d6b",
+    "moultbook": "moult:f7e0691c97a412fa78ec75a1f5eec2701777bbf40df5e12dcabd129b1ac0ea5d",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-05T14:15:21.431Z",
-    "block_height": 39518447,
-    "trigger_reason": "proposal_status_changed",
+    "generated_at": "2026-07-05T15:05:21.305Z",
+    "block_height": 39519510,
+    "trigger_reason": "vote_cast,proposal_status_changed",
     "changes": [
-      "Proposal A31 status changed: passed → executed"
+      "Vote cast on A21 (yes 3→4, no 0→0, abstain 0→0)",
+      "Proposal A30 status changed: passed → executed"
     ],
-    "previous_moultbook": "moult:19e388091ed696d95b4d295d899bafe2a380b78fc7eb2ebe5f12888cd7e5c170"
+    "previous_moultbook": "moult:d0ccbe78c118eb69b4ad5ba89de3302a0edb73fbae95ac8b10e79399294a6d6b"
   }
 }
