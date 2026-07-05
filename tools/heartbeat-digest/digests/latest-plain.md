@@ -8,8 +8,8 @@ _Generated from on-chain data via public RPC._
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
 | Total proposals | 31 |
 | Open | 0 |
-| Passed / ready to execute | 2 |
-| Closed | 29 |
+| Passed / ready to execute | 1 |
+| Closed | 30 |
 | Total voting power | 6 |
 
 ## New today
@@ -20,7 +20,6 @@ _Generated from on-chain data via public RPC._
 
 ## Ready to execute
 - **A30**: A18c-7 — Name the Commonwealth Memory System "The Reef"
-- **A31**: Set NoiseBoi member image
 
 ## Closing soon (next 24h)
 - none
@@ -55,6 +54,7 @@ _Generated from on-chain data via public RPC._
 - **A27**: A18c-5 — Ratify the Mother-Moult + Deploy the Knowledge Moults NFT Contract — Executed
 - **A28**: A18c-6 — Mother-Moult Planning Protocol: Propose Before You Build — Executed
 - **A29**: Join: NoiseBoi — builder — grassroots NFT ticketing — Executed
+- **A31**: Set NoiseBoi member image — Executed
 
 ## Treasury
 - 4000000000 ujuno
@@ -69,4 +69,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-05 14:10:21 UTC
+- Generated at: 2026-07-05 14:15:21 UTC
