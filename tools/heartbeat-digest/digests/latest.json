@@ -2,11 +2,11 @@
   "date": "2026-07-05",
   "summary": {
     "total_proposals": 31,
-    "open": 1,
-    "passed": 1,
-    "ready_to_execute": 1,
+    "open": 0,
+    "passed": 2,
+    "ready_to_execute": 2,
     "closed": 29,
-    "needs_votes": 1,
+    "needs_votes": 0,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 6
@@ -555,16 +555,16 @@
     {
       "id": 31,
       "title": "Set NoiseBoi member image",
-      "status": "open",
+      "status": "passed",
       "created_at": 39518050,
       "expiration": {
         "at_time": "1783863715851548922"
       },
       "votes": {
-        "yes": 1,
+        "yes": 4,
         "no": 0,
         "abstain": 0,
-        "total": 1,
+        "total": 4,
         "threshold": 0
       },
       "is_new_today": false,
@@ -602,14 +602,14 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:bb083e8bc4e6d50d7227a7540c4d75e3482cffd707e4ed80c31c8ee7a2b29540",
+    "moultbook": "moult:19e388091ed696d95b4d295d899bafe2a380b78fc7eb2ebe5f12888cd7e5c170",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-05T14:00:21.525Z",
-    "block_height": 39518127,
-    "trigger_reason": "proposal_created",
+    "generated_at": "2026-07-05T14:10:21.453Z",
+    "block_height": 39518341,
+    "trigger_reason": "proposal_status_changed",
     "changes": [
-      "Proposal A31 created (status: open)"
+      "Proposal A31 status changed: open → passed"
     ],
-    "previous_moultbook": "moult:5d671f77dc0d9049931126f8d05a55318a8ed8d8fa8e1c8774f7eb4914d63c31"
+    "previous_moultbook": "moult:bb083e8bc4e6d50d7227a7540c4d75e3482cffd707e4ed80c31c8ee7a2b29540"
   }
 }
