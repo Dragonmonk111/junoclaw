@@ -6,8 +6,8 @@ _Generated from on-chain data via public RPC._
 | Metric | Value |
 |---|---|
 | DAO core | juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac |
-| Total proposals | 30 |
-| Open | 0 |
+| Total proposals | 31 |
+| Open | 1 |
 | Passed / ready to execute | 1 |
 | Closed | 29 |
 | Total voting power | 6 |
@@ -16,7 +16,7 @@ _Generated from on-chain data via public RPC._
 - none
 
 ## Needs votes
-- none
+- **A31**: Set NoiseBoi member image [vote](https://dao.daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/31)
 
 ## Ready to execute
 - **A30**: A18c-7 — Name the Commonwealth Memory System "The Reef"
@@ -68,4 +68,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-05 12:50:21 UTC
+- Generated at: 2026-07-05 14:00:21 UTC
