@@ -68,4 +68,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-05 09:45:21 UTC
+- Generated at: 2026-07-05 11:20:24 UTC
