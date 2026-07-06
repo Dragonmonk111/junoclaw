@@ -1,0 +1,12 @@
+{
+  "recall": "green",
+  "plan": "green",
+  "attach": "green",
+  "gates": "green",
+  "replay": "green",
+  "moult-draft": "yellow",
+  "moultbook-post": "red",
+  "fund-transfer": "red",
+  "proposal-submit": "red",
+  "key-generation": "red"
+}

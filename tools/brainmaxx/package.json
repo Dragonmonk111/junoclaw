@@ -1,0 +1,17 @@
+{
+  "name": "brainmaxx",
+  "version": "0.1.0",
+  "description": "Deterministic D0 cognition CLI over the Reef local-file-bridge cache. See drafts/BRAINMAXX_V0_BUILD_SPEC.md.",
+  "type": "module",
+  "bin": {
+    "brainmaxx": "src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test test/determinism.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "private": true
+}

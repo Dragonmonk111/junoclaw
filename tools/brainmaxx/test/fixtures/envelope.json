@@ -1,0 +1,14 @@
+{
+  "akb_version": "1.0",
+  "direction": "export",
+  "mother_moult_id": "moult:mother:test",
+  "author": { "wallet": "juno1testwallet", "alias": "brainmaxx-test", "type": "agent" },
+  "content": {
+    "mime_type": "application/json+agent-insight",
+    "text": "Fixture insight for commitment parity test T6.",
+    "structured": { "type": "brainmaxx-insight", "run_id": "brainrun:fixture" }
+  },
+  "refs": ["moult:aaa1", "moult:aaa2"],
+  "tags": ["brainmaxx", "reef", "agent-cognition"],
+  "memory_ops": { "remember": [], "stale": [] }
+}
