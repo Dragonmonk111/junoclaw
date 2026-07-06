@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto'
 import { getConfig, configHash, MIN_SCORE, DEFAULT_K } from './config.js'
 import { loadSnapshot } from './store.js'
 import { buildPack } from './pack.js'
-import { createTrace, writeTrace, readTrace, resolveRunId, attachDraft } from './trace.js'
+import { createTrace, writeTrace, readTrace, resolveRunId, attachDraft, computeClaimId } from './trace.js'
 import { runGates } from './gates.js'
 import { composeEnvelope, writeDraft } from './akb-compose.js'
 import { canonV1 } from './canon.js'
@@ -161,7 +161,7 @@ function cmdPlan(positional, flags) {
 function cmdAttach(positional, flags) {
   const [runIdArg, draftFile] = positional
   if (!runIdArg || !draftFile) {
-    console.error('Usage: brainmaxx attach <run_id> <draft-file> [--model <name>]')
+    console.error('Usage: brainmaxx attach <run_id> <draft-file> [--model <name>] [--claims <claims.json>]')
     process.exit(1)
   }
   const config = getConfig()
@@ -176,6 +176,23 @@ function cmdAttach(positional, flags) {
   const sha256 = createHash('sha256').update(bytes).digest('hex')
 
   attachDraft(trace, { path: draftFile, sha256, model: flags.model || 'operator-declared' })
+
+  // Claims are how the D2 stage declares, structurally, what it claimed and
+  // from where — G1/G2 have nothing to check without them. Each entry:
+  // { claim, support: [moult_id, ...], quote? }. claim_id is computed here,
+  // not supplied, so it can't be spoofed independent of its own content.
+  if (flags.claims) {
+    if (!existsSync(flags.claims)) {
+      console.error(`claims file not found: ${flags.claims}`)
+      process.exit(1)
+    }
+    const rawClaims = JSON.parse(readFileSync(flags.claims, 'utf8'))
+    trace.claims = rawClaims.map((c) => ({
+      ...c,
+      claim_id: computeClaimId({ claim: c.claim, support: c.support || [], run_id: trace.run_id }),
+    }))
+  }
+
   const tracePath = writeTrace(config.brainmaxxDir, trace)
 
   console.log(`attached ${draftFile} to ${runId}`)
@@ -280,9 +297,14 @@ function cmdReplay(positional) {
     includeStale: trace.pack.include_stale,
   })
 
+  // Deliberately claims: [] here, not trace.claims. trace.gates was recorded
+  // at plan time, before any attach could add claims — replay's job is to
+  // reproduce THAT recorded verdict from the recorded pack, not to re-verify
+  // whatever claims a later `attach` happened to add. `gates <run_id>` and
+  // `moult-draft <run_id>` already re-check current claims fresh, every time.
   const recomputedGates = runGates({
     refs: recomputedPack.items.map((i) => i.moult_id),
-    claims: trace.claims || [],
+    claims: [],
     includeStale: trace.pack.include_stale,
     entries: snapshot.entries,
   })
@@ -335,7 +357,7 @@ Usage:
   brainmaxx snapshot
   brainmaxx recall "<query>" [--k 12] [--semantic|--hybrid] [--include-stale] [--json]
   brainmaxx plan "<objective>" [--k 12]
-  brainmaxx attach <run_id> <draft-file> [--model <name>]
+  brainmaxx attach <run_id> <draft-file> [--model <name>] [--claims <claims.json>]
   brainmaxx gates <run_id>
   brainmaxx moult-draft <run_id>
   brainmaxx replay <run_id>`)

@@ -89,6 +89,9 @@ mcp/*.js
 memory/
 /TODO.md
 
+# Brainmaxx local manual-run scratch state (reproducible via the CLI; not test fixtures)
+tools/brainmaxx/real-run/
+
 # Private DM drafts and outreach — contains personal comms
 docs/JAKE_DM_*.md
 docs/HIGHLANDER_OUTREACH_DM.md

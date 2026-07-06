@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -170,6 +170,31 @@ test('T7: plan -> replay is byte-identical and exits 0', () => {
     const match = planResult.stdout.match(/run_id: (brainrun:[a-f0-9]+)/)
     assert.ok(match, `expected run_id in stdout: ${planResult.stdout}`)
     const runId = match[1]
+
+    const replayResult = spawnSync('node', [CLI, 'replay', runId], { env, encoding: 'utf8' })
+    assert.equal(replayResult.status, 0, replayResult.stderr || replayResult.stdout)
+    assert.match(replayResult.stdout, /replay OK/)
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('T7: replay still matches after attach adds claims (replay reproduces plan-time verdict, not post-hoc claims)', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'brainmaxx-t7b-'))
+  try {
+    const env = { ...process.env, MEMORY_STORE_PATH: CORPUS, MEMORY_NAMESPACE: 'brainmaxx-test', BRAINMAXX_DIR: tmp }
+
+    const planResult = spawnSync('node', [CLI, 'plan', 'Explain the Reef memory system', '--k', '5'], { env, encoding: 'utf8' })
+    assert.equal(planResult.status, 0, planResult.stderr)
+    const runId = planResult.stdout.match(/run_id: (brainrun:[a-f0-9]+)/)[1]
+
+    const draftPath = join(tmp, 'draft.md')
+    writeFileSync(draftPath, 'The Reef is built on Moultbook (moult:aaa1).')
+    const claimsPath = join(tmp, 'claims.json')
+    writeFileSync(claimsPath, JSON.stringify([{ claim: 'test', support: ['moult:aaa1'], quote: 'immutable append-only ledger' }]))
+
+    const attachResult = spawnSync('node', [CLI, 'attach', runId, draftPath, '--claims', claimsPath], { env, encoding: 'utf8' })
+    assert.equal(attachResult.status, 0, attachResult.stderr)
 
     const replayResult = spawnSync('node', [CLI, 'replay', runId], { env, encoding: 'utf8' })
     assert.equal(replayResult.status, 0, replayResult.stderr || replayResult.stdout)

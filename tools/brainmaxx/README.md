@@ -47,7 +47,7 @@ Every command is offline-capable once the cache is synced — no network call is
 | `snapshot` | Prints `corpus_snapshot_hash` + entry count for the current cache |
 | `recall "<query>"` | Ranked, cited sources — `--k`, `--semantic`/`--hybrid`, `--include-stale`, `--json` |
 | `plan "<objective>"` | Writes a trace + `PLAN-INPUT.md` bundle for your own agent to draft from |
-| `attach <run_id> <file>` | Attaches a D2 draft to a trace; flips `determinism_profile` to `D2-attached` |
+| `attach <run_id> <file> [--claims <claims.json>]` | Attaches a D2 draft to a trace; flips `determinism_profile` to `D2-attached`. `--claims` supplies `[{ claim, support: [moult_id,...], quote? }]` for G1/G2 to actually check |
 | `gates <run_id>` | Runs G1–G5 against a trace; exit 1 if any gate fails |
 | `moult-draft <run_id>` | Gated AKB export draft + commitment preview (never posts) |
 | `replay <run_id>` | Byte-exact recomputation of pack + gates from the recorded trace |
