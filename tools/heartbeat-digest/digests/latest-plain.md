@@ -1,4 +1,4 @@
-# Juno Agents DAO Heartbeat Digest — 2026-07-05
+# Juno Agents DAO Heartbeat Digest — 2026-07-08
 
 _Generated from on-chain data via public RPC._
 
@@ -58,7 +58,7 @@ _Generated from on-chain data via public RPC._
 - **A31**: Set NoiseBoi member image — Executed
 
 ## Treasury
-- 4000000000 ujuno
+- 9000000000 ujuno
 
 ## Members
 - juno1dlm6y5cnvxayyv6hxd863lef82vu9jnez89gkh — weight 1
@@ -70,4 +70,4 @@ _Generated from on-chain data via public RPC._
 - DAO core: juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac
 - Proposal module: juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp
 - REST endpoint: https://juno-rest.publicnode.com
-- Generated at: 2026-07-05 15:05:21 UTC
+- Generated at: 2026-07-08 16:10:22 UTC
