@@ -1,5 +1,5 @@
 {
-  "date": "2026-07-08",
+  "date": "2026-07-09",
   "summary": {
     "total_proposals": 31,
     "open": 0,
@@ -399,10 +399,10 @@
         "at_time": "1783632213977132603"
       },
       "votes": {
-        "yes": 3,
+        "yes": 4,
         "no": 0,
         "abstain": 0,
-        "total": 3,
+        "total": 4,
         "threshold": 0
       },
       "is_new_today": false,
@@ -435,10 +435,10 @@
         "at_time": "1783638446144110396"
       },
       "votes": {
-        "yes": 3,
+        "yes": 4,
         "no": 0,
         "abstain": 0,
-        "total": 3,
+        "total": 4,
         "threshold": 0
       },
       "is_new_today": false,
@@ -602,14 +602,15 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:6b8ee75690333047982df2c97ec1a8658b87b23b2cff342c88c96389e803b164",
+    "moultbook": "moult:eb1afc86fc7bca701b2b2b13afd44ecad0600a168964f3b17b1a52a45a6dc38c",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-08T16:10:22.094Z",
-    "block_height": 39614196,
-    "trigger_reason": "treasury_change",
+    "generated_at": "2026-07-09T08:15:21.888Z",
+    "block_height": 39635072,
+    "trigger_reason": "vote_cast",
     "changes": [
-      "Treasury ujuno changed: 4000000000 → 9000000000"
+      "Vote cast on A22 (yes 3→4, no 0→0, abstain 0→0)",
+      "Vote cast on A24 (yes 3→4, no 0→0, abstain 0→0)"
     ],
-    "previous_moultbook": "moult:f7e0691c97a412fa78ec75a1f5eec2701777bbf40df5e12dcabd129b1ac0ea5d"
+    "previous_moultbook": "moult:6b8ee75690333047982df2c97ec1a8658b87b23b2cff342c88c96389e803b164"
   }
 }
