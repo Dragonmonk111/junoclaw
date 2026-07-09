@@ -1,12 +1,12 @@
 {
   "date": "2026-07-09",
   "summary": {
-    "total_proposals": 31,
-    "open": 0,
+    "total_proposals": 32,
+    "open": 1,
     "passed": 0,
     "ready_to_execute": 0,
     "closed": 31,
-    "needs_votes": 0,
+    "needs_votes": 1,
     "closing_soon": 0,
     "new_today": 0,
     "total_voting_power": 6
@@ -569,6 +569,24 @@
       },
       "is_new_today": false,
       "is_closing_soon": false
+    },
+    {
+      "id": 32,
+      "title": "A18c-9 — Authorize the J-Reef / J-Lens Audit Layer as DAO Infrastructure",
+      "status": "open",
+      "created_at": 39636003,
+      "expiration": {
+        "at_time": "1784191420486109632"
+      },
+      "votes": {
+        "yes": 0,
+        "no": 0,
+        "abstain": 0,
+        "total": 0,
+        "threshold": 0
+      },
+      "is_new_today": false,
+      "is_closing_soon": false
     }
   ],
   "members": [
@@ -602,17 +620,14 @@
   "meta": {
     "dao_core": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
     "proposal_module": "juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp",
-    "moultbook": "moult:bf25e000829a476e8e6b4a6810b8156e5db8566b48d688bae1462795438e108d",
+    "moultbook": "moult:28be3479fb11b2ce0672b3025f85346c15c3a9a9a0ead255605fae4c766c6d39",
     "rest_endpoint": "https://juno-rest.publicnode.com",
-    "generated_at": "2026-07-09T08:20:21.840Z",
-    "block_height": 39635181,
-    "trigger_reason": "vote_cast",
+    "generated_at": "2026-07-09T09:00:22.644Z",
+    "block_height": 39636042,
+    "trigger_reason": "proposal_created",
     "changes": [
-      "Vote cast on A25 (yes 3→4, no 0→0, abstain 0→0)",
-      "Vote cast on A26 (yes 3→4, no 0→0, abstain 0→0)",
-      "Vote cast on A27 (yes 3→4, no 0→0, abstain 0→0)",
-      "Vote cast on A28 (yes 3→4, no 0→0, abstain 0→0)"
+      "Proposal A32 created (status: open)"
     ],
-    "previous_moultbook": "moult:eb1afc86fc7bca701b2b2b13afd44ecad0600a168964f3b17b1a52a45a6dc38c"
+    "previous_moultbook": "moult:bf25e000829a476e8e6b4a6810b8156e5db8566b48d688bae1462795438e108d"
   }
 }
