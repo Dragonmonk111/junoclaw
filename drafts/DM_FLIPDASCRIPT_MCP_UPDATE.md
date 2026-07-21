@@ -21,9 +21,13 @@ Added `mcp/QUICKSTART.md` — 5-minute path: install → wire into Windsurf/Clau
 
 **3. On-chain skill repo "on the hub"**
 
-Confirmed the hub = Juno for this, so it's live: `skill-registry`, a new CosmWasm contract where any interchain dApp can publish a pointer + hash to its own operating manual (`SKILL.md`-equivalent) — permissionless to publish, small anti-spam fee, first-publisher owns the name, admin can resolve disputes/squatting. Any agent, on any chain, can query it via plain RPC (no wallet needed) and get pointed straight at the manual for any registered dApp — no need to already know the dApp's GitHub URL.
+Confirmed the hub = Juno for this, so it's live on **mainnet** now: `skill-registry` (codeId 5145, `juno1wp5fpcxukgjm9ag9u97a7yf7rtwe47m9h93vk7nfrnel9xelt6zs4hj09s`) — a CosmWasm contract where any interchain dApp can publish a pointer + SHA-256 hash to its own operating manual. Permissionless to publish, first-publisher owns the name, admin can resolve disputes. Any agent, on any chain, can query it via plain RPC (no wallet needed) and get pointed straight at the manual for any registered dApp.
 
-Contract's built and tested (14/14 passing) on our repo now: `github.com/Dragonmonk111/junoclaw/tree/main/contracts/skill-registry`. Next up: deploy to `uni-7` testnet and register JunoClaw's own manual as the first entry, then add `get_dapp_skill` / `list_dapp_skills` query tools to the MCP so any client can pull it directly.
+JunoClaw self-registered `junoclaw-cosmos-mcp` as the first entry. `get_dapp_skill` / `list_dapp_skills` query tools are in the MCP now — any client can pull it directly.
+
+Also shipped a **second-approval gate**: every fund-moving tool stages a tx and returns a preview + confirmation_id. Nothing broadcasts until a separate `confirm_transaction` call. Single-use, 5-min TTL, required by default. Makes the MCP safe to hand to an AI agent on mainnet.
+
+Mainnet txs: store `56F71E...`, instantiate `1457C5...`, self-register `09E3A4...` — all on `juno-1`.
 
 Repo + docs: `github.com/Dragonmonk111/junoclaw` — MCP lives at `/mcp`, `npm install @junoclaw/cosmos-mcp`.
 

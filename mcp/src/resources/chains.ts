@@ -55,6 +55,7 @@ export const CHAIN_REGISTRY: Record<string, ChainConfig> = {
     slip44: 118,
     explorerTx: "https://mintscan.io/juno/tx",
     isTestnet: false,
+    skillRegistry: "juno1wp5fpcxukgjm9ag9u97a7yf7rtwe47m9h93vk7nfrnel9xelt6zs4hj09s",
     ibcChannels: {
       "osmosis-1": { sourceChannel: "channel-0", destChannel: "channel-42" },
       "stargaze-1": { sourceChannel: "channel-20", destChannel: "channel-5" },

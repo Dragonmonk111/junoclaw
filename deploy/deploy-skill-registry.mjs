@@ -39,7 +39,8 @@ function loadMnemonic() {
   process.exit(1)
 }
 
-const MNEMONIC = loadMnemonic()
+const WALLET_ID = process.env.WALLET_ID
+const MNEMONIC = WALLET_ID ? null : loadMnemonic()
 
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR
   || 'C:\\Temp\\junoclaw-wasm-target\\wasm32-unknown-unknown\\release'
@@ -78,13 +79,37 @@ async function main() {
     console.log('  ⚠  MAINNET deploy — this spends real JUNO. Ctrl+C now to abort.\n')
   }
 
-  const wallet = await DirectSecp256k1HdWallet.fromMnemonic(MNEMONIC, { prefix: 'juno' })
-  const [{ address }] = await wallet.getAccounts()
-  console.log(`  Deployer: ${address}`)
+  let client, address
 
-  const client = await SigningCosmWasmClient.connectWithSigner(RPC_URL, wallet, {
-    gasPrice: GasPrice.fromString(GAS_PRICE),
-  })
+  if (WALLET_ID) {
+    console.log(`  Wallet:   encrypted store (id: "${WALLET_ID}")`)
+    const { WalletStore } = await import('../mcp/dist/wallet/store.js')
+    const store = WalletStore.defaultStore()
+    const chainConfig = {
+      chainId: CHAIN_ID,
+      chainName: IS_MAINNET ? 'Juno Mainnet' : 'Juno Testnet',
+      rpcEndpoint: RPC_URL,
+      restEndpoint: IS_MAINNET ? 'https://juno-api.polkachu.com' : 'https://juno-testnet-api.polkachu.com',
+      denom: DENOM,
+      bech32Prefix: 'juno',
+      gasPrice: GAS_PRICE,
+      slip44: 118,
+      explorerTx: IS_MAINNET ? 'https://mintscan.io/juno/tx' : 'https://testnet.mintscan.io/juno-testnet/tx',
+      isTestnet: !IS_MAINNET,
+    }
+    const ctx = await store.signFor(WALLET_ID, chainConfig)
+    client = ctx.client
+    address = ctx.address
+  } else {
+    const wallet = await DirectSecp256k1HdWallet.fromMnemonic(MNEMONIC, { prefix: 'juno' })
+    const [{ address: addr }] = await wallet.getAccounts()
+    address = addr
+    client = await SigningCosmWasmClient.connectWithSigner(RPC_URL, wallet, {
+      gasPrice: GasPrice.fromString(GAS_PRICE),
+    })
+  }
+
+  console.log(`  Deployer: ${address}`)
 
   const balance = await client.getBalance(address, DENOM)
   console.log(`  Balance:  ${(BigInt(balance.amount) / 1_000_000n).toString()} ${DENOM.replace('u', '').toUpperCase()}\n`)
@@ -127,7 +152,7 @@ async function main() {
     console.log(`  Instantiating skill-registry...`)
     const msg = {
       admin: address,
-      denom: 'ujuno',
+      denom: DENOM,
       registration_fee: '0', // free on testnet; consider a small anti-spam fee on mainnet
     }
     const res = await client.instantiate(
