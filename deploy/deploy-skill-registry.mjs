@@ -11,8 +11,10 @@ const __dir = dirname(fileURLToPath(import.meta.url))
 // ── Config ──────────────────────────────────────────────────────────────────
 
 const CHAIN_ID  = process.env.CHAIN_ID  || 'uni-7'
-const RPC_URL   = process.env.RPC_URL   || 'https://juno.rpc.t.stavr.tech'
-const GAS_PRICE = process.env.GAS_PRICE || '0.075ujunox'
+const IS_MAINNET = CHAIN_ID === 'juno-1'
+const RPC_URL   = process.env.RPC_URL   || (IS_MAINNET ? 'https://juno-rpc.polkachu.com' : 'https://juno.rpc.t.stavr.tech')
+const DENOM     = process.env.DENOM     || (IS_MAINNET ? 'ujuno' : 'ujunox')
+const GAS_PRICE = process.env.GAS_PRICE || `0.075${DENOM}`
 
 const PARLIAMENT_STATE = join(__dir, '..', 'wavs', 'bridge', 'parliament-state.json')
 
@@ -42,7 +44,7 @@ const MNEMONIC = loadMnemonic()
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR
   || 'C:\\Temp\\junoclaw-wasm-target\\wasm32-unknown-unknown\\release'
 
-const DEPLOYED_FILE = join(__dir, 'deployed-testnet.json')
+const DEPLOYED_FILE = join(__dir, IS_MAINNET ? 'deployed-mainnet.json' : 'deployed-testnet.json')
 
 function loadDeployed() {
   if (existsSync(DEPLOYED_FILE)) {
@@ -63,14 +65,18 @@ const SKILL_URI  = process.env.SKILL_URI
 const SKILL_HASH = process.env.SKILL_HASH
   || 'd76f8665409085d553fc8382221ab88902cc3df0edd48ff8527802a2e740954a'
 const DAPP_NAME   = 'junoclaw-cosmos-mcp'
-const DAPP_CHAIN  = CHAIN_ID // this first entry documents the registry's own testnet home
+const DAPP_CHAIN  = CHAIN_ID // this first entry documents the registry's own home chain
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('\n  Deploy: skill-registry to uni-7 + self-register junoclaw-cosmos-mcp')
+  console.log(`\n  Deploy: skill-registry to ${CHAIN_ID} + self-register junoclaw-cosmos-mcp`)
   console.log(`  Chain:    ${CHAIN_ID}`)
   console.log(`  RPC:      ${RPC_URL}\n`)
+
+  if (IS_MAINNET) {
+    console.log('  ⚠  MAINNET deploy — this spends real JUNO. Ctrl+C now to abort.\n')
+  }
 
   const wallet = await DirectSecp256k1HdWallet.fromMnemonic(MNEMONIC, { prefix: 'juno' })
   const [{ address }] = await wallet.getAccounts()
@@ -80,8 +86,13 @@ async function main() {
     gasPrice: GasPrice.fromString(GAS_PRICE),
   })
 
-  const balance = await client.getBalance(address, 'ujunox')
-  console.log(`  Balance:  ${(BigInt(balance.amount) / 1_000_000n).toString()} JUNOX\n`)
+  const balance = await client.getBalance(address, DENOM)
+  console.log(`  Balance:  ${(BigInt(balance.amount) / 1_000_000n).toString()} ${DENOM.replace('u', '').toUpperCase()}\n`)
+
+  if (BigInt(balance.amount) === 0n) {
+    console.error(`  Deployer ${address} has 0 ${DENOM} on ${CHAIN_ID}. Fund it before deploying.`)
+    process.exit(1)
+  }
 
   const deployed = loadDeployed()
 
