@@ -35,6 +35,7 @@ node src/cli.js plan "explain why $REEF accrues value to holders"
 node src/cli.js attach <run_id> <draft-file>
 node src/cli.js gates <run_id>
 node src/cli.js moult-draft <run_id>
+node src/cli.js trace-export <run_id>
 node src/cli.js replay <run_id>
 ```
 
@@ -50,6 +51,7 @@ Every command is offline-capable once the cache is synced — no network call is
 | `attach <run_id> <file> [--claims <claims.json>]` | Attaches a D2 draft to a trace; flips `determinism_profile` to `D2-attached`. `--claims` supplies `[{ claim, support: [moult_id,...], quote? }]` for G1/G2 to actually check |
 | `gates <run_id>` | Runs G1–G5 against a trace; exit 1 if any gate fails |
 | `moult-draft <run_id>` | Gated AKB export draft + commitment preview (never posts) |
+| `trace-export <run_id>` | Gated AKB export of the full Brainmaxx trace as `application/json+brainmaxx-trace` (public, replayable) |
 | `replay <run_id>` | Byte-exact recomputation of pack + gates from the recorded trace |
 
 ## Gates (fixed order, always run)

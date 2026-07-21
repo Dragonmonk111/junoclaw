@@ -1,0 +1,21 @@
+[package]
+name = "skill-registry"
+version = "0.1.0"
+edition = "2021"
+description = "On-chain registry where any interchain dApp publishes a pointer + hash to its SKILL.md-equivalent operating manual, queryable by any agent without prior knowledge of the dApp's GitHub URL"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }
+anyhow = { workspace = true }

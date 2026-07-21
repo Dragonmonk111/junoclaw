@@ -249,3 +249,28 @@ test('G5: unknown action fails closed', () => {
   const g5 = verdicts.find((v) => v.gate === 'G5')
   assert.equal(g5.verdict, 'fail')
 })
+
+test('trace-export: plan -> trace-export emits a valid brainmaxx-trace envelope', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'brainmaxx-trace-export-'))
+  try {
+    const env = { ...process.env, MEMORY_STORE_PATH: CORPUS, MEMORY_NAMESPACE: 'brainmaxx-test', BRAINMAXX_DIR: tmp }
+
+    const planResult = spawnSync('node', [CLI, 'plan', 'Explain the Reef memory system', '--k', '5'], { env, encoding: 'utf8' })
+    assert.equal(planResult.status, 0, planResult.stderr)
+    const runId = planResult.stdout.match(/run_id: (brainrun:[a-f0-9]+)/)[1]
+
+    const exportResult = spawnSync('node', [CLI, 'trace-export', runId], { env, encoding: 'utf8' })
+    assert.equal(exportResult.status, 0, exportResult.stderr || exportResult.stdout)
+    assert.match(exportResult.stdout, /trace export:/)
+
+    const pathMatch = exportResult.stdout.match(/trace export: (.+\.trace\.envelope\.json)/)
+    assert.ok(pathMatch, exportResult.stdout)
+    const envelope = JSON.parse(readFileSync(pathMatch[1].trim(), 'utf8'))
+    assert.equal(envelope.content.mime_type, 'application/json+brainmaxx-trace')
+    assert.ok(envelope.refs.length > 0)
+    assert.ok(envelope.tags.includes('j-reef'))
+    assert.equal(envelope.content.structured.type, 'brainmaxx-trace')
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
+})

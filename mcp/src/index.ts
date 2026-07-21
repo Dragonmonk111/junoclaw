@@ -43,6 +43,12 @@ import {
   migrateContract,
   ibcTransfer,
   submitBlob,
+  voteOnProposal,
+  delegateTokens,
+  undelegateTokens,
+  redelegateTokens,
+  withdrawRewards,
+  composeAndBroadcastMsg,
 } from "./tools/tx-builder.js";
 import { scaffoldProject, listTemplates, DAO_TEMPLATES } from "./tools/scaffold.js";
 
@@ -342,6 +348,110 @@ server.tool(
   async ({ chain_id, wallet_id, contract_address, new_code_id, migrate_msg, memo }) => {
     const parsedMsg = JSON.parse(migrate_msg);
     const result = await migrateContract(chain_id, wallet_id, contract_address, new_code_id, parsedMsg, memo);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "vote_on_proposal",
+  "Vote on a governance proposal (cosmos.gov.v1beta1.MsgVote). Requires a registered wallet_id.",
+  {
+    chain_id: z.string().describe("Chain ID"),
+    wallet_id: z.string().describe(WALLET_ID_DESC),
+    proposal_id: z.string().describe("Governance proposal ID"),
+    option: z.enum(["yes", "no", "abstain", "no_with_veto"]).describe("Vote option"),
+    memo: z.string().optional().describe("TX memo"),
+  },
+  async ({ chain_id, wallet_id, proposal_id, option, memo }) => {
+    const result = await voteOnProposal(chain_id, wallet_id, proposal_id, option, memo);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "delegate_tokens",
+  "Delegate (stake) tokens to a validator (cosmos.staking.v1beta1.MsgDelegate). Requires a registered wallet_id.",
+  {
+    chain_id: z.string().describe("Chain ID"),
+    wallet_id: z.string().describe(WALLET_ID_DESC),
+    validator_address: z.string().describe("Validator operator bech32 address (valoper...)"),
+    amount: z.string().describe("Amount in base denom (e.g. '1000000' for 1 JUNO)"),
+    denom: z.string().optional().describe("Token denom (defaults to chain native)"),
+    memo: z.string().optional().describe("TX memo"),
+  },
+  async ({ chain_id, wallet_id, validator_address, amount, denom, memo }) => {
+    const result = await delegateTokens(chain_id, wallet_id, validator_address, amount, denom, memo);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "undelegate_tokens",
+  "Undelegate (unstake) tokens from a validator (cosmos.staking.v1beta1.MsgUndelegate). Requires a registered wallet_id.",
+  {
+    chain_id: z.string().describe("Chain ID"),
+    wallet_id: z.string().describe(WALLET_ID_DESC),
+    validator_address: z.string().describe("Validator operator bech32 address (valoper...)"),
+    amount: z.string().describe("Amount in base denom"),
+    denom: z.string().optional().describe("Token denom (defaults to chain native)"),
+    memo: z.string().optional().describe("TX memo"),
+  },
+  async ({ chain_id, wallet_id, validator_address, amount, denom, memo }) => {
+    const result = await undelegateTokens(chain_id, wallet_id, validator_address, amount, denom, memo);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "redelegate_tokens",
+  "Redelegate tokens from one validator to another without unbonding (cosmos.staking.v1beta1.MsgBeginRedelegate). Requires a registered wallet_id.",
+  {
+    chain_id: z.string().describe("Chain ID"),
+    wallet_id: z.string().describe(WALLET_ID_DESC),
+    validator_src_address: z.string().describe("Source validator operator bech32 address"),
+    validator_dst_address: z.string().describe("Destination validator operator bech32 address"),
+    amount: z.string().describe("Amount in base denom"),
+    denom: z.string().optional().describe("Token denom (defaults to chain native)"),
+    memo: z.string().optional().describe("TX memo"),
+  },
+  async ({ chain_id, wallet_id, validator_src_address, validator_dst_address, amount, denom, memo }) => {
+    const result = await redelegateTokens(chain_id, wallet_id, validator_src_address, validator_dst_address, amount, denom, memo);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "withdraw_rewards",
+  "Withdraw staking rewards from a validator (cosmos.distribution.v1beta1.MsgWithdrawDelegatorReward). Requires a registered wallet_id.",
+  {
+    chain_id: z.string().describe("Chain ID"),
+    wallet_id: z.string().describe(WALLET_ID_DESC),
+    validator_address: z.string().describe("Validator operator bech32 address (valoper...)"),
+    memo: z.string().optional().describe("TX memo"),
+  },
+  async ({ chain_id, wallet_id, validator_address, memo }) => {
+    const result = await withdrawRewards(chain_id, wallet_id, validator_address, memo);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "compose_and_broadcast_msg",
+  "Compose, sign, and broadcast an arbitrary Cosmos SDK message by type URL + JSON value. " +
+    "DISABLED BY DEFAULT (fail-closed) — the operator must set JUNOCLAW_ALLOWED_MSG_TYPES " +
+    "to a comma-separated allowlist of type URLs before this tool will broadcast anything. " +
+    "Prefer the dedicated typed tools (vote_on_proposal, delegate_tokens, send_tokens, etc.) " +
+    "when available; use this only for message types with no dedicated tool.",
+  {
+    chain_id: z.string().describe("Chain ID"),
+    wallet_id: z.string().describe(WALLET_ID_DESC),
+    type_url: z.string().describe("Cosmos SDK Msg type URL, e.g. '/cosmos.gov.v1.MsgVote'. Must be present in JUNOCLAW_ALLOWED_MSG_TYPES."),
+    value: z.string().describe("JSON-encoded message value matching the proto shape for type_url"),
+    memo: z.string().optional().describe("TX memo"),
+  },
+  async ({ chain_id, wallet_id, type_url, value, memo }) => {
+    const parsedValue = JSON.parse(value);
+    const result = await composeAndBroadcastMsg(chain_id, wallet_id, type_url, parsedValue, memo);
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );

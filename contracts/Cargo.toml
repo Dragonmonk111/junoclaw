@@ -14,6 +14,7 @@ members = [
     "knowledge-moults",
     "ibc-task-host",
     "jclaw-credential",
+    "skill-registry",
 ]
 resolver = "2"
 

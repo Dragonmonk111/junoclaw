@@ -15,13 +15,18 @@
  * - migration_watch   → SubmitAttestation (Chain Intelligence: migration watchdog)
  * - whale_alert       → SubmitAttestation (Chain Intelligence: large trade detection)
  * - ibc_health_check  → SubmitAttestation (Chain Intelligence: IBC monitoring)
+ * - store_signed_tx   → StoreSignedTx (sealed signer Cosmos tx)
  *
  * Usage:
  *   npm run bridge
  */
 
 import { config, validateConfig } from "./config.js";
-import { submitAttestation, submitRandomness } from "./client.js";
+import {
+  submitAttestation,
+  submitRandomness,
+  submitStoreSignedTx,
+} from "./client.js";
 import {
   AdminRpcHandle,
   defaultEgressController,
@@ -214,6 +219,19 @@ async function processResult(result: WavsResult): Promise<void> {
           result.data_hash,
           result.attestation_hash
         );
+        break;
+      }
+
+      case "store_signed_tx": {
+        const out = result.output || {};
+        const id = out.id as number | undefined;
+        const txBytes = out.tx_bytes as string | undefined;
+        const signDocSha256Hex = out.sign_doc_sha256_hex as string | undefined;
+        if (id === undefined || !txBytes || !signDocSha256Hex) {
+          console.warn(`[bridge] Missing signed tx fields for store_signed_tx`);
+          return;
+        }
+        await submitStoreSignedTx(id, txBytes, signDocSha256Hex, result.attestation_hash);
         break;
       }
 

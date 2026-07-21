@@ -16,7 +16,9 @@
     "egress-pause-test": "tsx src/utils/egress-pause-test.ts",
     "egress-pause-smoke": "tsx src/egress-pause-smoke.ts",
     "admin-rpc-test": "tsx src/admin/admin-rpc-test.ts",
-    "admin-rpc-smoke": "tsx src/admin-rpc-smoke.ts"
+    "admin-rpc-smoke": "tsx src/admin-rpc-smoke.ts",
+    "invoke-server": "tsx src/invoke-server.ts",
+    "invoke-test": "tsx src/invoke-test.ts"
   },
   "dependencies": {
     "@cosmjs/cosmwasm-stargate": "^0.32.4",

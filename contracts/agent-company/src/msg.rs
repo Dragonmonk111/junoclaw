@@ -1,8 +1,9 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Binary, Uint128};
 use crate::state::{
     Attestation, CodeUpgradeAction, Config, Member, NoisCallback, PaymentRecord, PendingSortition,
-    Proposal, SortitionRound, VerificationConfig, VoteOption, WeightProposal,
+    Proposal, SignRequest, SignRequestStatus, SortitionRound, VerificationConfig, VoteOption,
+    WeightProposal,
 };
 use junoclaw_common::ExecutionTier;
 
@@ -76,6 +77,14 @@ pub struct InstantiateMsg {
     /// is skipped and the DAO pays no additional gas.
     #[serde(default)]
     pub moultbook: Option<String>,
+    /// Optional relayer address authorized to submit `RequestSignedTx`
+    /// events for the WAVS sealed signer.
+    #[serde(default)]
+    pub relayer: Option<String>,
+    /// Optional sealed-signer (enclave) address. When set, the contract
+    /// only requests signatures from this sender.
+    #[serde(default)]
+    pub sealed_signer: Option<String>,
     pub escrow_contract: String,
     pub agent_registry: String,
     /// Optional task-ledger address for WavsPush proposals
@@ -100,6 +109,33 @@ pub struct InstantiateMsg {
     /// Supermajority quorum for constitutional proposals
     /// (`CodeUpgrade` and `WeightChange`) (default 67)
     pub supermajority_quorum_percent: Option<u64>,
+}
+
+impl Default for InstantiateMsg {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            admin: None,
+            governance: None,
+            wavs_operator: None,
+            zk_verifier: None,
+            moultbook: None,
+            relayer: None,
+            sealed_signer: None,
+            escrow_contract: String::new(),
+            agent_registry: String::new(),
+            task_ledger: None,
+            nois_proxy: None,
+            members: vec![],
+            denom: None,
+            voting_period_blocks: None,
+            quorum_percent: None,
+            adaptive_threshold_blocks: None,
+            adaptive_min_blocks: None,
+            verification: None,
+            supermajority_quorum_percent: None,
+        }
+    }
 }
 
 #[cw_serde]
@@ -162,6 +198,48 @@ pub enum ExecuteMsg {
     /// Admin-only as a bootstrap / emergency knob; decentralized rotation
     /// is a future `ConfigChange` extension. See ADR-005.
     RotateMoultbook { new_moultbook: Option<String> },
+
+    /// Admin-only: rotate the dedicated relayer address that may submit
+    /// `RequestSignedTx` events for the sealed signer to process.
+    /// `new_relayer = None` disables the sign-request flow.
+    RotateRelayer { new_relayer: Option<String> },
+
+    /// Admin-only: rotate the trusted sealed-signer (enclave) address.
+    /// `new_signer = None` disables the sign-request flow.
+    RotateSealedSigner { new_signer: Option<String> },
+
+    // ── Sealed-signer relayer ──
+
+    /// Relayer-only: request a `SIGN_MODE_DIRECT` signature for a single
+    /// `MsgExecuteContract`. The contract validates the request against the
+    /// configured `sealed_signer` and `moultbook` addresses, enforces fee/gas
+    /// caps, and emits a `sign_request` event for WAVS to consume.
+    RequestSignedTx {
+        sender: String,
+        contract: String,
+        exec_msg_json: String,
+        funds_denom: String,
+        funds_amount: Uint128,
+        gas_limit: u64,
+        fee_denom: String,
+        fee_amount: Uint128,
+        memo: String,
+        chain_id: String,
+        account_number: u64,
+        sequence: u64,
+    },
+
+    /// WAVS-only: store the signed `TxRaw` bytes returned by the sealed
+    /// signer. Callable only by the configured `wavs_operator`.
+    StoreSignedTx {
+        id: u64,
+        tx_bytes: Binary,
+        sign_doc_sha256_hex: String,
+    },
+
+    /// Relayer-only: mark a signed tx as broadcast and remove it from
+    /// pending storage, allowing a new request to be created.
+    AckBroadcastTx { id: u64 },
 
     // ── Randomness ──
 
@@ -240,6 +318,18 @@ pub enum QueryMsg {
 
     #[returns(Option<PendingSortition>)]
     GetPendingSortition { job_id: String },
+
+    // ── Sealed-signer requests ──
+
+    #[returns(Option<SignRequest>)]
+    GetSignRequest { id: u64 },
+
+    #[returns(Vec<SignRequest>)]
+    ListSignRequests {
+        status: Option<SignRequestStatus>,
+        start_after: Option<u64>,
+        limit: Option<u32>,
+    },
 
     // ── Attestations ──
 

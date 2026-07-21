@@ -11,16 +11,24 @@ use crate::msg::{
 };
 use crate::state::{
     Attestation, CodeUpgradeAction, Config, Member, NoisCallback, PaymentRecord,
-    PendingSortition, Proposal, ProposalKind, ProposalStatus, SortitionRound, Vote, VoteOption,
+    PendingSortition, Proposal, ProposalKind, ProposalStatus, SignRequest, SignRequestStatus,
+    SortitionRound, Vote, VoteOption,
     ATTESTATIONS, CONFIG, MEMBER_EARNINGS,
-    PAYMENT_HISTORY, PENDING_SORTITION,
-    PROPOSAL, PROPOSALS, PROPOSAL_SEQ, SORTITION_ROUNDS, SORTITION_SEQ,
+    PAYMENT_HISTORY, PENDING_SIGN_REQUEST, PENDING_SORTITION,
+    PROPOSAL, PROPOSALS, PROPOSAL_SEQ, SIGN_REQUESTS, SIGN_REQUEST_SEQ, SORTITION_ROUNDS,
+    SORTITION_SEQ,
 };
 use sha2::{Sha256, Digest};
 
 const CONTRACT_NAME: &str = "crates.io:junoclaw-agent-company";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const TOTAL_WEIGHT: u64 = 10_000;
+
+// ── Sealed-signer relayer guardrails ──
+/// Maximum gas the relayer may request for a signed Moultbook post.
+const MAX_GAS_LIMIT: u64 = 1_000_000;
+/// Maximum fee (in the DAO denom) the relayer may attach to a signed tx.
+const MAX_FEE_AMOUNT: u128 = 10_000_000; // 10 JUNO
 
 fn parse_members(deps: &DepsMut, inputs: Vec<MemberInput>) -> Result<Vec<Member>, ContractError> {
     if inputs.is_empty() {
@@ -70,6 +78,14 @@ pub fn instantiate(
     let moultbook = msg
         .moultbook
         .map(|m| deps.api.addr_validate(&m))
+        .transpose()?;
+    let relayer = msg
+        .relayer
+        .map(|r| deps.api.addr_validate(&r))
+        .transpose()?;
+    let sealed_signer = msg
+        .sealed_signer
+        .map(|s| deps.api.addr_validate(&s))
         .transpose()?;
     let escrow_contract = deps.api.addr_validate(&msg.escrow_contract)?;
     let agent_registry = deps.api.addr_validate(&msg.agent_registry)?;
@@ -133,11 +149,15 @@ pub fn instantiate(
         supermajority_quorum_percent,
         dex_factory: None,
         moultbook,
+        relayer,
+        sealed_signer,
     };
     CONFIG.save(deps.storage, &config)?;
     PROPOSAL.save(deps.storage, &None)?;
     PROPOSAL_SEQ.save(deps.storage, &0u64)?;
     SORTITION_SEQ.save(deps.storage, &0u64)?;
+    SIGN_REQUEST_SEQ.save(deps.storage, &0u64)?;
+    PENDING_SIGN_REQUEST.save(deps.storage, &None)?;
 
     Ok(Response::new()
         .add_attribute("action", "instantiate")
@@ -179,6 +199,47 @@ pub fn execute(
             execute_rotate_zk_verifier(deps, info, new_verifier),
         ExecuteMsg::RotateMoultbook { new_moultbook } =>
             execute_rotate_moultbook(deps, info, new_moultbook),
+        ExecuteMsg::RotateRelayer { new_relayer } =>
+            execute_rotate_relayer(deps, info, new_relayer),
+        ExecuteMsg::RotateSealedSigner { new_signer } =>
+            execute_rotate_sealed_signer(deps, info, new_signer),
+        // ── Sealed-signer relayer ──
+        ExecuteMsg::RequestSignedTx {
+            sender,
+            contract,
+            exec_msg_json,
+            funds_denom,
+            funds_amount,
+            gas_limit,
+            fee_denom,
+            fee_amount,
+            memo,
+            chain_id,
+            account_number,
+            sequence,
+        } => execute_request_signed_tx(
+            deps,
+            env,
+            info,
+            sender,
+            contract,
+            exec_msg_json,
+            funds_denom,
+            funds_amount,
+            gas_limit,
+            fee_denom,
+            fee_amount,
+            memo,
+            chain_id,
+            account_number,
+            sequence,
+        ),
+        ExecuteMsg::StoreSignedTx {
+            id,
+            tx_bytes,
+            sign_doc_sha256_hex,
+        } => execute_store_signed_tx(deps, env, info, id, tx_bytes, sign_doc_sha256_hex),
+        ExecuteMsg::AckBroadcastTx { id } => execute_ack_broadcast_tx(deps, info, id),
         // ── Randomness ──
         ExecuteMsg::NoisReceive { callback } =>
             execute_nois_receive(deps, env, info, callback),
@@ -1339,6 +1400,253 @@ fn execute_rotate_moultbook(
         ))
 }
 
+fn execute_rotate_relayer(
+    deps: DepsMut,
+    info: MessageInfo,
+    new_relayer: Option<String>,
+) -> Result<Response, ContractError> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+    if info.sender != cfg.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let resolved = match &new_relayer {
+        Some(raw) => Some(deps.api.addr_validate(raw)?),
+        None => None,
+    };
+    cfg.relayer = resolved;
+    CONFIG.save(deps.storage, &cfg)?;
+    Ok(Response::new()
+        .add_attribute("action", "rotate_relayer")
+        .add_attribute(
+            "new_relayer",
+            new_relayer.unwrap_or_else(|| "<cleared>".to_string()),
+        ))
+}
+
+fn execute_rotate_sealed_signer(
+    deps: DepsMut,
+    info: MessageInfo,
+    new_signer: Option<String>,
+) -> Result<Response, ContractError> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+    if info.sender != cfg.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let resolved = match &new_signer {
+        Some(raw) => Some(deps.api.addr_validate(raw)?),
+        None => None,
+    };
+    cfg.sealed_signer = resolved;
+    CONFIG.save(deps.storage, &cfg)?;
+    Ok(Response::new()
+        .add_attribute("action", "rotate_sealed_signer")
+        .add_attribute(
+            "new_signer",
+            new_signer.unwrap_or_else(|| "<cleared>".to_string()),
+        ))
+}
+
+fn execute_request_signed_tx(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    sender: String,
+    contract: String,
+    exec_msg_json: String,
+    funds_denom: String,
+    funds_amount: Uint128,
+    gas_limit: u64,
+    fee_denom: String,
+    fee_amount: Uint128,
+    memo: String,
+    chain_id: String,
+    account_number: u64,
+    sequence: u64,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    // Only the configured relayer may request signatures.
+    let relayer = cfg.relayer.as_ref().ok_or(ContractError::RelayerNotConfigured {})?;
+    if info.sender != *relayer {
+        return Err(ContractError::NotRelayer {
+            caller: info.sender.to_string(),
+        });
+    }
+
+    // The sealed signer must be configured so the contract can bind requests
+    // to a known sender address.
+    let sealed_signer = cfg
+        .sealed_signer
+        .as_ref()
+        .ok_or(ContractError::SealedSignerNotConfigured {})?;
+    if sender != sealed_signer.to_string() {
+        return Err(ContractError::InvalidSender {
+            expected: sealed_signer.to_string(),
+            got: sender.clone(),
+        });
+    }
+
+    // The target contract is scoped to the configured Moultbook address.
+    let moultbook = cfg
+        .moultbook
+        .as_ref()
+        .ok_or(ContractError::MoultbookNotConfigured {})?;
+    if contract != moultbook.to_string() {
+        return Err(ContractError::InvalidTargetContract {
+            expected: moultbook.to_string(),
+            got: contract.clone(),
+        });
+    }
+
+    // Fee/gas guardrails prevent a compromised relayer from requesting
+    // absurdly expensive transactions.
+    if gas_limit > MAX_GAS_LIMIT {
+        return Err(ContractError::GasLimitTooHigh {
+            max: MAX_GAS_LIMIT,
+            got: gas_limit,
+        });
+    }
+    if fee_amount.u128() > MAX_FEE_AMOUNT {
+        return Err(ContractError::FeeAmountTooHigh {
+            max: Uint128::from(MAX_FEE_AMOUNT),
+            got: fee_amount,
+        });
+    }
+    if fee_denom != cfg.denom {
+        return Err(ContractError::InvalidFeeDenom {
+            expected: cfg.denom.clone(),
+            got: fee_denom.clone(),
+        });
+    }
+
+    // Only one pending request at a time to avoid sequence collisions on the
+    // sealed-signer account.
+    if let Some(pending_id) = PENDING_SIGN_REQUEST.load(deps.storage)? {
+        return Err(ContractError::PendingSignRequestExists { id: pending_id });
+    }
+
+    let id = SIGN_REQUEST_SEQ.load(deps.storage)? + 1;
+    SIGN_REQUEST_SEQ.save(deps.storage, &id)?;
+
+    let request = SignRequest {
+        id,
+        requester: info.sender.clone(),
+        sender: sender.clone(),
+        contract: contract.clone(),
+        exec_msg_json: exec_msg_json.clone(),
+        funds_denom: funds_denom.clone(),
+        funds_amount,
+        gas_limit,
+        fee_denom: fee_denom.clone(),
+        fee_amount,
+        memo: memo.clone(),
+        chain_id: chain_id.clone(),
+        account_number,
+        sequence,
+        status: SignRequestStatus::Pending,
+        tx_bytes: None,
+        sign_doc_sha256_hex: None,
+        requested_at_block: env.block.height,
+        signed_at_block: None,
+    };
+    SIGN_REQUESTS.save(deps.storage, id, &request)?;
+    PENDING_SIGN_REQUEST.save(deps.storage, &Some(id))?;
+
+    let event = Event::new("sign_request")
+        .add_attribute("id", id.to_string())
+        .add_attribute("requester", info.sender)
+        .add_attribute("sender", sender)
+        .add_attribute("target_contract", contract)
+        .add_attribute("exec_msg_json", exec_msg_json)
+        .add_attribute("funds_denom", funds_denom)
+        .add_attribute("funds_amount", funds_amount.to_string())
+        .add_attribute("gas_limit", gas_limit.to_string())
+        .add_attribute("fee_denom", fee_denom)
+        .add_attribute("fee_amount", fee_amount.to_string())
+        .add_attribute("memo", memo)
+        .add_attribute("chain_id", chain_id)
+        .add_attribute("account_number", account_number.to_string())
+        .add_attribute("sequence", sequence.to_string());
+
+    Ok(Response::new()
+        .add_attribute("action", "request_signed_tx")
+        .add_attribute("id", id.to_string())
+        .add_event(event))
+}
+
+fn execute_store_signed_tx(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    id: u64,
+    tx_bytes: cosmwasm_std::Binary,
+    sign_doc_sha256_hex: String,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    // Only the WAVS operator may store a signed tx on behalf of the component.
+    let operator = cfg
+        .wavs_operator
+        .as_ref()
+        .ok_or(ContractError::Unauthorized {})?;
+    if info.sender != *operator {
+        return Err(ContractError::NotWavsOperator {
+            caller: info.sender.to_string(),
+        });
+    }
+
+    let mut request = SIGN_REQUESTS
+        .may_load(deps.storage, id)?
+        .ok_or(ContractError::SignRequestNotFound { id })?;
+    if !matches!(request.status, SignRequestStatus::Pending) {
+        return Err(ContractError::SignRequestNotPending { id });
+    }
+
+    request.status = SignRequestStatus::Signed;
+    request.tx_bytes = Some(tx_bytes);
+    request.sign_doc_sha256_hex = Some(sign_doc_sha256_hex.clone());
+    request.signed_at_block = Some(env.block.height);
+    SIGN_REQUESTS.save(deps.storage, id, &request)?;
+
+    // Clear the pending slot so the relayer can submit the next request.
+    PENDING_SIGN_REQUEST.save(deps.storage, &None)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "store_signed_tx")
+        .add_attribute("id", id.to_string())
+        .add_attribute("sign_doc_sha256_hex", sign_doc_sha256_hex))
+}
+
+fn execute_ack_broadcast_tx(
+    deps: DepsMut,
+    info: MessageInfo,
+    id: u64,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    // Only the relayer may ack a broadcast; this keeps the request lifecycle
+    // under the relayer's control and removes spent state from storage.
+    let relayer = cfg.relayer.as_ref().ok_or(ContractError::RelayerNotConfigured {})?;
+    if info.sender != *relayer {
+        return Err(ContractError::NotRelayer {
+            caller: info.sender.to_string(),
+        });
+    }
+
+    let request = SIGN_REQUESTS
+        .may_load(deps.storage, id)?
+        .ok_or(ContractError::SignRequestNotFound { id })?;
+    if !matches!(request.status, SignRequestStatus::Signed) {
+        return Err(ContractError::SignRequestNotPending { id });
+    }
+
+    SIGN_REQUESTS.remove(deps.storage, id);
+
+    Ok(Response::new()
+        .add_attribute("action", "ack_broadcast_tx")
+        .add_attribute("id", id.to_string()))
+}
+
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -1395,6 +1703,22 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         }
         QueryMsg::GetPendingSortition { job_id } => {
             to_json_binary(&PENDING_SORTITION.may_load(deps.storage, &job_id)?)
+        }
+        // ── Sealed-signer requests ──
+        QueryMsg::GetSignRequest { id } => to_json_binary(&SIGN_REQUESTS.may_load(deps.storage, id)?),
+        QueryMsg::ListSignRequests { status, start_after, limit } => {
+            let limit = limit.unwrap_or(30).min(50) as usize;
+            let start = start_after.map(Bound::exclusive);
+            let requests: Vec<SignRequest> = SIGN_REQUESTS
+                .range(deps.storage, start, None, Order::Descending)
+                .filter_map(|r| {
+                    r.ok().map(|(_, req)| req).filter(|req| {
+                        status.as_ref().map(|s| std::mem::discriminant(s) == std::mem::discriminant(&req.status)).unwrap_or(true)
+                    })
+                })
+                .take(limit)
+                .collect();
+            to_json_binary(&requests)
         }
         // ── Attestations ──
         QueryMsg::GetAttestation { proposal_id } => {

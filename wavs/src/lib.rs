@@ -24,6 +24,7 @@
 //! for on-chain submission.
 
 mod trigger;
+mod sealed_signer;
 
 #[allow(warnings)]
 mod bindings;
@@ -169,6 +170,40 @@ async fn process_task(task: &VerificationTask) -> anyhow::Result<VerificationRes
         } => process_ibc_health_check(
             channel_id, port_id, counterparty_channel, connection_id,
             state, packets_sent, packets_recv, packets_timeout,
+        ).await,
+
+        VerificationTask::SignMoultbookExport { export_json } => {
+            process_sign_moultbook_export(export_json).await
+        }
+
+        VerificationTask::SignRequest {
+            id,
+            sender,
+            contract,
+            exec_msg_json,
+            funds_denom,
+            funds_amount,
+            gas_limit,
+            fee_denom,
+            fee_amount,
+            memo,
+            chain_id,
+            account_number,
+            sequence,
+        } => process_sign_request(
+            *id,
+            sender,
+            contract,
+            exec_msg_json,
+            funds_denom,
+            *funds_amount,
+            *gas_limit,
+            fee_denom,
+            *fee_amount,
+            memo,
+            chain_id,
+            *account_number,
+            *sequence,
         ).await,
     }
 }
@@ -1222,6 +1257,100 @@ fn current_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+// ──────────────────────────────────────────────
+// 11. Moultbook Export Signing (co-located sealed signer)
+// ──────────────────────────────────────────────
+
+/// Sign a Moultbook export digest using the on-enclave sealed signer.
+///
+/// The export JSON is hashed with SHA-256; the 32-byte digest is signed by the
+/// persisted secp256k1 key. The result includes the signature, signer address,
+/// and public key so that anyone can verify the TEE-attested export off-chain.
+async fn process_sign_moultbook_export(export_json: &str) -> anyhow::Result<VerificationResult> {
+    let digest = Sha256::digest(export_json.as_bytes());
+    let data_hash = hex::encode(digest);
+
+    let sign_info = sealed_signer::sign(&digest)?;
+    let attestation_hash = compute_attestation_hash("sign_moultbook_export", &data_hash);
+
+    Ok(VerificationResult {
+        task_type: "sign_moultbook_export".to_string(),
+        data_hash,
+        attestation_hash,
+        output: serde_json::json!({
+            "export_json": export_json,
+            "signer_address": sign_info.address,
+            "signer_pubkey": sign_info.pubkey,
+            "signature": sign_info.signature,
+        }),
+        timestamp: current_timestamp(),
+    })
+}
+
+// ──────────────────────────────────────────────
+// 12. Sealed Signer Cosmos Tx Request
+// ──────────────────────────────────────────────
+
+/// Sign a Cosmos SDK `MsgExecuteContract` inside the TEE using the persisted
+/// sealed signer key. The resulting signed `TxRaw` bytes are returned to the
+/// WAVS bridge, which submits them to `agent-company` as a `StoreSignedTx`
+/// attestation.
+async fn process_sign_request(
+    id: u64,
+    sender: &str,
+    contract: &str,
+    exec_msg_json: &str,
+    funds_denom: &str,
+    funds_amount: u128,
+    gas_limit: u64,
+    fee_denom: &str,
+    fee_amount: u128,
+    memo: &str,
+    chain_id: &str,
+    account_number: u64,
+    sequence: u64,
+) -> anyhow::Result<VerificationResult> {
+    let signed = sealed_signer::sign_cosmos_execute_tx(sealed_signer::CosmosExecuteTxRequest {
+        sender: sender.to_string(),
+        contract: contract.to_string(),
+        exec_msg_json: exec_msg_json.to_string(),
+        funds_denom: funds_denom.to_string(),
+        funds_amount,
+        gas_limit,
+        fee_denom: fee_denom.to_string(),
+        fee_amount,
+        memo: memo.to_string(),
+        chain_id: chain_id.to_string(),
+        account_number,
+        sequence,
+    })?;
+
+    // Defensive check: the enclave can only sign for its own derived address.
+    if signed.address != sender {
+        anyhow::bail!(
+            "sign request sender {} does not match enclave address {}",
+            sender,
+            signed.address
+        );
+    }
+
+    let data_hash = signed.sign_doc_sha256_hex.clone();
+    let attestation_hash = compute_attestation_hash("store_signed_tx", &data_hash);
+
+    Ok(VerificationResult {
+        task_type: "store_signed_tx".to_string(),
+        data_hash,
+        attestation_hash,
+        output: serde_json::json!({
+            "id": id,
+            "tx_bytes": base64::prelude::BASE64_STANDARD.encode(&signed.tx_bytes),
+            "sign_doc_sha256_hex": signed.sign_doc_sha256_hex,
+            "signer_address": signed.address,
+        }),
+        timestamp: current_timestamp(),
+    })
 }
 
 // ──────────────────────────────────────────────

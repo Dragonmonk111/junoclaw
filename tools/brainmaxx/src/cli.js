@@ -12,7 +12,7 @@ import { loadSnapshot } from './store.js'
 import { buildPack } from './pack.js'
 import { createTrace, writeTrace, readTrace, resolveRunId, attachDraft, computeClaimId } from './trace.js'
 import { runGates } from './gates.js'
-import { composeEnvelope, writeDraft } from './akb-compose.js'
+import { composeEnvelope, writeDraft, composeTraceEnvelope, writeTraceExport } from './akb-compose.js'
 import { canonV1 } from './canon.js'
 
 // Plain fs read (not an import attribute) to stay compatible with Node 18,
@@ -275,6 +275,52 @@ function cmdMoultDraft(positional) {
   console.log('hand this file to tools/reply-bot for human-approved posting')
 }
 
+function cmdTraceExport(positional) {
+  const runIdArg = positional[0]
+  if (!runIdArg) {
+    console.error('Usage: brainmaxx trace-export <run_id>')
+    process.exit(1)
+  }
+  const config = getConfig()
+  const runId = resolveRunId(config.brainmaxxDir, runIdArg)
+  const trace = readTrace(config.brainmaxxDir, runId)
+  const snapshot = loadSnapshot(config.storePath)
+
+  let envelope
+  try {
+    envelope = composeTraceEnvelope(trace, { motherMoultId: config.motherMoultId })
+  } catch (e) {
+    console.error(`cannot compose trace envelope: ${e.message}`)
+    process.exit(1)
+  }
+  if (!config.motherMoultId) {
+    console.warn('[brainmaxx] warning: MOTHER_MOULT_ID is unset — envelope will omit mother_moult_id')
+  }
+
+  const verdicts = runGates({
+    refs: envelope.refs,
+    claims: trace.claims || [],
+    includeStale: trace.pack?.include_stale || false,
+    entries: snapshot.entries,
+    envelope,
+    action: 'trace-export',
+    policy,
+  })
+
+  const failed = verdicts.filter((v) => v.verdict === 'fail')
+  if (failed.length) {
+    console.error('gates failed, trace export not emitted:')
+    console.error(JSON.stringify(failed, null, 2))
+    process.exit(1)
+  }
+
+  const { path, commitment } = writeTraceExport(config.brainmaxxDir, trace, envelope)
+  console.log(`gates: ${JSON.stringify(verdicts)}`)
+  console.log(`trace export: ${path}`)
+  console.log(`commitment preview (sha256b64, byte-parity with reply-bot): ${commitment}`)
+  console.log('hand this file to tools/reply-bot for human-approved posting')
+}
+
 function cmdReplay(positional) {
   const runIdArg = positional[0]
   if (!runIdArg) {
@@ -348,6 +394,8 @@ function main() {
       return cmdGates(positional)
     case 'moult-draft':
       return cmdMoultDraft(positional)
+    case 'trace-export':
+      return cmdTraceExport(positional)
     case 'replay':
       return cmdReplay(positional)
     default:
@@ -360,6 +408,7 @@ Usage:
   brainmaxx attach <run_id> <draft-file> [--model <name>] [--claims <claims.json>]
   brainmaxx gates <run_id>
   brainmaxx moult-draft <run_id>
+  brainmaxx trace-export <run_id>
   brainmaxx replay <run_id>`)
       process.exit(cmd ? 1 : 0)
   }

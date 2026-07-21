@@ -1,0 +1,14 @@
+{
+  "name": "juno-agents-proposal-indexer",
+  "version": "0.1.0",
+  "description": "Auto-index DAO DAO proposals as citable Moultbook AKB exports",
+  "type": "module",
+  "scripts": {
+    "once": "node src/index.js --once",
+    "daemon": "node src/index.js",
+    "force": "node src/index.js --proposal-id"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

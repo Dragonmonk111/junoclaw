@@ -89,3 +89,33 @@ export async function submitRandomness(
   );
   return result.transactionHash;
 }
+
+export async function submitStoreSignedTx(
+  id: number,
+  txBytesBase64: string,
+  signDocSha256Hex: string,
+  _attestationHash: string
+): Promise<string> {
+  const { client, sender } = await getClient();
+
+  const msg = {
+    store_signed_tx: {
+      id,
+      tx_bytes: txBytesBase64,
+      sign_doc_sha256_hex: signDocSha256Hex,
+    },
+  };
+
+  const result = await client.execute(
+    sender,
+    config.agentCompanyContract,
+    msg,
+    "auto",
+    `WAVS signed tx for request ${id}`
+  );
+
+  console.log(
+    `[bridge] StoreSignedTx tx: ${result.transactionHash} (id=${id}, hash=${signDocSha256Hex.slice(0, 16)}...)`
+  );
+  return result.transactionHash;
+}

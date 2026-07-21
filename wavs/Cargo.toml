@@ -24,6 +24,19 @@ anyhow = "1.0"
 # Hashing for attestation
 sha2 = "0.10"
 hex = "0.4"
+base64 = "0.22"
+
+# Sealed signer crypto (co-located signing for SignMoultbookExport)
+k256 = { version = "0.13", features = ["ecdsa", "sha256", "serde"] }
+aes-gcm = { version = "0.10", features = ["std"] }
+pbkdf2 = { version = "0.12", features = ["simple"] }
+ripemd = "0.1"
+bech32 = "0.11"
+
+# Cosmos SDK SIGN_MODE_DIRECT tx signing for the sealed signer workflow
+cosmrs = { version = "0.22", default-features = false, features = ["cosmwasm"] }
+tendermint = { version = "0.40", default-features = false }
+prost = { version = "0.13", default-features = false }
 
 # HTTP for data fetching (via WASI)
 # Network requests use wstd::http in WASI components

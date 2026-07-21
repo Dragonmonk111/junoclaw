@@ -5,6 +5,7 @@
   "gates": "green",
   "replay": "green",
   "moult-draft": "yellow",
+  "trace-export": "yellow",
   "moultbook-post": "red",
   "fund-transfer": "red",
   "proposal-submit": "red",

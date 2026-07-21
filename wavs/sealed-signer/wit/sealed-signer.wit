@@ -1,0 +1,64 @@
+package junoclaw:sealed-signer@0.3.0;
+
+interface signer {
+    /// Generate a fresh secp256k1 key from wasi:random/random, seal it with
+    /// WAVS_ENV_SIGNER_PASSPHRASE, and return the Juno bech32 address,
+    /// public key, and the opaque sealed blob.
+    generate-key: func() -> result<key-info, string>;
+
+    /// Decrypt the sealed blob with WAVS_ENV_SIGNER_PASSPHRASE, sign the raw
+    /// message bytes, and return the 64-byte R||S signature as hex.
+    sign: func(message: list<u8>, sealed-blob: list<u8>) -> result<sign-info, string>;
+
+    /// Decrypt the sealed blob with WAVS_ENV_SIGNER_PASSPHRASE, build a
+    /// canonical Cosmos SDK SIGN_MODE_DIRECT transaction wrapping a single
+    /// `cosmwasm.wasm.v1.MsgExecuteContract`, sign it, and return the
+    /// protobuf-encoded TxRaw ready to broadcast. The enclave builds the
+    /// TxBody/AuthInfo/SignDoc itself from these structured fields rather
+    /// than trusting caller-supplied raw bytes, so a caller cannot get the
+    /// enclave to sign anything other than the described contract call.
+    sign-cosmos-execute-tx: func(
+        sealed-blob: list<u8>,
+        req: cosmos-execute-tx-request,
+    ) -> result<signed-cosmos-tx, string>;
+
+    record key-info {
+        address: string,
+        pubkey: string,
+        sealed-blob: list<u8>,
+    }
+
+    record sign-info {
+        address: string,
+        pubkey: string,
+        signature: string,
+    }
+
+    record cosmos-execute-tx-request {
+        sender: string,
+        contract: string,
+        exec-msg-json: string,
+        funds-denom: string,
+        funds-amount: u64,
+        gas-limit: u64,
+        fee-denom: string,
+        fee-amount: u64,
+        memo: string,
+        chain-id: string,
+        account-number: u64,
+        sequence: u64,
+    }
+
+    record signed-cosmos-tx {
+        address: string,
+        pubkey: string,
+        tx-bytes: list<u8>,
+        sign-doc-sha256-hex: string,
+    }
+}
+
+world sealed-signer-world {
+    import wasi:random/random@0.2.0;
+
+    export signer;
+}

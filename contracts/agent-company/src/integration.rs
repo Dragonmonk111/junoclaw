@@ -180,6 +180,7 @@ fn deploy_full_stack(app: &mut App) -> Deployment {
                 verification: None,
                 supermajority_quorum_percent: None,
                 moultbook: None,
+                ..Default::default()
             },
             &[],
             "agent-company",

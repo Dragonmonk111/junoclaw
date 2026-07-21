@@ -1,4 +1,4 @@
-use cosmwasm_std::StdError;
+use cosmwasm_std::{StdError, Uint128};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -83,4 +83,45 @@ pub enum ContractError {
 
     #[error("zk-sidecar: incomplete proof bundle — proof_base64 and public_inputs_base64 must both be Some or both be None, got proof_some={proof_some} inputs_some={inputs_some}")]
     IncompleteZkProofBundle { proof_some: bool, inputs_some: bool },
+
+    // ── Sealed-signer relayer errors ─────────────────────────────────
+
+    #[error("Relayer not configured")]
+    RelayerNotConfigured {},
+
+    #[error("Sealed signer not configured")]
+    SealedSignerNotConfigured {},
+
+    #[error("Moultbook contract not configured")]
+    MoultbookNotConfigured {},
+
+    #[error("Caller {caller} is not the configured relayer")]
+    NotRelayer { caller: String },
+
+    #[error("Caller {caller} is not the configured WAVS operator")]
+    NotWavsOperator { caller: String },
+
+    #[error("Sign request {id} not found")]
+    SignRequestNotFound { id: u64 },
+
+    #[error("Sign request {id} is not pending")]
+    SignRequestNotPending { id: u64 },
+
+    #[error("Pending sign request {id} already exists; only one pending request is allowed")]
+    PendingSignRequestExists { id: u64 },
+
+    #[error("Invalid sender: expected {expected}, got {got}")]
+    InvalidSender { expected: String, got: String },
+
+    #[error("Invalid target contract: expected {expected}, got {got}")]
+    InvalidTargetContract { expected: String, got: String },
+
+    #[error("Gas limit {got} exceeds maximum {max}")]
+    GasLimitTooHigh { max: u64, got: u64 },
+
+    #[error("Fee amount {got} exceeds maximum {max}")]
+    FeeAmountTooHigh { max: Uint128, got: Uint128 },
+
+    #[error("Fee denom {got} must match the DAO denom {expected}")]
+    InvalidFeeDenom { expected: String, got: String },
 }

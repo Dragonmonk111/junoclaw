@@ -80,6 +80,7 @@ fn store_and_instantiate_with_overrides(
             verification: None,
             supermajority_quorum_percent: None,
             moultbook: None,
+            ..Default::default()
         },
         &[],
         "agent-company",
@@ -143,6 +144,7 @@ fn test_invalid_weights_fails() {
             verification: None,
             supermajority_quorum_percent: None,
             moultbook: None,
+            ..Default::default()
         },
         &[],
         "bad-company",
@@ -1967,6 +1969,7 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
                 verification: None,
                 supermajority_quorum_percent: None,
                 moultbook: None,
+                ..Default::default()
             },
             &[],
             "bad-co-1",
@@ -2002,6 +2005,7 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
                 verification: None,
                 supermajority_quorum_percent: Some(50),
                 moultbook: None,
+                ..Default::default()
             },
             &[],
             "bad-co-2",
@@ -2037,6 +2041,7 @@ fn test_l5_governance_percent_bounds_rejected_at_instantiate() {
                 verification: None,
                 supermajority_quorum_percent: None,
                 moultbook: None,
+                ..Default::default()
             },
             &[],
             "bad-co-3",
@@ -2186,6 +2191,7 @@ fn store_and_instantiate_with_zk_verifier(
             verification: None,
             supermajority_quorum_percent: None,
             moultbook: None,
+            ..Default::default()
         },
         &[],
         "agent-company-zk",

@@ -2,9 +2,9 @@ import { createHash } from 'crypto'
 import { writeFileSync, mkdirSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
-import { SigningCosmWasmClient } from '@cosmjs/cosmwasm-stargate'
+import { SigningCosmWasmClient, CosmWasmClient } from '@cosmjs/cosmwasm-stargate'
 import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing'
-import { GasPrice } from '@cosmjs/stargate'
+import { GasPrice, StargateClient } from '@cosmjs/stargate'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // Where AKB export payload text is mirrored so context-agent's resolvers can
@@ -38,6 +38,9 @@ const RPC_ENDPOINT = process.env.JUNO_RPC_ENDPOINT || 'https://juno-rpc.publicno
 const GAS_PRICE = process.env.JUNO_GAS_PRICE || '0.075ujuno'
 const MNEMONIC = process.env.JUNO_REPLY_BOT_MNEMONIC
 const DRY_RUN = process.env.MOULTBOOK_DRY_RUN === 'true'
+
+const AGENT_COMPANY_ADDR = process.env.AGENT_COMPANY_ADDR
+const SEALED_SIGNER_ADDRESS = process.env.SEALED_SIGNER_ADDRESS
 
 export function sha256Base64(text) {
   return Buffer.from(createHash('sha256').update(text, 'utf8').digest()).toString('base64')
@@ -182,6 +185,22 @@ function findMoultId(result) {
   return null
 }
 
+export function parseSignRequestId(result) {
+  const eventSources = [
+    ...(result.logs || []).flatMap((log) => log.events || []),
+    ...(result.events || []),
+  ]
+  for (const event of eventSources) {
+    if (event.type === 'wasm-sign_request' || event.type === 'sign_request') {
+      const idAttr = event.attributes.find((a) => a.key === 'id')
+      if (idAttr?.value && /^\d+$/.test(idAttr.value)) {
+        return Number(idAttr.value)
+      }
+    }
+  }
+  return null
+}
+
 export async function postReplyToMoultbook(replyBody, replyToMoultId, agentName = 'dragonmonk111-bot') {
   if (!replyToMoultId) throw new Error('replyToMoultId is required')
 
@@ -216,4 +235,201 @@ export async function postReplyToMoultbook(replyBody, replyToMoultId, agentName 
   }
 
   return { txHash: result.transactionHash, moultId, author: sender, dryRun: false }
+}
+
+// ── Sealed-signer relayer helpers (M2) ──
+// These functions replace the plaintext-mnemonic signing path with a TEE-backed
+// signer. The relayer wallet only needs to be configured as the `relayer` role
+// in agent-company; it never sees the enclave signing key.
+
+export async function getSealedSignerAccountInfo() {
+  if (!SEALED_SIGNER_ADDRESS) throw new Error('SEALED_SIGNER_ADDRESS not set')
+  const client = await StargateClient.connect(RPC_ENDPOINT)
+  try {
+    const account = await client.getAccount(SEALED_SIGNER_ADDRESS)
+    if (!account) throw new Error(`Sealed signer account not found: ${SEALED_SIGNER_ADDRESS}`)
+    return {
+      address: SEALED_SIGNER_ADDRESS,
+      accountNumber: account.accountNumber,
+      sequence: account.sequence,
+    }
+  } finally {
+    await client.disconnect()
+  }
+}
+
+export function buildRequestSignedTx(accountInfo, execMsg, opts = {}) {
+  return {
+    sender: accountInfo.address,
+    contract: MOULTBOOK_ADDR,
+    exec_msg_json: JSON.stringify(execMsg),
+    funds_denom: opts.fundsDenom || '',
+    funds_amount: opts.fundsAmount || '0',
+    gas_limit: opts.gasLimit || 200_000,
+    fee_denom: opts.feeDenom || 'ujuno',
+    fee_amount: opts.feeAmount || '5000',
+    memo: opts.memo || 'sealed signer Moultbook post',
+    chain_id: opts.chainId || 'uni-7',
+    account_number: accountInfo.accountNumber,
+    sequence: accountInfo.sequence,
+  }
+}
+
+export async function requestSignedTx(client, sender, request) {
+  if (!AGENT_COMPANY_ADDR) throw new Error('AGENT_COMPANY_ADDR not set')
+  return client.execute(
+    sender,
+    AGENT_COMPANY_ADDR,
+    { request_signed_tx: request },
+    'auto',
+    `sealed signer request ${request.id}`
+  )
+}
+
+export async function pollSignRequest(id, opts = {}) {
+  if (!AGENT_COMPANY_ADDR) throw new Error('AGENT_COMPANY_ADDR not set')
+  const { maxAttempts = 30, delayMs = 2000 } = opts
+  const client = await CosmWasmClient.connect(RPC_ENDPOINT)
+  try {
+    for (let i = 0; i < maxAttempts; i++) {
+      const req = await client.queryContractSmart(AGENT_COMPANY_ADDR, {
+        get_sign_request: { id },
+      })
+      if (req && req.status && 'signed' in req.status && req.tx_bytes) {
+        return req
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+    throw new Error(`Timed out waiting for sign request ${id} to be signed`)
+  } finally {
+    await client.disconnect()
+  }
+}
+
+export async function broadcastTxBytes(txBytesBase64) {
+  const client = await StargateClient.connect(RPC_ENDPOINT)
+  try {
+    const txBytes = Buffer.from(txBytesBase64, 'base64')
+    return await client.broadcastTx(txBytes)
+  } finally {
+    await client.disconnect()
+  }
+}
+
+export async function ackBroadcastTx(client, sender, id) {
+  if (!AGENT_COMPANY_ADDR) throw new Error('AGENT_COMPANY_ADDR not set')
+  return client.execute(
+    sender,
+    AGENT_COMPANY_ADDR,
+    { ack_broadcast_tx: { id } },
+    'auto',
+    `ack broadcast ${id}`
+  )
+}
+
+// ── Off-chain invoke API path (M2.1 prototype) ──
+// These functions use the WAVS invoke HTTP endpoint to call the sealed
+// signer component directly, bypassing the on-chain round-trip entirely.
+// The flow collapses from 7 steps (request → poll → broadcast → ack) to 3:
+//   1. Fetch account info (sequence)
+//   2. POST /invoke/sealed-signer → get tx_bytes + attestation
+//   3. Broadcast tx_bytes on-chain
+//
+// The invoke server must be running (wavs/bridge/src/invoke-server.ts).
+// Configure with:
+//   WAVS_INVOKE_URL      — invoke server base URL (e.g. http://127.0.0.1:PORT)
+//   WAVS_INVOKE_TOKEN    — bearer token (must match server)
+//   WAVS_INVOKE_SEALED_BLOB — hex-encoded sealed blob (must match server)
+
+const INVOKE_URL = process.env.WAVS_INVOKE_URL || ''
+const INVOKE_TOKEN = process.env.WAVS_INVOKE_TOKEN || ''
+const INVOKE_SEALED_BLOB = process.env.WAVS_INVOKE_SEALED_BLOB || ''
+
+/**
+ * Call the WAVS invoke API to sign a Cosmos execute tx inside the TEE.
+ * Returns { tx_bytes, sign_doc_sha256_hex, address, pubkey } synchronously.
+ *
+ * This replaces the entire RequestSignedTx → StoreSignedTx → poll → broadcast
+ * round-trip with a single HTTP call.
+ */
+export async function invokeSealedSigner(accountInfo, execMsg, opts = {}) {
+  if (!INVOKE_URL) throw new Error('WAVS_INVOKE_URL not set')
+  if (!INVOKE_TOKEN) throw new Error('WAVS_INVOKE_TOKEN not set')
+
+  const requestBody = {
+    trigger: 'sign_request',
+    input: {
+      sender: accountInfo.address,
+      contract: MOULTBOOK_ADDR,
+      exec_msg_json: JSON.stringify(execMsg),
+      funds_denom: opts.fundsDenom || '',
+      funds_amount: opts.fundsAmount || '0',
+      gas_limit: opts.gasLimit || 200_000,
+      fee_denom: opts.feeDenom || 'ujuno',
+      fee_amount: opts.feeAmount || '5000',
+      memo: opts.memo || 'sealed signer Moultbook post (invoke)',
+      chain_id: opts.chainId || 'uni-7',
+      account_number: accountInfo.accountNumber,
+      sequence: accountInfo.sequence,
+    },
+  }
+
+  const resp = await fetch(`${INVOKE_URL}/invoke/sealed-signer`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${INVOKE_TOKEN}`,
+    },
+    body: JSON.stringify(requestBody),
+  })
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '<no body>')
+    throw new Error(`invoke failed (${resp.status}): ${text}`)
+  }
+
+  const result = await resp.json()
+  if (!result.output?.tx_bytes) {
+    throw new Error(`invoke returned no tx_bytes: ${JSON.stringify(result)}`)
+  }
+
+  return {
+    txBytes: result.output.tx_bytes,
+    signDocSha256Hex: result.output.sign_doc_sha256_hex,
+    address: result.output.address,
+    pubkey: result.output.pubkey,
+    attestationHash: result.attestation?.attestation_hash || result.output.sign_doc_sha256_hex,
+  }
+}
+
+/**
+ * Post to Moultbook using the off-chain invoke API path.
+ *
+ * This is the simplified sealed signer flow:
+ *   1. Get sealed signer account info (account number + sequence)
+ *   2. Invoke the sealed signer via HTTP → get signed tx_bytes
+ *   3. Broadcast the signed tx_bytes on-chain
+ *
+ * No RequestSignedTx, no StoreSignedTx, no AckBroadcastTx, no polling.
+ * The relayer wallet is not needed — the tx is already signed by the enclave.
+ */
+export async function postViaSealedSignerInvoke(execMsg, opts = {}) {
+  // 1. Get account info for the sealed signer address
+  const accountInfo = await getSealedSignerAccountInfo()
+
+  // 2. Invoke the sealed signer component via HTTP
+  const signed = await invokeSealedSigner(accountInfo, execMsg, opts)
+  console.log(`[reply-bot] invoke signed tx for ${signed.address} (signDoc=${signed.signDocSha256Hex.slice(0, 16)}...)`)
+
+  // 3. Broadcast the signed transaction
+  const broadcastResult = await broadcastTxBytes(signed.txBytes)
+  console.log(`[reply-bot] broadcast tx: ${broadcastResult.transactionHash}`)
+
+  return {
+    txHash: broadcastResult.transactionHash,
+    signDocSha256Hex: signed.signDocSha256Hex,
+    attestationHash: signed.attestationHash,
+    address: signed.address,
+    invokeMode: true,
+  }
 }

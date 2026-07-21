@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Uint128};
+use cosmwasm_std::{Addr, Binary, Uint128};
 use cw_storage_plus::{Item, Map};
 use junoclaw_common::ExecutionTier;
 
@@ -116,6 +116,15 @@ pub struct Config {
     /// no additional gas is spent on DAOs that have not opted in.
     #[serde(default)]
     pub moultbook: Option<Addr>,
+    /// Optional relayer address authorized to submit `RequestSignedTx`
+    /// events for the WAVS sealed signer to process.
+    #[serde(default)]
+    pub relayer: Option<Addr>,
+    /// Optional sealed-signer (enclave) address. When set, `RequestSignedTx`
+    /// must use this sender, and `StoreSignedTx` must be submitted by the
+    /// configured `wavs_operator`.
+    #[serde(default)]
+    pub sealed_signer: Option<Addr>,
 }
 
 // ──────────────────────────────────────────────
@@ -353,3 +362,45 @@ pub struct Attestation {
 
 /// Attestations keyed by proposal_id
 pub const ATTESTATIONS: Map<u64, Attestation> = Map::new("attestations");
+
+// ──────────────────────────────────────────────
+// Sealed-signer requests
+// ──────────────────────────────────────────────
+
+#[cw_serde]
+pub enum SignRequestStatus {
+    Pending,
+    Signed,
+}
+
+#[cw_serde]
+pub struct SignRequest {
+    pub id: u64,
+    pub requester: Addr,
+    pub sender: String,
+    pub contract: String,
+    pub exec_msg_json: String,
+    pub funds_denom: String,
+    pub funds_amount: Uint128,
+    pub gas_limit: u64,
+    pub fee_denom: String,
+    pub fee_amount: Uint128,
+    pub memo: String,
+    pub chain_id: String,
+    pub account_number: u64,
+    pub sequence: u64,
+    pub status: SignRequestStatus,
+    /// Protobuf-encoded `TxRaw` produced by the sealed signer.
+    pub tx_bytes: Option<Binary>,
+    /// SHA-256 hex of the exact `SignDoc` bytes that were signed.
+    pub sign_doc_sha256_hex: Option<String>,
+    pub requested_at_block: u64,
+    pub signed_at_block: Option<u64>,
+}
+
+pub const SIGN_REQUEST_SEQ: Item<u64> = Item::new("sign_request_seq");
+pub const SIGN_REQUESTS: Map<u64, SignRequest> = Map::new("sign_requests");
+/// Tracks the single currently-pending sign request, if any. The contract
+/// allows only one pending request at a time to avoid sequence collisions
+/// on the sealed-signer account.
+pub const PENDING_SIGN_REQUEST: Item<Option<u64>> = Item::new("pending_sign_request");

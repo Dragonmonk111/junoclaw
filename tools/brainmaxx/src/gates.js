@@ -128,6 +128,7 @@ const ALLOWED_MIME_TYPES = new Set([
   'application/json+agent-proposal',
   'application/json+redmark',
   'application/json+unredmark',
+  'application/json+brainmaxx-trace',
 ])
 
 /**

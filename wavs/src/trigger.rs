@@ -124,6 +124,30 @@ pub enum VerificationTask {
         packets_recv: String,
         packets_timeout: String,
     },
+
+    /// 11. Sign a Moultbook export digest inside the TEE using the persisted
+    /// sealed signer key.
+    SignMoultbookExport {
+        export_json: String,
+    },
+
+    /// 12. Sign a Cosmos SDK MsgExecuteContract inside the TEE using the
+    /// persisted sealed signer key, triggered by an on-chain sign_request event.
+    SignRequest {
+        id: u64,
+        sender: String,
+        contract: String,
+        exec_msg_json: String,
+        funds_denom: String,
+        funds_amount: u128,
+        gas_limit: u64,
+        fee_denom: String,
+        fee_amount: u128,
+        memo: String,
+        chain_id: String,
+        account_number: u64,
+        sequence: u64,
+    },
 }
 
 /// Result produced by the component after verification.
@@ -298,6 +322,40 @@ fn parse_cosmos_event(
                 packets_sent: get_attr("packets_sent").unwrap_or_else(|_| "0".to_string()),
                 packets_recv: get_attr("packets_recv").unwrap_or_else(|_| "0".to_string()),
                 packets_timeout: get_attr("packets_timeout").unwrap_or_else(|_| "0".to_string()),
+            })
+        }
+
+        // 11. Moultbook export signing — triggered by a custom agent-company event
+        t if t.contains("sign_moultbook_export") => {
+            Ok(VerificationTask::SignMoultbookExport {
+                export_json: get_attr("export_json")?,
+            })
+        }
+
+        // 12. Sealed signer request — triggered by a sign_request event from agent-company
+        t if t.contains("sign_request") => {
+            let parse_u64 = |key: &str| -> Result<u64> {
+                get_attr(key)
+                    .and_then(|v| v.parse().map_err(|e| anyhow!("{}: {}", key, e)))
+            };
+            let parse_u128 = |key: &str| -> Result<u128> {
+                get_attr(key)
+                    .and_then(|v| v.parse().map_err(|e| anyhow!("{}: {}", key, e)))
+            };
+            Ok(VerificationTask::SignRequest {
+                id: parse_u64("id")?,
+                sender: get_attr("sender")?,
+                contract: get_attr("target_contract")?,
+                exec_msg_json: get_attr("exec_msg_json")?,
+                funds_denom: get_attr("funds_denom")?,
+                funds_amount: parse_u128("funds_amount")?,
+                gas_limit: parse_u64("gas_limit")?,
+                fee_denom: get_attr("fee_denom")?,
+                fee_amount: parse_u128("fee_amount")?,
+                memo: get_attr("memo")?,
+                chain_id: get_attr("chain_id")?,
+                account_number: parse_u64("account_number")?,
+                sequence: parse_u64("sequence")?,
             })
         }
 

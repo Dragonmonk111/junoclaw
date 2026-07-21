@@ -10,8 +10,16 @@ function draftFilename(run_id) {
   return `${run_id.replace(/:/g, '_')}.envelope.json`
 }
 
+function traceDraftFilename(run_id) {
+  return `${run_id.replace(/:/g, '_')}.trace.envelope.json`
+}
+
 export function draftFilePath(brainmaxxDir, run_id) {
   return join(brainmaxxDir, 'drafts', draftFilename(run_id))
+}
+
+export function traceDraftFilePath(brainmaxxDir, run_id) {
+  return join(brainmaxxDir, 'drafts', traceDraftFilename(run_id))
 }
 
 /** Read the text of the most recently attached llm-draft, if any. */
@@ -70,6 +78,59 @@ export function composeEnvelope(trace, { motherMoultId, authorWallet, authorAlia
 
 export function writeDraft(brainmaxxDir, trace, envelope) {
   const path = draftFilePath(brainmaxxDir, trace.run_id)
+  mkdirSync(join(brainmaxxDir, 'drafts'), { recursive: true })
+  writeFileSync(path, JSON.stringify(envelope, null, 2), 'utf8')
+  return { path, commitment: envelopeCommitment(envelope) }
+}
+
+/** Build an AKB export envelope for the entire Brainmaxx trace (not just the insight). */
+export function composeTraceEnvelope(trace, { motherMoultId, authorWallet, authorAlias, tags = [] } = {}) {
+  const refs = refsFromTrace(trace)
+  if (!refs.length) throw new Error('cannot compose a trace envelope with no refs')
+
+  const gateLines = (trace.gates || []).map((g) => `- ${g.gate}: ${g.verdict}`).join('\n') || '(no gates recorded)'
+  const sourceLines = (trace.pack?.items || []).map((i) => `- ${i.moult_id} (${i.author || 'unknown'}, ${i.mime_type || 'unknown'})`).join('\n') || '(none)'
+
+  const text = [
+    `# Brainmaxx trace export — ${trace.run_id}`,
+    '',
+    `**Objective:** ${trace.objective}`,
+    `**Corpus snapshot:** ${trace.corpus_snapshot_hash}`,
+    `**Pack hash:** ${trace.pack?.pack_hash || 'none'}`,
+    `**Determinism profile:** ${trace.determinism_profile || 'D0'}`,
+    '',
+    '## Gate verdicts',
+    '',
+    gateLines,
+    '',
+    '## Cited sources',
+    '',
+    sourceLines,
+    '',
+    'Full structured trace is embedded in `content.structured.trace`.',
+  ].join('\n')
+
+  return {
+    akb_version: '1.0',
+    direction: 'export',
+    ...(motherMoultId ? { mother_moult_id: motherMoultId } : {}),
+    author: { wallet: authorWallet || null, alias: authorAlias || null, type: 'agent' },
+    content: {
+      mime_type: 'application/json+brainmaxx-trace',
+      text,
+      structured: {
+        type: 'brainmaxx-trace',
+        trace,
+      },
+    },
+    refs,
+    tags: ['brainmaxx', 'trace', 'j-reef', 'replayable', ...tags],
+    memory_ops: { remember: [], stale: [] },
+  }
+}
+
+export function writeTraceExport(brainmaxxDir, trace, envelope) {
+  const path = traceDraftFilePath(brainmaxxDir, trace.run_id)
   mkdirSync(join(brainmaxxDir, 'drafts'), { recursive: true })
   writeFileSync(path, JSON.stringify(envelope, null, 2), 'utf8')
   return { path, commitment: envelopeCommitment(envelope) }

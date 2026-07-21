@@ -1,0 +1,47 @@
+[package]
+name = "junoclaw-sealed-signer"
+version = "0.1.0"
+edition = "2021"
+description = "WAVS WASI sealed signer for Juno agent keys"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wit-bindgen-rt = { version = "0.40", features = ["bitflags"] }
+
+k256 = { version = "0.13", features = ["ecdsa", "sha256", "serde"] }
+aes-gcm = { version = "0.10", features = ["std"] }
+pbkdf2 = { version = "0.12", features = ["simple"] }
+sha2 = "0.10"
+ripemd = "0.1"
+bech32 = "0.11"
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+anyhow = "1.0"
+cosmrs = { version = "0.22", default-features = false, features = ["cosmwasm"] }
+tendermint = { version = "0.40", default-features = false }
+prost = { version = "0.13", default-features = false }
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[package.metadata.component]
+package = "junoclaw:sealed-signer"
+
+[package.metadata.component.target]
+path = "wit"
+world = "sealed-signer-world"
+
+[package.metadata.component.target.dependencies]
+"wasi:random" = "0.2.0"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+
+[workspace]
+members = ["."]

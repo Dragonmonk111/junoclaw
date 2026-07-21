@@ -21,6 +21,7 @@ On-chain Event (agent-company contract on uni-7)
 | wavs-push-verify | `wasm-wavs_push` | `data_verify` | `SubmitAttestation` |
 | sortition-randomness | `wasm-sortition_request` | `drand_randomness` | `SubmitRandomness` |
 | outcome-verify | `wasm-outcome_create` | `outcome_verify` | `SubmitAttestation` |
+| sign-request | `wasm-sign_request` | `store_signed_tx` | `StoreSignedTx` |
 
 ### `data_verify` SSRF defenses (Ffern H-3)
 
@@ -57,8 +58,14 @@ Run `npm run ssrf-guard-test` from `bridge/` to exercise the defenses against a 
 wkg config --default-registry wa.dev
 
 # Build the WASI component
-cargo component build --release
-# Output: target/wasm32-wasip1/release/junoclaw_wavs_component.wasm (352 KB)
+# IMPORTANT: pass --target explicitly. cargo-component 0.21.x ignores the
+# `target` key in .cargo/config.toml and defaults to wasm32-wasip1, whose
+# preview1-compat adapter drags in unused wasi:filesystem imports. WAVS
+# service.json sets `file_system: false`, so a wasip1-targeted build can
+# mismatch the declared permissions even though the code never touches the
+# filesystem. Always build with wasm32-wasip2 explicitly:
+cargo component build --release --target wasm32-wasip2
+# Output: target/wasm32-wasip2/release/junoclaw_wavs_component.wasm
 
 # Install bridge dependencies
 cd bridge && npm install

@@ -6,6 +6,8 @@
 
 The first Model Context Protocol server for the Cosmos ecosystem. Lets any MCP-compatible AI assistant (Claude, Windsurf/Cascade, Cursor) query chains, deploy contracts, and scaffold CosmWasm projects — without the developer needing to learn CosmJS, cargo schemas, or gas estimation.
 
+> **New here?** See [`QUICKSTART.md`](./QUICKSTART.md) for a 5-minute install → first query → first signed tx walkthrough with copy-paste examples.
+
 ## Philosophy
 
 ```
@@ -165,7 +167,7 @@ async with MultiServerMCPClient({
     }
 }) as client:
     tools = client.get_tools()
-    # Your local model can now call all 22 Cosmos tools
+    # Your local model can now call all 28 Cosmos tools
 ```
 
 **Option 4: `mcphost`** (Rust, any OpenAI-compatible API)
@@ -174,9 +176,9 @@ cargo install mcphost
 mcphost --config mcp_config.json --api-base http://localhost:11434/v1
 ```
 
-> **Bottom line**: Any model that can do tool-calling (Llama 3.1+, Mistral, Qwen2.5, DeepSeek) running on your own GPU via Ollama can use all 22 Cosmos MCP tools. Your keys, your GPU, your chain interactions. Full sovereignty.
+> **Bottom line**: Any model that can do tool-calling (Llama 3.1+, Mistral, Qwen2.5, DeepSeek) running on your own GPU via Ollama can use all 28 Cosmos MCP tools. Your keys, your GPU, your chain interactions. Full sovereignty.
 
-## Tools (22 total)
+## Tools (28 total)
 
 ### Query Tools (no wallet needed)
 | Tool | Description |
@@ -202,6 +204,12 @@ mcphost --config mcp_config.json --api-base http://localhost:11434/v1
 | `migrate_contract` | Migrate a contract to a new code ID |
 | `ibc_transfer` | Transfer tokens across Cosmos chains via IBC — the first cross-chain primitive for AI agents |
 | `submit_blob` | Submit data blobs to Celestia DA layer ([celestiaorg/celestia-app](https://github.com/celestiaorg/celestia-app), Apache 2.0). Sovereign rollup data availability. |
+| `vote_on_proposal` | Vote on a governance proposal (`MsgVote`) |
+| `delegate_tokens` | Delegate (stake) tokens to a validator (`MsgDelegate`) |
+| `undelegate_tokens` | Undelegate tokens from a validator (`MsgUndelegate`) |
+| `redelegate_tokens` | Redelegate between validators without unbonding (`MsgBeginRedelegate`) |
+| `withdraw_rewards` | Withdraw staking rewards (`MsgWithdrawDelegatorReward`) |
+| `compose_and_broadcast_msg` | Compose, sign, and broadcast **any** registered Cosmos SDK message by type URL + JSON. **Disabled by default** — see *Generic message composer* below. |
 
 #### Wallet registry (Ffern C-3 — mnemonic → `wallet_id`)
 
@@ -369,6 +377,24 @@ The chain registry includes IBC channel metadata for cross-chain transfers:
 7. **Citizens' Assembly** — Sortition governance with NOIS/drand randomness
 8. **Skill-Staking Circle** — Reputation staking and trust-tree credentials
 9. **Verifiable Outcome Market** — Prediction markets with TEE resolution
+
+## Roadmap
+
+- **On-chain skill registry** — a queryable, permissionless-write CosmWasm registry (`skill-registry`) where any interchain dApp can publish a pointer + hash to its own `SKILL.md`-equivalent manual, so any MCP client can discover and load the operating manual for any dApp on any chain without prior knowledge of its GitHub URL. Contract implemented at `contracts/skill-registry/` in the main repo (14/14 tests passing); MCP `get_dapp_skill` / `list_dapp_skills` query tools land once deployed. Design in `drafts/PLAN_ONCHAIN_SKILL_REGISTRY.md`.
+
+### Generic message composer (`compose_and_broadcast_msg`)
+
+**Yes, the MCP can compose, sign, and broadcast any registered Cosmos SDK message type** — via `compose_and_broadcast_msg` (type URL + JSON value) — but this is **disabled by default**. Rather than one always-on tool that lets the calling model construct and sign anything the chain will accept, the design has two layers, matching how every other write path in this server works:
+
+1. **Five targeted typed tools** for the highest-value known gaps: `vote_on_proposal`, `delegate_tokens`, `undelegate_tokens`, `redelegate_tokens`, `withdraw_rewards`. Each has an explicit, schema-validated parameter shape — the model cannot smuggle an unexpected message shape through these.
+2. **`compose_and_broadcast_msg`** for anything not covered by a dedicated tool. Gated by `JUNOCLAW_ALLOWED_MSG_TYPES` — a comma-separated allowlist of type URLs. **Unset or empty (the default) means the tool always refuses**, regardless of what the model asks for:
+
+```bash
+# Off by default — compose_and_broadcast_msg always throws until this is set.
+export JUNOCLAW_ALLOWED_MSG_TYPES="/cosmos.gov.v1.MsgVote,/ibc.applications.transfer.v1.MsgTransfer"
+```
+
+This mirrors the admin RPC's posture (`JUNOCLAW_ADMIN_RPC` off-by-default, fails loudly if half-configured) rather than a fully-open shape. A prompt-injected or compromised agent cannot use `compose_and_broadcast_msg` to sign an unexpected message type unless the operator has already explicitly opted that exact type URL in — narrowing the blast radius to whatever the operator decided in advance, not whatever the model decides at runtime.
 
 ## Security
 

@@ -251,6 +251,220 @@ export async function submitBlob(
   };
 }
 
+// ═══════════════════════════════════════════════════
+//  GOVERNANCE / STAKING TOOLS — targeted high-value message types
+//
+//  Added 2026-07-21 in response to FlipDAscript's Cosmos-chat question:
+//  "can it compose sign and broadcast any message types?" Rather than
+//  exposing a single unrestricted generic-message tool, the highest-value
+//  known gaps (vote, delegate, undelegate, redelegate, withdraw rewards)
+//  get their own explicit, schema-validated tools — smaller attack
+//  surface than a raw type-url + JSON blob, same posture as every other
+//  write tool in this file. All five typeUrls below are part of CosmJS's
+//  default registry (no custom registration needed).
+// ══════════════════════════════════════════════════
+
+export async function voteOnProposal(
+  chainId: string,
+  walletId: string,
+  proposalId: string,
+  option: "yes" | "no" | "abstain" | "no_with_veto",
+  memo?: string
+): Promise<TxResult> {
+  const chain = requireChain(chainId);
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
+
+  const optionMap: Record<string, number> = {
+    yes: 1,
+    abstain: 2,
+    no: 3,
+    no_with_veto: 4,
+  };
+
+  const voteMsg = {
+    typeUrl: "/cosmos.gov.v1beta1.MsgVote",
+    value: {
+      proposalId: BigInt(proposalId),
+      voter: address,
+      option: optionMap[option],
+    },
+  };
+
+  const result = await client.signAndBroadcast(address, [voteMsg], "auto", memo || "cosmos-mcp vote");
+  if (result.code !== 0) {
+    throw new Error(`Vote failed with code ${result.code}: ${result.rawLog}`);
+  }
+  return formatResult(chain, result);
+}
+
+export async function delegateTokens(
+  chainId: string,
+  walletId: string,
+  validatorAddress: string,
+  amount: string,
+  denom?: string,
+  memo?: string
+): Promise<TxResult> {
+  const chain = requireChain(chainId);
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
+  const d = denom || chain.denom;
+
+  const delegateMsg = {
+    typeUrl: "/cosmos.staking.v1beta1.MsgDelegate",
+    value: {
+      delegatorAddress: address,
+      validatorAddress,
+      amount: { denom: d, amount },
+    },
+  };
+
+  const result = await client.signAndBroadcast(address, [delegateMsg], "auto", memo || "cosmos-mcp delegate");
+  if (result.code !== 0) {
+    throw new Error(`Delegate failed with code ${result.code}: ${result.rawLog}`);
+  }
+  return formatResult(chain, result);
+}
+
+export async function undelegateTokens(
+  chainId: string,
+  walletId: string,
+  validatorAddress: string,
+  amount: string,
+  denom?: string,
+  memo?: string
+): Promise<TxResult> {
+  const chain = requireChain(chainId);
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
+  const d = denom || chain.denom;
+
+  const undelegateMsg = {
+    typeUrl: "/cosmos.staking.v1beta1.MsgUndelegate",
+    value: {
+      delegatorAddress: address,
+      validatorAddress,
+      amount: { denom: d, amount },
+    },
+  };
+
+  const result = await client.signAndBroadcast(address, [undelegateMsg], "auto", memo || "cosmos-mcp undelegate");
+  if (result.code !== 0) {
+    throw new Error(`Undelegate failed with code ${result.code}: ${result.rawLog}`);
+  }
+  return formatResult(chain, result);
+}
+
+export async function redelegateTokens(
+  chainId: string,
+  walletId: string,
+  validatorSrcAddress: string,
+  validatorDstAddress: string,
+  amount: string,
+  denom?: string,
+  memo?: string
+): Promise<TxResult> {
+  const chain = requireChain(chainId);
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
+  const d = denom || chain.denom;
+
+  const redelegateMsg = {
+    typeUrl: "/cosmos.staking.v1beta1.MsgBeginRedelegate",
+    value: {
+      delegatorAddress: address,
+      validatorSrcAddress,
+      validatorDstAddress,
+      amount: { denom: d, amount },
+    },
+  };
+
+  const result = await client.signAndBroadcast(address, [redelegateMsg], "auto", memo || "cosmos-mcp redelegate");
+  if (result.code !== 0) {
+    throw new Error(`Redelegate failed with code ${result.code}: ${result.rawLog}`);
+  }
+  return formatResult(chain, result);
+}
+
+export async function withdrawRewards(
+  chainId: string,
+  walletId: string,
+  validatorAddress: string,
+  memo?: string
+): Promise<TxResult> {
+  const chain = requireChain(chainId);
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
+
+  const withdrawMsg = {
+    typeUrl: "/cosmos.distribution.v1beta1.MsgWithdrawDelegatorReward",
+    value: {
+      delegatorAddress: address,
+      validatorAddress,
+    },
+  };
+
+  const result = await client.signAndBroadcast(address, [withdrawMsg], "auto", memo || "cosmos-mcp withdraw-rewards");
+  if (result.code !== 0) {
+    throw new Error(`Withdraw rewards failed with code ${result.code}: ${result.rawLog}`);
+  }
+  return formatResult(chain, result);
+}
+
+// ═══════════════════════════════════════════════════
+//  GENERIC MESSAGE COMPOSER — gated, off by default
+//
+//  Answers FlipDAscript's question directly: yes, this CAN compose, sign,
+//  and broadcast any registered Cosmos SDK message type — but only if the
+//  operator explicitly opts a specific typeUrl into
+//  JUNOCLAW_ALLOWED_MSG_TYPES. Unset or empty (the default) means this
+//  tool always refuses, mirroring the admin-RPC's "off by default, fails
+//  loudly if half-configured" posture (see README.md "Admin RPC" section)
+//  rather than the fully-open shape that would let a compromised or
+//  prompt-injected model sign literally anything the chain accepts.
+// ══════════════════════════════════════════════════
+
+function getAllowedMsgTypes(): Set<string> {
+  const raw = process.env.JUNOCLAW_ALLOWED_MSG_TYPES;
+  if (!raw || raw.trim() === "") return new Set();
+  return new Set(raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0));
+}
+
+export async function composeAndBroadcastMsg(
+  chainId: string,
+  walletId: string,
+  typeUrl: string,
+  value: Record<string, unknown>,
+  memo?: string
+): Promise<TxResult> {
+  const allowed = getAllowedMsgTypes();
+  if (allowed.size === 0) {
+    throw new Error(
+      "Generic message composer is disabled (fail-closed default). " +
+        "Set JUNOCLAW_ALLOWED_MSG_TYPES to a comma-separated list of Cosmos SDK " +
+        "type URLs (e.g. '/cosmos.gov.v1.MsgVote,/cosmos.staking.v1beta1.MsgDelegate') " +
+        "to enable specific message types. Prefer the dedicated typed tools " +
+        "(vote_on_proposal, delegate_tokens, etc.) when available instead."
+    );
+  }
+  if (!allowed.has(typeUrl)) {
+    throw new Error(
+      `Message type '${typeUrl}' is not in JUNOCLAW_ALLOWED_MSG_TYPES. ` +
+        `Allowed: [${Array.from(allowed).join(", ")}]`
+    );
+  }
+
+  const chain = requireChain(chainId);
+  const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
+
+  const result = await client.signAndBroadcast(
+    address,
+    [{ typeUrl, value }],
+    "auto",
+    memo || "cosmos-mcp compose-and-broadcast"
+  );
+  if (result.code !== 0) {
+    throw new Error(`Broadcast failed with code ${result.code}: ${result.rawLog}`);
+  }
+  return formatResult(chain, result);
+}
+
 export async function ibcTransfer(
   sourceChainId: string,
   destChainId: string,
