@@ -17,5 +17,13 @@
     "codeId": 80,
     "tx": "508F48C22CBAF5F40135713815E10CE5E9B47BE544D82DA0621E151324437BCE",
     "address": "juno1nm0mu2uwxnphn2hqnuyywyvxp6qfdfuhe64svrnq3vjh66pwxlhskt3dx4"
+  },
+  "skill-registry": {
+    "codeId": 82,
+    "tx": "148469DD942632FA007399CB62D87AB393886914F20E45E2AFF5EE7C4498820E",
+    "address": "juno1pug0zu6f93nmvjl559s0uymr92jhmn5t76p7knh9zg4sqlpygqyq0nn8gz",
+    "instantiateTx": "53C4A1A1D2EB0D4B104B8BE1B446A8FD8972CEE1822FAED65BA3757E5F1A99DA",
+    "registeredSelf": true,
+    "selfEntryTx": "B62A580DA3F9E299F6F15580ADD9C12ADBB48178F915A30F9DECCD631350E8F1"
   }
 }

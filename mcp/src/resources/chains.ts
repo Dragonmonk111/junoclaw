@@ -42,6 +42,7 @@ export const CHAIN_REGISTRY: Record<string, ChainConfig> = {
     explorerTx: "https://testnet.mintscan.io/juno-testnet/tx",
     faucet: "https://faucet.junonetwork.io/",
     isTestnet: true,
+    skillRegistry: "juno1pug0zu6f93nmvjl559s0uymr92jhmn5t76p7knh9zg4sqlpygqyq0nn8gz",
   },
   "juno-1": {
     chainId: "juno-1",
