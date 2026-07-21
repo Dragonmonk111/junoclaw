@@ -16,6 +16,7 @@
     "wallet-store-test": "tsx src/wallet/store-test.ts",
     "keychain-store-test": "tsx src/wallet/keychain-store-test.ts",
     "signing-pause-test": "tsx src/wallet/signing-pause-test.ts",
+    "pending-tx-test": "tsx src/wallet/pending-tx-test.ts",
     "signing-pause-smoke": "tsx src/signing-pause-smoke.ts",
     "admin-rpc-test": "tsx src/admin/admin-rpc-test.ts",
     "admin-rpc-smoke": "tsx src/admin-rpc-smoke.ts",

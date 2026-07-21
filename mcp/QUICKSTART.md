@@ -103,6 +103,8 @@ Under the hood:
 { "tool": "send_tokens", "chain_id": "juno-1", "wallet_id": "my-wallet", "recipient": "juno1abc...xyz", "amount": "1000000" }
 ```
 
+This does **not** broadcast immediately — see "Second-approval gate" below. The model must follow up with a `confirm_transaction` call before the tokens actually move.
+
 ## 6. Execute a CosmWasm contract
 
 ```text
@@ -165,6 +167,33 @@ export JUNOCLAW_ALLOWED_MSG_TYPES="/cosmos.gov.v1.MsgSubmitProposal"
 ```
 
 Without this env var set, the tool always refuses — see `README.md`'s "Generic message composer" section for the full security rationale.
+
+## Second-approval gate for fund-moving transactions
+
+`send_tokens`, staking (`delegate_tokens` / `undelegate_tokens` / `redelegate_tokens` / `withdraw_rewards`), `ibc_transfer`, funded `execute_contract` / `instantiate_contract`, and `compose_and_broadcast_msg` do not broadcast on the first tool call. Instead they stage the transaction and return a preview:
+
+```jsonc
+{
+  "confirmation_id": "pending_abc123_xyz789",
+  "status": "pending_confirmation",
+  "tool": "send_tokens",
+  "summary": { "chain_id": "juno-1", "wallet_id": "my-wallet", "recipient": "juno1abc...xyz", "amount": "1000000", "denom": "ujuno" },
+  "expires_at": "2026-07-21T13:05:00.000Z",
+  "instructions": "This transaction has NOT been signed or broadcast. ..."
+}
+```
+
+Show the `summary` to the user for their approval, then call:
+
+```jsonc
+{ "tool": "confirm_transaction", "confirmation_id": "pending_abc123_xyz789" }
+```
+
+to actually sign and broadcast. Confirmations are single-use and expire after 5 minutes. To disable this gate (not recommended — accepts single-shot signing risk):
+
+```bash
+export JUNOCLAW_REQUIRE_TX_CONFIRMATION=0
+```
 
 ## Troubleshooting
 

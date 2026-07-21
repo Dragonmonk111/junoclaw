@@ -176,7 +176,7 @@ cargo install mcphost
 mcphost --config mcp_config.json --api-base http://localhost:11434/v1
 ```
 
-> **Bottom line**: Any model that can do tool-calling (Llama 3.1+, Mistral, Qwen2.5, DeepSeek) running on your own GPU via Ollama can use all 28 Cosmos MCP tools. Your keys, your GPU, your chain interactions. Full sovereignty.
+> **Bottom line**: Any model that can do tool-calling (Llama 3.1+, Mistral, Qwen2.5, DeepSeek) running on your own GPU via Ollama can use all 28 Cosmos MCP tools (fund-moving ones subject to the *Second-approval gate*, see below). Your keys, your GPU, your chain interactions. Full sovereignty.
 
 ## Tools (28 total)
 
@@ -190,6 +190,8 @@ mcphost --config mcp_config.json --api-base http://localhost:11434/v1
 | `query_tx` | Look up a transaction by hash |
 | `query_block_height` | Get current block height |
 | `query_code_info` | Get info about an uploaded WASM code ID |
+| `get_dapp_skill` | Look up a dApp's on-chain skill/manual entry from the `skill-registry` contract. Returns `skill_uri` + `skill_hash` for the caller to fetch and verify. |
+| `list_dapp_skills` | List entries from the on-chain `skill-registry` contract, optionally filtered by `chain_id`. |
 | `query_zk_verifier` | Query a deployed zk-verifier contract (Groth16 BN254 VK status + last proof) |
 | `query_mesh_security` | **NEW** Query mesh-security contracts ([osmosis-labs/mesh-security](https://github.com/osmosis-labs/mesh-security), Apache 2.0). Auto-detects provider vs consumer. |
 | `list_chains` | List all supported Cosmos chains (now includes IBC channel metadata) |
@@ -210,6 +212,7 @@ mcphost --config mcp_config.json --api-base http://localhost:11434/v1
 | `redelegate_tokens` | Redelegate between validators without unbonding (`MsgBeginRedelegate`) |
 | `withdraw_rewards` | Withdraw staking rewards (`MsgWithdrawDelegatorReward`) |
 | `compose_and_broadcast_msg` | Compose, sign, and broadcast **any** registered Cosmos SDK message by type URL + JSON. **Disabled by default** — see *Generic message composer* below. |
+| `confirm_transaction` | **NEW** Second-approval step that actually signs and broadcasts a fund-moving transaction staged by one of the tools above. See *Second-approval gate* below. |
 
 #### Wallet registry (Ffern C-3 — mnemonic → `wallet_id`)
 
@@ -380,7 +383,7 @@ The chain registry includes IBC channel metadata for cross-chain transfers:
 
 ## Roadmap
 
-- **On-chain skill registry** — a queryable, permissionless-write CosmWasm registry (`skill-registry`) where any interchain dApp can publish a pointer + hash to its own `SKILL.md`-equivalent manual, so any MCP client can discover and load the operating manual for any dApp on any chain without prior knowledge of its GitHub URL. Contract implemented at `contracts/skill-registry/` in the main repo (14/14 tests passing); MCP `get_dapp_skill` / `list_dapp_skills` query tools land once deployed. Design in `drafts/PLAN_ONCHAIN_SKILL_REGISTRY.md`.
+- **On-chain skill registry** — a queryable, permissionless-write CosmWasm registry (`skill-registry`) where any interchain dApp can publish a pointer + hash to its own `SKILL.md`-equivalent manual, so any MCP client can discover and load the operating manual for any dApp on any chain without prior knowledge of its GitHub URL. Contract implemented at `contracts/skill-registry/` in the main repo (14/14 tests passing); MCP `get_dapp_skill` / `list_dapp_skills` query tools ship in this release and resolve once the per-chain `skillRegistry` address is deployed and wired into `resources/chains.ts`. Design in `drafts/PLAN_ONCHAIN_SKILL_REGISTRY.md`.
 
 ### Generic message composer (`compose_and_broadcast_msg`)
 
@@ -396,11 +399,28 @@ export JUNOCLAW_ALLOWED_MSG_TYPES="/cosmos.gov.v1.MsgVote,/ibc.applications.tran
 
 This mirrors the admin RPC's posture (`JUNOCLAW_ADMIN_RPC` off-by-default, fails loudly if half-configured) rather than a fully-open shape. A prompt-injected or compromised agent cannot use `compose_and_broadcast_msg` to sign an unexpected message type unless the operator has already explicitly opted that exact type URL in — narrowing the blast radius to whatever the operator decided in advance, not whatever the model decides at runtime.
 
+### Second-approval gate for fund-moving transactions
+
+Rattadan's advice (2026-07-21): an AI-driven signer should never move funds off a single tool call. Every tool that can move value — `send_tokens`, `delegate_tokens`, `undelegate_tokens`, `redelegate_tokens`, `withdraw_rewards`, `ibc_transfer`, `execute_contract` / `instantiate_contract` (when `funds` is non-empty), and `compose_and_broadcast_msg` — now stages its intent instead of broadcasting on the first call:
+
+1. The tool call returns a `confirmation_id`, a human-readable `summary` of exactly what would be signed (chain, wallet, recipient/validator, amount, denom, memo), and an `expires_at` (5 minutes).
+2. **Nothing has been signed or broadcast yet.** The underlying execution closure is held in an in-memory `PendingTxStore` (`src/wallet/pending-tx.ts`), keyed only by that `confirmation_id`.
+3. A second, separate `confirm_transaction` tool call — with that exact `confirmation_id` — is required to actually sign and broadcast. Confirmations are single-use (deleted before execution starts, so a replay cannot double-spend) and expire after 5 minutes if never confirmed.
+
+Required by default (fail-safe, the opposite default direction from the message-type allowlist above, since here the *safer* posture is "add friction" rather than "disable the capability"). An operator who wants single-shot automation and accepts the risk can opt out with:
+
+```bash
+export JUNOCLAW_REQUIRE_TX_CONFIRMATION=0
+```
+
+See `src/wallet/pending-tx.ts` for the implementation and `npm run pending-tx-test` for the test suite.
+
 ## Security
 
 The MCP server is the most-exposed surface in the JunoClaw stack — it brokers between an LLM's tool calls and signed Cosmos transactions. We document each defense honestly.
 
 - **Wallet handles, not raw mnemonics (Ffern C-3).** Every write tool takes a `wallet_id`. Mnemonics are enrolled out-of-band via the `cosmos-mcp wallet ...` CLI and encrypted at rest under a backend-specific 32-byte DEK — either an OS-keychain entry (Phase 2: DPAPI / macOS Keychain / libsecret) or a scrypt-derived master key (Phase 1: passphrase). See *Wallet registry* above.
+- **Second-approval gate on fund-moving transactions (Rattadan, 2026-07-21).** Required by default: `send_tokens`, staking, `ibc_transfer`, funded contract calls, and `compose_and_broadcast_msg` stage a `confirmation_id` + human-readable preview instead of broadcasting on the first call; a separate `confirm_transaction` call is needed to actually sign. Single-use, 5-minute TTL, in-memory only. See *Second-approval gate* above.
 - **`signing_paused` runtime kill-switch (v0.x.y-security-2).** `WalletStore.signFor()` refuses with a dedicated `SigningPausedError` when armed; `wallet list`, `verifyAddress`, `add`, `remove`, and every read tool keep working so the operator can still investigate during an incident. Arm by setting `JUNOCLAW_SIGNING_PAUSED=1` and restarting the MCP process (fail-closed on typos: any non-empty, non-`0` value arms the gate). Disarm by unsetting the env var and restarting. See *Runtime kill-switch* below.
 - **Path-guarded `upload_wasm` (Ffern C-4).** Allow-root, symlink reject, 8 MiB cap, magic-byte check. See *`upload_wasm` security* above.
 - **Read operations require no wallet.** Query tools take only addresses and chain ids; no key material is touched.

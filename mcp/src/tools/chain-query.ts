@@ -214,6 +214,65 @@ export async function queryMeshSecurity(
   );
 }
 
+/**
+ * On-chain skill registry (`contracts/skill-registry/`) — lets any agent
+ * discover the operating manual for any registered dApp, on any chain,
+ * without prior knowledge of its GitHub URL. See
+ * `drafts/PLAN_ONCHAIN_SKILL_REGISTRY.md` and `mcp/SKILL.md`.
+ */
+export interface SkillEntry {
+  dapp_name: string;
+  publisher: string;
+  chain_id: string;
+  skill_uri: string;
+  skill_hash: string;
+  version: number;
+  updated_at: number;
+}
+
+function requireSkillRegistry(chain: ChainConfig, registryAddress?: string): string {
+  const addr = registryAddress || chain.skillRegistry;
+  if (!addr) {
+    throw new Error(
+      `No skill-registry address configured for ${chain.chainId} and none provided. ` +
+        `Pass registry_address explicitly, or wait for chains.ts to be updated post-deploy.`
+    );
+  }
+  return addr;
+}
+
+export async function getDappSkill(
+  chainId: string,
+  dappName: string,
+  registryAddress?: string
+): Promise<SkillEntry> {
+  const chain = requireChain(chainId);
+  const addr = requireSkillRegistry(chain, registryAddress);
+  const client = await getQueryClient(chain);
+  return client.queryContractSmart(addr, { get_skill: { dapp_name: dappName } });
+}
+
+export async function listDappSkills(
+  chainId: string,
+  registryAddress?: string,
+  chainFilter?: string,
+  startAfter?: string,
+  limit?: number
+): Promise<SkillEntry[]> {
+  const chain = requireChain(chainId);
+  const addr = requireSkillRegistry(chain, registryAddress);
+  const client = await getQueryClient(chain);
+
+  if (chainFilter) {
+    return client.queryContractSmart(addr, {
+      search_by_chain: { chain_id: chainFilter, start_after: startAfter, limit },
+    });
+  }
+  return client.queryContractSmart(addr, {
+    list_skills: { start_after: startAfter, limit },
+  });
+}
+
 export async function queryZkVerifier(
   chainId: string,
   contractAddress: string

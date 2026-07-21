@@ -24,6 +24,7 @@ import {
 import { CHAIN_REGISTRY, listChains, listTestnets, getChain } from "./resources/chains.js";
 import { getDefaultWalletStore } from "./wallet/store.js";
 import { runWalletCli } from "./wallet/cli.js";
+import { getPendingTxStore, isTxConfirmationRequired, type StagedTxPreview } from "./wallet/pending-tx.js";
 import {
   queryBalance,
   queryAllBalances,
@@ -34,6 +35,8 @@ import {
   queryCodeInfo,
   queryZkVerifier,
   queryMeshSecurity,
+  getDappSkill,
+  listDappSkills,
 } from "./tools/chain-query.js";
 import {
   sendTokens,
@@ -204,6 +207,36 @@ server.tool(
 );
 
 server.tool(
+  "get_dapp_skill",
+  "Look up a dApp's on-chain skill/manual entry from the `skill-registry` contract (see mcp/SKILL.md). Returns skill_uri + skill_hash so the caller can fetch and verify the manual. No wallet needed.",
+  {
+    chain_id: z.string().describe("Chain ID where the skill-registry contract lives (e.g. 'uni-7')"),
+    dapp_name: z.string().describe("Registered dApp name, e.g. 'junoclaw-cosmos-mcp'"),
+    registry_address: z.string().optional().describe("Override the skill-registry contract address (defaults to the chain's configured address, if any)"),
+  },
+  async ({ chain_id, dapp_name, registry_address }) => {
+    const result = await getDappSkill(chain_id, dapp_name, registry_address);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "list_dapp_skills",
+  "List entries from the on-chain `skill-registry` contract, optionally filtered by the dApp's own chain_id. No wallet needed.",
+  {
+    chain_id: z.string().describe("Chain ID where the skill-registry contract lives (e.g. 'uni-7')"),
+    registry_address: z.string().optional().describe("Override the skill-registry contract address"),
+    filter_chain_id: z.string().optional().describe("Only return entries whose dApp runs on this chain_id"),
+    start_after: z.string().optional().describe("Pagination cursor (dapp_name to start after)"),
+    limit: z.number().optional().describe("Max entries to return (default 30, max 100)"),
+  },
+  async ({ chain_id, registry_address, filter_chain_id, start_after, limit }) => {
+    const result = await listDappSkills(chain_id, registry_address, filter_chain_id, start_after, limit);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
   "query_mesh_security",
   "Query a mesh-security contract (osmosis-labs/mesh-security, Apache 2.0). Auto-detects provider vs consumer. Returns config, validators, delegated security.",
   {
@@ -256,6 +289,26 @@ const WALLET_ID_DESC =
   "Opaque wallet handle previously registered via `cosmos-mcp wallet add <id>`. " +
   "The mnemonic itself is encrypted at rest and never crosses this API boundary.";
 
+/**
+ * Second-approval gate for fund-moving tools (Rattadan's advice,
+ * 2026-07-21 — see `wallet/pending-tx.ts` for the full rationale).
+ *
+ * Required by default: `JUNOCLAW_REQUIRE_TX_CONFIRMATION=0` opts out.
+ * When required, `execute` is NOT called on this pass — it is staged in
+ * `PendingTxStore` and only runs when the caller makes a *separate*
+ * `confirm_transaction` tool call with the returned `confirmation_id`.
+ */
+async function stageOrExecute<T>(
+  toolName: string,
+  summary: Record<string, unknown>,
+  execute: () => Promise<T>
+): Promise<T | StagedTxPreview> {
+  if (!isTxConfirmationRequired()) {
+    return execute();
+  }
+  return getPendingTxStore().stage(toolName, summary, execute);
+}
+
 server.tool(
   "send_tokens",
   "Send tokens to an address. Requires a registered wallet_id (see `cosmos-mcp wallet add`).",
@@ -268,7 +321,11 @@ server.tool(
     memo: z.string().optional().describe("TX memo"),
   },
   async ({ chain_id, wallet_id, recipient, amount, denom, memo }) => {
-    const result = await sendTokens(chain_id, wallet_id, recipient, amount, denom, memo);
+    const result = await stageOrExecute(
+      "send_tokens",
+      { chain_id, wallet_id, recipient, amount, denom: denom || "(chain native)", memo },
+      () => sendTokens(chain_id, wallet_id, recipient, amount, denom, memo)
+    );
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
@@ -287,7 +344,14 @@ server.tool(
   async ({ chain_id, wallet_id, contract_address, msg, funds, memo }) => {
     const parsedMsg = JSON.parse(msg);
     const parsedFunds = funds ? JSON.parse(funds) : undefined;
-    const result = await executeContract(chain_id, wallet_id, contract_address, parsedMsg, parsedFunds, memo);
+    const execute = () => executeContract(chain_id, wallet_id, contract_address, parsedMsg, parsedFunds, memo);
+    const result = parsedFunds && parsedFunds.length > 0
+      ? await stageOrExecute(
+          "execute_contract",
+          { chain_id, wallet_id, contract_address, msg: parsedMsg, funds: parsedFunds, memo },
+          execute
+        )
+      : await execute();
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
@@ -329,7 +393,14 @@ server.tool(
   async ({ chain_id, wallet_id, code_id, msg, label, admin, funds, memo }) => {
     const parsedMsg = JSON.parse(msg);
     const parsedFunds = funds ? JSON.parse(funds) : undefined;
-    const result = await instantiateContract(chain_id, wallet_id, code_id, parsedMsg, label, admin, parsedFunds, memo);
+    const execute = () => instantiateContract(chain_id, wallet_id, code_id, parsedMsg, label, admin, parsedFunds, memo);
+    const result = parsedFunds && parsedFunds.length > 0
+      ? await stageOrExecute(
+          "instantiate_contract",
+          { chain_id, wallet_id, code_id, label, funds: parsedFunds, memo },
+          execute
+        )
+      : await execute();
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
@@ -380,7 +451,11 @@ server.tool(
     memo: z.string().optional().describe("TX memo"),
   },
   async ({ chain_id, wallet_id, validator_address, amount, denom, memo }) => {
-    const result = await delegateTokens(chain_id, wallet_id, validator_address, amount, denom, memo);
+    const result = await stageOrExecute(
+      "delegate_tokens",
+      { chain_id, wallet_id, validator_address, amount, denom: denom || "(chain native)", memo },
+      () => delegateTokens(chain_id, wallet_id, validator_address, amount, denom, memo)
+    );
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
@@ -397,7 +472,11 @@ server.tool(
     memo: z.string().optional().describe("TX memo"),
   },
   async ({ chain_id, wallet_id, validator_address, amount, denom, memo }) => {
-    const result = await undelegateTokens(chain_id, wallet_id, validator_address, amount, denom, memo);
+    const result = await stageOrExecute(
+      "undelegate_tokens",
+      { chain_id, wallet_id, validator_address, amount, denom: denom || "(chain native)", memo },
+      () => undelegateTokens(chain_id, wallet_id, validator_address, amount, denom, memo)
+    );
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
@@ -415,7 +494,11 @@ server.tool(
     memo: z.string().optional().describe("TX memo"),
   },
   async ({ chain_id, wallet_id, validator_src_address, validator_dst_address, amount, denom, memo }) => {
-    const result = await redelegateTokens(chain_id, wallet_id, validator_src_address, validator_dst_address, amount, denom, memo);
+    const result = await stageOrExecute(
+      "redelegate_tokens",
+      { chain_id, wallet_id, validator_src_address, validator_dst_address, amount, denom: denom || "(chain native)", memo },
+      () => redelegateTokens(chain_id, wallet_id, validator_src_address, validator_dst_address, amount, denom, memo)
+    );
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
@@ -430,7 +513,11 @@ server.tool(
     memo: z.string().optional().describe("TX memo"),
   },
   async ({ chain_id, wallet_id, validator_address, memo }) => {
-    const result = await withdrawRewards(chain_id, wallet_id, validator_address, memo);
+    const result = await stageOrExecute(
+      "withdraw_rewards",
+      { chain_id, wallet_id, validator_address, memo },
+      () => withdrawRewards(chain_id, wallet_id, validator_address, memo)
+    );
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
@@ -451,7 +538,11 @@ server.tool(
   },
   async ({ chain_id, wallet_id, type_url, value, memo }) => {
     const parsedValue = JSON.parse(value);
-    const result = await composeAndBroadcastMsg(chain_id, wallet_id, type_url, parsedValue, memo);
+    const result = await stageOrExecute(
+      "compose_and_broadcast_msg",
+      { chain_id, wallet_id, type_url, value: parsedValue, memo },
+      () => composeAndBroadcastMsg(chain_id, wallet_id, type_url, parsedValue, memo)
+    );
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
@@ -486,7 +577,26 @@ server.tool(
     timeout_minutes: z.number().optional().describe("Timeout in minutes (default 10)"),
   },
   async ({ source_chain_id, dest_chain_id, wallet_id, receiver, amount, denom, memo, timeout_minutes }) => {
-    const result = await ibcTransfer(source_chain_id, dest_chain_id, wallet_id, receiver, amount, denom, memo, timeout_minutes);
+    const result = await stageOrExecute(
+      "ibc_transfer",
+      { source_chain_id, dest_chain_id, wallet_id, receiver, amount, denom: denom || "(source chain native)", memo },
+      () => ibcTransfer(source_chain_id, dest_chain_id, wallet_id, receiver, amount, denom, memo, timeout_minutes)
+    );
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "confirm_transaction",
+  "Second-approval step for fund-moving tools (send_tokens, delegate/undelegate/redelegate_tokens, withdraw_rewards, ibc_transfer, execute_contract/instantiate_contract with funds, compose_and_broadcast_msg). " +
+    "Those tools do NOT broadcast on their own call — they stage the transaction and return a confirmation_id + human-readable summary. " +
+    "Call this tool with that confirmation_id to actually sign and broadcast. Confirmations expire after 5 minutes and are single-use. " +
+    "Disable this gate entirely by setting JUNOCLAW_REQUIRE_TX_CONFIRMATION=0 (not recommended).",
+  {
+    confirmation_id: z.string().describe("The confirmation_id returned by the fund-moving tool call to approve and broadcast"),
+  },
+  async ({ confirmation_id }) => {
+    const result = await getPendingTxStore().confirm(confirmation_id);
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );

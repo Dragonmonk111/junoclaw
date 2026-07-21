@@ -25,6 +25,8 @@ export interface ChainConfig {
   faucet?: string;
   isTestnet: boolean;
   ibcChannels?: Record<string, IbcChannel>;
+  /** Address of the `skill-registry` contract on this chain, if deployed. */
+  skillRegistry?: string;
 }
 
 export const CHAIN_REGISTRY: Record<string, ChainConfig> = {
