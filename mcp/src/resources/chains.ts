@@ -127,6 +127,21 @@ export const CHAIN_REGISTRY: Record<string, ChainConfig> = {
       "neutron-1": { sourceChannel: "channel-8", destChannel: "channel-35" },
     },
   },
+  "akashnet-2": {
+    chainId: "akashnet-2",
+    chainName: "Akash Mainnet",
+    rpcEndpoint: "https://akash-rpc.polkachu.com",
+    restEndpoint: "https://akash-api.polkachu.com",
+    denom: "uakt",
+    bech32Prefix: "akash",
+    gasPrice: "0.025uakt",
+    slip44: 118,
+    explorerTx: "https://mintscan.io/akash/tx",
+    isTestnet: false,
+    ibcChannels: {
+      "osmosis-1": { sourceChannel: "channel-9", destChannel: "channel-15" },
+    },
+  },
   "mocha-4": {
     chainId: "mocha-4",
     chainName: "Celestia Mocha Testnet",

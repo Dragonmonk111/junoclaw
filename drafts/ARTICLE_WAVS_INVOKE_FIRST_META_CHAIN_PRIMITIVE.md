@@ -32,7 +32,7 @@ The missing half is **on-demand invocation**. Today, WAVS components can only ru
 
 ## What the invoke API adds
 
-The proposed `wavs invoke` API (`drafts/PLAN_WAVS_OFF_CHAIN_INVOKE_API.md`) is the missing half. It adds a direct invocation path:
+The proposed `wavs invoke` API is the missing half. It adds a direct invocation path:
 
 ```
 relayer → POST /invoke/{component} (authenticated HTTP) → component runs in TEE → response with output + attestation hash → relayer submits result on-chain
@@ -103,7 +103,7 @@ Ethan's meta-chain article argues that the *application* is the combination of o
 
 ## What we're proposing to Jake and the WAVS team
 
-The full spec (`drafts/PLAN_WAVS_OFF_CHAIN_INVOKE_API.md`) includes:
+The full spec (https://hackmd.io/@WHsRy8ndRX6AWEQtE4AQiw/S12l9tmEzg) includes:
 
 - **HTTP API design:** `POST /invoke/:componentId` with bearer token auth, rate limiting, allowlist
 - **6 architectural questions with our recommended answers**, informed by the existing codebase:

@@ -10,7 +10,7 @@ export interface AgentInfo {
   wavs_verified: boolean
   personality: Personality
   system_prompt?: string
-  created_at: string
+  created_at: number
   is_active: boolean
   chain_id?: string
   parent_id?: string | null
@@ -22,8 +22,8 @@ export interface DelegationRecord {
   to_agent_id: string
   prompt: string
   status: 'pending' | 'in_progress' | 'completed' | 'failed'
-  created_at: string
-  completed_at?: string
+  created_at: number
+  completed_at?: number
   result?: string
 }
 
@@ -94,7 +94,7 @@ export interface ChatMessage {
   role: MessageRole
   content: string
   tool_calls?: ToolCallRecord[]
-  timestamp: string
+  timestamp: number
 }
 
 export interface ToolCallRecord {
@@ -115,8 +115,8 @@ export interface Task {
   input: string
   tier: ExecutionTier
   status: TaskStatus
-  created_at: string
-  completed_at?: string
+  created_at: number
+  completed_at?: number
   result?: TaskResult
   cost?: TaskCost
   chain_tx?: string

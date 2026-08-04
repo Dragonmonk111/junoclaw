@@ -219,7 +219,7 @@ export const useStore = create<AppState>((set, get) => ({
       id: crypto.randomUUID(),
       role: 'user',
       content,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
     }
 
     const agentMessages = sessions[activeAgentId] || []
@@ -361,7 +361,7 @@ export const useStore = create<AppState>((set, get) => ({
       wavs_verified: false,
       personality: personality ?? 'professional',
       system_prompt: systemPrompt,
-      created_at: new Date().toISOString(),
+      created_at: Date.now(),
       is_active: true,
       parent_id: parentId ?? null,
     }
@@ -382,7 +382,7 @@ export const useStore = create<AppState>((set, get) => ({
       to_agent_id: toAgentId,
       prompt,
       status: 'pending',
-      created_at: new Date().toISOString(),
+      created_at: Date.now(),
     }
 
     // Add a system message to the sender's session showing delegation
@@ -392,7 +392,7 @@ export const useStore = create<AppState>((set, get) => ({
       id: crypto.randomUUID(),
       role: 'system',
       content: `↪ Delegated to **${toAgent?.name ?? toAgentId}**: "${prompt}"`,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
     }
     const fromMessages = sessions[fromAgentId] || []
 
@@ -401,7 +401,7 @@ export const useStore = create<AppState>((set, get) => ({
       id: crypto.randomUUID(),
       role: 'user',
       content: `[From ${fromAgent?.name ?? 'Main Agent'}] ${prompt}`,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
     }
     const toMessages = sessions[toAgentId] || []
 

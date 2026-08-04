@@ -31,7 +31,7 @@ import { join, resolve } from "path";
 
 import { SigningCosmWasmClient } from "@cosmjs/cosmwasm-stargate";
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
-import { GasPrice } from "@cosmjs/stargate";
+import { GasPrice, SigningStargateClient } from "@cosmjs/stargate";
 
 import { aesGcmDecrypt, aesGcmEncrypt } from "./crypto.js";
 import {
@@ -41,7 +41,7 @@ import {
 } from "./key-store.js";
 import { KeychainKeyStore } from "./keychain-store.js";
 import type { ChainConfig } from "../resources/chains.js";
-import type { SigningContext } from "../utils/cosmos-client.js";
+import type { SigningContext, StargateSigningContext } from "../utils/cosmos-client.js";
 
 // ──────────────────────────────────────────────
 // Types
@@ -328,6 +328,46 @@ export class WalletStore {
   // ──────────────────────────────
 
   /**
+   * Generate a brand-new mnemonic in-process and encrypt+persist it as
+   * wallet `id`, WITHOUT ever returning the plaintext mnemonic to the
+   * caller. This is the highest-safety wallet-creation path: unlike
+   * `add()`, which imports an externally-sourced mnemonic (and so has
+   * to accept it as a parameter — the caller necessarily held it in
+   * memory first), `generateAndAdd()` never lets the mnemonic leave
+   * this function. There is no legitimate way to recover it later;
+   * this is intentional for disposable, spend-capped signing wallets
+   * (see `tools/akash/README.md` "Security model").
+   *
+   * Word count defaults to 24 (256-bit entropy, the BIP-39 maximum).
+   */
+  async generateAndAdd(
+    id: string,
+    opts: {
+      bech32Prefix?: string;
+      hdPath?: string;
+      backend?: string;
+      wordCount?: 12 | 15 | 18 | 21 | 24;
+    } = {}
+  ): Promise<WalletEntry> {
+    const bech32Prefix = opts.bech32Prefix ?? "cosmos";
+    const wordCount = opts.wordCount ?? 24;
+
+    const hdWallet = await DirectSecp256k1HdWallet.generate(wordCount, {
+      prefix: bech32Prefix,
+    });
+    let mnemonic: string | undefined = hdWallet.mnemonic;
+    try {
+      return await this.add(id, mnemonic, {
+        bech32Prefix,
+        hdPath: opts.hdPath,
+        backend: opts.backend,
+      });
+    } finally {
+      mnemonic = undefined;
+    }
+  }
+
+  /**
    * Register a new wallet by encrypting `mnemonic` on disk. The
    * mnemonic itself is validated by deriving a wallet from it; if
    * the mnemonic is malformed (wrong word count, bad checksum) this
@@ -532,15 +572,111 @@ export class WalletStore {
   }
 
   /**
-   * Decrypt the mnemonic for `walletId`, derive a signing wallet,
-   * and connect a `SigningCosmWasmClient` on `chain`. The mnemonic
-   * is held in process memory only for the duration of this call;
-   * the buffer is zeroed in the `finally` block.
+   * Decrypt and return the plaintext mnemonic for `walletId`, ONE TIME,
+   * for interop with an external signer that cannot consume a CosmJS
+   * signing client directly — e.g. the Akash Go CLI's own keyring,
+   * which needs a raw mnemonic fed to `akash keys add --recover`
+   * because there is no CosmJS-based Akash transaction signing path
+   * in this repo yet.
    *
-   * The wallet's bech32 prefix must match the chain. A juno wallet
-   * cannot sign for osmosis transactions — register a separate
-   * wallet for each prefix.
+   * This is a deliberate, narrow exception to "the plaintext never
+   * leaves WalletStore". Callers MUST treat the return value as
+   * sensitive: hold it only as long as needed, do not log it, and
+   * overwrite the local reference immediately after use (see
+   * `tools/akash/auto-deploy.mjs` for the reference caller pattern).
+   *
+   * Prefer `signFor` / `signForStargate` wherever a CosmJS signing
+   * client will do — those never expose the mnemonic to the caller.
    */
+  async exportMnemonicForExternalSigner(walletId: string): Promise<string> {
+    if (this.signingPaused) {
+      throw new SigningPausedError(walletId, "external-signer-export");
+    }
+
+    const file = await this.readWalletFile(walletId);
+    const keyStore = this.getBackend(this.fileBackend(file));
+    const dek = await keyStore.getKey(walletId);
+
+    let mnemonicBuf: Buffer;
+    try {
+      mnemonicBuf = aesGcmDecrypt(
+        { iv_b64: file.cipher.iv_b64, ciphertext_b64: file.ciphertext_b64 },
+        dek
+      );
+    } catch (e) {
+      throw new Error(
+        `wallet "${walletId}": decryption failed (wrong passphrase, tampered file, or wrong backend). ` +
+          `Underlying: ${(e as Error).message}`
+      );
+    }
+
+    try {
+      return mnemonicBuf.toString("utf-8");
+    } finally {
+      mnemonicBuf.fill(0);
+    }
+  }
+
+  /**
+   * Same as `signFor`, but connects a `SigningStargateClient` instead
+   * of `SigningCosmWasmClient` — for chains that don't run CosmWasm
+   * (e.g. Akash). The mnemonic is scrubbed the same way.
+   */
+  async signForStargate(
+    walletId: string,
+    chain: ChainConfig
+  ): Promise<StargateSigningContext> {
+    if (this.signingPaused) {
+      throw new SigningPausedError(walletId, chain.chainId);
+    }
+
+    const file = await this.readWalletFile(walletId);
+
+    if (file.metadata.bech32Prefix !== chain.bech32Prefix) {
+      throw new Error(
+        `wallet "${walletId}" has bech32 prefix "${file.metadata.bech32Prefix}", ` +
+          `but chain ${chain.chainId} expects "${chain.bech32Prefix}". ` +
+          `Register a wallet for prefix "${chain.bech32Prefix}" first.`
+      );
+    }
+
+    const keyStore = this.getBackend(this.fileBackend(file));
+    const dek = await keyStore.getKey(walletId);
+
+    let mnemonicBuf: Buffer;
+    try {
+      mnemonicBuf = aesGcmDecrypt(
+        {
+          iv_b64: file.cipher.iv_b64,
+          ciphertext_b64: file.ciphertext_b64,
+        },
+        dek
+      );
+    } catch (e) {
+      throw new Error(
+        `wallet "${walletId}": decryption failed (wrong passphrase, tampered file, or wrong backend). ` +
+          `Underlying: ${(e as Error).message}`
+      );
+    }
+
+    let mnemonic = mnemonicBuf.toString("utf-8");
+    try {
+      const hdWallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
+        prefix: chain.bech32Prefix,
+      });
+      const accounts = await hdWallet.getAccounts();
+      const client = await SigningStargateClient.connectWithSigner(
+        chain.rpcEndpoint,
+        hdWallet,
+        { gasPrice: GasPrice.fromString(chain.gasPrice) }
+      );
+      return { client, address: accounts[0].address };
+    } finally {
+      mnemonicBuf.fill(0);
+      mnemonic = "";
+    }
+  }
+
   async signFor(
     walletId: string,
     chain: ChainConfig

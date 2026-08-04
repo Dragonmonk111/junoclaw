@@ -14,6 +14,7 @@
  */
 
 import { CosmWasmClient, SigningCosmWasmClient } from "@cosmjs/cosmwasm-stargate";
+import { SigningStargateClient } from "@cosmjs/stargate";
 import { type ChainConfig } from "../resources/chains.js";
 
 // Cache query clients by chainId to avoid reconnecting
@@ -30,6 +31,11 @@ export async function getQueryClient(chain: ChainConfig): Promise<CosmWasmClient
 
 export interface SigningContext {
   client: SigningCosmWasmClient;
+  address: string;
+}
+
+export interface StargateSigningContext {
+  client: SigningStargateClient;
   address: string;
 }
 
