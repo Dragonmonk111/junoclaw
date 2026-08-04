@@ -1,15 +1,21 @@
-# Publication shape — `cosmwasm-bn254` fork + patches (P1 + keep patches)
+# Publication shape — P2 (patch series only, no public fork)
 
-*Decision recorded 2026-05-14. Anchor: [`memory/SESSION_PROTOCOL.md`](../../memory/SESSION_PROTOCOL.md) §T2c.*
+*Decision updated 2026-08-04. Supersedes the P1 decision recorded 2026-05-14. Anchor: [`memory/SESSION_PROTOCOL.md`](../../memory/SESSION_PROTOCOL.md) §T2c.*
 
 ## TL;DR
 
-Two artefacts, one source-of-truth:
+One artefact, zero fork maintenance:
 
-1. **Canonical authoring source-of-truth:** [`wasmvm-fork/patches/v3.0.x/`](./v3.0.x/) — the patch series. Edit here. Re-baseline here.
-2. **Generated consumer convenience:** `Dragonmonk111/cosmwasm-bn254` GitHub repo, tagged `v3.0.6-bn254`. Produced by [`make-cosmwasm-bn254-fork.ps1`](./make-cosmwasm-bn254-fork.ps1). Consumers depend on this via a one-line `[patch.crates-io]`.
+1. **Canonical source-of-truth:** [`wasmvm-fork/patches/v3.0.x/`](./v3.0.x/) — the patch series. Edit here. Re-baseline here.
+2. **No public fork.** No `Dragonmonk111/cosmwasm-bn254` repo. No `Dragonmonk111/wasmvm` fork tag. Consumers apply the 10 patches at build time via a build script.
 
-This is the **P1 + keep patches** option from the T2c decision: belt-and-braces. Consumers get the easy integration path (the fork tag), and we keep the patch series as the authoring artefact (which is what we'd PR upstream and what we'd use to re-baseline against future cosmwasm tags).
+This is the **P2** option from the T2c decision. Given that upstream CosmWasm#2685 is deferred to Backlog (no PR accepted until ~Q3/Q4 2026), maintaining a public fork for 3-6 months with no upstream merge path is unnecessary burden. P2 has zero fork maintenance — patches rebase automatically on `cargo update`.
+
+## Rationale for the change from P1 to P2
+
+- **2026-05-14:** P1 (fork + tag) was chosen for shipping speed. The assumption was that upstream would accept the PR within weeks.
+- **2026-06-29:** @DariuszDepta replied on CosmWasm#2685, moved it to Backlog, stated the team will not take external proposals until ~Q3/Q4 2026. This extends the fork maintenance window from weeks to 3-6 months.
+- **2026-08-04:** P2 adopted. The patch series is complete (10/10 clean, 22/22 tests pass). A build script applies the patches at build time. No fork to maintain. When upstream reopens, the same patch series becomes the PR body.
 
 ## Why this shape
 
@@ -65,16 +71,16 @@ Once the script succeeds locally:
 
 ## How consumers integrate
 
-In their `Cargo.toml`:
+Run the build script (`build-wasmvm-bn254.sh`, to be created in Phase 2 of the Track B plan):
 
-```toml
-[patch.crates-io]
-cosmwasm-std = { git = "https://github.com/Dragonmonk111/cosmwasm-bn254", tag = "v3.0.6-bn254" }
-cosmwasm-vm  = { git = "https://github.com/Dragonmonk111/cosmwasm-bn254", tag = "v3.0.6-bn254" }
-cosmwasm-crypto-bn254 = { git = "https://github.com/Dragonmonk111/cosmwasm-bn254", tag = "v3.0.6-bn254" }
-```
+1. Script clones `CosmWasm/wasmvm` at tag `v3.0.4`
+2. Script clones `CosmWasm/cosmwasm` at tag `v3.0.6`
+3. Script applies the 10 patches from `wasmvm-fork/patches/v3.0.x/`
+4. Script adds `[patch.crates-io]` to `libwasmvm/Cargo.toml` pointing to the local patched cosmwasm
+5. Script builds `libwasmvm.x86_64.so`
+6. Consumer swaps the `.so` into their junod build
 
-That's the entire integration. No patch application required on the consumer side.
+No fork needed. No git tags to maintain. Patches rebase automatically against future cosmwasm releases.
 
 ## What stays in `wasmvm-fork/patches/v3.0.x/`
 
