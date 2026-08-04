@@ -4,8 +4,36 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-06-29 UTC+1
-Status: junod-aegis CI built green in GitHub Actions (Option 1) with both the two-fork and the full three-fork (ibc-go) configurations; binary sha256s 53aaf4c9... and 661adbaf... recorded. AEGIS_HYBRID_TRANSPORT=1 smoke ok for both. All headline engineering complete (C5/C6 transport, D1/D2/D3 accounts, F1-F7 consensus, IBC Phase G, native --aegis-hybrid-consensus, Fable P3/P4/P5). 4h devnet stability satisfied by the always-on VirtualBox validator (WSL2 soak optional). CosmWasm#2685 reply posted (deferred to Q3). Remaining work is passive: track juno#1202 v30 merge, rebase Aegis patches once it lands, and re-check cosmwasm#2685/wasmvm#735 in late Q3.
+Last update: 2026-08-04 UTC+1
+Status: v30 mainnet upgrade landed (prop #377). BN254 Track B Phase 2 build script written (build-wasmvm-bn254-v3.sh). Mainnet pure-Wasm benchmark completed: avg 430,833 gas, 2.12x precompile target. DAO proposals A042 (BN254 mandate) + A043 (duplicate) on-chain and open for voting. Aegis forks need rebasing from v29 to v30. Next: run Track B build script on VirtualBox, vote on A042/A043 via Keplr, rebase Aegis forks to v30.
+
+
+== 2026-08-04 ==
+
+- MAINNET BENCHMARK DONE: ran benchmark-zk-verifier-mainnet.mjs on Windows host
+  with WALLET_ID=builder. Pure-Wasm VerifyProof gas: avg 430,833 (3 samples,
+  min 430,477, max 431,326), avg 3,530ms. VK stored (gas 271,498). All proofs
+  verified=true. Report: docs/BN254_BENCHMARK_MAINNET.md. Committed + pushed.
+  Mainnet gas is ~16% higher than devnet (430k vs 370k), making the precompile
+  case stronger: 2.12x reduction (vs 1.82x on devnet).
+
+- TRACK B PHASE 2 BUILD SCRIPT WRITTEN: wasmvm-fork/patches/build-wasmvm-bn254-v3.sh.
+  P2 no-fork approach: clones cosmwasm v3.0.6, applies 10 BN254 patches from
+  v3.0.x/, clones wasmvm v3.0.4, injects [patch] block into libwasmvm/Cargo.toml,
+  builds with Rust 1.82, verifies 6 BN254 symbols via nm, stages .so for Go
+  linking. Ready to run on VirtualBox/WSL (needs Rust 1.82 + Linux toolchain).
+
+- DAO PROPOSALS A042 + A043 ON-CHAIN: both confirmed via junod query on
+  juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp. A042 is the
+  BN254 mandate (vote YES), A043 is an accidental duplicate (vote NO). DAO DAO
+  UI not showing them due to post-v30 indexer lag. Voting requires Keplr (agent
+  wallet juno1dlm6y5cnvxayyv6hxd863lef82vu9jnez89gkh not in VBox keyring).
+  DM drafted for DAO agents with voting instructions.
+
+- V30 MAINNET UPGRADE LANDED: prop #377 passed. wasmvm bumped v2.2.4 -> v3.0.4.
+  BN254 confirmed missing from v30 binary (store rejected with "unsupported
+  import: env.bn254_add"). Aegis forks (cometbft, cosmos-sdk, ibc-go) need
+  rebasing from v29.0.0 to v30 tags.
 
 
 == 2026-06-29 ==

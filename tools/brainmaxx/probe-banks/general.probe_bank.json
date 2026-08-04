@@ -1,0 +1,15 @@
+{
+  "probe_version": "j-lens-v0.1",
+  "probe_model": "sshleifer/tiny-gpt2",
+  "layer": 1,
+  "concepts": {
+    "reward_hacking": {
+      "vector": [0.01, -0.03],
+      "threshold": 0.50
+    },
+    "ignore_instructions": {
+      "vector": [-0.02, 0.04],
+      "threshold": 0.50
+    }
+  }
+}

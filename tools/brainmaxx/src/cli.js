@@ -15,7 +15,16 @@ import { runGates } from './gates.js'
 import { composeEnvelope, writeDraft, composeTraceEnvelope, writeTraceExport } from './akb-compose.js'
 import { canonV1 } from './canon.js'
 import { buildJSpaceSnapshot, d1Verdict } from './d1-probe.js'
-import { runFullPipeline, saveAuditReport, CSI_VERSION } from './chain-superintelligence.js'
+import {
+  runFullPipeline,
+  runPanelAudit,
+  buildPanelAttestation,
+  saveAuditReport,
+  computeSeparationScore,
+  gateVerdict,
+  DEFAULT_THRESHOLDS,
+  CSI_VERSION,
+} from './chain-superintelligence.js'
 
 // Plain fs read (not an import attribute) to stay compatible with Node 18,
 // which does not support `import ... with { type: 'json' }`.
@@ -407,12 +416,91 @@ async function cmdCsi(positional, flags) {
       console.log(`report: ${reportPath}`)
     }
 
+    const sepScore = computeSeparationScore(result.snapshot)
+    const gate = gateVerdict(sepScore)
+
     console.log(`verdict: ${result.verdict.verdict}`)
+    console.log(`separation_score: ${sepScore.toFixed(6)}`)
+    console.log(`gate: ${gate.gate} — ${gate.label}`)
     console.log(`attestation_hash: ${result.attestation.attestation_hash}`)
     console.log(`data_hash: ${result.attestation.data_hash}`)
     console.log(`detections: ${result.snapshot.detections.length}`)
   } catch (e) {
     console.error(`[csi] pipeline failed: ${e.message}`)
+    process.exit(1)
+  }
+}
+
+// Chain Superintelligence — multi-model panel audit (v0.2)
+// Probes multiple models under identical text, compares separation scores
+// for consensus or dissent.
+async function cmdPanel(positional, flags) {
+  if (!flags['panel-config'] || !flags['text']) {
+    console.error('Usage: brainmaxx panel --panel-config <file.json> --text <file|-> [--report <file.json>] [--mode dev-sim|tee]')
+    console.error(`Chain Superintelligence v${CSI_VERSION} — multi-model panel audit.`)
+    console.error('Panel config format: { "panel": [{ "modelId": "...", "endpoint": "...", "probeBankPath": "...", "layer": N }] }')
+    process.exit(1)
+  }
+
+  let text
+  if (flags['text'] !== '-') {
+    if (!existsSync(flags['text'])) {
+      console.error(`text file not found: ${flags['text']}`)
+      process.exit(1)
+    }
+    text = readFileSync(flags['text'], 'utf8')
+  } else {
+    text = readFileSync(0, 'utf8').trim()
+  }
+  if (!text) {
+    console.error('no input text provided')
+    process.exit(1)
+  }
+
+  if (!existsSync(flags['panel-config'])) {
+    console.error(`panel config not found: ${flags['panel-config']}`)
+    process.exit(1)
+  }
+  const { panel } = JSON.parse(readFileSync(flags['panel-config'], 'utf8'))
+  if (!Array.isArray(panel) || !panel.length) {
+    console.error('panel config must have a non-empty panel[] array')
+    process.exit(1)
+  }
+
+  const mode = flags['mode'] || 'dev-sim'
+  const reportPath = flags['report']
+
+  try {
+    const result = await runPanelAudit({
+      panel,
+      text,
+      hiddenStatesDir: reportPath ? reportPath.replace(/\.json$/, '.hidden_states') : null,
+    })
+
+    const attestation = buildPanelAttestation(result, { mode })
+
+    console.log(`panel_size: ${result.models.length}`)
+    console.log(`panel_separation_score: ${result.panelSepScore.toFixed(6)}`)
+    console.log(`panel_gate: ${result.panelVerdict.panel_gate} — ${result.panelVerdict.panel_label}`)
+    console.log(`consensus: ${result.consensus.status} — ${result.consensus.label}`)
+    for (const m of result.models) {
+      console.log(`  ${m.modelId}: sep=${m.separationScore.toFixed(6)} gate=${m.gate} detections=${m.snapshot.detections.length}`)
+    }
+    console.log(`attestation_hash: ${attestation.attestation_hash}`)
+    console.log(`data_hash: ${attestation.data_hash}`)
+
+    if (reportPath) {
+      writeFileSync(reportPath, JSON.stringify({
+        csi_version: CSI_VERSION,
+        timestamp: new Date().toISOString(),
+        mode,
+        ...result,
+        attestation,
+      }, null, 2), 'utf8')
+      console.log(`report: ${reportPath}`)
+    }
+  } catch (e) {
+    console.error(`[csi-panel] failed: ${e.message}`)
     process.exit(1)
   }
 }
@@ -496,6 +584,8 @@ function main() {
       return cmdJLens(positional, flags)
     case 'csi':
       return cmdCsi(positional, flags)
+    case 'panel':
+      return cmdPanel(positional, flags)
     case 'replay':
       return cmdReplay(positional)
     default:
@@ -511,7 +601,13 @@ Usage:
   brainmaxx trace-export <run_id>
   brainmaxx j-lens <run_id> --hidden-states <file.json> --probe-bank <file.json>
   brainmaxx csi --endpoint <url> --text <file|-> --probe-bank <file.json> [--layer N] [--mode dev-sim|tee] [--report <file.json>]
-  brainmaxx replay <run_id>`)
+  brainmaxx panel --panel-config <file.json> --text <file|-> [--report <file.json>] [--mode dev-sim|tee]
+  brainmaxx replay <run_id>
+
+Chain Superintelligence Module (v0.2):
+  csi-server  — HTTP server for single-model and panel audits (src/csi-server.js)
+  audit-api   — Domain-General Audit API server (src/audit-api.js)
+  Thresholds: green >= ${DEFAULT_THRESHOLDS.green}, yellow >= ${DEFAULT_THRESHOLDS.yellow}, red < ${DEFAULT_THRESHOLDS.yellow}`)
       process.exit(cmd ? 1 : 0)
   }
 }

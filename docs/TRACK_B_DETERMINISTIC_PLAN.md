@@ -42,7 +42,7 @@
 
 ### 2.1 Create build script
 
-- [ ] Write `wasmvm-fork/patches/build-wasmvm-bn254.sh` that:
+- [x] Write `wasmvm-fork/patches/build-wasmvm-bn254-v3.sh` that:
   1. Clones `CosmWasm/wasmvm` at tag `v3.0.4`
   2. Clones `CosmWasm/cosmwasm` at tag `v3.0.6` (what wasmvm v3.0.4 resolves to)
   3. Applies the 10 patches from `wasmvm-fork/patches/v3.0.x/` to the cosmwasm checkout

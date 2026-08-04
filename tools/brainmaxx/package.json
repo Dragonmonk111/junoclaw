@@ -1,13 +1,18 @@
 {
   "name": "brainmaxx",
-  "version": "0.1.0",
-  "description": "Deterministic D0 cognition CLI over the Reef local-file-bridge cache. See drafts/BRAINMAXX_V0_BUILD_SPEC.md.",
+  "version": "0.2.0",
+  "description": "Deterministic D0 cognition CLI + Chain Superintelligence Module + Domain-General Audit API. See drafts/BRAINMAXX_V0_BUILD_SPEC.md.",
   "type": "module",
   "bin": {
-    "brainmaxx": "src/cli.js"
+    "brainmaxx": "src/cli.js",
+    "csi-server": "src/csi-server.js",
+    "audit-api": "src/audit-api.js"
   },
   "scripts": {
-    "test": "node --test test/determinism.test.js test/d1-probe.test.js"
+    "test": "node --test test/determinism.test.js test/d1-probe.test.js test/chain-superintelligence.test.js test/csi-v02.test.js",
+    "test:csi": "node --test test/chain-superintelligence.test.js test/csi-v02.test.js",
+    "csi-server": "node src/csi-server.js",
+    "audit-api": "node src/audit-api.js"
   },
   "engines": {
     "node": ">=18"

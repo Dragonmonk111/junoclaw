@@ -1,0 +1,5 @@
+{
+  "label": "General AI Integrity",
+  "description": "Domain-general probe bank for detecting deception, reward hacking, and instruction ignoring in AI outputs. Works with any text.",
+  "thresholds": { "green": 0.30, "yellow": 0.15, "red": 0.0 }
+}
