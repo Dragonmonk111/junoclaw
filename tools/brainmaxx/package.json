@@ -7,7 +7,7 @@
     "brainmaxx": "src/cli.js"
   },
   "scripts": {
-    "test": "node --test test/determinism.test.js"
+    "test": "node --test test/determinism.test.js test/d1-probe.test.js"
   },
   "engines": {
     "node": ">=18"

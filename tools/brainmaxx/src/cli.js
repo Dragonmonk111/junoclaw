@@ -14,6 +14,8 @@ import { createTrace, writeTrace, readTrace, resolveRunId, attachDraft, computeC
 import { runGates } from './gates.js'
 import { composeEnvelope, writeDraft, composeTraceEnvelope, writeTraceExport } from './akb-compose.js'
 import { canonV1 } from './canon.js'
+import { buildJSpaceSnapshot, d1Verdict } from './d1-probe.js'
+import { runFullPipeline, saveAuditReport, CSI_VERSION } from './chain-superintelligence.js'
 
 // Plain fs read (not an import attribute) to stay compatible with Node 18,
 // which does not support `import ... with { type: 'json' }`.
@@ -321,6 +323,100 @@ function cmdTraceExport(positional) {
   console.log('hand this file to tools/reply-bot for human-approved posting')
 }
 
+// D1 layer — J-Lens audit probe (PLAN_J_REEF_AND_J_LENS.md §3, A18c-9 Phase
+// 3). Feature-flagged, local-only, operator opts in explicitly per run.
+// Never runs by default; never blocks export in v0.1 (fails to a warn, per
+// spec §3.5 "fail safe" — a red/blocking policy is a future, separate flag).
+function cmdJLens(positional, flags) {
+  const runIdArg = positional[0]
+  if (!runIdArg || !flags['hidden-states'] || !flags['probe-bank']) {
+    console.error('Usage: brainmaxx j-lens <run_id> --hidden-states <file.json> --probe-bank <file.json>')
+    console.error('See tools/brainmaxx/j-lens/README.md for how to produce both files.')
+    process.exit(1)
+  }
+  const config = getConfig()
+  const runId = resolveRunId(config.brainmaxxDir, runIdArg)
+  const trace = readTrace(config.brainmaxxDir, runId)
+
+  let snapshot
+  try {
+    snapshot = buildJSpaceSnapshot({ hiddenStatesPath: flags['hidden-states'], probeBankPath: flags['probe-bank'] })
+  } catch (e) {
+    console.error(`j-lens probe failed, snapshot not attached (fail-safe, spec §3.5): ${e.message}`)
+    process.exit(1)
+  }
+
+  trace.j_space_snapshot = snapshot
+  const verdict = d1Verdict(snapshot)
+  trace.gates = [...(trace.gates || []), verdict]
+
+  const tracePath = writeTrace(config.brainmaxxDir, trace)
+
+  console.log(`probe_model: ${snapshot.probe_model}  layer: ${snapshot.layer}  probe_version: ${snapshot.probe_version}`)
+  console.log(`snapshot_hash: ${snapshot.snapshot_hash}`)
+  console.log(`D1 verdict: ${verdict.verdict} — ${verdict.details.join('; ')}`)
+  console.log(`trace: ${tracePath}`)
+}
+
+// Chain Superintelligence — Phase 4 orchestration (PLAN_J_REEF_AND_J_LENS.md §3.7).
+// Runs the full pipeline: fetch hidden states from remote GPU -> D1 probe ->
+// build attestation -> optionally submit on-chain. Dev mode by default.
+async function cmdCsi(positional, flags) {
+  if (!flags['endpoint'] || !flags['probe-bank']) {
+    console.error('Usage: brainmaxx csi --endpoint <url> --text <file|-> --probe-bank <file.json> [--layer N] [--mode dev-sim|tee] [--report <file.json>]')
+    console.error(`Chain Superintelligence v${CSI_VERSION} — full J-Lens pipeline with attestation.`)
+    process.exit(1)
+  }
+
+  let text
+  if (flags['text'] && flags['text'] !== '-') {
+    if (!existsSync(flags['text'])) {
+      console.error(`text file not found: ${flags['text']}`)
+      process.exit(1)
+    }
+    text = readFileSync(flags['text'], 'utf8')
+  } else {
+    text = readFileSync(0, 'utf8').trim()
+  }
+  if (!text) {
+    console.error('no input text provided (use --text <file> or pipe via stdin with --text -)')
+    process.exit(1)
+  }
+
+  const layer = flags['layer'] ? Number(flags['layer']) : -1
+  const mode = flags['mode'] || 'dev-sim'
+  const reportPath = flags['report']
+
+  try {
+    const result = await runFullPipeline({
+      endpoint: flags['endpoint'],
+      text,
+      layer,
+      probeBankPath: flags['probe-bank'],
+      hiddenStatesOut: reportPath ? reportPath.replace(/\.json$/, '.hidden_states.json') : null,
+      mode,
+    })
+
+    if (reportPath) {
+      saveAuditReport(reportPath, {
+        ...result,
+        text,
+        endpoint: flags['endpoint'],
+        mode,
+      })
+      console.log(`report: ${reportPath}`)
+    }
+
+    console.log(`verdict: ${result.verdict.verdict}`)
+    console.log(`attestation_hash: ${result.attestation.attestation_hash}`)
+    console.log(`data_hash: ${result.attestation.data_hash}`)
+    console.log(`detections: ${result.snapshot.detections.length}`)
+  } catch (e) {
+    console.error(`[csi] pipeline failed: ${e.message}`)
+    process.exit(1)
+  }
+}
+
 function cmdReplay(positional) {
   const runIdArg = positional[0]
   if (!runIdArg) {
@@ -396,6 +492,10 @@ function main() {
       return cmdMoultDraft(positional)
     case 'trace-export':
       return cmdTraceExport(positional)
+    case 'j-lens':
+      return cmdJLens(positional, flags)
+    case 'csi':
+      return cmdCsi(positional, flags)
     case 'replay':
       return cmdReplay(positional)
     default:
@@ -409,6 +509,8 @@ Usage:
   brainmaxx gates <run_id>
   brainmaxx moult-draft <run_id>
   brainmaxx trace-export <run_id>
+  brainmaxx j-lens <run_id> --hidden-states <file.json> --probe-bank <file.json>
+  brainmaxx csi --endpoint <url> --text <file|-> --probe-bank <file.json> [--layer N] [--mode dev-sim|tee] [--report <file.json>]
   brainmaxx replay <run_id>`)
       process.exit(cmd ? 1 : 0)
   }

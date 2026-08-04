@@ -1,0 +1,103 @@
+---
+# J-Lens FLAGSHIP SDL — GLM-5.2-FP8 on 8x H200 (1120GB unified VRAM)
+# Biggest open-weight model with clean transformers-native support.
+# zai-org/GLM-5.2-FP8: 744B total / 40B active, MoE + DSA (sparse attention),
+# FP8 weights ~744GB, fits 1120GB with ~370GB headroom for KV/activations.
+# Architecture: glm_moe_dsa (GlmMoeDsaModel), transformers v0.5.12+ (5.x line).
+# Fine-grained FP8 needs `kernels` package + CUDA_LAUNCH_BLOCKING=1 (same as
+# Qwen3-235B FP8 run, dseq 27992717 lineage).
+# Download ~744GB ≈ 65+ min at ~190MB/s HF throughput; deploy with >=180 min timeout.
+
+version: "2.0"
+
+services:
+  jlens-inference:
+    image: python:3.11-slim
+    command:
+      - /bin/sh
+    args:
+      - -c
+      - |
+        apt-get update && apt-get install -y gcc && \
+        pip install --no-cache-dir --upgrade torch transformers accelerate fastapi uvicorn "kernels>=0.15.2" && \
+        echo 'import torch' > /s.py && \
+        echo 'from fastapi import FastAPI' >> /s.py && \
+        echo 'from pydantic import BaseModel' >> /s.py && \
+        echo 'from transformers import AutoModelForCausalLM, AutoTokenizer' >> /s.py && \
+        echo 'import uvicorn' >> /s.py && \
+        echo 'MODEL_ID = "zai-org/GLM-5.2-FP8"' >> /s.py && \
+        echo 'print(f"Loading {MODEL_ID}...", flush=True)' >> /s.py && \
+        echo 'tok = AutoTokenizer.from_pretrained(MODEL_ID)' >> /s.py && \
+        echo 'model = AutoModelForCausalLM.from_pretrained(MODEL_ID, device_map="auto")' >> /s.py && \
+        echo 'model.eval()' >> /s.py && \
+        echo 'NUM_LAYERS = model.config.num_hidden_layers' >> /s.py && \
+        echo 'print(f"Model loaded. {NUM_LAYERS} layers.", flush=True)' >> /s.py && \
+        echo 'app = FastAPI(title="J-Lens")' >> /s.py && \
+        echo 'class ExtractReq(BaseModel):' >> /s.py && \
+        echo '    text: str' >> /s.py && \
+        echo '    layer: int = -1' >> /s.py && \
+        echo 'class CompleteReq(BaseModel):' >> /s.py && \
+        echo '    prompt: str' >> /s.py && \
+        echo '    max_tokens: int = 256' >> /s.py && \
+        echo '    temperature: float = 0.7' >> /s.py && \
+        echo '@app.post("/extract_hidden_states")' >> /s.py && \
+        echo 'def extract_hidden_states(req: ExtractReq):' >> /s.py && \
+        echo '    inputs = tok(req.text, return_tensors="pt").to(model.device)' >> /s.py && \
+        echo '    with torch.no_grad():' >> /s.py && \
+        echo '        out = model(**inputs, output_hidden_states=True)' >> /s.py && \
+        echo '    layer = req.layer if req.layer >= 0 else NUM_LAYERS - 1' >> /s.py && \
+        echo '    hs = out.hidden_states[layer][0]' >> /s.py && \
+        echo '    states = []' >> /s.py && \
+        echo '    for pos in range(hs.shape[0]):' >> /s.py && \
+        echo '        states.append({"token": str(pos), "position": pos, "vector": hs[pos].float().tolist()})' >> /s.py && \
+        echo '    return {"probe_model": MODEL_ID, "layer": layer, "states": states}' >> /s.py && \
+        echo '@app.post("/v1/completions")' >> /s.py && \
+        echo 'def completions(req: CompleteReq):' >> /s.py && \
+        echo '    inputs = tok(req.prompt, return_tensors="pt").to(model.device)' >> /s.py && \
+        echo '    with torch.no_grad():' >> /s.py && \
+        echo '        gen = model.generate(**inputs, max_new_tokens=req.max_tokens, do_sample=False)' >> /s.py && \
+        echo '    text = tok.decode(gen[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)' >> /s.py && \
+        echo '    return {"text": text, "model": MODEL_ID}' >> /s.py && \
+        echo '@app.get("/health")' >> /s.py && \
+        echo 'def health():' >> /s.py && \
+        echo '    return {"status": "ok", "model": MODEL_ID, "layers": NUM_LAYERS}' >> /s.py && \
+        echo 'uvicorn.run(app, host="0.0.0.0", port=8000)' >> /s.py && \
+        python /s.py
+    env:
+      - HF_HOME=/root/.cache/huggingface
+      - CUDA_LAUNCH_BLOCKING=1
+    expose:
+      - port: 8000
+        as: 80
+        to:
+          - global: true
+        proto: tcp
+
+profiles:
+  compute:
+    jlens-inference:
+      resources:
+        cpu:
+          units: 32
+        memory:
+          size: 256Gi
+        storage:
+          - size: 900Gi
+        gpu:
+          units: 8
+          attributes:
+            vendor:
+              nvidia:
+                - model: h200
+  placement:
+    akash:
+      pricing:
+        jlens-inference:
+          denom: uact
+          amount: 40000
+
+deployment:
+  jlens-inference:
+    akash:
+      profile: jlens-inference
+      count: 1

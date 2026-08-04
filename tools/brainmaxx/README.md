@@ -52,6 +52,7 @@ Every command is offline-capable once the cache is synced — no network call is
 | `gates <run_id>` | Runs G1–G5 against a trace; exit 1 if any gate fails |
 | `moult-draft <run_id>` | Gated AKB export draft + commitment preview (never posts) |
 | `trace-export <run_id>` | Gated AKB export of the full Brainmaxx trace as `application/json+brainmaxx-trace` (public, replayable) |
+| `j-lens <run_id> --hidden-states <f> --probe-bank <f>` | D1 audit probe (feature-flagged, off by default) — attaches a `j_space_snapshot` to the trace. See `j-lens/README.md` |
 | `replay <run_id>` | Byte-exact recomputation of pack + gates from the recorded trace |
 
 ## Gates (fixed order, always run)

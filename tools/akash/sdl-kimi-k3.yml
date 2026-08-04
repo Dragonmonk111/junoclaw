@@ -1,0 +1,72 @@
+---
+# J-Lens Phase 3 SDL — Kimi K3 (Q2-class quantized) bid-test
+# A039/A040 pilot, Phase B/C per tools/brainmaxx/j-lens/README.md.
+#
+# STATUS AS OF 2026-08-02: the A040 provider audit found NO confirmed
+# single-provider multi-GPU node with enough aggregate VRAM for even a
+# Q4-class Kimi K3 quantization (300-700GB). Q2-class quantization is
+# used here instead to reduce the footprint to roughly 150-350GB,
+# targeted at a 4x H100 (320GB) bundle. This is still a BID-TEST, not
+# a confirmed-available match — `akash tx deployment create` may
+# receive zero bids if no provider offers this exact 4-GPU bundle.
+# Run as a bid-test first (short timeout, no full session commitment)
+# before increasing --timeout-minutes for a real extraction run.
+#
+# Model: moonshotai/Kimi-K3 quantized to Q2_K-class GGUF.
+# Serving: llama.cpp with ggml callback hook for intermediate tensor
+# buffers (vLLM's MoE support for this architecture may lag — see
+# README "Serve with an inference engine that exposes hidden states").
+
+version: "2.0"
+
+services:
+  jlens-inference:
+    image: ghcr.io/ggerganov/llama.cpp:server-cuda
+    command:
+      - /bin/sh
+    args:
+      - -c
+      - |
+        ./server \
+          --model /models/kimi-k3-q2.gguf \
+          --n-gpu-layers 999 \
+          --ctx-size 8192 \
+          --host 0.0.0.0 \
+          --port 8000
+    env:
+      - CUDA_VISIBLE_DEVICES=0,1,2,3
+    expose:
+      - port: 8000
+        as: 8000
+        to:
+          - global: true
+        proto: tcp
+
+profiles:
+  compute:
+    jlens-inference:
+      resources:
+        cpu:
+          units: 32
+        memory:
+          size: 256Gi
+        storage:
+          - size: 400Gi
+        gpu:
+          units: 4
+          attributes:
+            vendor:
+              nvidia:
+                - model: h100
+  placement:
+    akash:
+      pricing:
+        jlens-inference:
+          denom: uact
+          amount: 500000
+
+deployment:
+  jlens-inference:
+    akash:
+      profile: jlens-inference
+      count: 1

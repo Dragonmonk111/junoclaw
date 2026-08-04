@@ -1,0 +1,39 @@
+---
+# Minimal CPU-only SDL to validate full lease creation pipeline
+# This proves the auto-deploy.mjs lease creation + heartbeat works end-to-end
+# before relying on GPU provider availability
+
+version: "2.0"
+
+services:
+  jlens-ping:
+    image: nginx:alpine
+    expose:
+      - port: 80
+        as: 80
+        to:
+          - global: true
+        proto: tcp
+
+profiles:
+  compute:
+    jlens-ping:
+      resources:
+        cpu:
+          units: 1
+        memory:
+          size: 512Mi
+        storage:
+          - size: 1Gi
+  placement:
+    akash:
+      pricing:
+        jlens-ping:
+          denom: uact
+          amount: 100
+
+deployment:
+  jlens-ping:
+    akash:
+      profile: jlens-ping
+      count: 1

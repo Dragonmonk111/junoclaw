@@ -1,0 +1,104 @@
+---
+# J-Lens Phase 1 validation SDL — Mixtral 8x7B on a single GPU
+# A039/A040 pilot: validates the vLLM hidden-states extraction path
+# before committing to a full Kimi K3 rental (which needs multi-GPU
+# capacity not yet confirmed available — see tools/brainmaxx/j-lens/README.md
+# "A040 provider audit" section).
+#
+# Model: mistralai/Mixtral-8x7B-Instruct-v0.1 (AWQ or GPTQ 4-bit quant
+# recommended to fit comfortably in 48GiB VRAM with headroom for KV cache).
+#
+# Serving: vLLM Python API (NOT the OpenAI-compatible HTTP server — that
+# path strips hidden_states the same way hosted APIs do). This SDL runs
+# a thin FastAPI wrapper that calls vLLM's LLM class directly and exposes
+# an internal-only /extract_hidden_states endpoint consumed by
+# extract_hidden_states.py on the operator side.
+#
+# Est. cost: single L40S/RTX-5090-class card, ~2 hour session.
+# See tools/akash/README.md "Cost Estimation" table.
+
+version: "2.0"
+
+services:
+  jlens-inference:
+    image: python:3.11-slim
+    command:
+      - /bin/sh
+    args:
+      - -c
+      - |
+        pip install --no-cache-dir torch transformers fastapi uvicorn && \
+        echo 'import torch' > /s.py && \
+        echo 'from fastapi import FastAPI' >> /s.py && \
+        echo 'from pydantic import BaseModel' >> /s.py && \
+        echo 'from transformers import AutoModelForCausalLM, AutoTokenizer' >> /s.py && \
+        echo 'import uvicorn' >> /s.py && \
+        echo 'MODEL_ID = "sshleifer/tiny-gpt2"' >> /s.py && \
+        echo 'print(f"Loading {MODEL_ID}...", flush=True)' >> /s.py && \
+        echo 'tok = AutoTokenizer.from_pretrained(MODEL_ID)' >> /s.py && \
+        echo 'model = AutoModelForCausalLM.from_pretrained(MODEL_ID, torch_dtype=torch.float32)' >> /s.py && \
+        echo 'model.eval()' >> /s.py && \
+        echo 'NUM_LAYERS = model.config.num_hidden_layers' >> /s.py && \
+        echo 'print(f"Model loaded. {NUM_LAYERS} layers.", flush=True)' >> /s.py && \
+        echo 'app = FastAPI(title="J-Lens")' >> /s.py && \
+        echo 'class ExtractReq(BaseModel):' >> /s.py && \
+        echo '    text: str' >> /s.py && \
+        echo '    layer: int = -1' >> /s.py && \
+        echo 'class CompleteReq(BaseModel):' >> /s.py && \
+        echo '    prompt: str' >> /s.py && \
+        echo '    max_tokens: int = 256' >> /s.py && \
+        echo '    temperature: float = 0.7' >> /s.py && \
+        echo '@app.post("/extract_hidden_states")' >> /s.py && \
+        echo 'def extract_hidden_states(req: ExtractReq):' >> /s.py && \
+        echo '    inputs = tok(req.text, return_tensors="pt")' >> /s.py && \
+        echo '    with torch.no_grad():' >> /s.py && \
+        echo '        out = model(**inputs, output_hidden_states=True)' >> /s.py && \
+        echo '    layer = req.layer if req.layer >= 0 else NUM_LAYERS - 1' >> /s.py && \
+        echo '    hs = out.hidden_states[layer][0]' >> /s.py && \
+        echo '    states = []' >> /s.py && \
+        echo '    for pos in range(hs.shape[0]):' >> /s.py && \
+        echo '        states.append({"token": str(pos), "position": pos, "vector": hs[pos].float().tolist()})' >> /s.py && \
+        echo '    return {"probe_model": MODEL_ID, "layer": layer, "states": states}' >> /s.py && \
+        echo '@app.post("/v1/completions")' >> /s.py && \
+        echo 'def completions(req: CompleteReq):' >> /s.py && \
+        echo '    inputs = tok(req.prompt, return_tensors="pt")' >> /s.py && \
+        echo '    with torch.no_grad():' >> /s.py && \
+        echo '        gen = model.generate(**inputs, max_new_tokens=req.max_tokens, do_sample=False)' >> /s.py && \
+        echo '    text = tok.decode(gen[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)' >> /s.py && \
+        echo '    return {"text": text, "model": MODEL_ID}' >> /s.py && \
+        echo '@app.get("/health")' >> /s.py && \
+        echo 'def health():' >> /s.py && \
+        echo '    return {"status": "ok", "model": MODEL_ID, "layers": NUM_LAYERS}' >> /s.py && \
+        echo 'uvicorn.run(app, host="0.0.0.0", port=8000)' >> /s.py && \
+        python /s.py
+    env:
+      - HF_HOME=/root/.cache/huggingface
+    expose:
+      - port: 8000
+        as: 80
+        to:
+          - global: true
+        proto: tcp
+
+profiles:
+  compute:
+    jlens-inference:
+      resources:
+        cpu:
+          units: 4
+        memory:
+          size: 4Gi
+        storage:
+          - size: 20Gi
+  placement:
+    akash:
+      pricing:
+        jlens-inference:
+          denom: uact
+          amount: 10000
+
+deployment:
+  jlens-inference:
+    akash:
+      profile: jlens-inference
+      count: 1
