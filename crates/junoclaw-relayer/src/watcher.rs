@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::{error, info, warn};
 
+use crate::moult::MoultConfig;
+
 /// Configuration for the batch watcher.
 #[derive(Clone, Debug)]
 pub struct WatcherConfig {
@@ -14,6 +16,9 @@ pub struct WatcherConfig {
     pub relayer_key: String,
     pub coordination_endpoint: String,
     pub poll_interval_secs: u64,
+    /// When set, every settled batch also gets a moultbook entry (the
+    /// semantic on-chain index — see moult.rs).
+    pub moult: Option<MoultConfig>,
 }
 
 /// A finalized batch from the coordination network.
@@ -24,6 +29,10 @@ pub struct FinalizedBatch {
     pub messages_hash: [u8; 32],
     pub certificate: Vec<u8>,
     pub timestamp: u64,
+    /// Off-chain payload size in bytes, if the coordination node reports it.
+    /// 0 = unknown (recorded as-is in the moultbook entry).
+    #[serde(default)]
+    pub payload_size_bytes: u64,
 }
 
 /// Response from the coordination node's /finalized endpoint.
@@ -93,6 +102,25 @@ impl BatchWatcher {
                         "Batch {} settled on Juno",
                         batch.commonware_height
                     );
+
+                    // Moultbook addendum: semantic index entry for the
+                    // settled batch. Best-effort — a failed moult post must
+                    // not stall settlement of subsequent batches.
+                    if let Some(moult_cfg) = &self.config.moult {
+                        if let Err(e) = crate::moult::post_batch_moult(
+                            &self.config.rpc_endpoint,
+                            &self.config.relayer_key,
+                            moult_cfg,
+                            &batch,
+                        )
+                        .await
+                        {
+                            warn!(
+                                "Moultbook addendum failed for batch {}: {}",
+                                batch.commonware_height, e
+                            );
+                        }
+                    }
                 }
                 Err(e) => {
                     error!(

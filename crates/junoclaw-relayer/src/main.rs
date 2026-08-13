@@ -14,6 +14,7 @@ use clap::{Parser, Subcommand};
 use tracing::info;
 
 mod bridge;
+mod moult;
 mod watcher;
 
 #[derive(Parser)]
@@ -47,6 +48,16 @@ enum Commands {
         /// Poll interval in seconds
         #[arg(long, default_value_t = 5)]
         poll_interval: u64,
+
+        /// Optional moultbook-v0 contract address. When set, every settled
+        /// batch also gets a moultbook entry (semantic on-chain index).
+        #[arg(long)]
+        moultbook: Option<String>,
+
+        /// Topic namespace for moultbook entries (e.g. "pipeline-A12").
+        /// Required when --moultbook is set.
+        #[arg(long, requires = "moultbook")]
+        topic: Option<String>,
     },
 }
 
@@ -63,6 +74,8 @@ async fn main() -> Result<()> {
             key,
             coordination_endpoint,
             poll_interval,
+            moultbook,
+            topic,
         } => {
             info!("Starting JunoClaw relayer daemon");
             info!("  RPC: {}", rpc);
@@ -70,12 +83,27 @@ async fn main() -> Result<()> {
             info!("  Coordination endpoint: {}", coordination_endpoint);
             info!("  Poll interval: {}s", poll_interval);
 
+            let moult = moultbook.map(|addr| {
+                let namespace = topic
+                    .expect("--topic is required when --moultbook is set");
+                info!(
+                    "  Moultbook: {} (topic: {})",
+                    addr,
+                    moult::topic_hash(&namespace)
+                );
+                moult::MoultConfig {
+                    moultbook_addr: addr,
+                    topic_namespace: namespace,
+                }
+            });
+
             let config = watcher::WatcherConfig {
                 rpc_endpoint: rpc,
                 contract_addr: contract,
                 relayer_key: key,
                 coordination_endpoint,
                 poll_interval_secs: poll_interval,
+                moult,
             };
 
             let watcher = watcher::BatchWatcher::new(config);
