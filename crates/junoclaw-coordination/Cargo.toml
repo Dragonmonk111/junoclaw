@@ -1,0 +1,61 @@
+[package]
+name = "junoclaw-coordination"
+version = "0.1.0"
+edition = "2021"
+description = "Commonware-based coordination layer for JunoClaw agent messaging"
+
+[dependencies]
+# Commonware primitives — behind feature flag due to aws-lc-sys/NASM build dep
+commonware-p2p = { version = "2026.7.0", optional = true }
+commonware-cryptography = { version = "2026.7.0", optional = true }
+commonware-runtime = { version = "2026.7.0", optional = true }
+commonware-codec = { version = "2026.7.0", optional = true }
+commonware-utils = { version = "2026.7.0", optional = true }
+commonware-stream = { version = "2026.7.0", optional = true }
+commonware-actor = { version = "2026.7.0", optional = true }
+commonware-macros = { version = "2026.7.0", optional = true }
+commonware-math = { version = "2026.7.0", optional = true }
+commonware-parallel = { version = "2026.7.0", optional = true }
+
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Cryptography
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# HTTP client (for J-Lens gate CSI server calls)
+reqwest = { workspace = true }
+
+# Misc
+bytes = "1.7"
+rand = "0.10"
+
+[features]
+default = []
+# Enable Commonware P2P mesh (requires NASM for aws-lc-sys on Windows)
+p2p = [
+    "dep:commonware-p2p",
+    "dep:commonware-cryptography",
+    "dep:commonware-runtime",
+    "dep:commonware-codec",
+    "dep:commonware-utils",
+    "dep:commonware-stream",
+    "dep:commonware-actor",
+    "dep:commonware-macros",
+    "dep:commonware-math",
+    "dep:commonware-parallel",
+]

@@ -1,0 +1,29 @@
+[package]
+name = "junoclaw-coordination-napi"
+version = "0.1.0"
+edition = "2021"
+description = "Node.js bindings for JunoClaw coordination layer (napi-rs)"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+junoclaw-coordination = { path = "../junoclaw-coordination" }
+
+# napi-rs
+napi = { version = "2", features = ["napi8", "async"] }
+napi-derive = "2"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Cryptography
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+
+[build-dependencies]
+napi-build = "2"

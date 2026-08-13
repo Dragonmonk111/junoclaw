@@ -15,6 +15,7 @@ members = [
     "ibc-task-host",
     "jclaw-credential",
     "skill-registry",
+    "coordination-settler",
 ]
 resolver = "2"
 

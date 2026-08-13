@@ -1,0 +1,42 @@
+[package]
+name = "junoclaw-relayer"
+version = "0.1.0"
+edition = "2021"
+description = "Relayer daemon — bridges Commonware coordination certificates to Juno coordination-settler contract"
+
+[[bin]]
+name = "junoclaw-relayer"
+path = "src/main.rs"
+
+[dependencies]
+# JunoClaw coordination types
+junoclaw-coordination = { path = "../junoclaw-coordination" }
+
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# HTTP client
+reqwest = { workspace = true }
+
+# CosmWasm client (for submitting txs to Juno)
+cosmwasm-std = "2.2"
+
+# Misc
+hex = { workspace = true }
+sha2 = { workspace = true }

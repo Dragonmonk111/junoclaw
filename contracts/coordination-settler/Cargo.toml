@@ -1,0 +1,27 @@
+[package]
+name = "coordination-settler"
+version = "0.1.0"
+edition = "2021"
+description = "Settlement bridge for Commonware coordination network certificates on Juno"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+library = []
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = "1.0"
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }
+anyhow = { workspace = true }

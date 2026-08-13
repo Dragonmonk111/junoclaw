@@ -1,0 +1,25 @@
+{
+  "name": "@junoclaw/coordination",
+  "version": "0.1.0",
+  "description": "Node.js bindings for JunoClaw coordination layer (AgentMessage, Batch, GateVerdict)",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "scripts": {
+    "build": "cargo build --release -p junoclaw-coordination-napi && napi create-npm-dir -t . && napi artifacts -t . --cargo-name junoclaw-coordination-napi",
+    "postbuild": "napi prepublish -t ."
+  },
+  "napi": {
+    "name": "coordination",
+    "triples": {
+      "defaults": false,
+      "additional": [
+        "x86_64-pc-windows-msvc"
+      ]
+    }
+  },
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,47 @@
+[package]
+name = "junoclaw-test-mesh"
+version = "0.1.0"
+edition = "2021"
+description = "Local 3-node test mesh for JunoClaw coordination layer"
+
+[[bin]]
+name = "test-mesh"
+path = "src/main.rs"
+
+[[bin]]
+name = "consensus-test"
+path = "src/consensus_test.rs"
+
+[[bin]]
+name = "gate-test"
+path = "src/gate_test.rs"
+
+[[bin]]
+name = "soak-node"
+path = "src/soak_node.rs"
+required-features = ["p2p"]
+
+[features]
+p2p = ["junoclaw-coordination/p2p"]
+
+[dependencies]
+junoclaw-coordination = { path = "../junoclaw-coordination" }
+clap = { version = "4", features = ["derive"] }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+
+# Misc
+hex = { workspace = true }
+sha2 = { workspace = true }
