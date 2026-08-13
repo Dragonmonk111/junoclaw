@@ -13,6 +13,17 @@ aegis-forks/
 # Build logs
 devnet/*.log
 
+# Scratch debug output at repo root (soak/gate/mesh test runs)
+/soak-logs/
+/soak-orchestrator.log
+/*_stdout.txt
+/*_stderr.txt
+/*_test_*.txt
+/*_output.txt
+/tm_*.txt
+/probe-*.log
+/consensus-test-run.log
+
 # Devnet generated state
 devnet/deploy.env
 tmpdir/

@@ -99,6 +99,12 @@ export function buildIndex(entries, stats = null) {
     disclosures: {},
     by_disclosed_primary: {},
     by_voter: {},
+    // J-Lens gate attestations from the coordination layer.
+    // Populated by a dedicated J-Lens attestation indexer (future: wired to
+    // relayer output / coordination-settler batch events). Shape:
+    //   jlens_attestations[wallet] = [{ verdict, timestamp, concept, score }]
+    // See trust.js for how these are folded into the trust score.
+    jlens_attestations: {},
   }
 
   if (stats) index.meta.moultbook_stats = stats
