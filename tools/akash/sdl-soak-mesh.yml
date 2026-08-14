@@ -1,0 +1,63 @@
+---
+# JunoClaw coordination soak mesh — single-container, fixed-duration
+# shared deployment so the team can watch/verify without local VM access.
+#
+# Runs all 4 soak-node P2P processes over loopback inside one container
+# (same topology as the local VM soak test) plus consensus-test/gate-test
+# on each cycle. Exposes soak-logs/ (soak-status.json, soak-main.log,
+# per-node logs) over HTTP on :8080.
+#
+# Build + push image first:
+#   docker build -f Dockerfile.soak-mesh -t <registry>/junoclaw-soak-mesh:latest .
+#   docker push <registry>/junoclaw-soak-mesh:latest
+# Then set `image:` below to that tag before deploying.
+#
+# Deploy:
+#   akash tx deployment create tools/akash/sdl-soak-mesh.yml --from <wallet> \
+#     --chain-id akashnet-2 --gas auto --gas-adjustment 1.5 --gas-prices 0.025uakt
+#
+# 7-day cost estimate @ 400 uact/block bid: ~40.32 ACT lease + 5 ACT
+# refundable deposit = ~45.32 ACT. Fund escrow with a buffer (e.g. 60 ACT)
+# to absorb bid variance across providers and avoid the lease closing
+# early if it runs out mid-week. Unused ACT is refundable on close.
+
+version: "2.0"
+
+services:
+  soak-mesh:
+    image: docker.io/REPLACE_ME/junoclaw-soak-mesh:latest
+    env:
+      - SOAK_DAYS=7
+      - SOAK_INTERVAL=300
+      - MOULTBOOK_ADDR=
+      - MOULTBOOK_TOPIC=soak-test
+      - SETTLER_ADDR=
+    expose:
+      - port: 8080
+        as: 80
+        to:
+          - global: true
+        proto: tcp
+
+profiles:
+  compute:
+    soak-mesh:
+      resources:
+        cpu:
+          units: 2
+        memory:
+          size: 1Gi
+        storage:
+          - size: 2Gi
+  placement:
+    akash:
+      pricing:
+        soak-mesh:
+          denom: uact
+          amount: 400
+
+deployment:
+  soak-mesh:
+    akash:
+      profile: soak-mesh
+      count: 1

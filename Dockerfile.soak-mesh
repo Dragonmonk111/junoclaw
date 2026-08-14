@@ -1,0 +1,62 @@
+# syntax=docker/dockerfile:1.6
+#
+# JunoClaw soak-mesh — single-container deployment of the 4-node P2P
+# coordination soak test, for a fixed-duration shared demo on Akash.
+#
+# All 4 soak-node processes bind to 127.0.0.1 (same as the local VM
+# soak test) and talk to each other over loopback inside this one
+# container. A tiny static file server exposes soak-logs/soak-status.json
+# and the main log so the team can watch progress without shell access.
+#
+# Build:
+#   docker build -f Dockerfile.soak-mesh -t junoclaw-soak-mesh .
+#
+# Run locally:
+#   docker run -p 8080:8080 -e SOAK_DAYS=1 junoclaw-soak-mesh
+
+FROM rust:1.82-bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nasm clang pkg-config libssl-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY . .
+
+RUN cargo build --release --features p2p -p junoclaw-test-mesh
+RUN cargo build --release -p junoclaw-relayer
+
+# ══════════════════════════════════════════════════════════════════════
+# Runtime
+# ══════════════════════════════════════════════════════════════════════
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates bash python3 && \
+    rm -rf /var/lib/apt/lists/*
+
+# soak-test.sh resolves REPO_ROOT as its own parent dir and expects
+# binaries at $REPO_ROOT/target/release/*, so lay out the same relative
+# structure here instead of /usr/local/bin.
+RUN mkdir -p /opt/junoclaw/target/release /opt/junoclaw/scripts
+COPY --from=builder /src/target/release/soak-node /opt/junoclaw/target/release/soak-node
+COPY --from=builder /src/target/release/consensus-test /opt/junoclaw/target/release/consensus-test
+COPY --from=builder /src/target/release/gate-test /opt/junoclaw/target/release/gate-test
+COPY --from=builder /src/target/release/junoclaw-relayer /opt/junoclaw/target/release/junoclaw-relayer
+COPY scripts/soak-test.sh /opt/junoclaw/scripts/soak-test.sh
+RUN chmod +x /opt/junoclaw/scripts/soak-test.sh /opt/junoclaw/target/release/*
+
+WORKDIR /opt/junoclaw
+EXPOSE 8080
+
+ENV LOG_DIR=/opt/junoclaw/soak-logs
+ENV SOAK_DAYS=1
+ENV SOAK_INTERVAL=300
+
+# Run the soak orchestrator in the background and serve soak-logs/ over
+# HTTP on :8080 so status can be checked without shelling into the box.
+ENTRYPOINT ["/bin/bash", "-c", "\
+    mkdir -p \"$LOG_DIR\" && \
+    ./scripts/soak-test.sh > \"$LOG_DIR/soak-orchestrator.log\" 2>&1 & \
+    cd \"$LOG_DIR\" && exec python3 -m http.server 8080 \
+"]

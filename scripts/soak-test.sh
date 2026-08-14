@@ -9,9 +9,12 @@
 #   - Rust toolchain with NASM installed (apt install nasm)
 #   - cargo build --release --features p2p -p junoclaw-coordination
 #   - cargo build --release -p junoclaw-test-mesh
+#   - cargo build --release -p junoclaw-relayer
 #   - Node.js 20+ for the relayer script
 #   - JUNO_MNEMONIC or WALLET_ID env set for testnet txs
 #   - coordination-settler contract deployed on uni-7 (deployed-testnet.json)
+#   - MOULTBOOK_ADDR (optional) — moultbook-v0 contract address for layer 4
+#   - MOULTBOOK_TOPIC (optional) — topic namespace for moultbook entries
 #
 # Usage:
 #   chmod +x scripts/soak-test.sh
@@ -34,6 +37,12 @@ SOAK_INTERVAL="${SOAK_INTERVAL:-300}"
 CHAIN_ID="${CHAIN_ID:-uni-7}"
 RPC_URL="${RPC_URL:-https://juno.rpc.t.stavr.tech}"
 LOG_DIR="${LOG_DIR:-./soak-logs}"
+
+# Layer 4 — Moultbook addendum (optional)
+MOULTBOOK_ADDR="${MOULTBOOK_ADDR:-}"
+MOULTBOOK_TOPIC="${MOULTBOOK_TOPIC:-soak-test}"
+SETTLER_ADDR="${SETTLER_ADDR:-}"
+RELAYER_KEY="${RELAYER_KEY:-${JUNO_MNEMONIC:-}}"
 
 START_TIME=$(date +%s)
 END_TIME=$((START_TIME + SOAK_DAYS * 86400))
@@ -107,7 +116,38 @@ if [ ! -f "$BIN_PATH/soak-node" ]; then
     cargo build --release --features p2p -p junoclaw-test-mesh 2>&1 | tee -a "$LOG_DIR/build.log"
 fi
 
+if [ ! -f "$BIN_PATH/junoclaw-relayer" ]; then
+    log "Building junoclaw-relayer (layer 3+4: settlement + moultbook)..."
+    cargo build --release -p junoclaw-relayer 2>&1 | tee -a "$LOG_DIR/build.log"
+fi
+
 log "Binaries ready."
+
+# ─── Layer 4: Relayer daemon (optional) ───────────────────────────────────────
+#
+# If MOULTBOOK_ADDR and SETTLER_ADDR are set, launch the relayer daemon
+# alongside the mesh. It polls the coordination endpoint for finalized
+# batches, settles them on Juno, and posts moultbook entries.
+
+RELAYER_PID=""
+if [ -n "$MOULTBOOK_ADDR" ] && [ -n "$SETTLER_ADDR" ] && [ -n "$RELAYER_KEY" ]; then
+    log "Layer 4 enabled: Moultbook at $MOULTBOOK_ADDR (topic: $MOULTBOOK_TOPIC)"
+    log "  Settler: $SETTLER_ADDR"
+    log "  Starting relayer daemon..."
+    RUST_LOG=info "$BIN_PATH/junoclaw-relayer" run \
+        --rpc "$RPC_URL" \
+        --contract "$SETTLER_ADDR" \
+        --key "$RELAYER_KEY" \
+        --coordination-endpoint "http://127.0.0.1:4001" \
+        --poll-interval 30 \
+        --moultbook "$MOULTBOOK_ADDR" \
+        --topic "$MOULTBOOK_TOPIC" \
+        > "$LOG_DIR/relayer.log" 2>&1 &
+    RELAYER_PID=$!
+    log "  relayer started (PID $RELAYER_PID)"
+else
+    log "Layer 4 (Moultbook): not configured (set MOULTBOOK_ADDR + SETTLER_ADDR + RELAYER_KEY to enable)"
+fi
 
 # ─── Node Configuration ─────────────────────────────────────────────────────
 #
@@ -179,6 +219,10 @@ cleanup_nodes() {
             log "  stopped node$seed (PID $pid)"
         fi
     done
+    if [ -n "$RELAYER_PID" ] && kill -0 "$RELAYER_PID" 2>/dev/null; then
+        kill "$RELAYER_PID" 2>/dev/null
+        log "  stopped relayer (PID $RELAYER_PID)"
+    fi
 }
 trap cleanup_nodes EXIT
 
@@ -273,6 +317,22 @@ while true; do
         fi
     fi
 
+    # ── Step 3b: Moultbook addendum test (layer 4) ──
+    #
+    # Run the relayer's moult module tests to verify layer 4 integrity.
+    # This doesn't require a live moultbook contract — it validates that
+    # build_batch_post produces correct commitments from batch data.
+
+    MOULT_LOG="$LOG_DIR/moult-cycle-$CYCLE.log"
+    log "Running moultbook addendum tests (cycle $CYCLE)..."
+
+    if cargo test -p junoclaw-relayer -- moult > "$MOULT_LOG" 2>&1; then
+        log "  moult-test: PASS"
+    else
+        log_err "moult-test FAILED (cycle $CYCLE)"
+        log "  See: $MOULT_LOG"
+    fi
+
     # ── Step 4: Health summary ──
 
     ALIVE_COUNT=0
@@ -283,7 +343,13 @@ while true; do
         fi
     done
 
-    log "Health: cycle=$CYCLE elapsed=${EL}s remaining=${REM}s p2p_nodes_alive=${ALIVE_COUNT}/4"
+    # Check relayer health if running
+    RELAYER_ALIVE="no"
+    if [ -n "$RELAYER_PID" ] && kill -0 "$RELAYER_PID" 2>/dev/null; then
+        RELAYER_ALIVE="yes"
+    fi
+
+    log "Health: cycle=$CYCLE elapsed=${EL}s remaining=${REM}s p2p_nodes_alive=${ALIVE_COUNT}/4 relayer_alive=${RELAYER_ALIVE}"
 
     # Write a summary file that can be checked externally
     cat > "$LOG_DIR/soak-status.json" << EOF
@@ -295,6 +361,10 @@ while true; do
   "end_time": $END_TIME,
   "soak_days": $SOAK_DAYS,
   "p2p_nodes_alive": $ALIVE_COUNT,
+  "relayer_alive": "$RELAYER_ALIVE",
+  "moultbook_enabled": "$([ -n "$MOULTBOOK_ADDR" ] && echo yes || echo no)",
+  "moultbook_addr": "${MOULTBOOK_ADDR:-none}",
+  "moultbook_topic": "${MOULTBOOK_TOPIC:-none}",
   "last_cert_size": "${CERT_SIZE:-unknown}",
   "last_throughput": "${THROUGHPUT:-unknown}",
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
