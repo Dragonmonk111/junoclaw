@@ -197,6 +197,80 @@ This architecture has real tradeoffs, and the article doesn't work without stati
 
 ---
 
+## Roadmap to Safe Agent Data
+
+The architecture is designed so that **each phase removes a trust assumption without breaking the previous one**. You can stop at any phase and still have a working system — just with a different trust boundary.
+
+### Phase 0 — DAO pilot mesh (today)
+
+- 4 DAO-appointed nodes, loopback P2P
+- Warm tier = single DAO-operated disk
+- Soak test running, A49 live on DAO DAO
+- **Trust**: "trust the DAO operator"
+- **Data availability**: centralized warm disk — verifiable but not redundant
+- **Agent memory**: agents can query Moultbook, fetch from DAO disk, verify against anchor
+
+### Phase 1 — A49 passes (30-day testnet pilot)
+
+- Success criteria: ≥100 batches settled, 95% uptime, 0 false red positives, 100% red detection
+- Nothing changes architecturally — this is the proof gate
+- Jake's condition ("show me 4-node consensus running first") is already met; A49 asks for 30 days of real data
+- **Trust**: same as Phase 0, but now backed by evidence
+- **Timeline**: 30 days from pilot start
+
+### Phase 2 — Validator sidecars (mainnet proposal)
+
+- Juno validators run coordination nodes alongside `junod`
+- ~50-100MB RAM, no slashing, no `junod` modification, no chain upgrade
+- Mesh security inherits Juno's validator set security
+- Any validator can mirror warm-tier data — redundancy without trust
+- **Trust**: "same validators who secure Juno"
+- **Data availability**: N potential mirrors, all self-verifying
+- **Blocker**: A49 must pass first, then DAO votes on mainnet proposal
+
+### Phase 3 — Sortition + TEE
+
+- drand verifiable randomness rotates consensus committee each epoch
+- TEE (SGX/SEV) hardware-attests submissions — even the validator can't tamper
+- No one can predict or manipulate who's in the committee
+- **Trust**: "the hardware chip signed it"
+- **Data availability**: same as Phase 2, but committee integrity is now quantum-resistant
+- **Blocker**: sidecar adoption reaches critical mass
+
+### Phase 4 — Commonware content store (the target)
+
+- The P2P mesh that runs consensus **also serves the data it certified**
+- Batch payloads keyed by `messages_hash`, served by mesh nodes
+- Moultbook refs carry `cid:<content-hash>` pointing directly into the store
+- No central warm-tier server needed — the mesh that ordered the data also serves it
+- **Trust**: "the mesh that ordered it also serves it, hash verifies"
+- **Data availability**: decentralized, redundant, self-verifying — **complete safe agent data fallback**
+
+```
+Agent query: "What happened in pipeline-A12?"
+  → Moultbook: ListByRef(topic:pipeline-A12) → [commitment, refs, height]
+  → Commonware store: GET(messages_hash) → batch payload
+  → Verify: SHA256(payload) == commitment == on-chain anchor ✓
+  → Agent has verified past events to reason about — no trusted server involved
+```
+
+**This is the phase where agent memory becomes fully decentralized.** An agent can reconstruct any past state, fetch the data from any mesh node, and verify it independently — without trusting the DAO, a validator, or any single operator. If one node goes down, another serves the same data. If someone serves corrupted data, the hash mismatch catches it instantly. If someone withholds data, the on-chain anchor proves something is missing.
+
+The swap from "DAO disk" to "Commonware mesh store" doesn't change the trust model — it removes the single point of availability failure. The hash chain made every byte accountable from day one. Phase 4 makes every byte **also retrievable** without a central operator.
+
+### What's blocking each phase
+
+| Phase | Blocker | Status |
+|-------|---------|--------|
+| **A49** | DAO vote | Live on DAO DAO, awaiting result |
+| **Sidecars** | A49 must pass first | Sidecar binary not yet built, proposal ready |
+| **Real P2P transport** | NASM compile of Commonware | In progress — `network.rs` links, ed25519 RNG needs alignment |
+| **Commonware store** | Needs real P2P + multiple live nodes | Design complete (this article), implementation not started |
+
+Realistic timeline to Phase 4: **~2-4 months** after A49 passes and validators opt in. The Commonware store itself is weeks of dev — the critical path is getting real distributed nodes running.
+
+---
+
 ## The Vibe
 
 The blockchain industry's default answer to "how do we make machine data trustworthy?" is "put it all on-chain." It's the answer of a field that only has one tool.
