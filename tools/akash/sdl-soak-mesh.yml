@@ -20,6 +20,11 @@
 # refundable deposit = ~45.32 ACT. Fund escrow with a buffer (e.g. 60 ACT)
 # to absorb bid variance across providers and avoid the lease closing
 # early if it runs out mid-week. Unused ACT is refundable on close.
+# Storage bumped to 4Gi for full source tree + Rust toolchain in runtime.
+#
+# Layer 5/6 env vars (TASK_LEDGER_ADDR, AGENT_REGISTRY_ADDR,
+# TRUTH_MARKET_ADDR, EXECUTE) default to empty — set them to contract
+# addresses on uni-7 to enable on-chain executor + truth market testing.
 
 version: "2.0"
 
@@ -32,6 +37,10 @@ services:
       - MOULTBOOK_ADDR=
       - MOULTBOOK_TOPIC=soak-test
       - SETTLER_ADDR=
+      - TASK_LEDGER_ADDR=
+      - AGENT_REGISTRY_ADDR=
+      - TRUTH_MARKET_ADDR=
+      - EXECUTE=
     expose:
       - port: 8080
         as: 80
@@ -48,7 +57,7 @@ profiles:
         memory:
           size: 1Gi
         storage:
-          - size: 2Gi
+          - size: 4Gi
   placement:
     akash:
       pricing:

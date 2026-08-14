@@ -25,6 +25,8 @@ COPY . .
 
 RUN cargo build --release --features p2p -p junoclaw-test-mesh
 RUN cargo build --release -p junoclaw-relayer
+RUN cargo build --release -p junoclaw-coordination
+RUN cargo build --release -p truth-market
 
 # ══════════════════════════════════════════════════════════════════════
 # Runtime
@@ -32,17 +34,25 @@ RUN cargo build --release -p junoclaw-relayer
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates bash python3 && \
+    ca-certificates bash python3 curl git nasm clang pkg-config libssl-dev && \
     rm -rf /var/lib/apt/lists/*
+
+# Install Rust toolchain for running cargo test in soak cycles
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.82
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # soak-test.sh resolves REPO_ROOT as its own parent dir and expects
 # binaries at $REPO_ROOT/target/release/*, so lay out the same relative
 # structure here instead of /usr/local/bin.
-RUN mkdir -p /opt/junoclaw/target/release /opt/junoclaw/scripts
+RUN mkdir -p /opt/junoclaw/target/release /opt/junoclaw/scripts /opt/junoclaw/contracts
 COPY --from=builder /src/target/release/soak-node /opt/junoclaw/target/release/soak-node
 COPY --from=builder /src/target/release/consensus-test /opt/junoclaw/target/release/consensus-test
 COPY --from=builder /src/target/release/gate-test /opt/junoclaw/target/release/gate-test
 COPY --from=builder /src/target/release/junoclaw-relayer /opt/junoclaw/target/release/junoclaw-relayer
+COPY --from=builder /src/contracts /opt/junoclaw/contracts
+COPY --from=builder /src/crates /opt/junoclaw/crates
+COPY --from=builder /src/Cargo.toml /opt/junoclaw/Cargo.toml
+COPY --from=builder /src/Cargo.lock /opt/junoclaw/Cargo.lock
 COPY scripts/soak-test.sh /opt/junoclaw/scripts/soak-test.sh
 RUN chmod +x /opt/junoclaw/scripts/soak-test.sh /opt/junoclaw/target/release/*
 
@@ -52,6 +62,10 @@ EXPOSE 8080
 ENV LOG_DIR=/opt/junoclaw/soak-logs
 ENV SOAK_DAYS=1
 ENV SOAK_INTERVAL=300
+ENV TASK_LEDGER_ADDR=
+ENV AGENT_REGISTRY_ADDR=
+ENV TRUTH_MARKET_ADDR=
+ENV EXECUTE=
 
 # Run the soak orchestrator in the background and serve soak-logs/ over
 # HTTP on :8080 so status can be checked without shelling into the box.

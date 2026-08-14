@@ -8,6 +8,9 @@
  *                    | --mnemonic-file <path>]
  *   wallet list
  *   wallet rm <id>
+ *   wallet exec <id> <contract> <msg_json> [--chain <chainId>] [--rpc <url>]
+ *                  Sign and broadcast a CosmWasm ExecuteMsg using the
+ *                  encrypted wallet. Used by the junoclaw-relayer bridge.
  *
  * The mnemonic is intentionally hard to pass on the command line —
  * `--mnemonic <m>` puts it in shell history and `ps -ef` output, and
@@ -71,6 +74,7 @@ function printUsage(): void {
       "                              [--chain <chainId>]",
       "  cosmos-mcp wallet list",
       "  cosmos-mcp wallet rm <id>",
+      "  cosmos-mcp wallet exec <id> <contract> <msg_json> [--chain <chainId>] [--rpc <url>]",
       "",
       "Backends:",
       "  passphrase  (default if JUNOCLAW_WALLET_PASSPHRASE is set, or as a fallback)",
@@ -301,6 +305,79 @@ async function runRemove(args: ParsedArgs, store: WalletStore): Promise<void> {
   console.log(`✓ wallet "${id}" removed`);
 }
 
+async function runExec(args: ParsedArgs, store: WalletStore): Promise<void> {
+  const id = args.positional[0];
+  const contract = args.positional[1];
+  const msgJson = args.positional[2];
+
+  if (!id || !contract || !msgJson) {
+    printUsage();
+    throw new Error("wallet exec: requires <id> <contract> <msg_json>");
+  }
+
+  let msg: Record<string, unknown>;
+  try {
+    msg = JSON.parse(msgJson);
+  } catch {
+    throw new Error("wallet exec: msg_json is not valid JSON");
+  }
+
+  // Determine chain: --chain flag, or infer from wallet's bech32 prefix
+  const chainFlag = args.flags.get("chain");
+  let chainId: string | undefined;
+  if (typeof chainFlag === "string") {
+    chainId = chainFlag;
+  } else {
+    // Try to infer from wallet entry's bech32 prefix
+    const entries = await store.list();
+    const entry = entries.find((e) => e.id === id);
+    if (entry) {
+      // Map common prefixes to chain IDs
+      const prefixToChain: Record<string, string> = {
+        juno: "juno-1",
+        cosmos: "cosmoshub-4",
+        osmo: "osmosis-1",
+      };
+      chainId = prefixToChain[entry.bech32Prefix];
+    }
+  }
+
+  if (!chainId) {
+    throw new Error(
+      "wallet exec: cannot determine chain. Use --chain <chainId>."
+    );
+  }
+
+  const chain = getChain(chainId);
+  if (!chain) {
+    throw new Error(`wallet exec: unknown chain ${chainId}`);
+  }
+
+  // Override RPC if provided
+  const rpcFlag = args.flags.get("rpc");
+  if (typeof rpcFlag === "string") {
+    // Temporarily override the chain's rpcUrl
+    (chain as any).rpcUrl = rpcFlag;
+  }
+
+  const { client, address } = await store.signFor(id, chain);
+
+  const result = await client.execute(
+    address,
+    contract,
+    msg,
+    "auto",
+    "cosmos-mcp wallet exec"
+  );
+
+  console.log(JSON.stringify({
+    txHash: result.transactionHash,
+    height: result.height,
+    gasUsed: result.gasUsed.toString(),
+    gasWanted: result.gasWanted.toString(),
+  }));
+}
+
 /**
  * Entry point for the `cosmos-mcp wallet ...` subcommand. Called
  * from `index.ts` when `process.argv[2] === "wallet"`. Throws on
@@ -327,6 +404,9 @@ export async function runWalletCli(args: readonly string[]): Promise<void> {
     case "rm":
     case "remove":
       await runRemove(parsed, store);
+      return;
+    case "exec":
+      await runExec(parsed, store);
       return;
     default:
       printUsage();

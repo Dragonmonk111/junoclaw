@@ -14,6 +14,8 @@ use clap::{Parser, Subcommand};
 use tracing::info;
 
 mod bridge;
+mod executor;
+mod market;
 mod moult;
 mod watcher;
 
@@ -58,6 +60,26 @@ enum Commands {
         /// Required when --moultbook is set.
         #[arg(long, requires = "moultbook")]
         topic: Option<String>,
+
+        /// Enable Layer 5 (Execution Bridge): submit extracted tasks
+        /// from settled batches to the task-ledger contract.
+        #[arg(long)]
+        execute: bool,
+
+        /// Task-ledger contract address on Juno.
+        /// Required when --execute is set.
+        #[arg(long, requires = "execute")]
+        task_ledger: Option<String>,
+
+        /// Agent-registry contract address (for agent validation in executor).
+        /// Optional when --execute is set.
+        #[arg(long)]
+        agent_registry: Option<String>,
+
+        /// Optional truth-market contract address. When set, the relayer
+        /// finalizes eval epochs after each batch settlement (Layer 6).
+        #[arg(long)]
+        truth_market: Option<String>,
     },
 }
 
@@ -76,6 +98,10 @@ async fn main() -> Result<()> {
             poll_interval,
             moultbook,
             topic,
+            execute,
+            task_ledger,
+            agent_registry,
+            truth_market,
         } => {
             info!("Starting JunoClaw relayer daemon");
             info!("  RPC: {}", rpc);
@@ -97,6 +123,27 @@ async fn main() -> Result<()> {
                 }
             });
 
+            let executor_cfg = if execute {
+                let tl = task_ledger
+                    .expect("--task-ledger is required when --execute is set");
+                info!("  Executor: enabled (task-ledger: {})", tl);
+                Some(executor::ExecutorConfig {
+                    task_ledger_addr: tl,
+                    agent_registry_addr: agent_registry
+                        .unwrap_or_default(),
+                    enabled: true,
+                })
+            } else {
+                None
+            };
+
+            let market_cfg = truth_market.map(|addr| {
+                info!("  Truth Market: {}", addr);
+                market::MarketConfig {
+                    truth_market_addr: addr,
+                }
+            });
+
             let config = watcher::WatcherConfig {
                 rpc_endpoint: rpc,
                 contract_addr: contract,
@@ -104,6 +151,8 @@ async fn main() -> Result<()> {
                 coordination_endpoint,
                 poll_interval_secs: poll_interval,
                 moult,
+                executor: executor_cfg,
+                market: market_cfg,
             };
 
             let watcher = watcher::BatchWatcher::new(config);

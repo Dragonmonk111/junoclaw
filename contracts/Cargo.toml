@@ -16,6 +16,7 @@ members = [
     "jclaw-credential",
     "skill-registry",
     "coordination-settler",
+    "truth-market",
 ]
 resolver = "2"
 

@@ -15,6 +15,10 @@
 #   - coordination-settler contract deployed on uni-7 (deployed-testnet.json)
 #   - MOULTBOOK_ADDR (optional) — moultbook-v0 contract address for layer 4
 #   - MOULTBOOK_TOPIC (optional) — topic namespace for moultbook entries
+#   - TASK_LEDGER_ADDR (optional) — task-ledger contract address for layer 5
+#   - AGENT_REGISTRY_ADDR (optional) — agent-registry contract address for layer 5
+#   - TRUTH_MARKET_ADDR (optional) — truth-market contract address for layer 6
+#   - EXECUTE (optional) — set to '1' to enable executor task submission
 #
 # Usage:
 #   chmod +x scripts/soak-test.sh
@@ -43,6 +47,14 @@ MOULTBOOK_ADDR="${MOULTBOOK_ADDR:-}"
 MOULTBOOK_TOPIC="${MOULTBOOK_TOPIC:-soak-test}"
 SETTLER_ADDR="${SETTLER_ADDR:-}"
 RELAYER_KEY="${RELAYER_KEY:-${JUNO_MNEMONIC:-}}"
+
+# Layer 5 — Executor bridge (optional)
+TASK_LEDGER_ADDR="${TASK_LEDGER_ADDR:-}"
+AGENT_REGISTRY_ADDR="${AGENT_REGISTRY_ADDR:-}"
+EXECUTE="${EXECUTE:-}"
+
+# Layer 6 — Truth market (optional)
+TRUTH_MARKET_ADDR="${TRUTH_MARKET_ADDR:-}"
 
 START_TIME=$(date +%s)
 END_TIME=$((START_TIME + SOAK_DAYS * 86400))
@@ -134,14 +146,34 @@ if [ -n "$MOULTBOOK_ADDR" ] && [ -n "$SETTLER_ADDR" ] && [ -n "$RELAYER_KEY" ]; 
     log "Layer 4 enabled: Moultbook at $MOULTBOOK_ADDR (topic: $MOULTBOOK_TOPIC)"
     log "  Settler: $SETTLER_ADDR"
     log "  Starting relayer daemon..."
-    RUST_LOG=info "$BIN_PATH/junoclaw-relayer" run \
-        --rpc "$RPC_URL" \
-        --contract "$SETTLER_ADDR" \
-        --key "$RELAYER_KEY" \
-        --coordination-endpoint "http://127.0.0.1:4001" \
-        --poll-interval 30 \
-        --moultbook "$MOULTBOOK_ADDR" \
-        --topic "$MOULTBOOK_TOPIC" \
+    RELAYER_ARGS=(
+        run
+        --rpc "$RPC_URL"
+        --contract "$SETTLER_ADDR"
+        --key "$RELAYER_KEY"
+        --coordination-endpoint "http://127.0.0.1:4001"
+        --poll-interval 30
+        --moultbook "$MOULTBOOK_ADDR"
+        --topic "$MOULTBOOK_TOPIC"
+    )
+
+    # Layer 5: executor flags
+    if [ -n "$TASK_LEDGER_ADDR" ]; then
+        RELAYER_ARGS+=(--execute)
+        RELAYER_ARGS+=(--task-ledger "$TASK_LEDGER_ADDR")
+        if [ -n "$AGENT_REGISTRY_ADDR" ]; then
+            RELAYER_ARGS+=(--agent-registry "$AGENT_REGISTRY_ADDR")
+        fi
+        log "  Layer 5 enabled: task-ledger at $TASK_LEDGER_ADDR"
+    fi
+
+    # Layer 6: truth market flags
+    if [ -n "$TRUTH_MARKET_ADDR" ]; then
+        RELAYER_ARGS+=(--truth-market "$TRUTH_MARKET_ADDR")
+        log "  Layer 6 enabled: truth-market at $TRUTH_MARKET_ADDR"
+    fi
+
+    RUST_LOG=info "$BIN_PATH/junoclaw-relayer" "${RELAYER_ARGS[@]}" \
         > "$LOG_DIR/relayer.log" 2>&1 &
     RELAYER_PID=$!
     log "  relayer started (PID $RELAYER_PID)"
@@ -333,6 +365,51 @@ while true; do
         log "  See: $MOULT_LOG"
     fi
 
+    # ── Step 3c: Executor test (layer 5) ──
+    #
+    # Run the relayer's executor module tests to verify layer 5 task
+    # extraction and submission logic.
+
+    EXEC_LOG="$LOG_DIR/executor-cycle-$CYCLE.log"
+    log "Running executor tests (cycle $CYCLE)..."
+
+    if cargo test -p junoclaw-relayer -- executor > "$EXEC_LOG" 2>&1; then
+        log "  executor-test: PASS"
+    else
+        log_err "executor-test FAILED (cycle $CYCLE)"
+        log "  See: $EXEC_LOG"
+    fi
+
+    # ── Step 3d: Truth market test (layer 6) ──
+    #
+    # Run the truth-market contract tests to verify layer 6 staking,
+    # verdict submission, and epoch finalization logic.
+
+    MARKET_LOG="$LOG_DIR/truth-market-cycle-$CYCLE.log"
+    log "Running truth-market contract tests (cycle $CYCLE)..."
+
+    if cargo test -p truth-market > "$MARKET_LOG" 2>&1; then
+        log "  truth-market-test: PASS"
+    else
+        log_err "truth-market-test FAILED (cycle $CYCLE)"
+        log "  See: $MARKET_LOG"
+    fi
+
+    # ── Step 3e: Multi-operator gate test (layer 6) ──
+    #
+    # Run the coordination crate's MultiOperatorGate tests to verify
+    # competitive evaluation and consensus divergence detection.
+
+    GATE_MULTI_LOG="$LOG_DIR/multi-gate-cycle-$CYCLE.log"
+    log "Running multi-operator gate tests (cycle $CYCLE)..."
+
+    if cargo test -p junoclaw-coordination -- gate::tests::multi_operator > "$GATE_MULTI_LOG" 2>&1; then
+        log "  multi-gate-test: PASS"
+    else
+        log_err "multi-gate-test FAILED (cycle $CYCLE)"
+        log "  See: $GATE_MULTI_LOG"
+    fi
+
     # ── Step 4: Health summary ──
 
     ALIVE_COUNT=0
@@ -365,6 +442,10 @@ while true; do
   "moultbook_enabled": "$([ -n "$MOULTBOOK_ADDR" ] && echo yes || echo no)",
   "moultbook_addr": "${MOULTBOOK_ADDR:-none}",
   "moultbook_topic": "${MOULTBOOK_TOPIC:-none}",
+  "executor_enabled": "$([ -n "$TASK_LEDGER_ADDR" ] && echo yes || echo no)",
+  "task_ledger_addr": "${TASK_LEDGER_ADDR:-none}",
+  "truth_market_enabled": "$([ -n "$TRUTH_MARKET_ADDR" ] && echo yes || echo no)",
+  "truth_market_addr": "${TRUTH_MARKET_ADDR:-none}",
   "last_cert_size": "${CERT_SIZE:-unknown}",
   "last_throughput": "${THROUGHPUT:-unknown}",
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -417,6 +498,45 @@ log "Generating final report..."
             tx=$(grep -oP 'txhash: \K\w+' "$f" || echo "?")
             h=$(grep -oP 'height: \K[0-9]+' "$f" || echo "?")
             echo "| $i | $result | $tx | $h |"
+        fi
+    done
+    echo ""
+    echo "## Executor Test Results (Layer 5)"
+    echo ""
+    echo "| Cycle | Result |"
+    echo "|-------|--------|"
+    for i in $(seq 1 "$CYCLE"); do
+        f="$LOG_DIR/executor-cycle-$i.log"
+        if [ -f "$f" ]; then
+            result="PASS"
+            grep -q "test result: ok" "$f" || result="FAIL"
+            echo "| $i | $result |"
+        fi
+    done
+    echo ""
+    echo "## Truth Market Test Results (Layer 6)"
+    echo ""
+    echo "| Cycle | Result |"
+    echo "|-------|--------|"
+    for i in $(seq 1 "$CYCLE"); do
+        f="$LOG_DIR/truth-market-cycle-$i.log"
+        if [ -f "$f" ]; then
+            result="PASS"
+            grep -q "test result: ok" "$f" || result="FAIL"
+            echo "| $i | $result |"
+        fi
+    done
+    echo ""
+    echo "## Multi-Operator Gate Test Results (Layer 6)"
+    echo ""
+    echo "| Cycle | Result |"
+    echo "|-------|--------|"
+    for i in $(seq 1 "$CYCLE"); do
+        f="$LOG_DIR/multi-gate-cycle-$i.log"
+        if [ -f "$f" ]; then
+            result="PASS"
+            grep -q "test result: ok" "$f" || result="FAIL"
+            echo "| $i | $result |"
         fi
     done
 } > "$LOG_DIR/SOAK_REPORT.md"

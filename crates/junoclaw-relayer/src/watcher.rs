@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::{error, info, warn};
 
+use crate::executor::ExecutorConfig;
+use crate::market::MarketConfig;
 use crate::moult::MoultConfig;
 
 /// Configuration for the batch watcher.
@@ -19,6 +21,12 @@ pub struct WatcherConfig {
     /// When set, every settled batch also gets a moultbook entry (the
     /// semantic on-chain index — see moult.rs).
     pub moult: Option<MoultConfig>,
+    /// Layer 5: when set, extracted tasks from settled batches are
+    /// submitted to the task-ledger contract for execution.
+    pub executor: Option<ExecutorConfig>,
+    /// Layer 6: when set, eval epochs are finalized after each batch
+    /// settlement (truth market reward/slash distribution).
+    pub market: Option<MarketConfig>,
 }
 
 /// A finalized batch from the coordination network.
@@ -117,6 +125,47 @@ impl BatchWatcher {
                         {
                             warn!(
                                 "Moultbook addendum failed for batch {}: {}",
+                                batch.commonware_height, e
+                            );
+                        }
+                    }
+
+                    // Layer 5 — Execution Bridge: extract task requests
+                    // from the settled batch and submit them to the
+                    // task-ledger contract. Best-effort.
+                    if let Some(exec_cfg) = &self.config.executor {
+                        let tasks = crate::executor::extract_tasks(&batch);
+                        if !tasks.is_empty() {
+                            if let Err(e) = crate::executor::submit_tasks(
+                                &self.config.rpc_endpoint,
+                                &self.config.relayer_key,
+                                exec_cfg,
+                                &tasks,
+                            )
+                            .await
+                            {
+                                warn!(
+                                    "Executor bridge failed for batch {}: {}",
+                                    batch.commonware_height, e
+                                );
+                            }
+                        }
+                    }
+
+                    // Layer 6 — Truth Market: finalize the eval epoch
+                    // for this batch, distributing rewards to matching
+                    // evaluators and slashing diverging ones. Best-effort.
+                    if let Some(market_cfg) = &self.config.market {
+                        if let Err(e) = crate::market::finalize_epoch(
+                            &self.config.rpc_endpoint,
+                            &self.config.relayer_key,
+                            market_cfg,
+                            &batch,
+                        )
+                        .await
+                        {
+                            warn!(
+                                "Truth market finalization failed for batch {}: {}",
                                 batch.commonware_height, e
                             );
                         }

@@ -108,6 +108,55 @@ impl AgentMessage {
     }
 }
 
+/// A structured task request embedded in an AgentMessage's content field.
+///
+/// When an agent wants to execute a task (shell command, compute job, browser
+/// action), it encodes a TaskRequest as JSON in the message content. The
+/// coordination layer orders it, J-Lens gates it, and the relayer extracts
+/// it post-settlement to submit to the task-ledger contract.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TaskRequest {
+    /// Agent's on-chain ID (from agent-registry)
+    pub agent_id: u64,
+    /// SHA-256 hash of the task input (the actual input lives off-chain)
+    pub input_hash: String,
+    /// Execution tier: "local" or "akash"
+    pub execution_tier: String,
+    /// Optional plugin hint (e.g. "plugin-shell", "plugin-compute-akash")
+    pub plugin_hint: Option<String>,
+    /// Optional proposal ID if this task originated from a DAO vote
+    pub proposal_id: Option<u64>,
+}
+
+impl TaskRequest {
+    /// Encode as JSON bytes for embedding in AgentMessage.content
+    pub fn encode(&self) -> anyhow::Result<Vec<u8>> {
+        Ok(serde_json::to_vec(self)?)
+    }
+
+    /// Decode from AgentMessage.content bytes
+    pub fn decode(content: &[u8]) -> anyhow::Result<Self> {
+        Ok(serde_json::from_slice(content)?)
+    }
+}
+
+/// An evaluator's attestation for the truth market (layer 6).
+///
+/// Each J-Lens operator independently evaluates a batch and submits a
+/// verdict. Multiple attestations are aggregated by the coordination mesh;
+/// operators matching consensus earn rewards, diverging operators get slashed.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EvalAttestation {
+    /// Evaluator's public key (ed25519, 32 bytes)
+    pub operator_pubkey: Vec<u8>,
+    /// The evaluator's verdict on the batch
+    pub verdict: GateVerdict,
+    /// Batch height being attested
+    pub batch_height: u64,
+    /// Operator's signature over (batch_height || verdict || messages_hash)
+    pub signature: Vec<u8>,
+}
+
 /// A batch of ordered messages — the block format for consensus.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Batch {
@@ -121,6 +170,9 @@ pub struct Batch {
     pub timestamp: u64,
     /// J-Lens gate result for the entire batch
     pub gate_result: Option<GateResult>,
+    /// Layer 6: evaluator attestations from multiple J-Lens operators
+    #[serde(default)]
+    pub eval_attestations: Vec<EvalAttestation>,
 }
 
 impl Batch {
@@ -144,6 +196,7 @@ impl Batch {
             height,
             timestamp,
             gate_result: None,
+            eval_attestations: Vec::new(),
         }
     }
 
@@ -260,5 +313,70 @@ mod tests {
 
         let batch = Batch::new(vec![msg1, msg2], [0u8; 32], 1, 3000);
         assert!(!batch.has_blocked_message());
+    }
+
+    #[test]
+    fn test_task_request_encode_decode() {
+        let req = TaskRequest {
+            agent_id: 42,
+            input_hash: "abc123".to_string(),
+            execution_tier: "akash".to_string(),
+            plugin_hint: Some("plugin-compute-akash".to_string()),
+            proposal_id: Some(7),
+        };
+        let encoded = req.encode().unwrap();
+        let decoded = TaskRequest::decode(&encoded).unwrap();
+        assert_eq!(decoded.agent_id, 42);
+        assert_eq!(decoded.execution_tier, "akash");
+        assert_eq!(decoded.plugin_hint, Some("plugin-compute-akash".to_string()));
+        assert_eq!(decoded.proposal_id, Some(7));
+    }
+
+    #[test]
+    fn test_task_request_in_agent_message() {
+        let req = TaskRequest {
+            agent_id: 1,
+            input_hash: "deadbeef".to_string(),
+            execution_tier: "local".to_string(),
+            plugin_hint: None,
+            proposal_id: None,
+        };
+        let content = req.encode().unwrap();
+        let msg = AgentMessage::new(vec![1; 32], vec![], content, 1000);
+        assert!(msg.verify_hash());
+
+        let decoded_req = TaskRequest::decode(&msg.content).unwrap();
+        assert_eq!(decoded_req.agent_id, 1);
+        assert_eq!(decoded_req.input_hash, "deadbeef");
+    }
+
+    #[test]
+    fn test_eval_attestation_serialization() {
+        let attestation = EvalAttestation {
+            operator_pubkey: vec![0xAB; 32],
+            verdict: GateVerdict::Green,
+            batch_height: 4041,
+            signature: vec![0xCD; 64],
+        };
+        let json = serde_json::to_string(&attestation).unwrap();
+        let decoded: EvalAttestation = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.batch_height, 4041);
+        assert_eq!(decoded.verdict, GateVerdict::Green);
+        assert_eq!(decoded.operator_pubkey, vec![0xAB; 32]);
+    }
+
+    #[test]
+    fn test_batch_with_eval_attestations() {
+        let msg = AgentMessage::new(vec![1; 32], vec![], b"test".to_vec(), 1000);
+        let mut batch = Batch::new(vec![msg], [0u8; 32], 1, 2000);
+        batch.eval_attestations.push(EvalAttestation {
+            operator_pubkey: vec![0xAB; 32],
+            verdict: GateVerdict::Green,
+            batch_height: 1,
+            signature: vec![0xCD; 64],
+        });
+        assert_eq!(batch.eval_attestations.len(), 1);
+        let hash = batch.hash();
+        assert_ne!(hash, [0u8; 32]);
     }
 }
