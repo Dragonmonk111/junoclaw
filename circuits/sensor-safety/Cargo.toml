@@ -1,0 +1,23 @@
+[package]
+name = "sensor-safety-circuit"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Groth16 circuit for private sensor safety proof — proves sensor readings satisfy the safety envelope without revealing the readings"
+
+[dependencies]
+ark-bn254 = "0.5"
+ark-groth16 = "0.5"
+ark-ec = "0.5"
+ark-ff = "0.5"
+ark-serialize = { version = "0.5", features = ["derive"] }
+ark-std = "0.5"
+ark-relations = "0.5"
+ark-snark = "0.5"
+ark-r1cs-std = "0.5"
+ark-crypto-primitives = { version = "0.5", features = ["crh", "merkle_tree", "r1cs"] }
+sha2 = "0.10"
+rand = "0.8"
+hex = "0.4"
+
+[dev-dependencies]
