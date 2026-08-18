@@ -1,0 +1,22 @@
+[package]
+name = "emergency-compute-escrow"
+version = "0.1.0"
+edition = "2021"
+description = "JunoClaw emergency compute escrow — edge agents autonomously lease burst Akash GPU compute for safety-critical decisions under a hard cost cap and latency timeout, with the lease event logged for audit"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+junoclaw-common = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }
+anyhow = { workspace = true }
