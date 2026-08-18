@@ -17,6 +17,9 @@ members = [
     "skill-registry",
     "coordination-settler",
     "truth-market",
+    "machine-rwa",
+    "marketplace",
+    "emergency-compute-escrow",
 ]
 resolver = "2"
 

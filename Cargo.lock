@@ -4350,6 +4350,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "plugin-peaq"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "junoclaw-core",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "plugin-ros2"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "hex",
+ "junoclaw-coordination",
+ "junoclaw-core",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "plugin-rsynth"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "junoclaw-core",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "plugin-shell"
 version = "0.1.0"
 dependencies = [

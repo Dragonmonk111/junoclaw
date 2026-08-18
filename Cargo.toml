@@ -20,6 +20,9 @@ members = [
     "plugins/plugin-shell",
     "plugins/plugin-ibc",
     "plugins/plugin-browser",
+    "plugins/plugin-peaq",
+    "plugins/plugin-rsynth",
+    "plugins/plugin-ros2",
 ]
 exclude = [
     "contracts",

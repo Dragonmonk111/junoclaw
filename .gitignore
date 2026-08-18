@@ -131,3 +131,10 @@ cv_*.txt
 *_for_pdf.html
 html_to_pdf.py
 make_pdf.py
+
+# Local scratch dirs
+Node/
+bin/
+
+# GPU probe results
+tools/akash/probe-batch-glm45air-results.json

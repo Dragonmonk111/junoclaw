@@ -4,9 +4,71 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-08-04 UTC+1
-Status: v30 mainnet upgrade landed (prop #377). BN254 Track B Phase 2 build script written (build-wasmvm-bn254-v3.sh). Mainnet pure-Wasm benchmark completed: avg 430,833 gas, 2.12x precompile target. DAO proposals A042 (BN254 mandate) + A043 (duplicate) on-chain and open for voting. Aegis forks need rebasing from v29 to v30. Next: run Track B build script on VirtualBox, vote on A042/A043 via Keplr, rebase Aegis forks to v30.
+Last update: 2026-08-17 UTC+1
+Status: All 3 contracts (marketplace/truth-market/emergency-compute-escrow) deployed to uni-7. Min-operator-count fix implemented in truth-market contract (InsufficientOperators check + min_operators config field, migrated on-chain code_id 93) and gate.rs (MultiOperatorGate returns Red when below min). 16/16 truth-market tests + 35/35 coordination tests pass. Next: resume ARTICLE_ROBOT_IS_THE_AGENT_2026_08_17.md.
 
+== 2026-08-17 ==
+
+- WASM REBUILD: cargo build --target wasm32-unknown-unknown --release --lib
+  for marketplace, truth-market, emergency-compute-escrow, machine-rwa into
+  CARGO_TARGET_DIR=C:\Temp\junoclaw-wasm-target (the dir every deploy/*.mjs
+  script reads ARTIFACTS_DIR from by default).
+- BUG FOUND+FIXED (real, not a build artifact): truth-market/src/contract.rs
+  instantiate/execute/query had NO #[entry_point] attribute (entry_point
+  wasn't even imported). For a cdylib target, only #[no_mangle] extern "C"
+  exports (which #[entry_point] generates) survive linking — without it the
+  whole call graph from instantiate/execute/query was unreachable dead code
+  and got stripped, producing a 17,352-byte wasm with zero instantiate/
+  execute/query/finalize_epoch/submit_verdict strings anywhere in the binary.
+  Would have failed immediately on any real MsgInstantiateContract. Confirmed
+  root cause by diffing against marketplace/machine-rwa/emergency-compute-
+  escrow (all three correctly have #[entry_point] on all 3-4 entry fns).
+  Fix: added `entry_point` to the cosmwasm_std import + #[entry_point] above
+  instantiate/execute/query. Rebuilt: 330,013 bytes, all expected strings
+  present. `cargo test -p truth-market` — 13/13 pass, no regression.
+- ARTICLE THEME CAPTURED (memory + two draft files, see drafts/
+  ARTICLE_ROBOT_IS_THE_AGENT_2026_08_17.md + drafts/PLAN_ROBOT_AGENT_
+  MARKETPLACE_CODEWORK_2026_08_17.md): robot-as-agent-fleet-extension thesis
+  confirmed against code (trust stack is content-agnostic, no robot-special-
+  casing anywhere); skill-registry (discovery/manual) vs marketplace
+  (economic escrow) confirmed complementary not identical, cross-check
+  currently unenforced (marketplace.skill_registry is optional/unused);
+  J-Lens open-weight-LLM requirement confirmed (tools/brainmaxx/j-lens/
+  README.md — hosted APIs never expose hidden_states, closed inference =
+  no J-Lens, per A18c-9); plugin-peaq/plugin-rsynth confirmed as the
+  generic-Plugin-trait template any open-source robotics stack could reuse.
+  SHARPEST FINDING: Truth Market has no enforced minimum-operator-count.
+  MultiOperatorGate::audit_with_attestations (crates/junoclaw-coordination/
+  src/gate.rs) computes verdict_counts[i]/total with total=tasks.len() and
+  no floor; truth-market::execute_finalize_epoch accepts any non-empty
+  verdict set. With exactly 1 operator, ratio is trivially 1/1=100%, so that
+  operator can never diverge from "consensus" (they ARE the consensus) and
+  claims the full reward pool every epoch with zero adversarial check. Zero
+  operators safely halts (NoVerdicts error) but one operator is worse than
+  zero — looks like the system works while providing none of the claimed
+  security. Fix plan (InsufficientOperators check + min_operators config
+  field) written up in the codework plan doc, not yet implemented.
+
+
+- DEPLOYED to uni-7 (all 3 contracts live, verified via get_config queries):
+  truth-market: code_id=87, addr=juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p
+  marketplace: code_id=88, addr=juno1ur0cy702apq04xztq43r4s2307egme98n9xjex9tf5hh2q5h262s8trgwt
+  emergency-compute-escrow: code_id=89, addr=juno143mk0t4g4zx2ahqx5x905lps5x0mfm5ghhkw42fjwjme37cvdkdqwnatt3
+  Deployer: The Builder (juno1aq995jf4fezcghl6ar6k79hk9layss8w6q2t7z), 396 JUNOX balance.
+  marketplace wired to truth-market + task-ledger. emergency-compute-escrow wired to moultbook + task-ledger.
+  Created deploy/deploy-emergency-compute-escrow.mjs (no prior script existed for this contract).
+
+- MIN-OPERATOR-COUNT FIX IMPLEMENTED + DEPLOYED:
+  truth-market contract: Added `min_operators: u32` to Config/InstantiateMsg (optional, defaults
+  to 3)/UpdateConfig/ConfigResponse. execute_finalize_epoch now checks `verdicts.len() >=
+  config.min_operators` and rejects with InsufficientOperators error if below threshold. Added
+  MigrateMsg + migrate entry point that patches old Config state to inject min_operators=3.
+  3 new tests (insufficient_operators, configurable min, update_config) — 16/16 pass.
+  gate.rs (MultiOperatorGate): Added `min_operators: usize` to MultiOperatorConfig (default 3).
+  audit_with_attestations returns Red verdict with no attestations if operators.len() < min.
+  35/35 coordination tests pass.
+  Migrated on-chain: code_id 93, tx D42DA9..., verified min_operators=3 via get_config query.
+  Scripts created: deploy/migrate-truth-market.mjs.
 
 == 2026-08-04 ==
 
