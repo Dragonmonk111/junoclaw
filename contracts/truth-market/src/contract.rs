@@ -1,20 +1,21 @@
 use cosmwasm_std::{
-    coins, ensure, ensure_eq, to_json_binary, Addr, BankMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, StdResult, Uint128,
+    coins, ensure, ensure_eq, entry_point, to_json_binary, Addr, BankMsg, Deps, DepsMut, Env,
+    MessageInfo, Response, StdResult, Uint128,
 };
 
 use crate::error::ContractError;
 use crate::msg::{
-    ConfigResponse, EpochResponse, ExecuteMsg, InstantiateMsg, OperatorResponse, OperatorsResponse,
-    QueryMsg, StatsResponse,
+    ConfigResponse, EpochResponse, ExecuteMsg, FingerprintsResponse, FingerprintEntry,
+    InstantiateMsg, MigrateMsg, OperatorResponse, OperatorsResponse, QueryMsg, StatsResponse,
 };
 use crate::state::{
-    Config, EpochResult, MarketStats, Operator, VerdictRecord, CONFIG, EPOCHS, MARKET_STATS,
-    NEXT_OPERATOR_ID, OPERATORS, REWARD_POOL, VERDICTS,
+    Config, EpochResult, MarketStats, Operator, VerdictRecord, CONFIG, EPOCHS,
+    FINGERPRINT_COUNTS, MARKET_STATS, NEXT_OPERATOR_ID, OPERATORS, REWARD_POOL, VERDICTS,
 };
 
 const VALID_VERDICTS: &[&str] = &["green", "yellow", "red"];
 
+#[entry_point]
 pub fn instantiate(
     deps: DepsMut,
     _env: Env,
@@ -28,6 +29,7 @@ pub fn instantiate(
         reward_percent: msg.reward_percent,
         denom: msg.denom,
         unstake_cooldown_secs: msg.unstake_cooldown_secs,
+        min_operators: msg.min_operators.unwrap_or(3),
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -51,6 +53,7 @@ pub fn instantiate(
         .add_attribute("admin", info.sender))
 }
 
+#[entry_point]
 pub fn execute(
     deps: DepsMut,
     env: Env,
@@ -58,7 +61,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::RegisterOperator {} => execute_register(deps, env, info),
+        ExecuteMsg::RegisterOperator { fingerprint } => execute_register(deps, env, info, fingerprint),
         ExecuteMsg::SubmitVerdict {
             batch_height,
             verdict,
@@ -78,11 +81,52 @@ pub fn execute(
             slash_percent,
             reward_percent,
             unstake_cooldown_secs,
-        } => execute_update_config(deps, info, min_stake, slash_percent, reward_percent, unstake_cooldown_secs),
+            min_operators,
+        } => execute_update_config(deps, info, min_stake, slash_percent, reward_percent, unstake_cooldown_secs, min_operators),
         ExecuteMsg::DepositRewards {} => execute_deposit_rewards(deps, info),
     }
 }
 
+#[entry_point]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    // Patch stored Config: old state lacks min_operators field.
+    // Load with old shape, save back with min_operators=3 default.
+    #[derive(serde::Deserialize)]
+    struct OldConfig {
+        admin: Addr,
+        min_stake: Uint128,
+        slash_percent: u8,
+        reward_percent: u8,
+        denom: String,
+        unstake_cooldown_secs: u64,
+    }
+    let raw = deps.storage.get(b"config");
+    if let Some(data) = raw {
+        if let Ok(old) = cosmwasm_std::from_json::<OldConfig>(&data) {
+            let new_config = Config {
+                admin: old.admin,
+                min_stake: old.min_stake,
+                slash_percent: old.slash_percent,
+                reward_percent: old.reward_percent,
+                denom: old.denom,
+                unstake_cooldown_secs: old.unstake_cooldown_secs,
+                min_operators: 3,
+            };
+            CONFIG.save(deps.storage, &new_config)?;
+            // Patch existing operators: add fingerprint=None for old state.
+            for (addr, mut op) in OPERATORS.range(deps.storage, None, None, cosmwasm_std::Order::Ascending).filter_map(|r| r.ok()) {
+                if op.fingerprint.is_none() {
+                    // Old operators have no fingerprint field — leave as None.
+                    let _ = addr;
+                    let _ = &mut op;
+                }
+            }
+        }
+    }
+    Ok(Response::new().add_attribute("method", "migrate"))
+}
+
+#[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Binary> {
     match msg {
         QueryMsg::GetConfig {} => to_json_binary(&query_config(deps)?),
@@ -94,6 +138,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
         QueryMsg::GetEpoch { batch_height } => to_json_binary(&query_epoch(deps, batch_height)?),
         QueryMsg::GetStats {} => to_json_binary(&query_stats(deps)?),
         QueryMsg::GetRewardPool {} => to_json_binary(&query_reward_pool(deps)?),
+        QueryMsg::GetFingerprints {} => to_json_binary(&query_fingerprints(deps)?),
     }
 }
 
@@ -101,6 +146,7 @@ fn execute_register(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
+    fingerprint: Option<String>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
@@ -137,8 +183,14 @@ fn execute_register(
         incorrect_verdicts: 0,
         active: true,
         unstake_request_time: 0,
+        fingerprint: fingerprint.clone(),
     };
     OPERATORS.save(deps.storage, &info.sender, &operator)?;
+
+    if let Some(ref fp) = fingerprint {
+        let count = FINGERPRINT_COUNTS.may_load(deps.storage, fp)?.unwrap_or(0) + 1;
+        FINGERPRINT_COUNTS.save(deps.storage, fp, &count)?;
+    }
 
     // Update stats
     let mut stats = MARKET_STATS.load(deps.storage)?;
@@ -152,7 +204,8 @@ fn execute_register(
     Ok(Response::new()
         .add_attribute("method", "register_operator")
         .add_attribute("operator", info.sender)
-        .add_attribute("stake", sent))
+        .add_attribute("stake", sent)
+        .add_attribute("fingerprint", fingerprint.unwrap_or_default()))
 }
 
 fn execute_submit_verdict(
@@ -238,6 +291,16 @@ fn execute_finalize_epoch(
         .collect();
 
     ensure!(!verdicts.is_empty(), ContractError::NoVerdicts { batch_height });
+
+    // Enforce minimum operator count to prevent single-operator self-consensus
+    let submitted = verdicts.len() as u32;
+    ensure!(
+        submitted >= config.min_operators,
+        ContractError::InsufficientOperators {
+            required: config.min_operators,
+            submitted,
+        }
+    );
 
     // Validate consensus verdict
     ensure!(
@@ -473,6 +536,7 @@ fn execute_update_config(
     slash_percent: Option<u8>,
     reward_percent: Option<u8>,
     unstake_cooldown_secs: Option<u64>,
+    min_operators: Option<u32>,
 ) -> Result<Response, ContractError> {
     let mut config = CONFIG.load(deps.storage)?;
     ensure_eq!(info.sender, config.admin, ContractError::Unauthorized {});
@@ -488,6 +552,9 @@ fn execute_update_config(
     }
     if let Some(cd) = unstake_cooldown_secs {
         config.unstake_cooldown_secs = cd;
+    }
+    if let Some(mo) = min_operators {
+        config.min_operators = mo;
     }
     CONFIG.save(deps.storage, &config)?;
 
@@ -536,6 +603,7 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         reward_percent: config.reward_percent,
         denom: config.denom,
         unstake_cooldown_secs: config.unstake_cooldown_secs,
+        min_operators: config.min_operators,
     })
 }
 
@@ -557,6 +625,7 @@ fn query_operator(deps: Deps, address: String) -> StdResult<OperatorResponse> {
         incorrect_verdicts: op.incorrect_verdicts,
         active: op.active,
         accuracy,
+        fingerprint: op.fingerprint,
     })
 }
 
@@ -580,6 +649,7 @@ fn query_list_operators(deps: Deps) -> StdResult<OperatorsResponse> {
                 incorrect_verdicts: op.incorrect_verdicts,
                 active: op.active,
                 accuracy,
+                fingerprint: op.fingerprint,
             }
         })
         .collect();
@@ -627,4 +697,30 @@ fn query_stats(deps: Deps) -> StdResult<StatsResponse> {
 
 fn query_reward_pool(deps: Deps) -> StdResult<Uint128> {
     REWARD_POOL.load(deps.storage)
+}
+
+fn query_fingerprints(deps: Deps) -> StdResult<FingerprintsResponse> {
+    let mut fingerprints: Vec<FingerprintEntry> = FINGERPRINT_COUNTS
+        .range(deps.storage, None, None, cosmwasm_std::Order::Ascending)
+        .filter_map(|r| r.ok())
+        .map(|(fp, count)| FingerprintEntry {
+            fingerprint: fp,
+            operator_count: count,
+        })
+        .collect();
+
+    // Count operators without fingerprint
+    let operators_without_fingerprint = OPERATORS
+        .range(deps.storage, None, None, cosmwasm_std::Order::Ascending)
+        .filter_map(|r| r.ok())
+        .filter(|(_, op)| op.fingerprint.is_none())
+        .count() as u64;
+
+    // Sort by operator_count descending so the most correlated fingerprints appear first
+    fingerprints.sort_by(|a, b| b.operator_count.cmp(&a.operator_count));
+
+    Ok(FingerprintsResponse {
+        fingerprints,
+        operators_without_fingerprint,
+    })
 }

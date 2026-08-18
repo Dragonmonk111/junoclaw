@@ -83,6 +83,7 @@ fn store_and_instantiate(app: &mut App, admin: &Addr) -> Addr {
             reward_percent: 80,
             denom: UJUNO.to_string(),
             unstake_cooldown_secs: 86400,
+            min_operators: None,
         },
         &[],
         "truth-market",
@@ -111,6 +112,7 @@ fn test_instantiate() {
     assert_eq!(config.slash_percent, 10);
     assert_eq!(config.reward_percent, 80);
     assert_eq!(config.denom, UJUNO);
+    assert_eq!(config.min_operators, 3);
 
     let stats: crate::msg::StatsResponse = app
         .wrap()
@@ -130,7 +132,7 @@ fn test_register_operator() {
     app.execute_contract(
         operator.clone(),
         contract.clone(),
-        &ExecuteMsg::RegisterOperator {},
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
         &coins(1_000_000, UJUNO),
     )
     .unwrap();
@@ -163,7 +165,7 @@ fn test_register_insufficient_stake() {
         .execute_contract(
             operator,
             contract,
-            &ExecuteMsg::RegisterOperator {},
+            &ExecuteMsg::RegisterOperator { fingerprint: None },
             &coins(500_000, UJUNO),
         )
         .unwrap_err();
@@ -184,7 +186,7 @@ fn test_register_duplicate() {
     app.execute_contract(
         operator.clone(),
         contract.clone(),
-        &ExecuteMsg::RegisterOperator {},
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
         &coins(1_000_000, UJUNO),
     )
     .unwrap();
@@ -193,7 +195,7 @@ fn test_register_duplicate() {
         .execute_contract(
             operator,
             contract,
-            &ExecuteMsg::RegisterOperator {},
+            &ExecuteMsg::RegisterOperator { fingerprint: None },
             &coins(1_000_000, UJUNO),
         )
         .unwrap_err();
@@ -214,7 +216,7 @@ fn test_submit_verdict() {
     app.execute_contract(
         operator.clone(),
         contract.clone(),
-        &ExecuteMsg::RegisterOperator {},
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
         &coins(1_000_000, UJUNO),
     )
     .unwrap();
@@ -281,7 +283,7 @@ fn test_submit_verdict_invalid() {
     app.execute_contract(
         operator.clone(),
         contract.clone(),
-        &ExecuteMsg::RegisterOperator {},
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
         &coins(1_000_000, UJUNO),
     )
     .unwrap();
@@ -320,7 +322,7 @@ fn test_finalize_epoch_rewards_and_slashes() {
         app.execute_contract(
             op.clone(),
             contract.clone(),
-            &ExecuteMsg::RegisterOperator {},
+            &ExecuteMsg::RegisterOperator { fingerprint: None },
             &coins(1_000_000, UJUNO),
         )
         .unwrap();
@@ -425,7 +427,7 @@ fn test_finalize_epoch_unauthorized() {
     app.execute_contract(
         operator.clone(),
         contract.clone(),
-        &ExecuteMsg::RegisterOperator {},
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
         &coins(1_000_000, UJUNO),
     )
     .unwrap();
@@ -494,7 +496,7 @@ fn test_deactivate_and_reactivate() {
     app.execute_contract(
         operator.clone(),
         contract.clone(),
-        &ExecuteMsg::RegisterOperator {},
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
         &coins(1_000_000, UJUNO),
     )
     .unwrap();
@@ -562,7 +564,7 @@ fn test_list_operators() {
         app.execute_contract(
             op,
             contract.clone(),
-            &ExecuteMsg::RegisterOperator {},
+            &ExecuteMsg::RegisterOperator { fingerprint: None },
             &coins(1_000_000, UJUNO),
         )
         .unwrap();
@@ -573,4 +575,233 @@ fn test_list_operators() {
         .query_wasm_smart(&contract, &QueryMsg::ListOperators {})
         .unwrap();
     assert_eq!(resp.operators.len(), 3);
+}
+
+#[test]
+fn test_finalize_epoch_insufficient_operators() {
+    let mut app = setup_app();
+    let admin = make_addr(&app, "admin");
+    let contract = store_and_instantiate(&mut app, &admin);
+
+    // Register only 1 operator (below default min_operators=3)
+    let operator = make_addr(&app, "op1");
+    app.execute_contract(
+        operator.clone(),
+        contract.clone(),
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
+        &coins(1_000_000, UJUNO),
+    )
+    .unwrap();
+
+    app.execute_contract(
+        operator.clone(),
+        contract.clone(),
+        &ExecuteMsg::SubmitVerdict {
+            batch_height: 1,
+            verdict: "green".to_string(),
+            messages_hash: "hash".to_string(),
+        },
+        &[],
+    )
+    .unwrap();
+
+    // Admin tries to finalize with only 1 operator — should fail
+    let err = app
+        .execute_contract(
+            admin,
+            contract,
+            &ExecuteMsg::FinalizeEpoch {
+                batch_height: 1,
+                consensus_verdict: "green".to_string(),
+                messages_hash: "hash".to_string(),
+            },
+            &[],
+        )
+        .unwrap_err();
+    let contract_err = err.downcast::<crate::error::ContractError>().unwrap();
+    assert!(matches!(
+        contract_err,
+        crate::error::ContractError::InsufficientOperators { required: 3, submitted: 1 }
+    ));
+}
+
+#[test]
+fn test_finalize_epoch_min_operators_configurable() {
+    let mut app = setup_app();
+    let admin = make_addr(&app, "admin");
+
+    // Instantiate with min_operators = 1
+    let code = ContractWrapper::new(
+        crate::contract::execute,
+        crate::contract::instantiate,
+        crate::contract::query,
+    );
+    let code_id = app.store_code(Box::new(code));
+    let contract = app
+        .instantiate_contract(
+            code_id,
+            admin.clone(),
+            &InstantiateMsg {
+                min_stake: Uint128::from(1_000_000u128),
+                slash_percent: 10,
+                reward_percent: 80,
+                denom: UJUNO.to_string(),
+                unstake_cooldown_secs: 86400,
+                min_operators: Some(1),
+            },
+            &[],
+            "truth-market",
+            None,
+        )
+        .unwrap();
+
+    // Register 1 operator
+    let operator = make_addr(&app, "op1");
+    app.execute_contract(
+        operator.clone(),
+        contract.clone(),
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
+        &coins(1_000_000, UJUNO),
+    )
+    .unwrap();
+
+    app.execute_contract(
+        operator.clone(),
+        contract.clone(),
+        &ExecuteMsg::SubmitVerdict {
+            batch_height: 1,
+            verdict: "green".to_string(),
+            messages_hash: "hash".to_string(),
+        },
+        &[],
+    )
+    .unwrap();
+
+    // Finalize with 1 operator should succeed when min_operators=1
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::FinalizeEpoch {
+            batch_height: 1,
+            consensus_verdict: "green".to_string(),
+            messages_hash: "hash".to_string(),
+        },
+        &[],
+    )
+    .unwrap();
+
+    let epoch: crate::msg::EpochResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetEpoch { batch_height: 1 })
+        .unwrap();
+    assert!(epoch.finalized);
+    assert_eq!(epoch.total_operators, 1);
+}
+
+#[test]
+fn test_update_config_min_operators() {
+    let mut app = setup_app();
+    let admin = make_addr(&app, "admin");
+    let contract = store_and_instantiate(&mut app, &admin);
+
+    // Update min_operators to 5
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::UpdateConfig {
+            min_stake: None,
+            slash_percent: None,
+            reward_percent: None,
+            unstake_cooldown_secs: None,
+            min_operators: Some(5),
+        },
+        &[],
+    )
+    .unwrap();
+
+    let config: crate::msg::ConfigResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(config.min_operators, 5);
+}
+
+#[test]
+fn test_register_with_fingerprint() {
+    let mut app = setup_app();
+    let admin = make_addr(&app, "admin");
+    let contract = store_and_instantiate(&mut app, &admin);
+
+    let op_a = make_addr(&app, "opA");
+    let op_b = make_addr(&app, "opB");
+
+    let fp = "qwen25-14b-host01".to_string();
+
+    app.execute_contract(
+        op_a.clone(),
+        contract.clone(),
+        &ExecuteMsg::RegisterOperator { fingerprint: Some(fp.clone()) },
+        &coins(1_000_000, UJUNO),
+    )
+    .unwrap();
+
+    app.execute_contract(
+        op_b.clone(),
+        contract.clone(),
+        &ExecuteMsg::RegisterOperator { fingerprint: Some(fp.clone()) },
+        &coins(1_000_000, UJUNO),
+    )
+    .unwrap();
+
+    // Query operator should return fingerprint
+    let resp_a: crate::msg::OperatorResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetOperator { address: op_a.to_string() })
+        .unwrap();
+    assert_eq!(resp_a.fingerprint, Some(fp.clone()));
+
+    // Query fingerprints should show count=2 for this fingerprint
+    let fps: crate::msg::FingerprintsResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetFingerprints {})
+        .unwrap();
+    assert_eq!(fps.fingerprints.len(), 1);
+    assert_eq!(fps.fingerprints[0].fingerprint, fp);
+    assert_eq!(fps.fingerprints[0].operator_count, 2);
+    assert_eq!(fps.operators_without_fingerprint, 0);
+}
+
+#[test]
+fn test_fingerprints_mixed_and_none() {
+    let mut app = setup_app();
+    let admin = make_addr(&app, "admin");
+    let contract = store_and_instantiate(&mut app, &admin);
+
+    // op1 with fingerprint
+    let op1 = make_addr(&app, "op1");
+    app.execute_contract(
+        op1,
+        contract.clone(),
+        &ExecuteMsg::RegisterOperator { fingerprint: Some("llama31-70b-gpu0".to_string()) },
+        &coins(1_000_000, UJUNO),
+    )
+    .unwrap();
+
+    // op2 without fingerprint
+    let op2 = make_addr(&app, "op2");
+    app.execute_contract(
+        op2,
+        contract.clone(),
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
+        &coins(1_000_000, UJUNO),
+    )
+    .unwrap();
+
+    let fps: crate::msg::FingerprintsResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetFingerprints {})
+        .unwrap();
+    assert_eq!(fps.fingerprints.len(), 1);
+    assert_eq!(fps.fingerprints[0].operator_count, 1);
+    assert_eq!(fps.operators_without_fingerprint, 1);
 }

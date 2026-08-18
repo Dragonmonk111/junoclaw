@@ -8,13 +8,16 @@ pub struct InstantiateMsg {
     pub reward_percent: u8,
     pub denom: String,
     pub unstake_cooldown_secs: u64,
+    /// Minimum operators required to finalize an epoch (default 3 if None).
+    pub min_operators: Option<u32>,
 }
 
 #[cw_serde]
 pub enum ExecuteMsg {
     /// Register as a truth-market evaluator. Requires sending min_stake
-    /// in the tx's funds field.
-    RegisterOperator {},
+    /// in the tx's funds field. Optionally self-report a fingerprint
+    /// (model + host hash) for diversity signaling.
+    RegisterOperator { fingerprint: Option<String> },
 
     /// Submit a verdict for a batch height. Called by each evaluator
     /// independently before the epoch is finalized.
@@ -52,11 +55,15 @@ pub enum ExecuteMsg {
         slash_percent: Option<u8>,
         reward_percent: Option<u8>,
         unstake_cooldown_secs: Option<u64>,
+        min_operators: Option<u32>,
     },
 
     /// Deposit funds into the reward pool (anyone can contribute).
     DepositRewards {},
 }
+
+#[cw_serde]
+pub struct MigrateMsg {}
 
 #[cw_serde]
 pub enum QueryMsg {
@@ -67,6 +74,7 @@ pub enum QueryMsg {
     GetEpoch { batch_height: u64 },
     GetStats {},
     GetRewardPool {},
+    GetFingerprints {},
 }
 
 #[cw_serde]
@@ -77,6 +85,7 @@ pub struct ConfigResponse {
     pub reward_percent: u8,
     pub denom: String,
     pub unstake_cooldown_secs: u64,
+    pub min_operators: u32,
 }
 
 #[cw_serde]
@@ -90,6 +99,7 @@ pub struct OperatorResponse {
     pub incorrect_verdicts: u64,
     pub active: bool,
     pub accuracy: u64,
+    pub fingerprint: Option<String>,
 }
 
 #[cw_serde]
@@ -119,4 +129,16 @@ pub struct StatsResponse {
     pub total_slashed: Uint128,
     pub epochs_finalized: u64,
     pub reward_pool: Uint128,
+}
+
+#[cw_serde]
+pub struct FingerprintEntry {
+    pub fingerprint: String,
+    pub operator_count: u64,
+}
+
+#[cw_serde]
+pub struct FingerprintsResponse {
+    pub fingerprints: Vec<FingerprintEntry>,
+    pub operators_without_fingerprint: u64,
 }

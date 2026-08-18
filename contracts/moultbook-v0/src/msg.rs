@@ -130,11 +130,28 @@ pub enum QueryMsg {
         start_after: Option<String>,
         limit: Option<u32>,
     },
+    /// Compute a work-integrity credit score for an author.
+    /// Score is deterministic: (active_entries * 60 + verified_entries * 40) / total_entries,
+    /// capped 0–100. An entry is "verified" if it has an attestation_ref.
+    #[returns(CreditScoreResponse)]
+    QueryCreditScore { author: String },
 }
 
 #[cw_serde]
 pub struct EntriesResponse {
     pub entries: Vec<MoultEntry>,
+}
+
+#[cw_serde]
+pub struct CreditScoreResponse {
+    pub author: String,
+    /// 0–100 deterministic work-integrity score
+    pub score: u64,
+    pub total_entries: u64,
+    pub active_entries: u64,
+    pub redacted_entries: u64,
+    /// Entries with an attestation_ref (ZkProof, TEE, or Bridge)
+    pub verified_entries: u64,
 }
 
 /// Subset of the upstream `whoami` contract's query API that Moultbook calls

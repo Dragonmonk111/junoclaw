@@ -3,7 +3,7 @@ use cw_multi_test::{App, ContractWrapper, Executor};
 
 use crate::contract::{execute, instantiate, migrate, query};
 use crate::error::ContractError;
-use crate::msg::{EntriesResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::msg::{CreditScoreResponse, EntriesResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{AttestationRef, Config, Disclosure, MoultEntry, Stats, Visibility};
 
 const MAX_SIZE: u64 = 1_048_576;
@@ -1012,5 +1012,123 @@ mod publish_anon_integration {
             .query_wasm_smart(&mb_contract, &QueryMsg::GetDisclosure { entry_id })
             .unwrap();
         assert!(disclosure.is_none());
+    }
+
+    #[test]
+    fn test_credit_score_no_entries() {
+        let mut app = App::default();
+        let admin = app.api().addr_make("admin");
+        let contract = store_and_instantiate(&mut app, &admin);
+
+        let resp: CreditScoreResponse = app
+            .wrap()
+            .query_wasm_smart(
+                &contract,
+                &QueryMsg::QueryCreditScore {
+                    author: admin.to_string(),
+                },
+            )
+            .unwrap();
+        assert_eq!(resp.score, 0);
+        assert_eq!(resp.total_entries, 0);
+    }
+
+    #[test]
+    fn test_credit_score_with_entries() {
+        let mut app = App::default();
+        let admin = app.api().addr_make("admin");
+        let alice = app.api().addr_make("alice");
+        let contract = store_and_instantiate(&mut app, &admin);
+
+        // Alice posts 3 entries
+        post_entry(&mut app, &contract, &alice, 0x01, vec![]).unwrap();
+        post_entry(&mut app, &contract, &alice, 0x02, vec![]).unwrap();
+        post_entry(&mut app, &contract, &alice, 0x03, vec![]).unwrap();
+
+        let resp: CreditScoreResponse = app
+            .wrap()
+            .query_wasm_smart(
+                &contract,
+                &QueryMsg::QueryCreditScore {
+                    author: alice.to_string(),
+                },
+            )
+            .unwrap();
+        assert_eq!(resp.total_entries, 3);
+        assert_eq!(resp.active_entries, 3);
+        assert_eq!(resp.redacted_entries, 0);
+        assert_eq!(resp.verified_entries, 0);
+        // score = (3*60 + 0*40) / 3 = 60
+        assert_eq!(resp.score, 60);
+    }
+
+    #[test]
+    fn test_credit_score_with_redacted() {
+        let mut app = App::default();
+        let admin = app.api().addr_make("admin");
+        let alice = app.api().addr_make("alice");
+        let contract = store_and_instantiate(&mut app, &admin);
+
+        // Alice posts 2 entries
+        let resp1 = post_entry(&mut app, &contract, &alice, 0x01, vec![]).unwrap();
+        let id1 = extract_id(&resp1);
+        post_entry(&mut app, &contract, &alice, 0x02, vec![]).unwrap();
+
+        // Redact one
+        app.execute_contract(
+            alice.clone(),
+            contract.clone(),
+            &ExecuteMsg::Redact { id: id1 },
+            &[],
+        )
+        .unwrap();
+
+        let resp: CreditScoreResponse = app
+            .wrap()
+            .query_wasm_smart(
+                &contract,
+                &QueryMsg::QueryCreditScore {
+                    author: alice.to_string(),
+                },
+            )
+            .unwrap();
+        assert_eq!(resp.total_entries, 2);
+        assert_eq!(resp.active_entries, 1);
+        assert_eq!(resp.redacted_entries, 1);
+        // score = (1*60 + 0*40) / 2 = 30
+        assert_eq!(resp.score, 30);
+    }
+
+    #[test]
+    fn test_credit_score_deterministic() {
+        let mut app = App::default();
+        let admin = app.api().addr_make("admin");
+        let alice = app.api().addr_make("alice");
+        let contract = store_and_instantiate(&mut app, &admin);
+
+        post_entry(&mut app, &contract, &alice, 0x01, vec![]).unwrap();
+
+        let resp1: CreditScoreResponse = app
+            .wrap()
+            .query_wasm_smart(
+                &contract,
+                &QueryMsg::QueryCreditScore {
+                    author: alice.to_string(),
+                },
+            )
+            .unwrap();
+
+        let resp2: CreditScoreResponse = app
+            .wrap()
+            .query_wasm_smart(
+                &contract,
+                &QueryMsg::QueryCreditScore {
+                    author: alice.to_string(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(resp1.score, resp2.score);
+        assert_eq!(resp1.score, 60);
     }
 }

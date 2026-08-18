@@ -8,8 +8,8 @@ use sha2::{Digest, Sha256};
 
 use crate::error::ContractError;
 use crate::msg::{
-    EntriesResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, WhoamiQuery,
-    WhoamiTokensResponse,
+    CreditScoreResponse, EntriesResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
+    WhoamiQuery, WhoamiTokensResponse,
 };
 use crate::state::{
     AttestationRef, Config, Disclosure, MoultEntry, MoultKeyState, PendingDisclosure,
@@ -414,6 +414,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             start_after,
             limit,
         } => to_json_binary(&query_list_by_topic(deps, topic_hash, start_after, limit)?),
+        QueryMsg::QueryCreditScore { author } => {
+            to_json_binary(&query_credit_score(deps, author)?)
+        }
     }
 }
 
@@ -777,6 +780,53 @@ fn query_moult_key_stats(deps: Deps, moult_key: String) -> StdResult<MoultKeySta
     MOULT_KEY_STATE
         .may_load(deps.storage, &moult_key)?
         .ok_or_else(|| StdError::not_found("moult_key_state"))
+}
+
+fn query_credit_score(deps: Deps, author: String) -> StdResult<CreditScoreResponse> {
+    let author_addr = deps.api.addr_validate(&author)?;
+
+    let mut total_entries: u64 = 0;
+    let mut active_entries: u64 = 0;
+    let mut redacted_entries: u64 = 0;
+    let mut verified_entries: u64 = 0;
+
+    let entries = BY_AUTHOR
+        .prefix(&author_addr)
+        .range(deps.storage, None, None, Order::Ascending)
+        .map(|kv| {
+            let (id, _) = kv?;
+            ENTRIES.load(deps.storage, &id)
+        })
+        .collect::<StdResult<Vec<_>>>()?;
+
+    for entry in &entries {
+        total_entries += 1;
+        if entry.redacted_at.is_some() {
+            redacted_entries += 1;
+        } else {
+            active_entries += 1;
+        }
+        if entry.attestation_ref.is_some() {
+            verified_entries += 1;
+        }
+    }
+
+    let score = if total_entries == 0 {
+        0
+    } else {
+        let raw = active_entries * 60 + verified_entries * 40;
+        let score = raw / total_entries;
+        score.min(100)
+    };
+
+    Ok(CreditScoreResponse {
+        author,
+        score,
+        total_entries,
+        active_entries,
+        redacted_entries,
+        verified_entries,
+    })
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

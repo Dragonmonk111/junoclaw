@@ -47,4 +47,7 @@ pub enum ContractError {
 
     #[error("No pending unstake request")]
     NoPendingUnstake {},
+
+    #[error("Insufficient operators: required {required}, submitted {submitted}")]
+    InsufficientOperators { required: u32, submitted: u32 },
 }

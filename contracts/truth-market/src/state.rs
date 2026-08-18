@@ -15,6 +15,9 @@ pub struct Config {
     pub denom: String,
     /// Cooldown in seconds before a withdrawn stake is released
     pub unstake_cooldown_secs: u64,
+    /// Minimum number of operators required to finalize an epoch.
+    /// Prevents a single operator from trivially self-consensing.
+    pub min_operators: u32,
 }
 
 #[cw_serde]
@@ -37,6 +40,10 @@ pub struct Operator {
     pub active: bool,
     /// Unstake request timestamp (0 = no pending withdrawal)
     pub unstake_request_time: u64,
+    /// Self-reported operator fingerprint (model + host hash) for diversity signal.
+    /// Not enforced on-chain — relayers use this to detect correlated operators.
+    /// None means the operator did not declare a fingerprint.
+    pub fingerprint: Option<String>,
 }
 
 #[cw_serde]
@@ -76,3 +83,7 @@ pub const EPOCHS: Map<u64, EpochResult> = Map::new("epochs");
 pub const NEXT_OPERATOR_ID: Item<u64> = Item::new("next_operator_id");
 pub const MARKET_STATS: Item<MarketStats> = Item::new("market_stats");
 pub const REWARD_POOL: Item<Uint128> = Item::new("reward_pool");
+
+/// Map from fingerprint string to count of operators with that fingerprint.
+/// Used by the GetFingerprints query for relayer-side diversity checks.
+pub const FINGERPRINT_COUNTS: Map<&str, u64> = Map::new("fp_counts");
