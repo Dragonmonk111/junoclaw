@@ -21,3 +21,10 @@ rand = "0.8"
 hex = "0.4"
 
 [dev-dependencies]
+
+[features]
+default = []
+# When enabled, the circuit uses Poseidon hash instead of MiMC.
+# Poseidon has ~210 constraints for 2-to-1 hash vs MiMC's ~730,
+# reducing total circuit constraints by ~60%.
+poseidon-hash = []

@@ -35,6 +35,10 @@
 //!
 //! MiMC (x^5, 91 rounds) over BN254::Fr — same as the moultbook-membership
 //! circuit for consistency and proof composition.
+//!
+//! With the `poseidon-hash` feature, the circuit switches to Poseidon
+//! (state=3, alpha=5, 8 full + 57 partial rounds), reducing constraint
+//! count by ~60% (210 constraints per 2-to-1 hash vs ~730 for MiMC).
 
 use ark_bn254::Fr;
 use ark_ff::{PrimeField, AdditiveGroup, BigInteger};
@@ -47,6 +51,8 @@ use ark_r1cs_std::{
     select::CondSelectGadget,
 };
 use ark_std::vec::Vec;
+
+pub mod poseidon;
 
 pub const DEFAULT_TREE_HEIGHT: usize = 20;
 const MIMC_ROUNDS: usize = 91;
@@ -189,6 +195,132 @@ fn generate_round_constants() -> Vec<Fr> {
         .collect()
 }
 
+// === Poseidon hash gadget (on-circuit) ===
+// Only compiled when the `poseidon-hash` feature is enabled.
+
+#[cfg(feature = "poseidon-hash")]
+fn poseidon_permute_gadget(
+    cs: ConstraintSystemRef<Fr>,
+    state: &mut [FpVar<Fr>; poseidon::POSEIDON_STATE_SIZE],
+) -> Result<(), SynthesisError> {
+    let config = poseidon::poseidon_config();
+    let total_rounds = config.full_rounds + config.partial_rounds;
+    let half_full = config.full_rounds / 2;
+    let alpha = Fr::from(config.alpha);
+
+    for round in 0..total_rounds {
+        // ARK: add round constants
+        for i in 0..poseidon::POSEIDON_STATE_SIZE {
+            let rc = FpVar::new_constant(cs.clone(), config.ark[round][i])?;
+            state[i] = state[i].clone() + rc;
+        }
+
+        // S-box
+        let is_full_round = round < half_full || round >= half_full + config.partial_rounds;
+        if is_full_round {
+            for elem in state.iter_mut() {
+                let t2 = elem.clone() * elem.clone();
+                let t4 = &t2 * &t2;
+                *elem = &t4 * elem.clone();
+            }
+        } else {
+            let t2 = state[0].clone() * state[0].clone();
+            let t4 = &t2 * &t2;
+            state[0] = &t4 * &state[0];
+        }
+
+        // MDS matrix multiply
+        let mut new_state = Vec::with_capacity(poseidon::POSEIDON_STATE_SIZE);
+        for i in 0..poseidon::POSEIDON_STATE_SIZE {
+            let mut acc = FpVar::new_constant(cs.clone(), Fr::from(0u64))?;
+            for j in 0..poseidon::POSEIDON_STATE_SIZE {
+                let mds_const = FpVar::new_constant(cs.clone(), config.mds[i][j])?;
+                acc = acc + (mds_const * &state[j]);
+            }
+            new_state.push(acc);
+        }
+        for (i, val) in new_state.into_iter().enumerate() {
+            state[i] = val;
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "poseidon-hash")]
+fn poseidon_hash_gadget(
+    cs: ConstraintSystemRef<Fr>,
+    left: &FpVar<Fr>,
+    right: &FpVar<Fr>,
+) -> Result<FpVar<Fr>, SynthesisError> {
+    let zero = FpVar::new_constant(cs.clone(), Fr::from(0u64))?;
+    let mut state = [zero.clone(), left.clone(), right.clone()];
+    poseidon_permute_gadget(cs, &mut state)?;
+    Ok(state[0].clone())
+}
+
+#[cfg(feature = "poseidon-hash")]
+fn poseidon_hash_5_gadget(
+    cs: ConstraintSystemRef<Fr>,
+    inputs: [&FpVar<Fr>; 5],
+) -> Result<FpVar<Fr>, SynthesisError> {
+    let zero = FpVar::new_constant(cs.clone(), Fr::from(0u64))?;
+    let mut state = [zero.clone(), zero.clone(), zero.clone()];
+
+    // Absorb inputs[0], inputs[1]
+    state[1] = state[1].clone() + inputs[0].clone();
+    state[2] = state[2].clone() + inputs[1].clone();
+    poseidon_permute_gadget(cs.clone(), &mut state)?;
+
+    // Absorb inputs[2], inputs[3]
+    state[1] = state[1].clone() + inputs[2].clone();
+    state[2] = state[2].clone() + inputs[3].clone();
+    poseidon_permute_gadget(cs.clone(), &mut state)?;
+
+    // Absorb inputs[4], pad
+    state[1] = state[1].clone() + inputs[4].clone();
+    state[2] = state[2].clone() + FpVar::new_constant(cs.clone(), Fr::from(1u64))?;
+    poseidon_permute_gadget(cs, &mut state)?;
+
+    Ok(state[0].clone())
+}
+
+// === Hash dispatch: MiMC (default) or Poseidon (feature-gated) ===
+
+#[cfg(not(feature = "poseidon-hash"))]
+fn hash_2_gadget(
+    cs: ConstraintSystemRef<Fr>,
+    left: &FpVar<Fr>,
+    right: &FpVar<Fr>,
+) -> Result<FpVar<Fr>, SynthesisError> {
+    mimc_hash_gadget(cs, left, right)
+}
+
+#[cfg(feature = "poseidon-hash")]
+fn hash_2_gadget(
+    cs: ConstraintSystemRef<Fr>,
+    left: &FpVar<Fr>,
+    right: &FpVar<Fr>,
+) -> Result<FpVar<Fr>, SynthesisError> {
+    poseidon_hash_gadget(cs, left, right)
+}
+
+#[cfg(not(feature = "poseidon-hash"))]
+fn hash_5_gadget(
+    cs: ConstraintSystemRef<Fr>,
+    inputs: [&FpVar<Fr>; 5],
+) -> Result<FpVar<Fr>, SynthesisError> {
+    mimc_hash_5_gadget(cs, inputs)
+}
+
+#[cfg(feature = "poseidon-hash")]
+fn hash_5_gadget(
+    cs: ConstraintSystemRef<Fr>,
+    inputs: [&FpVar<Fr>; 5],
+) -> Result<FpVar<Fr>, SynthesisError> {
+    poseidon_hash_5_gadget(cs, inputs)
+}
+
 /// Enforce that `a <= b` in R1CS by proving `b - a` is non-negative.
 ///
 /// This uses a bit decomposition: we decompose `b - a` into `RANGE_BITS` bits
@@ -307,7 +439,7 @@ impl ConstraintSynthesizer<Fr> for SensorSafetyCircuit {
 
         // === Constraint 2: Envelope binding ===
         // H(max_speed, max_force, min_distance, max_tilt, max_accel) == envelope_commitment
-        let computed_commitment = mimc_hash_5_gadget(
+        let computed_commitment = hash_5_gadget(
             cs.clone(),
             [
                 &max_speed_var,
@@ -321,7 +453,7 @@ impl ConstraintSynthesizer<Fr> for SensorSafetyCircuit {
 
         // === Constraint 3: Batch binding (Merkle membership) ===
         // leaf = H(speed, force, distance, tilt, accel)
-        let leaf = mimc_hash_5_gadget(
+        let leaf = hash_5_gadget(
             cs.clone(),
             [
                 &speed_var,
@@ -360,7 +492,7 @@ impl ConstraintSynthesizer<Fr> for SensorSafetyCircuit {
                 &current,
                 &path_vars[i],
             )?;
-            current = mimc_hash_gadget(cs.clone(), &left, &right)?;
+            current = hash_2_gadget(cs.clone(), &left, &right)?;
         }
 
         current.enforce_equal(&merkle_root_var)?;
@@ -371,6 +503,7 @@ impl ConstraintSynthesizer<Fr> for SensorSafetyCircuit {
 
 // === Native (off-circuit) helpers ===
 
+#[cfg(not(feature = "poseidon-hash"))]
 pub fn mimc_hash(left: Fr, right: Fr) -> Fr {
     let round_constants = generate_round_constants();
     let mut state = left + right;
@@ -381,12 +514,23 @@ pub fn mimc_hash(left: Fr, right: Fr) -> Fr {
     state
 }
 
+#[cfg(not(feature = "poseidon-hash"))]
 pub fn mimc_hash_5(inputs: [Fr; 5]) -> Fr {
     let mut acc = mimc_hash(inputs[0], inputs[1]);
     for i in 2..5 {
         acc = mimc_hash(acc, inputs[i]);
     }
     acc
+}
+
+#[cfg(feature = "poseidon-hash")]
+pub fn mimc_hash(left: Fr, right: Fr) -> Fr {
+    poseidon::poseidon_hash(left, right)
+}
+
+#[cfg(feature = "poseidon-hash")]
+pub fn mimc_hash_5(inputs: [Fr; 5]) -> Fr {
+    poseidon::poseidon_hash_5(inputs)
 }
 
 /// Compute the envelope commitment from params.
