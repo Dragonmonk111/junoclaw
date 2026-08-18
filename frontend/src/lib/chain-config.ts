@@ -26,6 +26,12 @@ export const CONTRACTS = {
   // Deployed 2026-05-29 to uni-7 (code IDs 76 / 77).
   moultbookV0: 'juno1lahsc7ef0manp3czjx806l8v2erqzzlxhr7z9z7090h5k99vdd2qjhdh53',
   ibcTaskHost: 'juno1hskkxy5wlfdgc0ht595plwrhc2zqmrkcer2v9sehxf44nv3upa4sgu9cag',
+  // Deployed 2026-08-17 to uni-7 (code IDs 87-89). truth-market migrated
+  // in-place to code_id 93 same day (min-operator-count fix) — address
+  // unchanged by migration.
+  truthMarket: 'juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p',
+  marketplace: 'juno1ur0cy702apq04xztq43r4s2307egme98n9xjex9tf5hh2q5h262s8trgwt',
+  emergencyComputeEscrow: 'juno143mk0t4g4zx2ahqx5x905lps5x0mfm5ghhkw42fjwjme37cvdkdqwnatt3',
 } as const
 
 // Keplr chain suggestion (for adding uni-7 if not already added)

@@ -63,6 +63,29 @@ const GROUPS: ContractGroup[] = [
       },
     ],
   },
+  {
+    layer: 'Robotics / Trust Market',
+    rows: [
+      {
+        key: 'truthMarket',
+        label: 'Truth Market',
+        desc: 'Multi-operator BFT verdict consensus + slashing — powers the Robot Ops Trust Constellation',
+        codeId: '93 (migrated)',
+      },
+      {
+        key: 'marketplace',
+        label: 'Marketplace',
+        desc: 'Skill-gated escrow — releases funds on a green Truth Market verdict',
+        codeId: '88',
+      },
+      {
+        key: 'emergencyComputeEscrow',
+        label: 'Emergency Compute Escrow',
+        desc: 'Compute-credit escrow wired to moultbook + task-ledger',
+        codeId: '89',
+      },
+    ],
+  },
 ]
 
 function truncAddr(addr: string) {

@@ -7,11 +7,12 @@ import { IntelPanel } from './components/IntelPanel'
 import { UpdatesPanel } from './components/UpdatesPanel'
 import { ContractsPanel } from './components/ContractsPanel'
 import { CommonwealthPanel } from './components/CommonwealthPanel'
+import { RobotOpsPanel } from './components/RobotOpsPanel'
 import { StatusBar } from './components/StatusBar'
 import { useStore } from './store'
-import { MessageSquare, Building2, RefreshCw, ArrowLeftRight, Eye, FileCode2, HeartPulse } from 'lucide-react'
+import { MessageSquare, Building2, RefreshCw, ArrowLeftRight, Eye, FileCode2, HeartPulse, Cpu } from 'lucide-react'
 
-type MainTab = 'chat' | 'dao' | 'commonwealth' | 'dex' | 'intel' | 'contracts' | 'updates'
+type MainTab = 'chat' | 'dao' | 'commonwealth' | 'dex' | 'intel' | 'contracts' | 'updates' | 'robotops'
 
 const TABS: { id: MainTab; label: string; icon: React.ReactNode }[] = [
   { id: 'chat',      label: 'Chat',      icon: <MessageSquare   className="h-3.5 w-3.5" /> },
@@ -19,6 +20,7 @@ const TABS: { id: MainTab; label: string; icon: React.ReactNode }[] = [
   { id: 'commonwealth', label: 'Commonwealth', icon: <HeartPulse   className="h-3.5 w-3.5" /> },
   { id: 'dex',       label: 'DEX',       icon: <ArrowLeftRight  className="h-3.5 w-3.5" /> },
   { id: 'intel',     label: 'Qu-Zeno',   icon: <Eye             className="h-3.5 w-3.5" /> },
+  { id: 'robotops',  label: 'Robot Ops', icon: <Cpu             className="h-3.5 w-3.5" /> },
   { id: 'contracts', label: 'Contracts', icon: <FileCode2       className="h-3.5 w-3.5" /> },
   { id: 'updates',   label: 'Updates',   icon: <RefreshCw       className="h-3.5 w-3.5" /> },
 ]
@@ -71,6 +73,7 @@ export default function App() {
             {activeTab === 'commonwealth' && <CommonwealthPanel />}
             {activeTab === 'dex'       && <DexPanel />}
             {activeTab === 'intel'     && <IntelPanel />}
+            {activeTab === 'robotops'  && <RobotOpsPanel />}
             {activeTab === 'contracts' && <ContractsPanel />}
             {activeTab === 'updates'   && <UpdatesPanel />}
           </div>
