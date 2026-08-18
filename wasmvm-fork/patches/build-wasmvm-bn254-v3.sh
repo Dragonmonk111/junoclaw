@@ -195,18 +195,18 @@ echo "--- [4/6] Injecting [patch] block into libwasmvm/Cargo.toml ---"
 
 CARGO_TOML="${WASMVM_DIR}/libwasmvm/Cargo.toml"
 
-if grep -q '\[patch\."https://github.com/CosmWasm/cosmwasm.git"\]' "${CARGO_TOML}"; then
+if grep -q '\[patch\.crates-io\]' "${CARGO_TOML}"; then
   echo "[patch] block already present; skipping insert."
 else
   cat >> "${CARGO_TOML}" <<EOF
 
 # ── BN254 precompile Track B (P2 no-fork) ────────────────────────────────────
-# Redirect cosmwasm git deps to our patched local copy at ${COSMWASM_DIR}/
+# Redirect cosmwasm crates.io deps to our patched local copy at ${COSMWASM_DIR}/
 # which holds cosmwasm ${COSMWASM_TAG} plus the 10 BN254 patches from
 # junoclaw/wasmvm-fork/patches/v3.0.x/. Cargo resolves [patch] before
-# resolving the original git dependency, so the build pulls in the patched
+# resolving the original dependency, so the build pulls in the patched
 # packages/std and packages/vm crates instead of fetching upstream.
-[patch."https://github.com/CosmWasm/cosmwasm.git"]
+[patch.crates-io]
 cosmwasm-std = { path = "${COSMWASM_DIR}/packages/std" }
 cosmwasm-vm  = { path = "${COSMWASM_DIR}/packages/vm" }
 EOF
@@ -220,6 +220,22 @@ fi
   exit 4
 }
 echo "libwasmvm/Cargo.toml parses cleanly."
+
+# Update Cargo.lock to pick up the patched local crates (v3.0.6 vs pinned v3.0.5)
+echo "Updating Cargo.lock to resolve patched crates..."
+( cd "${WASMVM_DIR}/libwasmvm" && \
+    cargo "+${RUST_VERSION}" update -p cosmwasm-std -p cosmwasm-vm 2>&1 ) || {
+  echo "WARNING: cargo update failed, trying full update..." >&2
+  ( cd "${WASMVM_DIR}/libwasmvm" && cargo "+${RUST_VERSION}" update 2>&1 ) || true
+}
+
+# Verify the patch is now used
+( cd "${WASMVM_DIR}/libwasmvm" && \
+    cargo "+${RUST_VERSION}" tree -p cosmwasm-vm 2>&1 | head -3 ) | grep -q "not used in the crate graph" && {
+  echo "ERROR: patch still not used after cargo update" >&2
+  exit 4
+}
+echo "Patch verified: cosmwasm-vm resolved from local patched source."
 
 # ----- 5. Build libwasmvm.so -----------------------------------------------
 
