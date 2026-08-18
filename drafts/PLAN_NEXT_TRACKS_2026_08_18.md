@@ -104,6 +104,32 @@ Implement the actual HTTP bridge endpoints that the plugin currently stubs:
 - [ ] `register_robot`: create skill-registry entry with robotics capability
 - [ ] WebSocket streaming for real-time reflex attestation submission
 
+### Track J: Intent-Tier ZK Circuit (Private Intent Proofs)
+**Priority:** Medium
+**Effort:** 3-5 days
+
+ZK circuit for the intent layer — proves an intent is legitimate without revealing its proprietary parameters.
+
+- [ ] `IntentConsistencyCircuit`: prove `sensor_snapshot_hash` in IntentMessage matches a leaf in the reflex batch Merkle tree
+- [ ] Compose with moultbook-membership: prove intent came from a registered agent
+- [ ] Policy compliance sub-circuit: prove intent params satisfy governance policy (e.g., destination within authorized zone) without revealing destination
+- [ ] Envelope binding: prove intent was generated while safety envelope was in claimed state
+- [ ] Gate integration: J-Lens gate verifies ZK proof instead of seeing raw intent content
+- [ ] Tests: valid intent proves, wrong sensor snapshot fails, unregistered agent fails, policy violation fails
+
+### Track K: Consensus-Tier ZK Circuit (Private Validator Participation)
+**Priority:** Low (research phase)
+**Effort:** 5-10 days
+
+ZK circuit for the Commonware consensus layer — proves validator participation without revealing which validator.
+
+- [ ] `ValidatorMembershipCircuit`: prove "I am one of the N registered validators" without revealing which
+- [ `VoteCorrectnessCircuit`: prove "I voted for the finalized block" without revealing vote content
+- [ ] Aggregate threshold proof: prove 2f+1 threshold met without revealing signer set
+- [ ] Research: anonymous BFT participation (whisper-sub, anonymous consensus literature)
+- [ ] Integration with Commonware simplex engine
+- [ ] Note: BLS aggregate signatures already provide partial anonymity; ZK goes further
+
 ---
 
 ## Dependency Graph
@@ -115,9 +141,13 @@ Track B (done) ──┤
                  │
                  ├── Track C (on-chain verifier) ── Track F (recursive)
                  │                                  │
-                 ├── Track E (Poseidon) ────────────┘
+                 ├── Track E (Poseidon) ────────────┤
+                 │                                  │
+                 ├── Track G (TEE proving) ─────────┤
+                 │                                  │
+                 ├── Track J (intent ZK) ───────────┘  (composes with B + moultbook)
                  │
-                 └── Track G (TEE proving)
+                 └── Track K (consensus ZK) — research, independent
 
 Track H (advocacy) — independent, ongoing
 Track I (HTTP bridge) — independent, lower priority
@@ -133,4 +163,6 @@ Track I (HTTP bridge) — independent, lower priority
 4. **Track H** (advocacy) — post benchmarks, build community support
 5. **Track F** (recursive) — scale to full-batch proofs
 6. **Track G** (TEE proving) — witness integrity layer
-7. **Track I** (HTTP bridge) — production deployment readiness
+7. **Track J** (intent ZK) — privacy at the intent tier, composes reflex + identity proofs
+8. **Track I** (HTTP bridge) — production deployment readiness
+9. **Track K** (consensus ZK) — research-phase, depends on anonymous BFT literature maturing
