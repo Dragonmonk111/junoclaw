@@ -102,7 +102,23 @@ The `zk-verifier` contract verifies real Groth16 proofs on-chain — tested end-
 | Wasm size | 566 KB | 443 KB | 123 KB smaller |
 | Verification time | ~440 ms | ~110 ms | 4× faster |
 
-The proof is ~128 bytes — smaller than a typical Ethereum transaction's calldata. We've posted these benchmarks to the CosmWasm community to advocate for native BN254 precompile support.
+### Why 128 Bytes Matters
+
+The proof is ~128 bytes — three G1 points and three Fq scalars on BN254. That's the smallest practical ZK proof in production crypto:
+
+| What | Size | Context |
+|------|------|---------|
+| **Our Groth16 proof** | **128 bytes** | 3 G1 + 3 Fq on BN254 |
+| Ethereum simple transfer | ~110 bytes | Simplest on-chain tx |
+| PLONK proof | ~400 bytes | Common alternative to Groth16 |
+| STARK proof | 50–200 KB | Much larger |
+| Bitcoin transaction | ~250 bytes | 2× our proof |
+| TLS certificate | 1–4 KB | 30× our proof |
+| Single ROS2 sensor message | 200–1000+ bytes | Proof is smaller than one reading |
+
+128 bytes means the proof fits in a single CosmWasm transaction with room to spare. On-chain verification is cheap enough to run per-batch without bloating the chain. And in the robotics world, that matters — you're not streaming megabytes of proof data over a constrained mesh network. A robot on a 9600-baud radio link can transmit its entire safety proof in under 140 milliseconds.
+
+We've posted these benchmarks to the CosmWasm community (issue [#2685](https://github.com/CosmWasm/cosmwasm/issues/2685)) to advocate for native BN254 precompile support upstream.
 
 ---
 
