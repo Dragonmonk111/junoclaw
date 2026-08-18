@@ -1,0 +1,21 @@
+[package]
+name = "circuit-breaker"
+version = "0.1.0"
+edition = "2021"
+description = "JunoClaw Circuit Breaker — persistent on-chain breaker state per robot"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }
+anyhow = { workspace = true }

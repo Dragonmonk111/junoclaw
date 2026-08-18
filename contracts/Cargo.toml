@@ -20,6 +20,9 @@ members = [
     "machine-rwa",
     "marketplace",
     "emergency-compute-escrow",
+    "safety-envelope",
+    "circuit-breaker",
+    "merkle-verifier",
 ]
 resolver = "2"
 
