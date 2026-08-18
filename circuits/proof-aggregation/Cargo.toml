@@ -1,0 +1,26 @@
+[package]
+name = "proof-aggregation-circuit"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Aggregation circuit — proves cross-tier consistency across sensor, intent, and consensus proofs with TEE-attested pairing verification"
+
+[dependencies]
+ark-bn254 = "0.5"
+ark-groth16 = "0.5"
+ark-ec = "0.5"
+ark-ff = "0.5"
+ark-serialize = { version = "0.5", features = ["derive"] }
+ark-std = "0.5"
+ark-relations = "0.5"
+ark-snark = "0.5"
+ark-r1cs-std = "0.5"
+sensor-safety-circuit = { path = "../sensor-safety" }
+intent-safety-circuit = { path = "../intent-safety" }
+consensus-safety-circuit = { path = "../consensus-safety" }
+sha2 = "0.10"
+rand = "0.8"
+
+[features]
+default = []
+poseidon-hash = ["sensor-safety-circuit/poseidon-hash", "intent-safety-circuit/poseidon-hash"]
