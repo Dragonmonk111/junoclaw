@@ -327,4 +327,4 @@ Together, the six layers create a system where autonomous agents can coordinate,
 
 ---
 
-*The Truth Market contract, MultiOperatorGate, relayer market module, and updated soak test are all in the `junoclaw` repository. All 59 tests pass across the three affected crates. The soak test is ready to deploy on Akash or a local VM.*
+*The Truth Market contract, MultiOperatorGate, relayer market module, and updated soak test are all in the `junoclaw` repository. All 59 tests pass across the three affected crates. The soak test is live on Akash mainnet — cycle 127+, 762 test suite executions, zero failures, 4/4 P2P nodes alive. Live logs: `http://10sujobnch8gf1ec1nsgn49pmg.ingress.quanglong.org`*

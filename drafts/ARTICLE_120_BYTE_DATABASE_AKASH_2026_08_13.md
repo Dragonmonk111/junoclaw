@@ -295,8 +295,8 @@ The database is continuous. The memory footprint is constant. The proof fits in 
 | Hash chain + BFT consensus | 4-node test PASS, 69k msg/s, 32-byte certs |
 | J-Lens gate | 28+8 tests pass, mock + live CSI server modes |
 | Coordination-settler contract | Deployed on uni-7 (code ID 86) |
+| 7-day soak test (Akash) | **LIVE** — cycle 127+, 762 suites, zero failures, 4/4 nodes alive |
 | 7-day soak test (local VM) | Running — 4/4 P2P nodes alive, cycles passing |
-| 7-day soak test (Akash) | SDL ready, deploying |
 | Moultbook addendum (tier 4) | Built — `crates/junoclaw-relayer/src/moult.rs`, 3 tests pass |
 | Commonware content store | Design complete (this article), implementation next |
 | Warm-tier publisher | Design complete (this article), implementation next |
