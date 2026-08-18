@@ -1,0 +1,40 @@
+---
+version: "2.0"
+
+services:
+  soak-mesh:
+    image: rust:1.82-bookworm
+    command:
+      - /bin/bash
+    args:
+      - -c
+      - "echo hello && sleep 3600"
+    expose:
+      - port: 8080
+        as: 80
+        to:
+          - global: true
+        proto: tcp
+
+profiles:
+  compute:
+    soak-mesh:
+      resources:
+        cpu:
+          units: 1
+        memory:
+          size: 512Mi
+        storage:
+          - size: 1Gi
+  placement:
+    akash:
+      pricing:
+        soak-mesh:
+          denom: uakt
+          amount: 100
+
+deployment:
+  soak-mesh:
+    akash:
+      profile: soak-mesh
+      count: 1

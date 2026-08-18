@@ -1,0 +1,162 @@
+---
+# J-Lens vLLM SDL — Kimi K2.6 on 8x H100 with persistent storage
+# Uses vLLM (officially supported) instead of raw transformers
+# Persistent storage preserves model download across restarts/escrow top-ups
+# vLLM hidden states extracted via PyTorch forward hooks
+
+version: "2.0"
+
+services:
+  jlens-inference:
+    image: vllm/vllm-openai:latest
+    command:
+      - /bin/sh
+    args:
+      - -c
+      - |
+        mkdir -p /data
+        MODEL_DIR=/data/model
+        MODEL_ID="moonshotai/Kimi-K2.6"
+
+        # Phase 1: Download model if not already cached
+        if [ ! -f "$MODEL_DIR/config.json" ]; then
+          echo "Model not cached, downloading $MODEL_ID to $MODEL_DIR..." >> /data/download.log
+          pip install --no-cache-dir hf_transfer huggingface_hub
+          huggingface-cli download "$MODEL_ID" --local-dir "$MODEL_DIR" --max-workers 8 >> /data/download.log 2>&1
+          echo "Download complete at $(date)" >> /data/download.log
+        else
+          echo "Model already cached at $MODEL_DIR, skipping download" >> /data/download.log
+        fi
+
+        # Phase 2: Install dependencies for hidden state extraction
+        pip install --no-cache-dir fastapi uvicorn pydantic
+
+        # Phase 3: Write hidden state extraction server
+        cat > /jlens_server.py << 'PYEOF'
+        import os
+        import json
+        import torch
+        import uvicorn
+        from fastapi import FastAPI
+        from pydantic import BaseModel
+        from vllm import LLM, SamplingParams
+
+        MODEL_DIR = "/data/model"
+        MODEL_ID = "moonshotai/Kimi-K2.6"
+
+        print(f"Loading model from {MODEL_DIR} with vLLM...", flush=True)
+        llm = LLM(
+            model=MODEL_DIR,
+            tensor_parallel_size=8,
+            trust_remote_code=True,
+            dtype="auto",
+            enforce_eager=False,
+            max_model_len=4096,
+            gpu_memory_utilization=0.90,
+        )
+        print("Model loaded with vLLM.", flush=True)
+
+        # Extract model object for hidden state hooks
+        model_obj = llm.llm_engine.model_executor.driver_worker.model_runner.model
+        NUM_LAYERS = model_obj.config.num_hidden_layers
+
+        # Register forward hooks for hidden state capture
+        _captured_states = {}
+        def make_hook(layer_idx):
+            def hook(module, input, output):
+                if isinstance(output, tuple):
+                    _captured_states[layer_idx] = output[0].detach().cpu()
+                else:
+                    _captured_states[layer_idx] = output.detach().cpu()
+            return hook
+
+        hooks = []
+        for i, layer in enumerate(model_obj.model.layers):
+            h = layer.register_forward_hook(make_hook(i))
+            hooks.append(h)
+
+        app = FastAPI(title="J-Lens vLLM")
+
+        class ExtractReq(BaseModel):
+            text: str
+            layer: int = -1
+
+        class CompleteReq(BaseModel):
+            prompt: str
+            max_tokens: int = 256
+            temperature: float = 0.7
+
+        @app.get("/health")
+        def health():
+            return {"status": "ok", "model": MODEL_ID, "layers": NUM_LAYERS, "engine": "vllm"}
+
+        @app.post("/v1/completions")
+        def completions(req: CompleteReq):
+            sampling = SamplingParams(max_tokens=req.max_tokens, temperature=req.temperature)
+            outputs = llm.generate([req.prompt], sampling)
+            text = outputs[0].outputs[0].text
+            return {"text": text, "model": MODEL_ID}
+
+        @app.post("/extract_hidden_states")
+        def extract_hidden_states(req: ExtractReq):
+            _captured_states.clear()
+            sampling = SamplingParams(max_tokens=1, temperature=0.0)
+            llm.generate([req.text], sampling)
+            layer = req.layer if req.layer >= 0 else NUM_LAYERS - 1
+            if layer not in _captured_states:
+                return {"error": f"Layer {layer} not captured. Available: {list(_captured_states.keys())}"}
+            hs = _captured_states[layer][0]
+            states = []
+            for pos in range(min(hs.shape[0], 512)):
+                states.append({"token": str(pos), "position": pos, "vector": hs[pos].float().tolist()[:768]})
+            return {"probe_model": MODEL_ID, "layer": layer, "num_layers": NUM_LAYERS, "states": states}
+
+        @app.get("/")
+        def root():
+            return {"service": "J-Lens", "model": MODEL_ID, "engine": "vllm", "layers": NUM_LAYERS}
+
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+        PYEOF
+
+        # Phase 4: Launch server
+        python /jlens_server.py
+    env:
+      - HF_HOME=/root/.cache/huggingface
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+    expose:
+      - port: 8000
+        as: 80
+        to:
+          - global: true
+        proto: tcp
+
+profiles:
+  compute:
+    jlens-inference:
+      resources:
+        cpu:
+          units: 32
+        memory:
+          size: 256Gi
+        storage:
+          - name: data
+            size: 900Gi
+            persistent: true
+        gpu:
+          units: 8
+          attributes:
+            vendor:
+              nvidia:
+                - model: h100
+  placement:
+    akash:
+      pricing:
+        jlens-inference:
+          denom: uact
+          amount: 50000
+
+deployment:
+  jlens-inference:
+    akash:
+      profile: jlens-inference
+      count: 1
