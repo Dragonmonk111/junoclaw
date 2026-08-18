@@ -668,12 +668,12 @@ async function main() {
     console.log("[5/7] Polling for bids (up to 5 min, every 30s)...");
     let bids = [];
     if (!opts.dryRun) {
-      for (let attempt = 1; attempt <= 10; attempt++) {
+      for (let attempt = 1; attempt <= 20; attempt++) {
         await new Promise(r => setTimeout(r, 30000));
         const bidsRaw = queryBids(opts, keyring, dseq);
         const bidsParsed = JSON.parse(bidsRaw);
         bids = bidsParsed.bids || bidsParsed;
-        console.log(`[5/7] Attempt ${attempt}/10: ${bids.length} bid(s)`);
+        console.log(`[5/7] Attempt ${attempt}/20: ${bids.length} bid(s)`);
         if (bids.length > 0) break;
       }
     } else {

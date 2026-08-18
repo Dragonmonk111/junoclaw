@@ -2,7 +2,6 @@
 # J-Lens SUMMIT SDL — Kimi K2.6 on 8x H100 (640GB unified VRAM)
 # moonshotai/Kimi-K2.6: 1T total / 32B active, 61 layers, 384 experts (8+1 shared),
 # native INT4 (QAT) weights ~577GB, fits 640GB with ~63GB headroom (tight —
-# short prompts / small batches only for J-Lens probing).
 # transformers >=4.57.1, <5.0.0 (kimi_k25 model class, supports K2.5/K2.6/K2.7).
 # NOTE: repo fast tokenizer may be broken; fallback processor at
 # RaushanTurganbay/kimi2.7-processor. We load tokenizer from the fallback repo.
@@ -19,7 +18,7 @@ services:
       - -c
       - |
         apt-get update && apt-get install -y gcc && \
-        pip install --no-cache-dir "transformers>=4.57.1,<5.0.0" torch accelerate fastapi uvicorn tiktoken blobfile && \
+        pip install --no-cache-dir "transformers>=4.57.1,<5.0.0" torch accelerate fastapi uvicorn tiktoken blobfile hf_transfer compressed-tensors && \
         echo 'import torch' > /s.py && \
         echo 'from fastapi import FastAPI' >> /s.py && \
         echo 'from pydantic import BaseModel' >> /s.py && \
@@ -29,11 +28,11 @@ services:
         echo 'TOK_ID = "RaushanTurganbay/kimi2.7-processor"' >> /s.py && \
         echo 'print(f"Loading {MODEL_ID}...", flush=True)' >> /s.py && \
         echo 'try:' >> /s.py && \
-        echo '    tok = AutoTokenizer.from_pretrained(MODEL_ID)' >> /s.py && \
+        echo '    tok = AutoTokenizer.from_pretrained(MODEL_ID, trust_remote_code=True)' >> /s.py && \
         echo 'except Exception as e:' >> /s.py && \
         echo '    print(f"Tokenizer from main repo failed ({e}), using fallback", flush=True)' >> /s.py && \
-        echo '    tok = AutoTokenizer.from_pretrained(TOK_ID)' >> /s.py && \
-        echo 'model = AutoModelForCausalLM.from_pretrained(MODEL_ID, device_map="auto")' >> /s.py && \
+        echo '    tok = AutoTokenizer.from_pretrained(TOK_ID, trust_remote_code=True)' >> /s.py && \
+        echo 'model = AutoModelForCausalLM.from_pretrained(MODEL_ID, device_map="auto", low_cpu_mem_usage=True, trust_remote_code=True)' >> /s.py && \
         echo 'model.eval()' >> /s.py && \
         echo 'NUM_LAYERS = model.config.num_hidden_layers' >> /s.py && \
         echo 'print(f"Model loaded. {NUM_LAYERS} layers.", flush=True)' >> /s.py && \
@@ -70,6 +69,7 @@ services:
         python /s.py
     env:
       - HF_HOME=/root/.cache/huggingface
+      - HF_HUB_ENABLE_HF_TRANSFER=1
     expose:
       - port: 8000
         as: 80
@@ -86,7 +86,7 @@ profiles:
         memory:
           size: 256Gi
         storage:
-          - size: 700Gi
+          - size: 900Gi
         gpu:
           units: 8
           attributes:

@@ -93,7 +93,7 @@ profiles:
       pricing:
         jlens-inference:
           denom: uact
-          amount: 2000000
+          amount: 25000
 
 deployment:
   jlens-inference:

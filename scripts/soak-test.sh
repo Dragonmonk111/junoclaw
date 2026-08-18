@@ -388,7 +388,7 @@ while true; do
     MARKET_LOG="$LOG_DIR/truth-market-cycle-$CYCLE.log"
     log "Running truth-market contract tests (cycle $CYCLE)..."
 
-    if cargo test -p truth-market > "$MARKET_LOG" 2>&1; then
+    if cargo test --manifest-path ./contracts/Cargo.toml -p truth-market > "$MARKET_LOG" 2>&1; then
         log "  truth-market-test: PASS"
     else
         log_err "truth-market-test FAILED (cycle $CYCLE)"

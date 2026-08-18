@@ -1,0 +1,91 @@
+---
+# JunoClaw coordination soak mesh — startup-build variant
+#
+# No pre-built Docker image required. Uses the public rust:1.82-bookworm
+# image, clones the repo from GitHub, builds all binaries inside the
+# container, then runs the 7-day soak test.
+#
+# Build phase: ~20-30 min (Rust compilation with NASM)
+# Soak phase: 7 days (4-node P2P mesh + consensus/gate/executor/market tests)
+#
+# Deploy:
+#   node tools/akash/auto-deploy.mjs \
+#     --sdl tools/akash/sdl-soak-mesh-startup.yml \
+#     --wallet-id akash-jlens \
+#     --max-spend-uakt 33139153 \
+#     --timeout-minutes 9360 \
+#     --deposit 5000000uact
+#
+# Cost estimate @ 300 uact/block, 6.5 days:
+#   300 × 93,600 blocks = 28,080,000 uact = 28.08 ACT
+#   + 5 ACT refundable deposit = 33.08 ACT total
+#   Wallet has 33.14 ACT — tight but within budget.
+#
+# Funds expiration (auto-close): 9,360 minutes = 6.5 days from deployment.
+# If the build takes 30 min, the soak test gets ~6.47 days.
+
+version: "2.0"
+
+services:
+  soak-mesh:
+    image: rust:latest
+    env:
+      - SOAK_DAYS=7
+      - SOAK_INTERVAL=300
+      - MOULTBOOK_ADDR=
+      - MOULTBOOK_TOPIC=soak-test
+      - SETTLER_ADDR=
+      - TASK_LEDGER_ADDR=
+      - AGENT_REGISTRY_ADDR=
+      - TRUTH_MARKET_ADDR=
+      - EXECUTE=
+    command:
+      - /bin/bash
+    args:
+      - -c
+      - |
+        set -ex
+        apt-get update && apt-get install -y --no-install-recommends \
+          nasm clang pkg-config libssl-dev python3 git && \
+        rm -rf /var/lib/apt/lists/*
+        git clone --depth 1 https://github.com/Dragonmonk111/junoclaw.git /opt/junoclaw
+        cd /opt/junoclaw
+        cargo build --release --features p2p -p junoclaw-test-mesh 2>&1 | tail -5
+        cargo build --release -p junoclaw-relayer 2>&1 | tail -5
+        cargo build --release -p junoclaw-coordination 2>&1 | tail -5
+        cargo build --release --manifest-path ./contracts/Cargo.toml -p truth-market 2>&1 | tail -5
+        # Fix truth-market test manifest path in the cloned script
+        sed -i 's/cargo test -p truth-market/cargo test --manifest-path .\/contracts\/Cargo.toml -p truth-market/g' scripts/soak-test.sh
+        mkdir -p soak-logs
+        chmod +x scripts/soak-test.sh
+        bash scripts/soak-test.sh > soak-logs/soak-orchestrator.log 2>&1 &
+        cd soak-logs && exec python3 -m http.server 8080
+    expose:
+      - port: 8080
+        as: 80
+        to:
+          - global: true
+        proto: tcp
+
+profiles:
+  compute:
+    soak-mesh:
+      resources:
+        cpu:
+          units: 2
+        memory:
+          size: 2Gi
+        storage:
+          - size: 8Gi
+  placement:
+    akash:
+      pricing:
+        soak-mesh:
+          denom: uact
+          amount: 300
+
+deployment:
+  soak-mesh:
+    akash:
+      profile: soak-mesh
+      count: 1
