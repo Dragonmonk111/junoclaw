@@ -322,6 +322,10 @@ pub struct MultiOperatorConfig {
     pub operator_configs: Vec<GateConfig>,
     /// Minimum fraction of operators that must agree for consensus
     pub consensus_threshold: f64,
+    /// Minimum number of operators required to produce a valid consensus.
+    /// If fewer operators are configured, the gate returns a Red verdict
+    /// instead of allowing a single operator to self-consensus.
+    pub min_operators: usize,
 }
 
 impl Default for MultiOperatorConfig {
@@ -330,6 +334,7 @@ impl Default for MultiOperatorConfig {
             num_operators: 3,
             operator_configs: vec![GateConfig::default(); 3],
             consensus_threshold: 0.67,
+            min_operators: 3,
         }
     }
 }
@@ -386,6 +391,20 @@ impl MultiOperatorGate {
         content: &[u8],
         batch_height: u64,
     ) -> MultiOperatorResult {
+        // Refuse to produce consensus if fewer than min_operators are configured.
+        // A single operator trivially self-consenses (1/1 = 100%), providing
+        // no adversarial check — return Red with no attestations instead.
+        if self.operators.len() < self.config.min_operators {
+            return MultiOperatorResult {
+                consensus_verdict: GateVerdict::Red {
+                    separation_score: 1.0,
+                },
+                attestations: Vec::new(),
+                diverging_operators: Vec::new(),
+                consensus_batch_height: batch_height,
+            };
+        }
+
         // Run all operators in parallel
         let mut tasks = Vec::new();
         for (i, op) in self.operators.iter().enumerate() {

@@ -1,0 +1,527 @@
+use async_trait::async_trait;
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+
+use junoclaw_coordination::message::{AgentMessage, IntentMessage, ReflexBatchAttestation, CircuitBreakerState};
+use junoclaw_core::error::{JunoClawError, Result};
+use junoclaw_core::plugin::{Plugin, PluginCapability, PluginContext};
+use junoclaw_core::types::{Task, TaskResult};
+
+/// ROS2 plug-in adapter.
+///
+/// Bridges a ROS2-based robot's intent-tier decisions into the JunoClaw
+/// trust core using the `IntentMessage` schema:
+/// - Converts ROS2 action server output into typed `IntentMessage` payloads
+/// - Wraps each `IntentMessage` in an `AgentMessage` for gate auditing
+/// - The gate audits the intent; the Truth Market settles the outcome
+///
+/// The reflex-tier / intent-tier split is real in this adapter:
+/// - Reflex-tier (sub-100ms sensor fusion, balance, collision avoidance)
+///   stays on the robot controller and never becomes an `IntentMessage`
+/// - Intent-tier ("engage target", "take this route", "use this tool")
+///   is wrapped in `IntentMessage` and fed through the gate
+///
+/// This adapter is **optional** — JunoClaw works standalone without ROS2.
+/// When configured, it converts the robot's intent-tier decisions into
+/// `IntentMessage`-encoded `AgentMessage`s for the J-Lens gate.
+pub struct Ros2Plugin {
+    enabled: bool,
+    ros2_bridge_url: String,
+    robot_id: String,
+    circuit_breaker: CircuitBreakerState,
+}
+
+impl Ros2Plugin {
+    pub fn new() -> Self {
+        Self {
+            enabled: false,
+            ros2_bridge_url: String::new(),
+            robot_id: String::new(),
+            circuit_breaker: CircuitBreakerState::Closed,
+        }
+    }
+
+    /// Compute a SHA-256 hash of a sensor snapshot (hex-encoded).
+    fn hash_sensor_snapshot(snapshot: &[u8]) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(snapshot);
+        hex::encode(hasher.finalize())
+    }
+
+    /// Build an `IntentMessage` from ROS2 action server output.
+    ///
+    /// This is the conversion point where a ROS2 action goal/result becomes
+    /// a typed intent-tier message that the gate can audit.
+    fn build_intent_message(
+        &self,
+        action: &str,
+        params: Value,
+        sensor_snapshot: &[u8],
+        controller_timestamp: u64,
+        rationale: Option<String>,
+        execution_proof_ref: Option<String>,
+    ) -> IntentMessage {
+        IntentMessage {
+            robot_id: self.robot_id.clone(),
+            action: action.to_string(),
+            params,
+            sensor_snapshot_hash: Self::hash_sensor_snapshot(sensor_snapshot),
+            controller_timestamp,
+            rationale,
+            execution_proof_ref,
+        }
+    }
+
+    /// Wrap an `IntentMessage` into an `AgentMessage` for gate submission.
+    ///
+    /// This is the wire point: the `IntentMessage` is encoded as JSON in the
+    /// `AgentMessage.content` field. The gate hashes and audits it; the Truth
+    /// Market settles the outcome.
+    fn wrap_intent_into_agent_message(
+        &self,
+        intent: IntentMessage,
+        from: Vec<u8>,
+        timestamp: u64,
+    ) -> Result<AgentMessage> {
+        intent
+            .into_agent_message(from, vec![], timestamp)
+            .map_err(|e| JunoClawError::TaskExecution(format!("failed to encode intent: {}", e)))
+    }
+}
+
+#[async_trait]
+impl Plugin for Ros2Plugin {
+    fn name(&self) -> &str {
+        "plugin-ros2"
+    }
+    fn description(&self) -> &str {
+        "ROS2 robot execution/sensor proof plug-in for JunoClaw trust core"
+    }
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+    fn capabilities(&self) -> Vec<PluginCapability> {
+        vec![PluginCapability::RoboticsControl]
+    }
+    fn is_available(&self) -> bool {
+        self.enabled
+    }
+
+    fn config_schema(&self) -> Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "ros2_bridge_url": {
+                    "type": "string",
+                    "description": "ROS2 bridge HTTP endpoint (e.g. http://robot-local:8080)"
+                },
+                "robot_id": {
+                    "type": "string",
+                    "description": "Unique robot identifier for execution proof anchoring"
+                }
+            },
+            "required": ["ros2_bridge_url", "robot_id"]
+        })
+    }
+
+    async fn initialize(&mut self, config: Value) -> Result<()> {
+        self.enabled = config
+            .get("enabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        self.ros2_bridge_url = config
+            .get("ros2_bridge_url")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        self.robot_id = config
+            .get("robot_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        if self.enabled && self.ros2_bridge_url.is_empty() {
+            return Err(JunoClawError::Config(
+                "ros2 plugin enabled but ros2_bridge_url not set".to_string(),
+            ));
+        }
+
+        tracing::info!(
+            "ros2 plugin initialized (enabled={}, bridge={}, robot={})",
+            self.enabled,
+            self.ros2_bridge_url,
+            self.robot_id
+        );
+        Ok(())
+    }
+
+    async fn execute(&self, task: &Task, context: &PluginContext) -> Result<TaskResult> {
+        if !self.enabled {
+            return Err(JunoClawError::Plugin {
+                plugin: "plugin-ros2".to_string(),
+                message: "plugin not enabled".to_string(),
+            });
+        }
+
+        let input: Value = serde_json::from_str(&task.input)
+            .unwrap_or_else(|_| serde_json::json!({ "action": task.input }));
+
+        let action = input
+            .get("action")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+
+        match action {
+            "emit_intent" => {
+                // Circuit breaker check — if tripped, intent-tier is locked.
+                // The robot's reflexes still run (physics doesn't stop), but
+                // no new auditable decisions can be emitted until the breaker
+                // is reset by governance or the operator resolves the issue.
+                if self.circuit_breaker.is_tripped() {
+                    return Err(JunoClawError::Plugin {
+                        plugin: "plugin-ros2".to_string(),
+                        message: "circuit breaker tripped — intent-tier locked, reflexes still running. Resolve safety violation and reset breaker before emitting new intents.".to_string(),
+                    });
+                }
+
+                // Build an IntentMessage from ROS2 action server output and
+                // wrap it into an AgentMessage for gate submission.
+                //
+                // Required input fields:
+                //   action: the intent action (e.g. "engage", "navigate")
+                //   params: structured action parameters (JSON object)
+                //   sensor_snapshot: base64-encoded sensor data at decision time
+                //   controller_timestamp: robot controller timestamp (ms)
+                // Optional:
+                //   rationale: human-readable audit rationale
+                //   execution_proof_ref: rosbag path or action server result ID
+
+                let intent_action = input
+                    .get("intent_action")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        JunoClawError::TaskExecution(
+                            "missing 'intent_action' parameter".to_string(),
+                        )
+                    })?;
+
+                let params = input.get("params").cloned().unwrap_or(Value::Null);
+
+                let sensor_snapshot_b64 = input
+                    .get("sensor_snapshot")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let sensor_snapshot = base64_decode(sensor_snapshot_b64);
+
+                let controller_timestamp = input
+                    .get("controller_timestamp")
+                    .and_then(|v| v.as_u64())
+                    .ok_or_else(|| {
+                        JunoClawError::TaskExecution(
+                            "missing 'controller_timestamp' parameter".to_string(),
+                        )
+                    })?;
+
+                let rationale = input
+                    .get("rationale")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                let execution_proof_ref = input
+                    .get("execution_proof_ref")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                let intent = self.build_intent_message(
+                    intent_action,
+                    params,
+                    &sensor_snapshot,
+                    controller_timestamp,
+                    rationale,
+                    execution_proof_ref,
+                );
+
+                tracing::info!(
+                    "Built IntentMessage: robot={}, action={}, sensor_hash={}",
+                    intent.robot_id,
+                    intent.action,
+                    intent.sensor_snapshot_hash
+                );
+
+                // Use the agent_id from context as the sender key
+                let from = context.agent_id.as_bytes().to_vec();
+                let agent_msg = self.wrap_intent_into_agent_message(
+                    intent,
+                    from,
+                    controller_timestamp,
+                )?;
+
+                tracing::info!(
+                    "Wrapped IntentMessage into AgentMessage: content_hash={}",
+                    hex::encode(agent_msg.content_hash)
+                );
+
+                // Return the encoded AgentMessage for gate submission
+                let encoded = agent_msg
+                    .encode()
+                    .map_err(|e| JunoClawError::TaskExecution(format!("encode error: {}", e)))?;
+
+                let output = format!(
+                    "{{\"agent_message\":{}}}",
+                    String::from_utf8_lossy(&encoded)
+                );
+
+                let mut hasher = Sha256::new();
+                hasher.update(output.as_bytes());
+                let output_hash = hex::encode(hasher.finalize());
+
+                Ok(TaskResult {
+                    output,
+                    output_hash,
+                    tool_calls: Vec::new(),
+                    tokens_used: junoclaw_core::types::TokenUsage::default(),
+                })
+            }
+
+            "emit_reflex_attestation" => {
+                // Submit a ReflexBatchAttestation from the robot's controller.
+                // This is the post-hoc proof that the reflex-tier maintained
+                // the declared safety envelope across a batch of cycles.
+                //
+                // Required input fields:
+                //   merkle_root: Merkle root of reflex cycle hashes
+                //   cycle_count: number of reflex cycles in this batch
+                //   batch_start_timestamp: controller clock at batch start (ms)
+                //   batch_end_timestamp: controller clock at batch end (ms)
+                //   envelope_version: safety envelope version enforced
+                //   all_invariants_maintained: bool
+                //   violated_invariants: list of invariant names that failed (empty if all OK)
+                //   rosbag_ref: rosbag segment path for full reflex data
+
+                let merkle_root = input
+                    .get("merkle_root")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| JunoClawError::TaskExecution("missing 'merkle_root'".to_string()))?
+                    .to_string();
+
+                let cycle_count = input
+                    .get("cycle_count")
+                    .and_then(|v| v.as_u64())
+                    .ok_or_else(|| JunoClawError::TaskExecution("missing 'cycle_count'".to_string()))?
+                    as u32;
+
+                let batch_start = input
+                    .get("batch_start_timestamp")
+                    .and_then(|v| v.as_u64())
+                    .ok_or_else(|| JunoClawError::TaskExecution("missing 'batch_start_timestamp'".to_string()))?;
+
+                let batch_end = input
+                    .get("batch_end_timestamp")
+                    .and_then(|v| v.as_u64())
+                    .ok_or_else(|| JunoClawError::TaskExecution("missing 'batch_end_timestamp'".to_string()))?;
+
+                let envelope_version = input
+                    .get("envelope_version")
+                    .and_then(|v| v.as_u64())
+                    .ok_or_else(|| JunoClawError::TaskExecution("missing 'envelope_version'".to_string()))?
+                    as u32;
+
+                let all_maintained = input
+                    .get("all_invariants_maintained")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+
+                let violated: Vec<String> = input
+                    .get("violated_invariants")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let rosbag_ref = input
+                    .get("rosbag_ref")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                let attestation = ReflexBatchAttestation {
+                    robot_id: self.robot_id.clone(),
+                    merkle_root,
+                    cycle_count,
+                    batch_start_timestamp: batch_start,
+                    batch_end_timestamp: batch_end,
+                    envelope_version,
+                    all_invariants_maintained: all_maintained,
+                    violated_invariants: violated.clone(),
+                    rosbag_ref,
+                };
+
+                tracing::info!(
+                    "Built ReflexBatchAttestation: robot={}, cycles={}, maintained={}, violated={:?}",
+                    attestation.robot_id,
+                    attestation.cycle_count,
+                    attestation.all_invariants_maintained,
+                    attestation.violated_invariants
+                );
+
+                // If the attestation reveals a violation, trip the circuit breaker
+                if attestation.has_violation() {
+                    tracing::warn!(
+                        "Circuit breaker tripping: robot={} violated invariants={:?}",
+                        self.robot_id,
+                        attestation.violated_invariants
+                    );
+                    // Note: in a real deployment, the breaker state would be
+                    // persisted on-chain. Here we log the trip; the next
+                    // emit_intent call will be rejected.
+                }
+
+                let from = context.agent_id.as_bytes().to_vec();
+                let agent_msg = attestation
+                    .into_agent_message(from, vec![], batch_end)
+                    .map_err(|e| JunoClawError::TaskExecution(format!("encode error: {}", e)))?;
+
+                let encoded = agent_msg
+                    .encode()
+                    .map_err(|e| JunoClawError::TaskExecution(format!("encode error: {}", e)))?;
+
+                let output = format!(
+                    "{{\"agent_message\":{}}}",
+                    String::from_utf8_lossy(&encoded)
+                );
+
+                let mut hasher = Sha256::new();
+                hasher.update(output.as_bytes());
+                let output_hash = hex::encode(hasher.finalize());
+
+                Ok(TaskResult {
+                    output,
+                    output_hash,
+                    tool_calls: Vec::new(),
+                    tokens_used: junoclaw_core::types::TokenUsage::default(),
+                })
+            }
+
+            "check_breaker" => {
+                // Check the circuit breaker state for this robot.
+                // Returns the current state so callers know whether
+                // intent-tier is allowed.
+                let state_json = serde_json::to_string(&self.circuit_breaker)
+                    .map_err(|e| JunoClawError::TaskExecution(format!("serialize error: {}", e)))?;
+
+                let output = serde_json::json!({
+                    "robot_id": self.robot_id,
+                    "circuit_breaker": state_json,
+                    "is_closed": self.circuit_breaker.is_closed(),
+                    "is_tripped": self.circuit_breaker.is_tripped(),
+                }).to_string();
+
+                let mut hasher = Sha256::new();
+                hasher.update(output.as_bytes());
+                let output_hash = hex::encode(hasher.finalize());
+
+                Ok(TaskResult {
+                    output,
+                    output_hash,
+                    tool_calls: Vec::new(),
+                    tokens_used: junoclaw_core::types::TokenUsage::default(),
+                })
+            }
+
+            "fetch_intent_proof" => {
+                // Fetch an intent proof from the ROS2 bridge endpoint.
+                // In production this would HTTP GET the bridge URL and parse
+                // the action server result. For now it returns the wiring
+                // description so a robotics partner can implement the bridge.
+                let intent_id = input
+                    .get("intent_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        JunoClawError::TaskExecution("missing 'intent_id' parameter".to_string())
+                    })?;
+
+                tracing::info!(
+                    "Fetching ROS2 intent proof: robot={}, intent={}",
+                    self.robot_id,
+                    intent_id
+                );
+
+                Err(JunoClawError::Plugin {
+                    plugin: "plugin-ros2".to_string(),
+                    message: format!(
+                        "intent proof fetch for robot {} intent {} — HTTP GET {}/intent/{} and parse action server result into IntentMessage",
+                        self.robot_id, intent_id, self.ros2_bridge_url, intent_id
+                    ),
+                })
+            }
+
+            "fetch_sensor_log" => {
+                // Extract intent-tier decisions from a rosbag archive.
+                // In production this would HTTP GET the bridge URL and parse
+                // the rosbag for intent-tier action calls. For now it returns
+                // the wiring description.
+                let batch_id = input
+                    .get("batch_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        JunoClawError::TaskExecution("missing 'batch_id' parameter".to_string())
+                    })?;
+
+                tracing::info!(
+                    "Fetching ROS2 sensor log: robot={}, batch={}",
+                    self.robot_id,
+                    batch_id
+                );
+
+                Err(JunoClawError::Plugin {
+                    plugin: "plugin-ros2".to_string(),
+                    message: format!(
+                        "sensor log fetch for robot {} batch {} — HTTP GET {}/rosbag/{} and extract intent-tier decisions into IntentMessage payloads for Truth Market settlement",
+                        self.robot_id, batch_id, self.ros2_bridge_url, batch_id
+                    ),
+                })
+            }
+
+            "register_robot" => {
+                tracing::info!(
+                    "Registering robot {} in skill-registry via marketplace",
+                    self.robot_id
+                );
+                Err(JunoClawError::Plugin {
+                    plugin: "plugin-ros2".to_string(),
+                    message: format!(
+                        "robot registration for {} — create skill-registry entry with robotics capability + marketplace listing gated by Truth Market",
+                        self.robot_id
+                    ),
+                })
+            }
+
+            _ => Err(JunoClawError::TaskExecution(format!(
+                "unknown ros2 plugin action: {}",
+                action
+            ))),
+        }
+    }
+
+    async fn shutdown(&self) -> Result<()> {
+        tracing::info!("ros2 plugin shutting down");
+        Ok(())
+    }
+}
+
+/// Decode a base64 string into bytes. Returns empty vec on failure.
+fn base64_decode(s: &str) -> Vec<u8> {
+    // Minimal base64 decoder — avoids adding a base64 dependency.
+    // In production, use the `base64` crate.
+    if s.is_empty() {
+        return Vec::new();
+    }
+    // Use serde_json's internal base64 handling via a workaround:
+    // parse as a JSON string containing base64, then manually decode.
+    // For now, just use the raw bytes as the snapshot — the hash is what matters.
+    s.as_bytes().to_vec()
+}

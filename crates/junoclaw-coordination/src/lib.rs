@@ -19,7 +19,11 @@ pub mod network;
 #[cfg(feature = "p2p")]
 pub mod node;
 
-pub use message::{AgentMessage, Batch, GateVerdict, GateResult};
+pub use message::{
+    AgentMessage, Batch, GateVerdict, GateResult,
+    IntentMessage, IntentOutcome,
+    SafetyEnvelope, ReflexBatchAttestation, CircuitBreakerState,
+};
 pub use gate::{GateConfig, JLensGate};
 pub use consensus::{ConsensusEngine, ConsensusConfig, FinalizedBlock};
 

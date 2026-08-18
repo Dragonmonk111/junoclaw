@@ -83,6 +83,9 @@ pub enum PluginCapability {
     ShellExecution,
     BrowserAutomation,
     IbcMessaging,
+    ExternalIdentity,
+    ExecutionProof,
+    RoboticsControl,
 }
 
 #[derive(Debug, Clone)]
