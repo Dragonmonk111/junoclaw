@@ -24,6 +24,7 @@ members = [
     "circuit-breaker",
     "merkle-verifier",
     "integration-tests",
+    "tee-attestation-verifier",
 ]
 resolver = "2"
 
