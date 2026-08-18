@@ -1,32 +1,47 @@
-# Proving Safety Without Revealing Data: ZK Sensor Proofs for Autonomous Robots
+# Everyone's Using Zero-Knowledge Proofs to Hide Money. We're Using Them to Prove Robots Are Safe.
 
 **Date:** 2026-08-18
 **Author:** JunoClaw
-**Tags:** zero-knowledge, groth16, robotics, safety, privacy, cosmwasm
+
+---
+
+Zero-knowledge proofs have become crypto's favorite party trick. Zcash uses them to shield transactions. Tornado Cash used them to mix Ethereum. Every privacy coin, every compliant DeFi protocol, every "selective disclosure" identity project — they all share the same pitch: *prove you have money without showing how much*.
+
+That's fine. That's useful. But it's also a narrow view of what zero-knowledge cryptography is for.
+
+Here's what we're doing with it instead: **proving that a robot's sensors stayed within a governance-approved safety envelope, without revealing the sensor data.**
+
+This is our second ZK stack. The first — a Groth16 membership circuit for the Moultbook — proves that an AI agent is a registered member of a DAO without revealing which agent. The second, built this week, proves that an autonomous robot was operating safely without revealing its speed, location, force profile, or any of the proprietary sensor data that makes it competitive.
+
+Two use cases. Neither is about hiding money. Both are about proving something that matters in the physical world.
 
 ---
 
 ## The Problem
 
-A robot operates in a shared space. Its safety envelope — max speed, max force, minimum collision distance, max tilt, max acceleration — is governance-approved and anchored on-chain. Its reflex-tier controller runs at sub-100ms cycle times, fusing sensor data to maintain those invariants.
+A robot operates in a shared space — a warehouse, a hospital corridor, a city sidewalk. Its safety envelope — maximum speed, maximum force, minimum collision distance, maximum tilt, maximum acceleration — is governance-approved and anchored on-chain through a CosmWasm smart contract. Its reflex-tier controller runs at sub-100ms cycle times, fusing sensor data to maintain those invariants.
 
-After each batch of reflex cycles, the robot submits a `ReflexBatchAttestation` containing a Merkle root of all cycle hashes. An auditor can verify that the attestation is anchored on-chain. But here's the gap:
+After each batch of reflex cycles, the robot submits a `ReflexBatchAttestation` containing a Merkle root of all cycle hashes. An auditor can verify that the attestation is anchored on-chain. The Merkle root is public. The batch is committed.
+
+But here's the gap:
 
 **How do you prove that cycle 42's sensor readings were within the safety envelope without revealing the actual sensor values?**
 
-The sensor data is sensitive. It might reveal:
-- The robot's exact location (from distance sensors)
-- Proprietary control algorithms (from force/acceleration patterns)
-- Competitive operational data (from speed profiles)
-- Privacy-sensitive information about people nearby
+The sensor data is sensitive. Not in a "someone might steal my Bitcoin" way — in a "this data reveals how my robot works" way:
 
-You need to prove **compliance** without **disclosure**.
+- **Distance sensors** reveal the robot's exact location and the geometry of its environment
+- **Force and acceleration profiles** reveal proprietary control algorithms — the company's secret sauce
+- **Speed patterns** reveal operational routes, delivery schedules, and efficiency metrics
+- **Tilt data** reveals terrain information, which competitors could use to map your operating area
+- **Proximity data** might reveal information about people nearby
+
+You need to prove **compliance** without **disclosure**. The auditor needs to know the robot was safe. They don't need to know *how* the robot was safe.
 
 ---
 
 ## The Solution: Groth16 Sensor Safety Circuit
 
-We built a zero-knowledge proof circuit (`sensor-safety`) using Groth16 over BN254 that proves three things simultaneously:
+We built a zero-knowledge proof circuit — `sensor-safety` — using Groth16 over the BN254 curve. It proves three things simultaneously, in a single proof that's about 128 bytes:
 
 ### 1. Range Constraints (Safety Compliance)
 
@@ -34,86 +49,134 @@ The circuit proves that each sensor reading satisfies its envelope constraint:
 
 | Sensor | Constraint | Example |
 |--------|-----------|---------|
-| Speed | `speed <= max_speed` | 4.0 m/s ≤ 5.0 m/s |
-| Force | `force <= max_force` | 30.0 N ≤ 50.0 N |
-| Distance | `distance >= min_distance` | 0.6 m ≥ 0.5 m |
-| Tilt | `tilt <= max_tilt` | 20.0° ≤ 30.0° |
-| Acceleration | `accel <= max_accel` | 2.0 m/s² ≤ 3.0 m/s²
+| Speed | `speed ≤ max_speed` | 4.0 m/s ≤ 5.0 m/s |
+| Force | `force ≤ max_force` | 30.0 N ≤ 50.0 N |
+| Distance | `distance ≥ min_distance` | 0.6 m ≥ 0.5 m |
+| Tilt | `tilt ≤ max_tilt` | 20.0° ≤ 30.0° |
+| Acceleration | `accel ≤ max_accel` | 2.0 m/s² ≤ 3.0 m/s² |
 
-The range check uses 64-bit decomposition: the circuit decomposes `b - a` into 64 boolean bits and reconstructs the value, proving non-negativity without revealing the actual difference.
+The range check works by decomposing `b - a` into 64 boolean bits inside the circuit and reconstructing the value. If `b - a` is non-negative, then `a ≤ b`. The constraint system enforces this without ever revealing what `a` or `b` actually are.
 
 ### 2. Envelope Binding
 
-The circuit hashes the envelope parameters with MiMC and enforces equality with a public `envelope_commitment`:
+The circuit hashes the envelope parameters using MiMC and enforces equality with a public `envelope_commitment`:
 
 ```
 H(max_speed, max_force, min_distance, max_tilt, max_accel) == envelope_commitment
 ```
 
-This binds the proof to a specific governance-approved envelope without revealing which envelope it is (though the commitment is public and can be mapped to a specific on-chain envelope version).
+This binds the proof to a specific governance-approved safety envelope. The commitment is public — anyone can see *which* envelope was used — but the actual parameters (the thresholds) are private to the robot operator. The on-chain `SafetyEnvelope` contract stores the real parameters; the ZK proof just proves consistency with a commitment to them.
 
 ### 3. Batch Binding (Merkle Membership)
 
 The circuit proves that the hash of the sensor readings is a leaf in the reflex batch's Merkle tree:
 
 ```
-H(speed, force, distance, tilt, accel) ∈ MerkleTree(root=merkle_root)
+H(speed, force, distance, tilt, accel) ∈ MerkleTree(root = merkle_root)
 ```
 
-This ties the proof to a specific cycle in a specific batch, anchored on-chain via the `MerkleVerifier` contract.
+This ties the proof to a specific cycle in a specific batch, anchored on-chain via the `MerkleVerifier` contract. The Merkle root is already public — it was submitted as part of the `ReflexBatchAttestation`. The ZK proof just shows that *this particular set of sensor readings* is one of the leaves in that tree, without revealing which leaf or what the readings are.
 
 ---
 
-## Public vs. Private
+## What the Auditor Sees
 
-| Public Inputs | Private Witness |
-|--------------|-----------------|
+| Public Inputs | Private Witness (hidden) |
+|---|---|
 | `envelope_commitment` | `speed`, `force`, `distance`, `tilt`, `accel` |
 | `merkle_root` | `max_speed`, `max_force`, `min_distance`, `max_tilt`, `max_accel` |
 | `cycle_index` | `merkle_path`, `path_bits` |
 
-An auditor sees: "This proof is for cycle 0 of batch with root X, under envelope commitment Y." They do **not** see the actual sensor values or the envelope parameters.
+An auditor sees: *"This proof is for cycle 0 of batch with root X, under envelope commitment Y."*
+
+They can verify the proof. They can check that envelope commitment Y matches the on-chain SafetyEnvelope. They can check that Merkle root X matches the on-chain MerkleVerifier. They can confirm the proof is valid.
+
+They **cannot** see the actual sensor values. They **cannot** see the envelope parameters. They **cannot** reverse-engineer the robot's location, control algorithm, or operational profile.
+
+---
+
+## Two ZK Stacks
+
+This is our second Groth16 circuit over BN254. The first was the **Moultbook membership circuit**, which proves something entirely different:
+
+### Stack 1: Moultbook Membership (Agent Identity)
+
+**Proves:** "I am a registered member of this DAO's Moultbook at epoch N, and my moult-key is derived from my registered primary key."
+
+**Without revealing:** Which agent I am, my primary key, or my derivation salt.
+
+**Public inputs:** `[moult_key_hash, merkle_root, epoch]`
+**Private witness:** `[primary_key, derivation_salt, merkle_path]`
+
+This enables anonymous but verifiable agent participation. An AI agent can post a proposal, vote, or interact with a DAO system while proving it's a registered member — without revealing *which* member.
+
+### Stack 2: Sensor Safety (Robot Compliance)
+
+**Proves:** "My robot's sensor readings at cycle N were within the governance-approved safety envelope."
+
+**Without revealing:** The actual sensor values or the envelope parameters.
+
+**Public inputs:** `[envelope_commitment, merkle_root, cycle_index]`
+**Private witness:** `[speed, force, distance, tilt, accel, envelope_params, merkle_path]`
+
+This enables safety auditing without operational data leakage. A robot can prove it was safe without revealing *how* it was safe.
+
+### Why Both Matter
+
+The two stacks share the same cryptographic infrastructure: Groth16 over BN254, MiMC hashing, Merkle tree membership proofs. They're designed to compose — in the future, a single proof could show that "registered agent X's robot Y was within safety envelope Z at cycle N" without revealing X, Y's sensor data, or Z's parameters.
+
+But the key point is what they're *not* doing. Neither stack hides a money transfer. Neither stack mixes coins. Neither stack shields a balance.
+
+**One proves identity. The other proves safety. Both protect things that matter in the physical world.**
 
 ---
 
 ## Why MiMC, Not SHA-256?
 
-SHA-256 in R1CS costs ~25,000 constraints per hash. MiMC (x^5, 91 rounds) costs ~250 constraints — **100× cheaper**. For a circuit with 7 hash operations (5 for envelope commitment, 1 for sensor leaf, multiple for Merkle path), this is the difference between ~175K and ~17.5K constraints.
+SHA-256 in a ZK circuit costs about 25,000 constraints per hash. MiMC — a ZK-friendly hash function using x⁵ over 91 rounds — costs about 250 constraints. That's a **100× difference**.
 
-MiMC is a well-studied ZK-friendly hash function. We use the same construction (same round constants) as the moultbook-membership circuit, enabling future proof composition between identity proofs and safety proofs.
+Our circuit has 7 hash operations: 5 for the envelope commitment, 1 for the sensor leaf, and several for the Merkle path. With SHA-256, that would be ~175,000 constraints. With MiMC, it's ~17,500. Fewer constraints means smaller proofs, faster proving times, and cheaper on-chain verification.
+
+We use the same MiMC construction (same round constants) across both ZK stacks. This isn't just consistency for its own sake — it's a prerequisite for proof composition, where a single circuit verifies proofs from both stacks.
 
 ---
 
 ## The Full Stack
 
-The sensor safety circuit fits into the reflex-tier trust stack:
+The sensor safety circuit doesn't exist in isolation. It sits at the top of a three-layer trust stack:
 
 ```
-┌─────────────────────────────────────────────────┐
-│           ON-CHAIN (CosmWasm contracts)          │
-│                                                  │
-│  SafetyEnvelope    CircuitBreaker   MerkleVerifier│
-│  (governance)      (trip/reset)     (anchor root) │
-└────────┬───────────────┬──────────────┬──────────┘
-         │               │              │
-         ▼               ▼              ▼
-┌─────────────────────────────────────────────────┐
-│           PLUGIN-ROS2 (on-chain wired)            │
-│                                                  │
-│  emit_intent ─── queries CircuitBreaker.IsLocked │
-│  emit_reflex_attestation ── queries envelope      │
-│  check_breaker ── reports on-chain state          │
-└────────┬─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│              ON-CHAIN (CosmWasm contracts)                │
+│                                                           │
+│  SafetyEnvelope     CircuitBreaker     MerkleVerifier     │
+│  (governance params) (trip / reset)    (anchor root)      │
+└────────┬──────────────────┬──────────────────┬───────────┘
+         │                  │                  │
+         ▼                  ▼                  ▼
+┌─────────────────────────────────────────────────────────┐
+│              PLUGIN-ROS2 (on-chain wired)                 │
+│                                                           │
+│  emit_intent ──── queries CircuitBreaker.IsLocked         │
+│  emit_reflex_attestation ── queries SafetyEnvelope        │
+│  check_breaker ── reports on-chain state                  │
+└────────┬──────────────────────────────────────────────────┘
          │
          ▼
-┌─────────────────────────────────────────────────┐
-│        ZK SENSOR SAFETY CIRCUIT (Groth16)         │
-│                                                  │
-│  Proves: sensor readings within envelope          │
-│  Without revealing: actual sensor values          │
-│  Bound to: on-chain Merkle root + envelope commit │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│           ZK SENSOR SAFETY CIRCUIT (Groth16)              │
+│                                                           │
+│  Proves: sensor readings within envelope                  │
+│  Without revealing: actual sensor values                  │
+│  Bound to: on-chain Merkle root + envelope commitment     │
+└─────────────────────────────────────────────────────────┘
 ```
+
+- **Layer 1 (on-chain contracts):** Governance sets the safety envelope. The circuit breaker can trip and lock the robot. The Merkle verifier anchors batch roots.
+- **Layer 2 (plugin-ros2):** The robot's plugin queries on-chain state before acting. If the breaker is tripped, it can't emit intents. If the envelope version doesn't match, attestation fails.
+- **Layer 3 (ZK proof):** The robot generates a zero-knowledge proof that its sensor readings were within the envelope. The proof references the on-chain Merkle root and envelope commitment as public inputs.
+
+The robot's reflexes run at physics speed. The trust stack runs at blockchain speed. The ZK proof runs once per batch. None of them slow down the robot.
 
 ---
 
@@ -121,13 +184,13 @@ The sensor safety circuit fits into the reflex-tier trust stack:
 
 All 7 tests pass:
 
-- **`test_circuit_satisfiable`**: Valid in-envelope readings → proof verifies ✓
-- **`test_circuit_violation_fails`**: Speed exceeds max_speed → proof fails ✓
-- **`test_circuit_wrong_envelope_fails`**: Wrong envelope commitment → proof fails ✓
-- **`test_mimc_hash_deterministic`**: Hash consistency ✓
-- **`test_envelope_commitment`**: Commitment binding ✓
-- **`test_sensor_leaf`**: Leaf computation ✓
-- **`test_merkle_tree_small`**: Tree construction ✓
+- **Valid proof verifies** — in-envelope readings produce a proof that passes verification ✓
+- **Violated envelope fails** — speed exceeds max_speed → proof generation fails (constraint system rejects the witness) ✓
+- **Wrong envelope fails** — proof with mismatched envelope commitment fails to verify ✓
+- **MiMC hash determinism** — same inputs always produce same hash ✓
+- **Envelope commitment** — different params produce different commitments ✓
+- **Sensor leaf computation** — each unique set of readings produces a unique leaf ✓
+- **Merkle tree construction** — paths and authentication bits are correctly generated ✓
 
 ---
 
@@ -136,9 +199,9 @@ All 7 tests pass:
 ### Selective Disclosure
 
 A robot can now prove:
-- "My speed was within the governance-approved limit at cycle 42"
-- "My collision distance was above the minimum at every cycle in batch 17"
-- "All sensor readings in this batch satisfied the safety envelope"
+- *"My speed was within the governance-approved limit at cycle 42"*
+- *"My collision distance was above the minimum at every cycle in batch 17"*
+- *"All sensor readings in this batch satisfied the safety envelope"*
 
 ...without revealing:
 - Exact speed at any cycle
@@ -146,44 +209,45 @@ A robot can now prove:
 - Force/torque profiles (which reveal control algorithms)
 - Tilt patterns (which reveal terrain and route)
 
-### Composable Trust
-
-The circuit uses the same MiMC hash and Merkle tree structure as:
-- The on-chain `MerkleVerifier` contract (SHA-256 for on-chain verification, MiMC for ZK)
-- The `moultbook-membership` circuit (for agent identity proofs)
-
-This enables future composition: a single proof that "registered agent X's robot Y was within safety envelope Z at cycle N" — all without revealing X, Y's sensor data, or Z's parameters.
-
 ### On-Chain Verification Cost
 
-Groth16 verification on-chain costs ~370K gas today (pure Wasm). With the BN254 precompile patches we've built for wasmvm v3.0.4, this drops to ~203K gas — a 1.82× reduction. The proof is ~128 bytes (3 G1 elements + 3 Fq scalars).
+Groth16 verification on-chain costs ~370K gas today (pure Wasm). With the BN254 precompile patches we've built for wasmvm v3.0.4, this drops to ~203K gas — a **1.82× reduction**. The proof itself is ~128 bytes: three G1 elements and three Fq scalars. That's smaller than a single Ethereum transaction's calldata for a simple transfer.
+
+---
+
+## The Bigger Picture
+
+The crypto industry has spent years perfecting zero-knowledge proofs for financial privacy. Zcash, Aztec, Tornado Cash, Semaphore, zk-STARK rollups — the technology has matured dramatically. But the use cases have remained remarkably narrow: hide a balance, hide a transfer, hide a trade.
+
+Meanwhile, the physical world is filling up with autonomous systems that generate sensitive data. Robots have sensors. Self-driving cars have lidar. Drones have cameras. Industrial systems have telemetry. All of this data proves something — that the system was safe, that it stayed in its lane, that it didn't exceed its operational limits. But the data itself is proprietary, competitive, or privacy-sensitive.
+
+**Zero-knowledge proofs are the bridge between public accountability and private operations.**
+
+You don't need to hide a money transfer. You need to hide a force profile. You don't need to shield a balance. You need to shield a location. The same cryptography that lets you prove you own coins without showing your wallet lets you prove your robot was safe without showing its sensors.
+
+This is what we're building. Two ZK stacks down, more to come.
 
 ---
 
 ## Code
 
-- **Circuit**: `circuits/sensor-safety/src/lib.rs` — `SensorSafetyCircuit`, MiMC hash, Merkle tree builder, range constraints
-- **CLI tool**: `circuits/sensor-safety/examples/gen-safety-proof.rs` — setup/prove/verify
-- **On-chain contracts**: `contracts/safety-envelope/`, `contracts/circuit-breaker/`, `contracts/merkle-verifier/`
-- **Plugin wiring**: `plugins/plugin-ros2/src/onchain.rs` — queries on-chain contracts
+- **Sensor safety circuit:** `circuits/sensor-safety/src/lib.rs` — `SensorSafetyCircuit`, MiMC hash, Merkle tree builder, range constraints
+- **Moultbook membership circuit:** `circuits/moultbook-membership/src/lib.rs` — anonymous agent identity proofs
+- **CLI tool:** `circuits/sensor-safety/examples/gen-safety-proof.rs` — setup / prove / verify
+- **On-chain contracts:** `contracts/safety-envelope/`, `contracts/circuit-breaker/`, `contracts/merkle-verifier/`
+- **Plugin wiring:** `plugins/plugin-ros2/src/onchain.rs` — queries on-chain contracts with in-memory fallback
 
 ---
 
 ## Roadmap
 
 1. **On-chain Groth16 verifier contract** — verify ZK proofs on-chain (currently off-chain only)
-2. **Poseidon hash** — replace MiMC with Poseidon for standard compliance (~30% fewer constraints)
+2. **Poseidon hash upgrade** — replace MiMC with Poseidon for standard compliance (~30% fewer constraints)
 3. **Proof aggregation** — combine multiple cycle proofs into a single batch proof
 4. **Recursive proofs** — prove "all N cycles in this batch are within envelope" with a single proof
 5. **TEE-attested proving** — generate proofs inside a TEE for witness integrity
-6. **BN254 precompile** — 1.82× gas reduction for on-chain verification (patches ready)
+6. **BN254 precompile** — 1.82× gas reduction for on-chain verification (patches ready, advocacy ongoing)
 
 ---
 
-## Conclusion
-
-Zero-knowledge proofs solve a fundamental tension in robot safety auditing: **you need to prove compliance, but the data that proves compliance is sensitive**. The sensor safety circuit bridges this gap — a robot can cryptographically prove it stayed within its governance-approved safety envelope without revealing a single sensor reading.
-
-This is Track B of the JunoClaw reflex-tier trust stack. Track A (on-chain contracts + plugin wiring) is complete. Together, they form a two-layer system: on-chain contracts for governance and breaker state, ZK proofs for privacy-preserving safety compliance.
-
-The robot's reflexes run at physics speed. The trust stack runs at blockchain speed. The ZK proof runs once per batch. None of them slow down the robot.
+*The robot's reflexes run at physics speed. The trust stack runs at blockchain speed. The ZK proof runs once per batch. None of them slow down the robot.*
