@@ -130,6 +130,27 @@ ZK circuit for the Commonware consensus layer — proves validator participation
 - [ ] Integration with Commonware simplex engine
 - [ ] Note: BLS aggregate signatures already provide partial anonymity; ZK goes further
 
+### Track L: Full Sensor Type Coverage (Scalar + Visual + Lidar)
+**Priority:** Medium
+**Effort:** 3-5 days
+
+Real robots produce far more than scalar sensor readings. The current `SensorSafetyCircuit` handles the scalar subset (speed, force, distance, tilt, acceleration). This track extends the architecture to cover **all** sensor types a real robot generates:
+
+- **Scalar sensors** (speed, force, IMU, temperature, battery, motor torque) — ZK proofs via `SensorSafetyCircuit` (already built). Low-dimensional, fits as field elements in Groth16.
+- **High-dimensional sensors** (camera frames, lidar point clouds, depth maps, audio) — Merkle anchoring. The `ReflexBatchAttestation` already hashes every reflex cycle including visual data; the Merkle root anchors integrity on-chain. The rosbag stores the full recording for post-hoc audit.
+- **Visual inference results** (object detection, pedestrian proximity, obstacle classification) — TEE-attested inference. Run perception model inside SGX/SEV enclave, attest to the result, include attestation hash as a Merkle leaf alongside scalar readings.
+- **Derived data** (SLAM maps, path plans, trajectory predictions) — hash commitment as Merkle leaves. The ZK circuit can reference them via Merkle membership without revealing the full map.
+
+Architecture principle: **ZK proofs handle the scalar safety envelope (privacy-preserving). Merkle anchoring handles high-dimensional data integrity. TEE attestation handles visual inference results. The three-tier architecture accommodates all sensor types — the current circuit is the scalar subset, and the rosbag/Merkle layer covers the rest.**
+
+Tasks:
+- [ ] Extend `sensor_leaf` to hash a commitment to all sensor data in the cycle: `H(scalar_readings || H(camera_frame) || H(lidar_scan) || detection_results)`
+- [ ] Add `VisualAttestationLeaf` type: `H(detection_result || model_hash || frame_hash)` as a Merkle leaf
+- [ ] TEE-attested inference path: perception model runs in enclave, signs detection result, attestation hash included in Merkle tree
+- [ ] ZKML research spike: evaluate proving neural network inference on an image without revealing the image (currently too expensive for real-time, but track progress)
+- [ ] Rosbag integration: `rosbag_ref` in `ReflexBatchAttestation` already points to full recording; add verification tooling to check rosbag hashes against on-chain Merkle root
+- [ ] Tests: multi-sensor-type Merkle tree (scalars + visual commitments + detection results), ZK proof over scalar subset, Merkle proof over visual leaf
+
 ---
 
 ## Dependency Graph
@@ -147,6 +168,8 @@ Track B (done) ──┤
                  │                                  │
                  ├── Track J (intent ZK) ───────────┘  (composes with B + moultbook)
                  │
+                 ├── Track L (full sensor types) ─── Track G (TEE for visual inference)
+                 │
                  └── Track K (consensus ZK) — research, independent
 
 Track H (advocacy) — independent, ongoing
@@ -162,7 +185,8 @@ Track I (HTTP bridge) — independent, lower priority
 3. **Track E** (Poseidon) — optimization, reduces proof size and gas
 4. **Track H** (advocacy) — post benchmarks, build community support
 5. **Track F** (recursive) — scale to full-batch proofs
-6. **Track G** (TEE proving) — witness integrity layer
+6. **Track G** (TEE proving) — witness integrity layer + visual inference attestation
 7. **Track J** (intent ZK) — privacy at the intent tier, composes reflex + identity proofs
-8. **Track I** (HTTP bridge) — production deployment readiness
-9. **Track K** (consensus ZK) — research-phase, depends on anonymous BFT literature maturing
+8. **Track L** (full sensor types) — extend Merkle leaves to cover camera, lidar, detection results
+9. **Track I** (HTTP bridge) — production deployment readiness
+10. **Track K** (consensus ZK) — research-phase, depends on anonymous BFT literature maturing
