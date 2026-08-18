@@ -644,3 +644,185 @@ fn test_mismatched_vk_rejects_valid_proof() {
         err_str
     );
 }
+
+// ── Track C: SensorSafetyCircuit proof verified on-chain ──
+
+/// Generate a real SensorSafetyCircuit Groth16 proof and verify it
+/// through the zk-verifier contract. This closes the loop: the circuit
+/// generates the proof off-chain, and the contract verifies it on-chain.
+#[test]
+fn test_sensor_safety_proof_on_chain() {
+    use ark_bn254::{Bn254, Fr};
+    use ark_groth16::Groth16;
+    use ark_serialize::CanonicalSerialize;
+    use ark_snark::SNARK;
+    use ark_std::rand::{SeedableRng, rngs::StdRng};
+    use sensor_safety_circuit::{
+        SensorSafetyCircuit, envelope_commitment, sensor_leaf, build_merkle_tree,
+    };
+
+    let rng = &mut StdRng::seed_from_u64(42);
+    let tree_height = 3;
+
+    let max_speed = Fr::from(5000u64);
+    let max_force = Fr::from(50000u64);
+    let min_dist = Fr::from(500u64);
+    let max_tilt = Fr::from(30000u64);
+    let max_accel = Fr::from(3000u64);
+
+    let speed = Fr::from(4000u64);
+    let force = Fr::from(30000u64);
+    let distance = Fr::from(600u64);
+    let tilt = Fr::from(20000u64);
+    let accel = Fr::from(2000u64);
+
+    let leaves: Vec<Fr> = vec![
+        sensor_leaf(speed, force, distance, tilt, accel),
+        sensor_leaf(Fr::from(3500u64), Fr::from(25000u64), Fr::from(700u64), Fr::from(15000u64), Fr::from(1800u64)),
+        sensor_leaf(Fr::from(4500u64), Fr::from(40000u64), Fr::from(550u64), Fr::from(25000u64), Fr::from(2800u64)),
+        sensor_leaf(Fr::from(3000u64), Fr::from(20000u64), Fr::from(800u64), Fr::from(10000u64), Fr::from(1500u64)),
+    ];
+    let (merkle_root, paths, bits) = build_merkle_tree(&leaves, tree_height);
+    let env_commit = envelope_commitment(max_speed, max_force, min_dist, max_tilt, max_accel);
+    let cycle_index = Fr::from(0u64);
+
+    let empty_circuit = SensorSafetyCircuit::empty(tree_height);
+    let (pk, vk) = Groth16::<Bn254>::circuit_specific_setup(empty_circuit, rng).unwrap();
+
+    let circuit = SensorSafetyCircuit::new(
+        env_commit, merkle_root, cycle_index,
+        speed, force, distance, tilt, accel,
+        max_speed, max_force, min_dist, max_tilt, max_accel,
+        paths[0].clone(), bits[0].clone(), tree_height,
+    );
+    let proof = Groth16::<Bn254>::prove(&pk, circuit, rng).unwrap();
+
+    let mut vk_bytes: Vec<u8> = Vec::new();
+    CanonicalSerialize::serialize_compressed(&vk, &mut vk_bytes).unwrap();
+    let vk_b64 = base64_encode(&vk_bytes);
+
+    let mut proof_bytes: Vec<u8> = Vec::new();
+    CanonicalSerialize::serialize_compressed(&proof, &mut proof_bytes).unwrap();
+    let proof_b64 = base64_encode(&proof_bytes);
+
+    let mut input_bytes: Vec<u8> = Vec::new();
+    for pi in &[env_commit, merkle_root, cycle_index] {
+        CanonicalSerialize::serialize_compressed(pi, &mut input_bytes).unwrap();
+    }
+    let inputs_b64 = base64_encode(&input_bytes);
+
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let contract = store_and_instantiate(&mut app, &admin);
+
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::StoreVk { vk_base64: vk_b64 },
+        &[],
+    ).unwrap();
+
+    // Verify proof — should succeed (no error)
+    let _resp = app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::VerifyProof {
+            proof_base64: proof_b64,
+            public_inputs_base64: inputs_b64,
+        },
+        &[],
+    ).unwrap();
+
+    // Check last verification query
+    let last: crate::msg::LastVerifyResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::LastVerify {})
+        .unwrap();
+    assert!(last.verified);
+}
+
+/// Verify that a SensorSafetyCircuit proof with wrong public inputs
+/// (tampered merkle root) is rejected by the on-chain verifier.
+#[test]
+fn test_sensor_safety_proof_wrong_inputs_rejected() {
+    use ark_bn254::{Bn254, Fr};
+    use ark_groth16::Groth16;
+    use ark_serialize::CanonicalSerialize;
+    use ark_snark::SNARK;
+    use ark_std::rand::{SeedableRng, rngs::StdRng};
+    use sensor_safety_circuit::{
+        SensorSafetyCircuit, envelope_commitment, sensor_leaf, build_merkle_tree,
+    };
+
+    let rng = &mut StdRng::seed_from_u64(42);
+    let tree_height = 3;
+
+    let max_speed = Fr::from(5000u64);
+    let max_force = Fr::from(50000u64);
+    let min_dist = Fr::from(500u64);
+    let max_tilt = Fr::from(30000u64);
+    let max_accel = Fr::from(3000u64);
+
+    let speed = Fr::from(4000u64);
+    let force = Fr::from(30000u64);
+    let distance = Fr::from(600u64);
+    let tilt = Fr::from(20000u64);
+    let accel = Fr::from(2000u64);
+
+    let leaves: Vec<Fr> = vec![
+        sensor_leaf(speed, force, distance, tilt, accel),
+        sensor_leaf(Fr::from(3500u64), Fr::from(25000u64), Fr::from(700u64), Fr::from(15000u64), Fr::from(1800u64)),
+        sensor_leaf(Fr::from(4500u64), Fr::from(40000u64), Fr::from(550u64), Fr::from(25000u64), Fr::from(2800u64)),
+        sensor_leaf(Fr::from(3000u64), Fr::from(20000u64), Fr::from(800u64), Fr::from(10000u64), Fr::from(1500u64)),
+    ];
+    let (merkle_root, paths, bits) = build_merkle_tree(&leaves, tree_height);
+    let env_commit = envelope_commitment(max_speed, max_force, min_dist, max_tilt, max_accel);
+    let cycle_index = Fr::from(0u64);
+
+    let empty_circuit = SensorSafetyCircuit::empty(tree_height);
+    let (pk, vk) = Groth16::<Bn254>::circuit_specific_setup(empty_circuit, rng).unwrap();
+
+    let circuit = SensorSafetyCircuit::new(
+        env_commit, merkle_root, cycle_index,
+        speed, force, distance, tilt, accel,
+        max_speed, max_force, min_dist, max_tilt, max_accel,
+        paths[0].clone(), bits[0].clone(), tree_height,
+    );
+    let proof = Groth16::<Bn254>::prove(&pk, circuit, rng).unwrap();
+
+    let mut vk_bytes: Vec<u8> = Vec::new();
+    CanonicalSerialize::serialize_compressed(&vk, &mut vk_bytes).unwrap();
+    let vk_b64 = base64_encode(&vk_bytes);
+
+    let mut proof_bytes: Vec<u8> = Vec::new();
+    CanonicalSerialize::serialize_compressed(&proof, &mut proof_bytes).unwrap();
+    let proof_b64 = base64_encode(&proof_bytes);
+
+    // Wrong public inputs: swap merkle_root with a fake value
+    let fake_root = Fr::from(999999u64);
+    let mut wrong_input_bytes: Vec<u8> = Vec::new();
+    for pi in &[env_commit, fake_root, cycle_index] {
+        CanonicalSerialize::serialize_compressed(pi, &mut wrong_input_bytes).unwrap();
+    }
+    let wrong_inputs_b64 = base64_encode(&wrong_input_bytes);
+
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let contract = setup_contract_with_vk(&mut app, &admin, &vk_b64);
+
+    let err = app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::VerifyProof {
+            proof_base64: proof_b64,
+            public_inputs_base64: wrong_inputs_b64,
+        },
+        &[],
+    ).unwrap_err();
+    let err_str = format!("{:?}", err);
+    assert!(
+        err_str.contains("ProofInvalid") || err_str.contains("proof verification failed"),
+        "expected ProofInvalid for wrong merkle root, got: {}",
+        err_str
+    );
+}

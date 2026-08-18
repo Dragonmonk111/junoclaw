@@ -23,6 +23,7 @@ members = [
     "safety-envelope",
     "circuit-breaker",
     "merkle-verifier",
+    "integration-tests",
 ]
 resolver = "2"
 

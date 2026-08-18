@@ -133,7 +133,13 @@ fn execute_verify_proof(
     Ok(Response::new()
         .add_attribute("action", "verify_proof")
         .add_attribute("result", "valid")
-        .add_attribute("block_height", env.block.height.to_string()))
+        .add_attribute("block_height", env.block.height.to_string())
+        .add_event(
+            cosmwasm_std::Event::new("zk_proof_verified")
+                .add_attribute("result", "valid")
+                .add_attribute("block_height", env.block.height.to_string())
+                .add_attribute("public_inputs_count", public_inputs.len().to_string()),
+        ))
 }
 
 #[entry_point]

@@ -36,6 +36,8 @@ ark-relations = { workspace = true }
 ark-r1cs-std = { workspace = true }
 ark-ff = { workspace = true }
 ark-snark = { workspace = true }
+ark-crypto-primitives = { version = "0.5", features = ["crh", "merkle_tree", "r1cs"] }
+sensor-safety-circuit = { path = "../../circuits/sensor-safety" }
 
 [features]
 default = []
