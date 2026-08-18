@@ -106,6 +106,7 @@ dependencies = [
  "ark-crypto-primitives-macros",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
+ "ark-r1cs-std",
  "ark-relations",
  "ark-serialize 0.5.0",
  "ark-snark",
@@ -114,9 +115,11 @@ dependencies = [
  "derivative",
  "digest",
  "fnv",
+ "hashbrown 0.14.5",
  "merlin",
  "rayon",
  "sha2",
+ "tracing",
 ]
 
 [[package]]
@@ -1125,6 +1128,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "integration-tests"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-crypto-primitives",
+ "ark-ff 0.5.0",
+ "ark-groth16",
+ "ark-r1cs-std",
+ "ark-relations",
+ "ark-serialize 0.5.0",
+ "ark-snark",
+ "ark-std 0.5.0",
+ "circuit-breaker",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "hex",
+ "merkle-verifier",
+ "safety-envelope",
+ "sensor-safety-circuit",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1486,6 +1515,7 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
+ "libc",
  "rand_chacha",
  "rand_core",
 ]
@@ -1627,6 +1657,25 @@ name = "semver"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
+
+[[package]]
+name = "sensor-safety-circuit"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-crypto-primitives",
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-groth16",
+ "ark-r1cs-std",
+ "ark-relations",
+ "ark-serialize 0.5.0",
+ "ark-snark",
+ "ark-std 0.5.0",
+ "hex",
+ "rand",
+ "sha2",
+]
 
 [[package]]
 name = "serde"
@@ -1785,6 +1834,21 @@ dependencies = [
  "schemars",
  "serde",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "tee-attestation-verifier"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw2",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1965,6 +2029,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ark-bn254",
+ "ark-crypto-primitives",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-groth16",
@@ -1980,6 +2045,7 @@ dependencies = [
  "cw-storage-plus",
  "cw2",
  "schemars",
+ "sensor-safety-circuit",
  "serde",
  "thiserror 2.0.18",
 ]
