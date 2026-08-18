@@ -27,21 +27,29 @@ brainmaxx j-lens <run_id> --hidden-states hidden_states.json --probe-bank probe_
 cd tools/brainmaxx/j-lens
 pip install -r requirements.txt
 
-# 1. Build the probe bank once (diff-of-means over contrastive examples)
+# 1. (Optional) Sweep layers to find the best probe layer
+python build_probe_bank.py \
+  --model Qwen/Qwen2.5-0.5B-Instruct \
+  --examples examples/concepts.json \
+  --layer 0 \
+  --out /dev/null \
+  --sweep-layers 5,10,12,15,20
+
+# 2. Build the probe bank at the best layer (diff-of-means over contrastive examples)
 python build_probe_bank.py \
   --model Qwen/Qwen2.5-0.5B-Instruct \
   --examples examples/concepts.json \
   --layer 12 \
   --out probe_bank.json
 
-# 2. Extract hidden states for a specific draft/text you want to audit
+# 3. Extract hidden states for a specific draft/text you want to audit
 python extract_hidden_states.py \
   --model Qwen/Qwen2.5-0.5B-Instruct \
   --text "$(cat /path/to/draft.md)" \
   --layer 12 \
   --out hidden_states.json
 
-# 3. Attach the snapshot to a Brainmaxx trace
+# 4. Attach the snapshot to a Brainmaxx trace
 cd ../..
 node tools/brainmaxx/src/cli.js j-lens <run_id> \
   --hidden-states tools/brainmaxx/j-lens/hidden_states.json \
@@ -53,6 +61,25 @@ node tools/brainmaxx/src/cli.js j-lens <run_id> \
 in PLAN_J_REEF_AND_J_LENS.md §5 Phase 3. Use this to prove the pipeline
 end-to-end and reproduce a baseline detection rate before touching anything
 bigger.
+
+## Free Colab notebook — no local GPU needed
+
+`jlens_colab_pipeline.ipynb` runs the full pipeline on Google Colab's free
+T4 GPU (16GB VRAM). Supports models up to 7B in fp16.
+
+Features:
+- Build probe bank with 6 concepts (reward_hacking, ignore_instructions,
+  deception, self_preservation, sycophancy, power_seeking)
+- Layer sweep to find optimal probe layer
+- Extract hidden states from any draft text
+- Score detections with cosine similarity
+- Batch audit with expected clean/detect labels to measure accuracy
+- Visualization of per-token cosine scores per concept
+- Downloads output files (probe_bank.json, hidden_states.json,
+  j_space_snapshot.json) for use with Brainmaxx CLI
+
+Open in Colab: upload `jlens_colab_pipeline.ipynb` to Google Drive or
+github, then open with Colab. Select Runtime → Change runtime type → T4 GPU.
 
 ## Kimi K3 integration path
 

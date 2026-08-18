@@ -69,13 +69,16 @@ def mean_hidden_state(model, tokenizer, texts, layer, device):
     return np.mean(np.stack(vectors, axis=0), axis=0)
 
 
-def build_bank(model_id, examples_path, layer, device):
+DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
+
+
+def build_bank(model_id, examples_path, layer, device, dtype=torch.float32):
     with open(examples_path, "r", encoding="utf-8") as f:
         examples = json.load(f)
 
-    print(f"[build_probe_bank] loading {model_id} ...", file=sys.stderr)
+    print(f"[build_probe_bank] loading {model_id} (dtype={dtype}) ...", file=sys.stderr)
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype)
     model.to(device)
     model.eval()
 
@@ -104,6 +107,40 @@ def build_bank(model_id, examples_path, layer, device):
     }
 
 
+def sweep_layers(model_id, examples_path, layers, device, dtype=torch.float32):
+    """Sweep multiple layers and report separation quality for each.
+    Returns list of (layer, avg_separation, per_concept_norms)."""
+    with open(examples_path, "r", encoding="utf-8") as f:
+        examples = json.load(f)
+
+    print(f"[sweep] loading {model_id} (dtype={dtype}) ...", file=sys.stderr)
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype)
+    model.to(device)
+    model.eval()
+
+    results = []
+    for layer in layers:
+        print(f"[sweep] layer {layer} ...", file=sys.stderr)
+        per_concept = {}
+        sep_scores = []
+        for name, spec in examples.items():
+            mu_pos = mean_hidden_state(model, tokenizer, spec["positive"], layer, device)
+            mu_neg = mean_hidden_state(model, tokenizer, spec["negative"], layer, device)
+            sep = np.dot(mu_pos, mu_neg) / (np.linalg.norm(mu_pos) * np.linalg.norm(mu_neg))
+            direction = mu_pos - mu_neg
+            dnorm = np.linalg.norm(direction)
+            per_concept[name] = {"separation": float(sep), "direction_norm": float(dnorm)}
+            sep_scores.append(sep)
+        avg_sep = float(np.mean(sep_scores))
+        results.append((layer, avg_sep, per_concept))
+        print(f"[sweep] layer {layer}: avg_separation={avg_sep:.4f} (lower=better)", file=sys.stderr)
+
+    best = min(results, key=lambda x: x[1])
+    print(f"[sweep] best layer: {best[0]} (avg_separation={best[1]:.4f})", file=sys.stderr)
+    return results
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True, help="HF model id or local path")
@@ -111,9 +148,28 @@ def main():
     ap.add_argument("--layer", type=int, required=True, help="hidden_states index to probe")
     ap.add_argument("--out", required=True, help="output probe_bank.json path")
     ap.add_argument("--device", default="cpu", help="cpu | cuda | mps")
+    ap.add_argument("--dtype", default="float32", choices=list(DTYPES.keys()),
+                    help="model weight dtype; use bfloat16/float16 to roughly halve RAM/VRAM for larger models")
+    ap.add_argument("--sweep-layers", default=None,
+                    help="comma-separated layer indices to sweep (e.g. '5,10,15,20'). "
+                         "Reports separation quality per layer; does not write output.")
     args = ap.parse_args()
+    dtype = DTYPES[args.dtype]
 
-    bank = build_bank(args.model, args.examples, args.layer, args.device)
+    if args.sweep_layers:
+        layers = [int(x) for x in args.sweep_layers.split(",")]
+        results = sweep_layers(args.model, args.examples, layers, args.device, dtype)
+        print("\nLayer sweep results:")
+        print(f"{'layer':>6s}  {'avg_sep':>8s}  per-concept")
+        for layer, avg_sep, per_concept in results:
+            concepts_str = "  ".join(f"{n}={c['separation']:.3f}" for n, c in sorted(per_concept.items()))
+            print(f"{layer:6d}  {avg_sep:8.4f}  {concepts_str}")
+        best = min(results, key=lambda x: x[1])
+        print(f"\nBest layer: {best[0]} (avg_separation={best[1]:.4f})")
+        print(f"Re-run with --layer {best[0]} to build the probe bank at this layer.")
+        return
+
+    bank = build_bank(args.model, args.examples, args.layer, args.device, dtype)
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(bank, f, indent=2)
     print(f"[build_probe_bank] wrote {args.out} — {len(bank['concepts'])} concepts", file=sys.stderr)
