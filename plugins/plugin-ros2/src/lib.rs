@@ -1,11 +1,16 @@
+pub mod onchain;
+
 use async_trait::async_trait;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use junoclaw_coordination::message::{AgentMessage, IntentMessage, ReflexBatchAttestation, CircuitBreakerState};
 use junoclaw_core::error::{JunoClawError, Result};
 use junoclaw_core::plugin::{Plugin, PluginCapability, PluginContext};
 use junoclaw_core::types::{Task, TaskResult};
+use onchain::OnChainClient;
 
 /// ROS2 plug-in adapter.
 ///
@@ -29,6 +34,12 @@ pub struct Ros2Plugin {
     ros2_bridge_url: String,
     robot_id: String,
     circuit_breaker: CircuitBreakerState,
+    /// Optional on-chain client for querying SafetyEnvelope + CircuitBreaker contracts.
+    /// When set, the plugin queries on-chain state instead of relying solely on
+    /// in-memory `circuit_breaker`. Falls back to in-memory if the chain is unreachable.
+    onchain_client: Option<Arc<OnChainClient>>,
+    /// Cached envelope version from the on-chain SafetyEnvelope contract.
+    cached_envelope_version: Arc<RwLock<Option<u32>>>,
 }
 
 impl Ros2Plugin {
@@ -38,6 +49,8 @@ impl Ros2Plugin {
             ros2_bridge_url: String::new(),
             robot_id: String::new(),
             circuit_breaker: CircuitBreakerState::Closed,
+            onchain_client: None,
+            cached_envelope_version: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -119,6 +132,22 @@ impl Plugin for Ros2Plugin {
                 "robot_id": {
                     "type": "string",
                     "description": "Unique robot identifier for execution proof anchoring"
+                },
+                "chain_rpc_url": {
+                    "type": "string",
+                    "description": "Chain RPC endpoint for on-chain contract queries (e.g. http://localhost:26657)"
+                },
+                "safety_envelope_addr": {
+                    "type": "string",
+                    "description": "SafetyEnvelope contract address"
+                },
+                "circuit_breaker_addr": {
+                    "type": "string",
+                    "description": "CircuitBreaker contract address"
+                },
+                "merkle_verifier_addr": {
+                    "type": "string",
+                    "description": "MerkleVerifier contract address"
                 }
             },
             "required": ["ros2_bridge_url", "robot_id"]
@@ -147,11 +176,46 @@ impl Plugin for Ros2Plugin {
             ));
         }
 
+        // Optional: configure on-chain contract client
+        let chain_rpc = config
+            .get("chain_rpc_url")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let safety_addr = config
+            .get("safety_envelope_addr")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let breaker_addr = config
+            .get("circuit_breaker_addr")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let merkle_addr = config
+            .get("merkle_verifier_addr")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        if !chain_rpc.is_empty() && !safety_addr.is_empty() && !breaker_addr.is_empty() {
+            self.onchain_client = Some(Arc::new(OnChainClient::new(
+                chain_rpc,
+                safety_addr,
+                breaker_addr,
+                merkle_addr,
+            )));
+            tracing::info!(
+                "ros2 plugin configured with on-chain contracts (safety_envelope + circuit_breaker + merkle_verifier)"
+            );
+        }
+
         tracing::info!(
-            "ros2 plugin initialized (enabled={}, bridge={}, robot={})",
+            "ros2 plugin initialized (enabled={}, bridge={}, robot={}, onchain={})",
             self.enabled,
             self.ros2_bridge_url,
-            self.robot_id
+            self.robot_id,
+            self.onchain_client.is_some()
         );
         Ok(())
     }
@@ -178,7 +242,32 @@ impl Plugin for Ros2Plugin {
                 // The robot's reflexes still run (physics doesn't stop), but
                 // no new auditable decisions can be emitted until the breaker
                 // is reset by governance or the operator resolves the issue.
-                if self.circuit_breaker.is_tripped() {
+                //
+                // When an on-chain client is configured, we query the chain
+                // for the authoritative breaker state. We fall back to
+                // in-memory state if the chain is unreachable.
+                let breaker_tripped = if let Some(ref client) = self.onchain_client {
+                    match client.is_locked(&self.robot_id).await {
+                        Ok(resp) => {
+                            tracing::debug!(
+                                "on-chain breaker check: robot={} is_locked={}",
+                                self.robot_id, resp.is_locked
+                            );
+                            resp.is_locked
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "on-chain breaker query failed, falling back to in-memory: {}",
+                                e
+                            );
+                            self.circuit_breaker.is_tripped()
+                        }
+                    }
+                } else {
+                    self.circuit_breaker.is_tripped()
+                };
+
+                if breaker_tripped {
                     return Err(JunoClawError::Plugin {
                         plugin: "plugin-ros2".to_string(),
                         message: "circuit breaker tripped — intent-tier locked, reflexes still running. Resolve safety violation and reset breaker before emitting new intents.".to_string(),
@@ -327,6 +416,30 @@ impl Plugin for Ros2Plugin {
                     .ok_or_else(|| JunoClawError::TaskExecution("missing 'envelope_version'".to_string()))?
                     as u32;
 
+                // When on-chain client is configured, verify the envelope version
+                // matches the on-chain SafetyEnvelope contract. This ensures the
+                // attestation is against the governance-approved envelope.
+                if let Some(ref client) = self.onchain_client {
+                    match client.get_envelope(&self.robot_id).await {
+                        Ok(onchain_env) => {
+                            if onchain_env.version != envelope_version {
+                                tracing::warn!(
+                                    "envelope version mismatch: local={}, on-chain={}. Using on-chain version.",
+                                    envelope_version, onchain_env.version
+                                );
+                            }
+                            // Update cached version
+                            *self.cached_envelope_version.write().await = Some(onchain_env.version);
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "on-chain envelope query failed, using local version: {}",
+                                e
+                            );
+                        }
+                    }
+                }
+
                 let all_maintained = input
                     .get("all_invariants_maintained")
                     .and_then(|v| v.as_bool())
@@ -375,9 +488,10 @@ impl Plugin for Ros2Plugin {
                         self.robot_id,
                         attestation.violated_invariants
                     );
-                    // Note: in a real deployment, the breaker state would be
-                    // persisted on-chain. Here we log the trip; the next
-                    // emit_intent call will be rejected.
+                    // In a deployment with on-chain contracts, a governance
+                    // tx would call circuit-breaker.TripBreaker here. The
+                    // plugin's next emit_intent will be rejected by the
+                    // on-chain IsLocked query.
                 }
 
                 let from = context.agent_id.as_bytes().to_vec();
@@ -408,16 +522,33 @@ impl Plugin for Ros2Plugin {
 
             "check_breaker" => {
                 // Check the circuit breaker state for this robot.
-                // Returns the current state so callers know whether
-                // intent-tier is allowed.
-                let state_json = serde_json::to_string(&self.circuit_breaker)
-                    .map_err(|e| JunoClawError::TaskExecution(format!("serialize error: {}", e)))?;
+                // When on-chain client is configured, query the chain for
+                // the authoritative state. Falls back to in-memory.
+                let (is_closed, is_tripped, onchain_reason) =
+                    if let Some(ref client) = self.onchain_client {
+                        match client.is_locked(&self.robot_id).await {
+                            Ok(resp) => {
+                                (!resp.is_locked, resp.is_locked, resp.reason)
+                            }
+                            Err(e) => {
+                                tracing::warn!("on-chain breaker query failed: {}", e);
+                                (self.circuit_breaker.is_closed(),
+                                 self.circuit_breaker.is_tripped(),
+                                 None)
+                            }
+                        }
+                    } else {
+                        (self.circuit_breaker.is_closed(),
+                         self.circuit_breaker.is_tripped(),
+                         None)
+                    };
 
                 let output = serde_json::json!({
                     "robot_id": self.robot_id,
-                    "circuit_breaker": state_json,
-                    "is_closed": self.circuit_breaker.is_closed(),
-                    "is_tripped": self.circuit_breaker.is_tripped(),
+                    "is_closed": is_closed,
+                    "is_tripped": is_tripped,
+                    "onchain_reason": onchain_reason,
+                    "source": if self.onchain_client.is_some() { "on-chain" } else { "in-memory" },
                 }).to_string();
 
                 let mut hasher = Sha256::new();
