@@ -4,8 +4,33 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-08-17 UTC+1
-Status: All 3 contracts (marketplace/truth-market/emergency-compute-escrow) deployed to uni-7. Min-operator-count fix implemented in truth-market contract (InsufficientOperators check + min_operators config field, migrated on-chain code_id 93) and gate.rs (MultiOperatorGate returns Red when below min). 16/16 truth-market tests + 35/35 coordination tests pass. Next: resume ARTICLE_ROBOT_IS_THE_AGENT_2026_08_17.md.
+Last update: 2026-08-19 UTC+1
+Status: ZK trust stack complete — 5 Groth16 circuits on BN254 (sensor, batch, intent, consensus, aggregation). Plan D (ZK+TEE hybrid aggregation) implemented. Actual proving times: 187ms parallelized, 318ms sequential — 15× faster than 2.8s consensus block. 12/12 circuit tests pass. All pushed to main. Aegis pending tasks verified complete (done 2026-06-24). Next: no pending tasks.
+
+== 2026-08-19 ==
+
+- ZK TRUST STACK COMPLETE: Built ConsensusMembershipCircuit (Track K) + AggregationCircuit
+  (Plan D — novel ZK+TEE proof aggregation pattern).
+  * ConsensusMembershipCircuit: proves validator set membership via Merkle tree + vote binding
+    (H(block_hash, vote_decision, epoch) == vote_commitment). No BLS-in-R1CS. 6/6 tests pass.
+  * AggregationCircuit: proves cross-tier consistency (envelope + Merkle root match across
+    sensor and intent proofs) + knowledge of all 3 tier proof public inputs. TEE verifies
+    Groth16 pairings; ZK proves consistency. No recursion, no Grumpkin, no pairing in R1CS.
+    6/6 tests pass including full 3-tier integration test.
+  * ACTUAL PROVING TIMES (release build, this machine):
+    - SensorSafetyCircuit: 80ms prove, 3ms verify
+    - IntentConsistencyCircuit: 119ms prove, 5ms verify
+    - ConsensusMembershipCircuit: 51ms prove, 3ms verify
+    - AggregationCircuit: 68ms prove, 2ms verify
+    - Total sequential: 318ms. Parallelized: 187ms. 15× faster than one 2.8s consensus block.
+  * Plan A (Grumpkin BN254 cycle) kept as backup research plan for eliminating TEE trust.
+  * Schema summary: drafts/HACK_ZK_TRACKS_SUMMARY_2026_08_18.md
+  * Benchmark: circuits/proof-aggregation/examples/proving_times.rs
+  * All committed + pushed to main (0835c93, 27dc974).
+
+- AEGIS PENDING TASKS VERIFIED COMPLETE: Checked progress.txt lines 413-444 — all 5 tasks
+  were done in the 2026-06-24 session. C:\temp\aegis-push confirmed removed. No Aegis work
+  remains.
 
 == 2026-08-17 ==
 
