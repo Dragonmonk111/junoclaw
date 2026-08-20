@@ -8,8 +8,12 @@
 //! - `GET /health` — node health and uptime
 //! - `GET /finalized?after=N` — finalized blocks with height > N
 //! - `GET /batch/:height` — specific finalized batch by height
+//! - `GET /feepay/:contract` — FeePay pool balance, registered wallets, usage
+//! - `GET /feepay/:contract/history` — pool funding/withdrawal history
+//! - `GET /feepay/alerts` — low-balance alerts across all pools
 
 use crate::consensus::{ConsensusEngine, FinalizedBlock};
+use crate::feepay::{FeePayAlert, FeePayMonitor, FeePayPoolState, PoolHistoryEntry};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -31,6 +35,8 @@ struct ApiState {
     blocks: RwLock<BTreeMap<u64, StoredBlock>>,
     /// Engine reference (for receiving new blocks)
     engine: Arc<ConsensusEngine>,
+    /// FeePay pool monitor
+    feepay: Arc<FeePayMonitor>,
     /// Server start time
     start_time: Instant,
 }
@@ -145,6 +151,7 @@ pub async fn serve(engine: Arc<ConsensusEngine>, config: ApiConfig) -> anyhow::R
     let state = Arc::new(ApiState {
         blocks: RwLock::new(BTreeMap::new()),
         engine,
+        feepay: Arc::new(FeePayMonitor::new()),
         start_time: Instant::now(),
     });
 
@@ -179,6 +186,9 @@ pub async fn serve(engine: Arc<ConsensusEngine>, config: ApiConfig) -> anyhow::R
         .route("/health", get(health_handler))
         .route("/finalized", get(finalized_handler))
         .route("/batch/{height}", get(batch_handler))
+        .route("/feepay/{contract}", get(feepay_pool_handler))
+        .route("/feepay/{contract}/history", get(feepay_history_handler))
+        .route("/feepay/alerts", get(feepay_alerts_handler))
         .with_state(state);
 
     let addr: SocketAddr = config
@@ -237,6 +247,34 @@ async fn batch_handler(
             format!("batch at height {} not found", height),
         )),
     }
+}
+
+async fn feepay_pool_handler(
+    State(state): State<Arc<ApiState>>,
+    Path(contract): Path<String>,
+) -> Result<Json<FeePayPoolState>, (StatusCode, String)> {
+    match state.feepay.get_pool(&contract).await {
+        Some(pool) => Ok(Json(pool)),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            format!("no FeePay pool tracked for contract {}", contract),
+        )),
+    }
+}
+
+async fn feepay_history_handler(
+    State(state): State<Arc<ApiState>>,
+    Path(contract): Path<String>,
+) -> Json<Vec<PoolHistoryEntry>> {
+    let history = state.feepay.history_for(&contract).await;
+    Json(history)
+}
+
+async fn feepay_alerts_handler(
+    State(state): State<Arc<ApiState>>,
+) -> Json<Vec<FeePayAlert>> {
+    let alerts = state.feepay.alerts().await;
+    Json(alerts)
 }
 
 #[cfg(test)]

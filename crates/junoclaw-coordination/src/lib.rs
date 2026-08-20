@@ -15,6 +15,7 @@ pub mod consensus;
 pub mod context;
 pub mod api;
 pub mod fleet;
+pub mod feepay;
 
 #[cfg(feature = "p2p")]
 pub mod network;
@@ -33,6 +34,7 @@ pub use consensus::{ConsensusEngine, ConsensusConfig, FinalizedBlock};
 pub use context::{ContextFetcher, ContextSummary, MoultbookContextFetcher, MockContextFetcher};
 pub use api::{ApiConfig, serve as serve_api};
 pub use fleet::{FleetCoordinator, FleetConfig, FleetStatus, RobotState, RobotStatusEntry};
+pub use feepay::{FeePayMonitor, FeePayPoolState, FeePayAlert, AlertLevel, RegisteredWallet, PoolHistoryEntry};
 
 #[cfg(feature = "p2p")]
 pub use network::{CoordinationConfig, CoordinationNetwork};
