@@ -11,7 +11,8 @@
 //! In mock mode (for testing), a deterministic heuristic is used instead
 //! of HTTP calls — content containing deceptive keywords triggers Red.
 
-use crate::message::{Batch, EvalAttestation, GateResult, GateVerdict};
+use crate::message::{Batch, EvalAttestation, GateResult, GateVerdict, IntentMessage, ProofContext};
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::{info, warn};
@@ -72,16 +73,343 @@ pub struct CsiAuditResponse {
     pub gate: String,
 }
 
+/// Trait for verifying ZK proofs attached to messages.
+///
+/// In production, this calls the on-chain zk-verifier contract or a local
+/// verifier. In mock mode, it returns Ok(verified) for any non-empty proof.
+#[async_trait]
+pub trait ProofVerifier: Send + Sync {
+    /// Verify a proof reference. Returns ProofContext with verification status.
+    async fn verify(&self, proof_ref: &str, robot_id: &str) -> ProofContext;
+}
+
+/// Mock proof verifier — returns verified=true for non-empty proof refs,
+/// false for empty ones. Useful for testing the proof-aware gate loop.
+pub struct MockProofVerifier {
+    /// If true, all proofs are treated as valid (even empty refs).
+    pub always_valid: bool,
+}
+
+impl Default for MockProofVerifier {
+    fn default() -> Self {
+        Self {
+            always_valid: false,
+        }
+    }
+}
+
+/// Configuration for the on-chain proof verifier.
+#[derive(Clone, Debug)]
+pub struct OnChainProofVerifierConfig {
+    /// Juno RPC endpoint (e.g. "http://localhost:26657")
+    pub chain_rpc: String,
+    /// zk-verifier contract address
+    pub verifier_addr: String,
+    /// HTTP timeout for chain queries
+    pub timeout: Duration,
+}
+
+impl Default for OnChainProofVerifierConfig {
+    fn default() -> Self {
+        Self {
+            chain_rpc: "http://localhost:26657".to_string(),
+            verifier_addr: String::new(),
+            timeout: Duration::from_secs(10),
+        }
+    }
+}
+
+/// Production proof verifier — queries the Juno chain to verify that a
+/// ZK proof was successfully verified on-chain by the zk-verifier contract.
+///
+/// The `proof_ref` in an IntentMessage is the transaction hash of the
+/// `VerifyProof` execution. This verifier:
+/// 1. Queries the chain for the transaction by hash (tx_search)
+/// 2. Checks if the transaction was successful (code 0)
+/// 3. If tx_search fails, falls back to querying LastVerify on the contract
+/// 4. Returns ProofContext with proof_verified=true/false
+///
+/// If the proof_ref is empty or the transaction is not found, returns
+/// proof_verified=false (auto-Red in the gate).
+pub struct OnChainProofVerifier {
+    config: OnChainProofVerifierConfig,
+    client: reqwest::Client,
+}
+
+impl OnChainProofVerifier {
+    pub fn new(config: OnChainProofVerifierConfig) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(config.timeout)
+            .build()
+            .unwrap_or_default();
+        Self { config, client }
+    }
+
+    /// Create from environment variables.
+    /// JUNO_CHAIN_RPC — RPC endpoint (default: http://localhost:26657)
+    /// JUNO_ZK_VERIFIER_ADDR — zk-verifier contract address
+    pub fn from_env() -> Self {
+        let config = OnChainProofVerifierConfig {
+            chain_rpc: std::env::var("JUNO_CHAIN_RPC")
+                .unwrap_or_else(|_| "http://localhost:26657".to_string()),
+            verifier_addr: std::env::var("JUNO_ZK_VERIFIER_ADDR")
+                .unwrap_or_default(),
+            ..Default::default()
+        };
+        Self::new(config)
+    }
+
+    /// Query the chain for a transaction by hash.
+    /// Returns true if the transaction exists and was successful (code 0).
+    async fn check_tx_success(&self, tx_hash: &str) -> bool {
+        if tx_hash.is_empty() {
+            return false;
+        }
+
+        let url = format!(
+            "{}/tx_search?query=\"tx.hash='{}'\"",
+            self.config.chain_rpc.trim_end_matches('/'),
+            tx_hash
+        );
+
+        let resp = self.client.get(&url).send().await;
+        match resp {
+            Ok(r) if r.status().is_success() => {
+                let body: serde_json::Value = match r.json().await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("OnChainProofVerifier: tx_search parse error: {}", e);
+                        return false;
+                    }
+                };
+                let txs = body
+                    .get("result")
+                    .and_then(|r| r.get("txs"))
+                    .and_then(|t| t.as_array());
+                match txs {
+                    Some(arr) if !arr.is_empty() => {
+                        let code = arr[0]
+                            .get("tx_result")
+                            .and_then(|r| r.get("code"))
+                            .and_then(|c| c.as_i64())
+                            .unwrap_or(-1);
+                        if code == 0 {
+                            return true;
+                        }
+                        warn!(
+                            "OnChainProofVerifier: tx {} found but code={} (not successful)",
+                            tx_hash, code
+                        );
+                        false
+                    }
+                    _ => {
+                        warn!(
+                            "OnChainProofVerifier: tx {} not found in tx_search",
+                            tx_hash
+                        );
+                        false
+                    }
+                }
+            }
+            Ok(r) => {
+                warn!(
+                    "OnChainProofVerifier: tx_search HTTP {} for tx {}",
+                    r.status(),
+                    tx_hash
+                );
+                false
+            }
+            Err(e) => {
+                warn!(
+                    "OnChainProofVerifier: tx_search error for tx {}: {}",
+                    tx_hash, e
+                );
+                false
+            }
+        }
+    }
+
+    /// Query the zk-verifier contract's LastVerify as a fallback.
+    async fn check_last_verify(&self) -> Option<bool> {
+        if self.config.verifier_addr.is_empty() {
+            return None;
+        }
+
+        let query_msg = serde_json::json!({ "last_verify": {} });
+        let query_bytes = serde_json::to_vec(&query_msg).ok()?;
+        let query_b64 = base64_url_encode(&query_bytes);
+
+        let url = format!(
+            "{}/abci_query?path=\"/cosmwasm.wasm.v1.Query/SmartContractState/{}%2F{}\"",
+            self.config.chain_rpc.trim_end_matches('/'),
+            self.config.verifier_addr,
+            query_b64,
+        );
+
+        let resp = self.client.get(&url).send().await.ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+
+        let body: serde_json::Value = resp.json().await.ok()?;
+        let value = body
+            .get("result")
+            .and_then(|r| r.get("response"))
+            .and_then(|r| r.get("value"))
+            .and_then(|v| v.as_str())?;
+
+        let decoded = base64_std_decode(value)?;
+        let result: serde_json::Value = serde_json::from_slice(&decoded).ok()?;
+        result.get("verified").and_then(|v| v.as_bool())
+    }
+}
+
+#[async_trait]
+impl ProofVerifier for OnChainProofVerifier {
+    async fn verify(&self, proof_ref: &str, robot_id: &str) -> ProofContext {
+        if proof_ref.is_empty() {
+            warn!(
+                "OnChainProofVerifier: empty proof_ref for robot {}, auto-Red",
+                robot_id
+            );
+            return ProofContext {
+                proof_verified: false,
+                proof_hash: None,
+                attestation_clean: None,
+                violated_invariants: Vec::new(),
+            };
+        }
+
+        let tx_success = self.check_tx_success(proof_ref).await;
+
+        if !tx_success {
+            if let Some(verified) = self.check_last_verify().await {
+                if verified {
+                    info!(
+                        "OnChainProofVerifier: tx_search failed but LastVerify=true for robot {}, accepting",
+                        robot_id
+                    );
+                    return ProofContext {
+                        proof_verified: true,
+                        proof_hash: Some(proof_ref.to_string()),
+                        attestation_clean: Some(true),
+                        violated_invariants: Vec::new(),
+                    };
+                }
+            }
+
+            warn!(
+                "OnChainProofVerifier: proof {} NOT verified for robot {}, auto-Red",
+                proof_ref, robot_id
+            );
+            return ProofContext {
+                proof_verified: false,
+                proof_hash: Some(proof_ref.to_string()),
+                attestation_clean: None,
+                violated_invariants: Vec::new(),
+            };
+        }
+
+        info!(
+            "OnChainProofVerifier: proof {} verified on-chain for robot {}",
+            proof_ref, robot_id
+        );
+        ProofContext {
+            proof_verified: true,
+            proof_hash: Some(proof_ref.to_string()),
+            attestation_clean: Some(true),
+            violated_invariants: Vec::new(),
+        }
+    }
+}
+
+fn base64_url_encode(data: &[u8]) -> String {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut result = String::new();
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        result.push(CHARS[((triple >> 18) & 0x3F) as usize] as char);
+        result.push(CHARS[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            result.push(CHARS[((triple >> 6) & 0x3F) as usize] as char);
+        }
+        if chunk.len() > 2 {
+            result.push(CHARS[(triple & 0x3F) as usize] as char);
+        }
+    }
+    result
+}
+
+fn base64_std_decode(s: &str) -> Option<Vec<u8>> {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let s = s.trim_end_matches('=');
+    let mut result = Vec::new();
+    let bytes = s.as_bytes();
+
+    for chunk in bytes.chunks(4) {
+        let mut vals = [0u32; 4];
+        for (i, &b) in chunk.iter().enumerate() {
+            vals[i] = CHARS.iter().position(|&c| c == b)? as u32;
+        }
+        let quad = (vals[0] << 18) | (vals[1] << 12) | (vals[2] << 6) | vals[3];
+        result.push((quad >> 16) as u8);
+        if chunk.len() > 2 {
+            result.push((quad >> 8) as u8);
+        }
+        if chunk.len() > 3 {
+            result.push(quad as u8);
+        }
+    }
+    Some(result)
+}
+
+#[async_trait]
+impl ProofVerifier for MockProofVerifier {
+    async fn verify(&self, proof_ref: &str, robot_id: &str) -> ProofContext {
+        if self.always_valid {
+            return ProofContext {
+                proof_verified: true,
+                proof_hash: Some(proof_ref.to_string()),
+                attestation_clean: Some(true),
+                violated_invariants: Vec::new(),
+            };
+        }
+        if proof_ref.is_empty() {
+            warn!("Mock proof verifier: empty proof ref for robot {}", robot_id);
+            return ProofContext {
+                proof_verified: false,
+                proof_hash: None,
+                attestation_clean: None,
+                violated_invariants: Vec::new(),
+            };
+        }
+        ProofContext {
+            proof_verified: true,
+            proof_hash: Some(proof_ref.to_string()),
+            attestation_clean: Some(true),
+            violated_invariants: Vec::new(),
+        }
+    }
+}
+
 /// The J-Lens truth gate.
 ///
 /// In wired mode, makes real HTTP calls to the CSI server.
 /// In mock mode, uses deterministic heuristics for testing.
+/// When a proof verifier is attached, the gate also checks ZK proof
+/// verification status — if the proof is missing or invalid, the verdict
+/// is automatically Red regardless of content audit result.
 pub struct JLensGate {
     config: GateConfig,
     /// HTTP client (initialized when gate is wired)
     client: Option<reqwest::Client>,
     /// Mock mode — uses heuristics instead of HTTP calls
     mock: bool,
+    /// Optional proof verifier for proof-aware gating
+    proof_verifier: Option<Box<dyn ProofVerifier>>,
 }
 
 impl JLensGate {
@@ -91,6 +419,7 @@ impl JLensGate {
             config,
             client: None,
             mock: false,
+            proof_verifier: None,
         }
     }
 
@@ -101,6 +430,7 @@ impl JLensGate {
             config,
             client: None,
             mock: true,
+            proof_verifier: None,
         }
     }
 
@@ -112,6 +442,14 @@ impl JLensGate {
     /// Create a mock gate with default configuration.
     pub fn mock_default() -> Self {
         Self::mock(GateConfig::default())
+    }
+
+    /// Attach a proof verifier to make the gate proof-aware.
+    /// When set, the gate checks ZK proof verification alongside content audit.
+    /// If the proof is missing or invalid → auto-Red.
+    pub fn with_proof_verifier(mut self, verifier: Box<dyn ProofVerifier>) -> Self {
+        self.proof_verifier = Some(verifier);
+        self
     }
 
     /// Audit message content and return a gate verdict.
@@ -163,6 +501,68 @@ impl JLensGate {
                 GateVerdict::Yellow { separation_score: 0.0 }
             }
         }
+    }
+
+    /// Audit message content AND verify attached ZK proof.
+    ///
+    /// This is the proof-aware audit path. If a proof verifier is attached:
+    /// 1. Decode the content as an IntentMessage to extract execution_proof_ref
+    /// 2. Call the proof verifier to check proof status
+    /// 3. If proof is missing or invalid → auto-Red (regardless of content)
+    /// 4. If proof is valid → proceed with normal content audit
+    /// 5. If proof violation detected → auto-Red
+    ///
+    /// If no proof verifier is attached, falls back to content-only audit.
+    /// If content is not an IntentMessage (can't extract proof ref), falls back
+    /// to content-only audit.
+    pub async fn audit_with_proof(&self, content: &[u8]) -> GateVerdict {
+        // If no proof verifier attached, fall back to content-only audit
+        let verifier = match &self.proof_verifier {
+            Some(v) => v,
+            None => return self.audit(content).await,
+        };
+
+        // Try to decode as IntentMessage to extract proof ref
+        let intent = match IntentMessage::decode(content) {
+            Ok(i) => i,
+            Err(_) => {
+                // Not an IntentMessage — can't check proof, do content-only
+                return self.audit(content).await;
+            }
+        };
+
+        // Verify the proof
+        let proof_ctx = verifier.verify(
+            intent.execution_proof_ref.as_deref().unwrap_or(""),
+            &intent.robot_id,
+        )
+        .await;
+
+        // If proof is not verified → auto-Red
+        if !proof_ctx.proof_verified {
+            warn!(
+                "J-Lens proof-aware gate: proof NOT verified for robot {} (hash={:?}), auto-Red",
+                intent.robot_id,
+                proof_ctx.proof_hash
+            );
+            return GateVerdict::Red {
+                separation_score: 1.0,
+            };
+        }
+
+        // If proof shows a violation → auto-Red
+        if proof_ctx.has_violation() {
+            warn!(
+                "J-Lens proof-aware gate: violation detected in proof for robot {}, auto-Red",
+                intent.robot_id
+            );
+            return GateVerdict::Red {
+                separation_score: 0.95,
+            };
+        }
+
+        // Proof is valid — proceed with normal content audit
+        self.audit(content).await
     }
 
     /// Audit a full batch of messages and return an aggregate GateResult.
@@ -680,5 +1080,85 @@ mod tests {
         let result = gate.audit_with_attestations(b"clean content", 100).await;
         assert_eq!(result.attestations.len(), 3);
         assert_eq!(result.consensus_batch_height, 100);
+    }
+
+    #[tokio::test]
+    async fn test_proof_aware_gate_missing_proof_auto_red() {
+        let gate = JLensGate::mock_default()
+            .with_proof_verifier(Box::new(MockProofVerifier::default()));
+
+        // IntentMessage with no execution_proof_ref → proof not verified → auto-Red
+        let intent = IntentMessage {
+            robot_id: "robot-test".to_string(),
+            action: "navigate".to_string(),
+            params: serde_json::json!({"target": "warehouse"}),
+            sensor_snapshot_hash: "sha256:abc".to_string(),
+            controller_timestamp: 1000,
+            rationale: Some("routine patrol".to_string()),
+            execution_proof_ref: None, // No proof!
+        };
+        let content = intent.encode().unwrap();
+        let verdict = gate.audit_with_proof(&content).await;
+        assert!(matches!(verdict, GateVerdict::Red { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_proof_aware_gate_valid_proof_proceeds_to_content_audit() {
+        let gate = JLensGate::mock_default()
+            .with_proof_verifier(Box::new(MockProofVerifier::default()));
+
+        // IntentMessage with valid proof ref + clean content → Green
+        let intent = IntentMessage {
+            robot_id: "robot-test".to_string(),
+            action: "navigate".to_string(),
+            params: serde_json::json!({"target": "warehouse"}),
+            sensor_snapshot_hash: "sha256:abc".to_string(),
+            controller_timestamp: 1000,
+            rationale: Some("routine patrol".to_string()),
+            execution_proof_ref: Some("proof_001".to_string()),
+        };
+        let content = intent.encode().unwrap();
+        let verdict = gate.audit_with_proof(&content).await;
+        assert_eq!(verdict, GateVerdict::Green);
+    }
+
+    #[tokio::test]
+    async fn test_proof_aware_gate_valid_proof_but_malicious_content_still_red() {
+        let gate = JLensGate::mock_default()
+            .with_proof_verifier(Box::new(MockProofVerifier::default()));
+
+        // Valid proof but malicious content → still Red (content audit catches it)
+        let intent = IntentMessage {
+            robot_id: "robot-evil".to_string(),
+            action: "engage".to_string(),
+            params: serde_json::json!({"target": "civilian"}),
+            sensor_snapshot_hash: "sha256:abc".to_string(),
+            controller_timestamp: 1000,
+            rationale: Some("malicious intent".to_string()),
+            execution_proof_ref: Some("proof_002".to_string()),
+        };
+        let content = intent.encode().unwrap();
+        let verdict = gate.audit_with_proof(&content).await;
+        assert!(matches!(verdict, GateVerdict::Red { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_proof_aware_gate_no_verifier_falls_back_to_content_only() {
+        // Gate without proof verifier — should just do content audit
+        let gate = JLensGate::mock_default();
+
+        let intent = IntentMessage {
+            robot_id: "robot-test".to_string(),
+            action: "navigate".to_string(),
+            params: serde_json::json!({"target": "warehouse"}),
+            sensor_snapshot_hash: "sha256:abc".to_string(),
+            controller_timestamp: 1000,
+            rationale: Some("routine patrol".to_string()),
+            execution_proof_ref: None, // No proof, but no verifier either
+        };
+        let content = intent.encode().unwrap();
+        let verdict = gate.audit_with_proof(&content).await;
+        // Content is clean → Green (no proof check since no verifier)
+        assert_eq!(verdict, GateVerdict::Green);
     }
 }

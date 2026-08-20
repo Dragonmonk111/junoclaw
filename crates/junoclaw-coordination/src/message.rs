@@ -376,6 +376,89 @@ impl CircuitBreakerState {
     }
 }
 
+/// An action emitted by the consensus engine when a safety violation is
+/// detected. The relayer consumes these and submits `TripBreaker`
+/// transactions to the circuit-breaker contract on Juno.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BreakerAction {
+    /// Robot ID whose breaker should trip
+    pub robot_id: String,
+    /// Human-readable reason for the trip
+    pub reason: String,
+    /// Reference to the attestation, verdict, or batch that caused the trip
+    pub cause_ref: String,
+    /// Batch height where the violation was detected
+    pub batch_height: u64,
+    /// Timestamp (ms) when the action was emitted
+    pub emitted_at: u64,
+}
+
+impl BreakerAction {
+    /// Create a breaker action from a red gate verdict on a robot intent.
+    pub fn from_red_verdict(
+        robot_id: String,
+        batch_height: u64,
+        separation_score: f64,
+    ) -> Self {
+        Self {
+            robot_id,
+            reason: format!(
+                "J-Lens gate red verdict (separation_score={:.3}) — intent blocked by coordination layer",
+                separation_score
+            ),
+            cause_ref: format!("batch:{}:red-verdict", batch_height),
+            batch_height,
+            emitted_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        }
+    }
+
+    /// Create a breaker action from a reflex batch attestation violation.
+    pub fn from_attestation_violation(
+        robot_id: String,
+        batch_height: u64,
+        violated_invariants: &[String],
+    ) -> Self {
+        Self {
+            robot_id,
+            reason: format!(
+                "ReflexBatchAttestation violation: {}",
+                violated_invariants.join(", ")
+            ),
+            cause_ref: format!("batch:{}:attestation-violation", batch_height),
+            batch_height,
+            emitted_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        }
+    }
+}
+
+/// Proof verification context attached to a message during coordination.
+/// This is populated by the `ProofAwareGate` when it checks whether a
+/// ZK proof verification result accompanies the intent.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct ProofContext {
+    /// Whether a valid ZK proof was verified for this message
+    pub proof_verified: bool,
+    /// Optional proof hash for attestation reference
+    pub proof_hash: Option<String>,
+    /// Whether the reflex batch attestation showed any violations
+    pub attestation_clean: Option<bool>,
+    /// List of violated invariants (if attestation_clean is false)
+    pub violated_invariants: Vec<String>,
+}
+
+impl ProofContext {
+    /// Returns true if the proof context indicates a safety violation.
+    pub fn has_violation(&self) -> bool {
+        self.attestation_clean == Some(false) || !self.violated_invariants.is_empty()
+    }
+}
+
 /// A batch of ordered messages — the block format for consensus.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Batch {
@@ -392,6 +475,12 @@ pub struct Batch {
     /// Layer 6: evaluator attestations from multiple J-Lens operators
     #[serde(default)]
     pub eval_attestations: Vec<EvalAttestation>,
+    /// Breaker actions emitted during this batch's consensus processing
+    #[serde(default)]
+    pub breaker_actions: Vec<BreakerAction>,
+    /// Moultbook context fetched during this batch's consensus processing
+    #[serde(default)]
+    pub context_digest: Option<String>,
 }
 
 impl Batch {
@@ -416,12 +505,26 @@ impl Batch {
             timestamp,
             gate_result: None,
             eval_attestations: Vec::new(),
+            breaker_actions: Vec::new(),
+            context_digest: None,
         }
     }
 
     /// Attach a J-Lens gate result to the batch.
     pub fn with_gate_result(mut self, result: GateResult) -> Self {
         self.gate_result = Some(result);
+        self
+    }
+
+    /// Attach breaker actions emitted during consensus processing.
+    pub fn with_breaker_actions(mut self, actions: Vec<BreakerAction>) -> Self {
+        self.breaker_actions = actions;
+        self
+    }
+
+    /// Attach a moultbook context digest fetched during consensus processing.
+    pub fn with_context_digest(mut self, digest: String) -> Self {
+        self.context_digest = Some(digest);
         self
     }
 

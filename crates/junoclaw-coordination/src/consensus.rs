@@ -17,8 +17,9 @@ use anyhow::Result;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{info, warn};
 
+use crate::context::ContextFetcher;
 use crate::gate::JLensGate;
-use crate::message::{AgentMessage, Batch, GateVerdict};
+use crate::message::{AgentMessage, Batch, BreakerAction, GateVerdict, IntentMessage};
 
 /// Configuration for the consensus engine.
 #[derive(Clone, Debug)]
@@ -78,6 +79,8 @@ pub struct ConsensusEngine {
     validators: Vec<Vec<u8>>,
     /// Optional J-Lens truth gate for batch auditing
     gate: Option<JLensGate>,
+    /// Optional context fetcher for moultbook provenance
+    context_fetcher: Option<Box<dyn ContextFetcher>>,
 }
 
 impl ConsensusEngine {
@@ -104,6 +107,7 @@ impl ConsensusEngine {
             height: Mutex::new(0),
             validators,
             gate: None,
+            context_fetcher: None,
         }
     }
 
@@ -111,8 +115,17 @@ impl ConsensusEngine {
     /// When attached, every batch is audited before finalization:
     /// - Red-gated messages are filtered out
     /// - GateResult is attached to the finalized batch
+    /// - BreakerActions are emitted for red-gated robot intents
     pub fn with_gate(mut self, gate: JLensGate) -> Self {
         self.gate = Some(gate);
+        self
+    }
+
+    /// Attach a context fetcher for moultbook provenance retrieval.
+    /// When attached, the engine fetches heartbeat history for each robot
+    /// intent during batch processing and attaches the digest to the batch.
+    pub fn with_context_fetcher(mut self, fetcher: Box<dyn ContextFetcher>) -> Self {
+        self.context_fetcher = Some(fetcher);
         self
     }
 
@@ -168,10 +181,30 @@ impl ConsensusEngine {
             let gate_result = gate.audit_batch(&batch).await;
 
             let mut filtered = Vec::new();
+            let mut breaker_actions = Vec::new();
+
             for msg in &batch.messages {
-                let verdict = gate.audit(&msg.content).await;
-                if !matches!(verdict, GateVerdict::Red { .. }) {
-                    filtered.push(msg.clone());
+                let verdict = gate.audit_with_proof(&msg.content).await;
+                match &verdict {
+                    GateVerdict::Red { separation_score } => {
+                        // Message blocked — emit breaker action if this is a robot intent
+                        if let Ok(intent) = IntentMessage::decode(&msg.content) {
+                            warn!(
+                                "Robot {} intent blocked by J-Lens gate (red) at height {}",
+                                intent.robot_id, height
+                            );
+                            breaker_actions.push(BreakerAction::from_red_verdict(
+                                intent.robot_id,
+                                height,
+                                *separation_score,
+                            ));
+                        }
+                    }
+                    _ => {
+                        let mut msg = msg.clone();
+                        msg.j_lens_gate = Some(verdict);
+                        filtered.push(msg);
+                    }
                 }
             }
 
@@ -183,8 +216,43 @@ impl ConsensusEngine {
                 );
             }
 
-            batch = Batch::new(filtered, prev_hash, height, timestamp)
+            // Fetch moultbook context for surviving robot intents
+            let mut context_digest = String::new();
+            if let Some(fetcher) = &self.context_fetcher {
+                for msg in &filtered {
+                    if let Ok(intent) = IntentMessage::decode(&msg.content) {
+                        match fetcher.fetch_context(&intent.robot_id, height).await {
+                            Ok(summary) => {
+                                info!(
+                                    "Fetched moultbook context for robot {} at height {}: {}",
+                                    intent.robot_id, height, summary.digest
+                                );
+                                context_digest.push_str(&summary.digest);
+                                context_digest.push('\n');
+                            }
+                            Err(e) => {
+                                warn!(
+                                    "Context fetch failed for robot {} at height {}: {}",
+                                    intent.robot_id, height, e
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
+            let mut new_batch = Batch::new(filtered, prev_hash, height, timestamp)
                 .with_gate_result(gate_result);
+
+            if !breaker_actions.is_empty() {
+                new_batch = new_batch.with_breaker_actions(breaker_actions);
+            }
+
+            if !context_digest.is_empty() {
+                new_batch = new_batch.with_context_digest(context_digest);
+            }
+
+            batch = new_batch;
         }
 
         if batch.is_empty() {
@@ -266,12 +334,31 @@ impl ConsensusEngine {
             if let Some(gate) = &self_arc.gate {
                 let gate_result = gate.audit_batch(&batch).await;
 
-                // Filter out red-gated messages (audit each message individually)
+                // Filter out red-gated messages and emit breaker actions for robot intents
                 let mut filtered = Vec::new();
+                let mut breaker_actions = Vec::new();
+
                 for msg in &batch.messages {
-                    let verdict = gate.audit(&msg.content).await;
-                    if !matches!(verdict, GateVerdict::Red { .. }) {
-                        filtered.push(msg.clone());
+                    let verdict = gate.audit_with_proof(&msg.content).await;
+                    match &verdict {
+                        GateVerdict::Red { separation_score } => {
+                            if let Ok(intent) = IntentMessage::decode(&msg.content) {
+                                warn!(
+                                    "Robot {} intent blocked by J-Lens gate (red) at height {}",
+                                    intent.robot_id, height
+                                );
+                                breaker_actions.push(BreakerAction::from_red_verdict(
+                                    intent.robot_id,
+                                    height,
+                                    *separation_score,
+                                ));
+                            }
+                        }
+                        _ => {
+                            let mut msg = msg.clone();
+                            msg.j_lens_gate = Some(verdict);
+                            filtered.push(msg);
+                        }
                     }
                 }
 
@@ -283,8 +370,43 @@ impl ConsensusEngine {
                     );
                 }
 
-                batch = Batch::new(filtered, prev_hash, height, timestamp)
+                // Fetch moultbook context for surviving robot intents
+                let mut context_digest = String::new();
+                if let Some(fetcher) = &self_arc.context_fetcher {
+                    for msg in &filtered {
+                        if let Ok(intent) = IntentMessage::decode(&msg.content) {
+                            match fetcher.fetch_context(&intent.robot_id, height).await {
+                                Ok(summary) => {
+                                    info!(
+                                        "Fetched moultbook context for robot {} at height {}: {}",
+                                        intent.robot_id, height, summary.digest
+                                    );
+                                    context_digest.push_str(&summary.digest);
+                                    context_digest.push('\n');
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        "Context fetch failed for robot {} at height {}: {}",
+                                        intent.robot_id, height, e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let mut new_batch = Batch::new(filtered, prev_hash, height, timestamp)
                     .with_gate_result(gate_result);
+
+                if !breaker_actions.is_empty() {
+                    new_batch = new_batch.with_breaker_actions(breaker_actions);
+                }
+
+                if !context_digest.is_empty() {
+                    new_batch = new_batch.with_context_digest(context_digest);
+                }
+
+                batch = new_batch;
             }
 
             // Skip empty blocks (all messages were filtered or none pending)
@@ -440,5 +562,274 @@ mod tests {
         assert!(!block.certificate.is_empty());
 
         handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_full_wired_loop_gate_context_breaker() {
+        use crate::context::MockContextFetcher;
+        use crate::gate::JLensGate;
+        use crate::message::IntentMessage;
+
+        // Build engine with mock gate + mock context fetcher
+        let engine = ConsensusEngine::new(ConsensusConfig {
+            num_validators: 4,
+            block_time: Duration::from_millis(50),
+            max_messages_per_block: 100,
+            validator_index: 0,
+        })
+        .with_gate(JLensGate::mock_default())
+        .with_context_fetcher(Box::new(MockContextFetcher));
+
+        // Create a malicious robot intent (triggers Red in mock gate)
+        let bad_intent = IntentMessage {
+            robot_id: "robot-evil".to_string(),
+            action: "engage".to_string(),
+            params: serde_json::json!({"target": "civilian"}),
+            sensor_snapshot_hash: "sha256:abc".to_string(),
+            controller_timestamp: now_ms(),
+            rationale: Some("malicious intent to harm".to_string()),
+            execution_proof_ref: None,
+        };
+        let bad_msg = bad_intent
+            .into_agent_message(vec![1; 32], vec![], now_ms())
+            .unwrap();
+
+        // Create a clean robot intent (passes gate, triggers context fetch)
+        let good_intent = IntentMessage {
+            robot_id: "robot-good".to_string(),
+            action: "navigate".to_string(),
+            params: serde_json::json!({"destination": "warehouse"}),
+            sensor_snapshot_hash: "sha256:def".to_string(),
+            controller_timestamp: now_ms(),
+            rationale: Some("routine patrol".to_string()),
+            execution_proof_ref: None,
+        };
+        let good_msg = good_intent
+            .into_agent_message(vec![2; 32], vec![], now_ms())
+            .unwrap();
+
+        engine.submit(bad_msg).await.unwrap();
+        engine.submit(good_msg).await.unwrap();
+
+        // Produce a block
+        let block = engine.produce_block().await.expect("should produce a block");
+
+        // The bad message should be filtered out (Red-gated)
+        assert_eq!(block.batch.len(), 1, "only the clean intent should survive");
+
+        // A breaker action should be emitted for robot-evil
+        assert_eq!(
+            block.batch.breaker_actions.len(),
+            1,
+            "one breaker action for the red-gated robot"
+        );
+        assert_eq!(block.batch.breaker_actions[0].robot_id, "robot-evil");
+
+        // Context digest should be present (fetched for the surviving robot-good)
+        assert!(
+            block.batch.context_digest.is_some(),
+            "context digest should be fetched for surviving intents"
+        );
+        let digest = block.batch.context_digest.as_ref().unwrap();
+        assert!(
+            digest.contains("robot-good"),
+            "context digest should mention the surviving robot"
+        );
+
+        // The surviving message should have a gate verdict attached
+        assert!(
+            !matches!(block.batch.messages[0].j_lens_gate, Some(GateVerdict::Red { .. })),
+            "surviving message should not be red-gated"
+        );
+    }
+
+    /// End-to-end simulation harness: exercises the full wired loop.
+    ///
+    /// Flow: IntentMessage (with proof ref) → proof-aware gate → context fetch
+    /// → consensus → breaker action emission → REST API serves finalized block
+    ///
+    /// This test demonstrates the complete coordination pipeline:
+    /// 1. Robot emits intent with valid ZK proof reference
+    /// 2. Proof-aware gate verifies proof + audits content
+    /// 3. Context fetcher retrieves moultbook heartbeat history
+    /// 4. Consensus engine produces finalized block with breaker actions + context digest
+    /// 5. REST API serves the finalized block to relayers
+    /// 6. A second robot emits intent WITHOUT proof → auto-Red → breaker trips
+    #[tokio::test]
+    async fn test_end_to_end_sim_harness() {
+        use crate::context::MockContextFetcher;
+        use crate::gate::{JLensGate, MockProofVerifier};
+        use crate::message::IntentMessage;
+
+        // Build engine with proof-aware gate + mock context fetcher
+        let engine = ConsensusEngine::new(ConsensusConfig {
+            num_validators: 4,
+            block_time: Duration::from_millis(50),
+            max_messages_per_block: 100,
+            validator_index: 0,
+        })
+        .with_gate(
+            JLensGate::mock_default()
+                .with_proof_verifier(Box::new(MockProofVerifier::default())),
+        )
+        .with_context_fetcher(Box::new(MockContextFetcher));
+
+        // === Phase 1: Good robot with valid proof ===
+        let good_intent = IntentMessage {
+            robot_id: "robot-alpha".to_string(),
+            action: "navigate".to_string(),
+            params: serde_json::json!({"destination": "sector-7"}),
+            sensor_snapshot_hash: "sha256:alpha-snapshot".to_string(),
+            controller_timestamp: now_ms(),
+            rationale: Some("routine patrol to sector-7".to_string()),
+            execution_proof_ref: Some("proof-alpha-001".to_string()),
+        };
+        let good_msg = good_intent
+            .into_agent_message(vec![1; 32], vec![], now_ms())
+            .unwrap();
+
+        // === Phase 2: Bad robot with no proof (auto-Red) ===
+        let no_proof_intent = IntentMessage {
+            robot_id: "robot-beta".to_string(),
+            action: "navigate".to_string(),
+            params: serde_json::json!({"destination": "restricted-zone"}),
+            sensor_snapshot_hash: "sha256:beta-snapshot".to_string(),
+            controller_timestamp: now_ms(),
+            rationale: Some("navigate to restricted zone".to_string()),
+            execution_proof_ref: None, // No proof → auto-Red
+        };
+        let no_proof_msg = no_proof_intent
+            .into_agent_message(vec![2; 32], vec![], now_ms())
+            .unwrap();
+
+        // === Phase 3: Malicious robot with valid proof but bad content ===
+        let malicious_intent = IntentMessage {
+            robot_id: "robot-gamma".to_string(),
+            action: "engage".to_string(),
+            params: serde_json::json!({"target": "civilian"}),
+            sensor_snapshot_hash: "sha256:gamma-snapshot".to_string(),
+            controller_timestamp: now_ms(),
+            rationale: Some("malicious engage civilian".to_string()),
+            execution_proof_ref: Some("proof-gamma-001".to_string()),
+        };
+        let malicious_msg = malicious_intent
+            .into_agent_message(vec![3; 32], vec![], now_ms())
+            .unwrap();
+
+        // Submit all three
+        engine.submit(good_msg).await.unwrap();
+        engine.submit(no_proof_msg).await.unwrap();
+        engine.submit(malicious_msg).await.unwrap();
+
+        // === Phase 4: Produce block ===
+        let block = engine.produce_block().await.expect("should produce a block");
+
+        // Only robot-alpha should survive (valid proof + clean content)
+        assert_eq!(
+            block.batch.len(),
+            1,
+            "only robot-alpha should survive gate filtering"
+        );
+
+        // Two breaker actions: robot-beta (no proof) + robot-gamma (malicious content)
+        assert_eq!(
+            block.batch.breaker_actions.len(),
+            2,
+            "breaker actions for robot-beta (no proof) and robot-gamma (malicious)"
+        );
+
+        let breaker_robot_ids: Vec<&str> = block
+            .batch
+            .breaker_actions
+            .iter()
+            .map(|a| a.robot_id.as_str())
+            .collect();
+        assert!(
+            breaker_robot_ids.contains(&"robot-beta"),
+            "robot-beta should have breaker action (no proof)"
+        );
+        assert!(
+            breaker_robot_ids.contains(&"robot-gamma"),
+            "robot-gamma should have breaker action (malicious content)"
+        );
+
+        // Context digest should be present for robot-alpha
+        assert!(
+            block.batch.context_digest.is_some(),
+            "context digest should be fetched for surviving robot-alpha"
+        );
+        let digest = block.batch.context_digest.as_ref().unwrap();
+        assert!(
+            digest.contains("robot-alpha"),
+            "context digest should mention robot-alpha"
+        );
+
+        // Surviving message should be green-gated
+        assert_eq!(
+            block.batch.messages[0].j_lens_gate,
+            Some(GateVerdict::Green),
+            "robot-alpha should be green-gated"
+        );
+
+        // === Phase 5: Verify REST API can serve the block ===
+        use crate::api::{ApiConfig, serve as serve_api};
+        use std::sync::Arc;
+
+        let engine_arc = Arc::new(engine);
+        let engine_for_api = engine_arc.clone();
+
+        // Find a free port
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let api_config = ApiConfig {
+            bind_addr: format!("127.0.0.1:{}", port),
+        };
+
+        tokio::spawn(async move {
+            let _ = serve_api(engine_for_api, api_config).await;
+        });
+
+        // Give the API server time to start
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Query health
+        let client = reqwest::Client::new();
+        let health_resp = client
+            .get(format!("http://127.0.0.1:{}/health", port))
+            .send()
+            .await
+            .expect("health request should succeed");
+        assert_eq!(health_resp.status(), 200);
+
+        // Query finalized blocks
+        let finalized_resp = client
+            .get(format!("http://127.0.0.1:{}/finalized", port))
+            .send()
+            .await
+            .expect("finalized request should succeed");
+        assert_eq!(finalized_resp.status(), 200);
+
+        // The API should serve the block (timing-dependent, so just verify endpoint works)
+        let response: serde_json::Value = finalized_resp.json().await.expect("parse blocks");
+        assert!(
+            response.get("batches").is_some(),
+            "finalized endpoint should return {{ batches: [...], latest_height: N }}"
+        );
+
+        // === Summary ===
+        // The full loop works:
+        // - robot-alpha: valid proof + clean content → Green → survives → context fetched
+        // - robot-beta: no proof → auto-Red → breaker action emitted
+        // - robot-gamma: valid proof + malicious content → Red (content) → breaker action emitted
+        // - REST API serves finalized blocks to relayers
+        tracing::info!(
+            "End-to-end sim harness: {} messages submitted, {} survived, {} breaker actions, context={}",
+            3,
+            block.batch.len(),
+            block.batch.breaker_actions.len(),
+            block.batch.context_digest.is_some()
+        );
     }
 }

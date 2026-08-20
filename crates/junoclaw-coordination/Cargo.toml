@@ -40,9 +40,23 @@ thiserror = { workspace = true }
 # HTTP client (for J-Lens gate CSI server calls)
 reqwest = { workspace = true }
 
+# HTTP server (for coordination REST API)
+axum = { workspace = true }
+tower-http = { workspace = true }
+
+# Async trait support
+async-trait = "0.1"
+
+# URL encoding
+urlencoding = "2.1"
+
 # Misc
 bytes = "1.7"
 rand = "0.10"
+
+[[bin]]
+name = "csi-server"
+path = "src/bin/csi-server.rs"
 
 [features]
 default = []

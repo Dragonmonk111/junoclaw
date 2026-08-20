@@ -12,6 +12,9 @@
 pub mod message;
 pub mod gate;
 pub mod consensus;
+pub mod context;
+pub mod api;
+pub mod fleet;
 
 #[cfg(feature = "p2p")]
 pub mod network;
@@ -23,9 +26,13 @@ pub use message::{
     AgentMessage, Batch, GateVerdict, GateResult,
     IntentMessage, IntentOutcome,
     SafetyEnvelope, ReflexBatchAttestation, CircuitBreakerState,
+    BreakerAction, ProofContext,
 };
-pub use gate::{GateConfig, JLensGate};
+pub use gate::{GateConfig, JLensGate, ProofVerifier, MockProofVerifier, OnChainProofVerifier, OnChainProofVerifierConfig};
 pub use consensus::{ConsensusEngine, ConsensusConfig, FinalizedBlock};
+pub use context::{ContextFetcher, ContextSummary, MoultbookContextFetcher, MockContextFetcher};
+pub use api::{ApiConfig, serve as serve_api};
+pub use fleet::{FleetCoordinator, FleetConfig, FleetStatus, RobotState, RobotStatusEntry};
 
 #[cfg(feature = "p2p")]
 pub use network::{CoordinationConfig, CoordinationNetwork};
