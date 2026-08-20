@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "junoclaw-ros2-bridge"
+version = "0.1.0"
+description = "HTTP bridge exposing ROS2 action server results and sensor data to the JunoClaw trust stack"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.9"
+authors = [{name = "JunoClaw Contributors"}]
+keywords = ["ros2", "blockchain", "zero-knowledge", "robotics", "safety", "juno"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Robotics",
+]
+
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+ros2 = [
+    # Install these separately via rosdep or from your ROS2 distro
+    # rclpy is not available on PyPI — it comes with the ROS2 installation
+]
+simulate = [
+    # No extra deps needed for simulation mode
+]
+dev = [
+    "pytest>=7.0",
+    "httpx>=0.24.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[project.scripts]
+junoclaw-ros2-bridge = "junoclaw_ros2_bridge.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

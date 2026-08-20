@@ -1,0 +1,16 @@
+# Sample prover daemon configuration
+# Copy to prover-config.toml and edit for your deployment
+
+robot_id = "warehouse-bot-01"
+bridge_url = "http://localhost:8080"
+chain_rpc = "http://localhost:26657"
+keys_dir = "./keys"
+
+# On-chain contract addresses (optional — if omitted, proofs saved locally)
+# verifier_addr = "juno1qd9qaggnw350kt7wjpw37h0c7666wuwulhz0makrve9tenkx0ymqvfkh7p"
+# circuit_breaker_addr = "juno1..."
+# safety_envelope_addr = "juno1..."
+# merkle_verifier_addr = "juno1..."
+
+poll_interval_secs = 10
+log_level = "info"

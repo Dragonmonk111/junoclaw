@@ -564,10 +564,9 @@ impl Plugin for Ros2Plugin {
             }
 
             "fetch_intent_proof" => {
-                // Fetch an intent proof from the ROS2 bridge endpoint.
-                // In production this would HTTP GET the bridge URL and parse
-                // the action server result. For now it returns the wiring
-                // description so a robotics partner can implement the bridge.
+                // Fetch an intent proof from the ROS2 bridge HTTP endpoint.
+                // The bridge (junoclaw-ros2-bridge) runs on the robot or edge
+                // device and exposes action server results as JSON.
                 let intent_id = input
                     .get("intent_id")
                     .and_then(|v| v.as_str())
@@ -581,20 +580,45 @@ impl Plugin for Ros2Plugin {
                     intent_id
                 );
 
-                Err(JunoClawError::Plugin {
-                    plugin: "plugin-ros2".to_string(),
-                    message: format!(
-                        "intent proof fetch for robot {} intent {} — HTTP GET {}/intent/{} and parse action server result into IntentMessage",
-                        self.robot_id, intent_id, self.ros2_bridge_url, intent_id
-                    ),
+                let url = format!("{}/intent/{}", self.ros2_bridge_url.trim_end_matches('/'), intent_id);
+                let resp = reqwest::get(&url).await
+                    .map_err(|e| JunoClawError::Plugin {
+                        plugin: "plugin-ros2".to_string(),
+                        message: format!("bridge HTTP GET failed: {}", e),
+                    })?;
+
+                if !resp.status().is_success() {
+                    return Err(JunoClawError::Plugin {
+                        plugin: "plugin-ros2".to_string(),
+                        message: format!("bridge returned {} for intent {}", resp.status(), intent_id),
+                    });
+                }
+
+                let intent_json: Value = resp.json().await
+                    .map_err(|e| JunoClawError::Plugin {
+                        plugin: "plugin-ros2".to_string(),
+                        message: format!("failed to parse bridge response: {}", e),
+                    })?;
+
+                let output = serde_json::to_string(&intent_json)
+                    .map_err(|e| JunoClawError::TaskExecution(format!("serialize error: {}", e)))?;
+
+                let mut hasher = Sha256::new();
+                hasher.update(output.as_bytes());
+                let output_hash = hex::encode(hasher.finalize());
+
+                Ok(TaskResult {
+                    output,
+                    output_hash,
+                    tool_calls: Vec::new(),
+                    tokens_used: junoclaw_core::types::TokenUsage::default(),
                 })
             }
 
             "fetch_sensor_log" => {
-                // Extract intent-tier decisions from a rosbag archive.
-                // In production this would HTTP GET the bridge URL and parse
-                // the rosbag for intent-tier action calls. For now it returns
-                // the wiring description.
+                // Fetch a reflex batch from the ROS2 bridge HTTP endpoint.
+                // The bridge returns cycle data including sensor readings,
+                // invariant checks, and a pre-computed Merkle root.
                 let batch_id = input
                     .get("batch_id")
                     .and_then(|v| v.as_str())
@@ -608,26 +632,75 @@ impl Plugin for Ros2Plugin {
                     batch_id
                 );
 
-                Err(JunoClawError::Plugin {
-                    plugin: "plugin-ros2".to_string(),
-                    message: format!(
-                        "sensor log fetch for robot {} batch {} — HTTP GET {}/rosbag/{} and extract intent-tier decisions into IntentMessage payloads for Truth Market settlement",
-                        self.robot_id, batch_id, self.ros2_bridge_url, batch_id
-                    ),
+                let url = format!("{}/rosbag/{}", self.ros2_bridge_url.trim_end_matches('/'), batch_id);
+                let resp = reqwest::get(&url).await
+                    .map_err(|e| JunoClawError::Plugin {
+                        plugin: "plugin-ros2".to_string(),
+                        message: format!("bridge HTTP GET failed: {}", e),
+                    })?;
+
+                if !resp.status().is_success() {
+                    return Err(JunoClawError::Plugin {
+                        plugin: "plugin-ros2".to_string(),
+                        message: format!("bridge returned {} for batch {}", resp.status(), batch_id),
+                    });
+                }
+
+                let batch_json: Value = resp.json().await
+                    .map_err(|e| JunoClawError::Plugin {
+                        plugin: "plugin-ros2".to_string(),
+                        message: format!("failed to parse bridge response: {}", e),
+                    })?;
+
+                let output = serde_json::to_string(&batch_json)
+                    .map_err(|e| JunoClawError::TaskExecution(format!("serialize error: {}", e)))?;
+
+                let mut hasher = Sha256::new();
+                hasher.update(output.as_bytes());
+                let output_hash = hex::encode(hasher.finalize());
+
+                Ok(TaskResult {
+                    output,
+                    output_hash,
+                    tool_calls: Vec::new(),
+                    tokens_used: junoclaw_core::types::TokenUsage::default(),
                 })
             }
 
             "register_robot" => {
+                // Register the robot via the ROS2 bridge's /robot/register endpoint.
+                // The bridge returns registration metadata; the actual skill-registry
+                // transaction is submitted separately via the MCP server or CLI.
                 tracing::info!(
                     "Registering robot {} in skill-registry via marketplace",
                     self.robot_id
                 );
-                Err(JunoClawError::Plugin {
-                    plugin: "plugin-ros2".to_string(),
-                    message: format!(
-                        "robot registration for {} — create skill-registry entry with robotics capability + marketplace listing gated by Truth Market",
-                        self.robot_id
-                    ),
+
+                let url = format!("{}/robot/register", self.ros2_bridge_url.trim_end_matches('/'));
+                let resp = reqwest::Client::new().post(&url).send().await
+                    .map_err(|e| JunoClawError::Plugin {
+                        plugin: "plugin-ros2".to_string(),
+                        message: format!("bridge POST failed: {}", e),
+                    })?;
+
+                let reg_json: Value = resp.json().await
+                    .map_err(|e| JunoClawError::Plugin {
+                        plugin: "plugin-ros2".to_string(),
+                        message: format!("failed to parse bridge response: {}", e),
+                    })?;
+
+                let output = serde_json::to_string(&reg_json)
+                    .map_err(|e| JunoClawError::TaskExecution(format!("serialize error: {}", e)))?;
+
+                let mut hasher = Sha256::new();
+                hasher.update(output.as_bytes());
+                let output_hash = hex::encode(hasher.finalize());
+
+                Ok(TaskResult {
+                    output,
+                    output_hash,
+                    tool_calls: Vec::new(),
+                    tokens_used: junoclaw_core::types::TokenUsage::default(),
                 })
             }
 
