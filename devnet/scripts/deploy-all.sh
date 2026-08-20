@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy all pending contracts to the live BN254 devnet.
-# Order: zk-verifier -> jclaw-credential -> moultbook
+# Order: zk-verifier -> jclaw-credential -> moultbook -> coordination contracts
 #
 # Environment:
 #   BUILD=0 (default) — reuse pre-built wasm artefacts
@@ -39,7 +39,7 @@ echo "[deploy-all] admin = ${ADMIN}"
 
 # ── 1. zk-verifier (pure + precompile) ───────────────────────────────────
 echo ""
-echo "[deploy-all] === 1/3  zk-verifier ==="
+echo "[deploy-all] === 1/4  zk-verifier ==="
 bash "${HERE}/deploy-zk-verifier.sh"
 
 # Source the freshly written deploy.env
@@ -50,7 +50,7 @@ echo "[deploy-all]   precompile code_id=${PRECOMPILE_CODE_ID} addr=${PRECOMPILE_
 
 # ── 2. jclaw-credential ──────────────────────────────────────────────────
 echo ""
-echo "[deploy-all] === 2/3  jclaw-credential ==="
+echo "[deploy-all] === 2/4  jclaw-credential ==="
 
 JCLAW_WASM="${DEVNET_DIR}/artifacts/jclaw_credential.wasm"
 if [ ! -f "${JCLAW_WASM}" ]; then
@@ -104,7 +104,7 @@ echo "[deploy-all]   addr=${JCLAW_ADDR}"
 
 # ── 3. moultbook ───────────────────────────────────────────────────────────
 echo ""
-echo "[deploy-all] === 3/3  moultbook ==="
+echo "[deploy-all] === 3/4  moultbook ==="
 
 # Wire zk-verifier precompile into moultbook if available
 export ZK_VERIFIER="${PRECOMPILE_ADDR:-}"
@@ -119,6 +119,20 @@ bash "${HERE}/deploy-moultbook.sh"
 source "${DEVNET_DIR}/moultbook.env"
 echo "[deploy-all]   code_id=${MOULTBOOK_CODE_ID} addr=${MOULTBOOK_ADDR}"
 
+# ── 4. Coordination contracts (safety-envelope, merkle-verifier, circuit-breaker, coordination-settler) ─
+echo ""
+echo "[deploy-all] === 4/4  coordination contracts ==="
+export BUILD="${BUILD:-0}"
+bash "${HERE}/deploy-coordination-contracts.sh"
+
+# Source coordination-contracts.env
+# shellcheck source=/dev/null
+source "${DEVNET_DIR}/coordination-contracts.env"
+echo "[deploy-all]   safety-envelope      : ${SAFETY_ENVELOPE_ADDR}"
+echo "[deploy-all]   merkle-verifier      : ${MERKLE_VERIFIER_ADDR}"
+echo "[deploy-all]   circuit-breaker      : ${CIRCUIT_BREAKER_ADDR}"
+echo "[deploy-all]   coordination-settler : ${COORDINATION_SETTLER_ADDR}"
+
 # ── Final summary ────────────────────────────────────────────────────────
 echo ""
 echo "=============================================="
@@ -128,8 +142,13 @@ echo "  zk-verifier-pure      : ${PURE_ADDR}"
 echo "  zk-verifier-precompile: ${PRECOMPILE_ADDR}"
 echo "  jclaw-credential      : ${JCLAW_ADDR}"
 echo "  moultbook             : ${MOULTBOOK_ADDR}"
+echo "  safety-envelope       : ${SAFETY_ENVELOPE_ADDR}"
+echo "  merkle-verifier       : ${MERKLE_VERIFIER_ADDR}"
+echo "  circuit-breaker       : ${CIRCUIT_BREAKER_ADDR}"
+echo "  coordination-settler  : ${COORDINATION_SETTLER_ADDR}"
 echo ""
 echo "  Files written:"
 echo "    ${DEVNET_DIR}/deploy.env"
 echo "    ${DEVNET_DIR}/moultbook.env"
+echo "    ${DEVNET_DIR}/coordination-contracts.env"
 echo "=============================================="

@@ -87,12 +87,13 @@ exec_tx() {
 }
 
 wait_tx() {
-  # Poll up to ~20 s for tx inclusion. With ~2 s block time and broadcast
+  # Poll up to ~60 s for tx inclusion. With ~2 s block time and broadcast
   # mode=sync, normal inclusion is in the 2nd or 3rd block; indexer flush
-  # on a busy proposer can take an extra block.
+  # on a busy proposer can take an extra block. Large wasm store txs
+  # (e.g. moultbook at 374KB) can take longer to index.
   local hash="$1"
   local out=""
-  for _ in $(seq 1 20); do
+  for _ in $(seq 1 60); do
     sleep 1
     out=$(docker exec "${CONTAINER}" junod query tx "${hash}" \
             --node "${NODE}" --output json 2>/dev/null || true)
@@ -101,7 +102,7 @@ wait_tx() {
       return 0
     fi
   done
-  echo "error: tx ${hash} not indexed after 20 s" >&2
+  echo "error: tx ${hash} not indexed after 60 s" >&2
   return 4
 }
 

@@ -1,0 +1,44 @@
+# docker-compose.yml for the JunoClaw context agent.
+#
+# Usage:
+#   docker compose up -d
+#
+# The context agent indexes Moultbook entries and serves them over HTTP.
+# Mount a volume for the cache so the index survives container restarts.
+
+version: "3.8"
+
+services:
+  context-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${CONTEXT_AGENT_PORT:-3000}:3000"
+    environment:
+      # Juno chain connection
+      JUNO_RPC_ENDPOINT: "${JUNO_RPC_ENDPOINT:-http://localhost:26657}"
+      JUNO_REST_ENDPOINT: "${JUNO_REST_ENDPOINT:-https://juno-rest.publicnode.com}"
+      MOULTBOOK_ADDR: "${MOULTBOOK_ADDR:-juno18xn4cfpjfpqhmjenr9gdxk5uk7jjq3cezcy6d2jcar2gvx98pvtsm95z6j}"
+      # Crawl seeds
+      HEARTBEAT_AUTHOR: "${HEARTBEAT_AUTHOR:-juno17nmczzsfycwn74z2yrxqe7fc96033e7rm2gut6}"
+      EXTRA_SEED_AUTHORS: "${EXTRA_SEED_AUTHORS:-juno1r7g6q3lwkzedxgjae7alvc8x0848dgjyzllat7}"
+      # Refresh interval (5 min default)
+      REFRESH_INTERVAL_MS: "${REFRESH_INTERVAL_MS:-300000}"
+      # DAO contracts
+      DAO_CORE: "${DAO_CORE:-juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac}"
+      PROPOSAL_MODULE: "${PROPOSAL_MODULE:-juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp}"
+      # Redmark trust threshold
+      REDMARK_MIN_TRUST_SCORE: "${REDMARK_MIN_TRUST_SCORE:-10}"
+    volumes:
+      - context-agent-cache:/app/cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  context-agent-cache:

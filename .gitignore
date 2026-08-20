@@ -135,6 +135,9 @@ make_pdf.py
 # Local scratch dirs
 Node/
 bin/
+# Exception: Rust cargo binary targets live in src/bin/
+!crates/*/src/bin/
+!src/bin/
 
 # GPU probe results
 tools/akash/probe-batch-glm45air-results.json

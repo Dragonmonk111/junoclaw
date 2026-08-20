@@ -1,0 +1,41 @@
+---
+# Flux.1-schnell on Akash — image generation for JunoClaw articles
+# Based on cro7nis/flux-schnell-on-akash working SDL
+version: "2.0"
+
+services:
+  flux:
+    image: cro7/flux-schnell-on-akash:0.0.1
+    expose:
+      - port: 7860
+        as: 7860
+        to:
+          - global: true
+
+profiles:
+  compute:
+    flux:
+      resources:
+        cpu:
+          units: 6
+        memory:
+          size: 32Gi
+        storage:
+          - size: 40Gi
+        gpu:
+          units: 1
+          attributes:
+            vendor:
+              nvidia:
+  placement:
+    dcloud:
+      pricing:
+        flux:
+          denom: uact
+          amount: 500000
+
+deployment:
+  flux:
+    dcloud:
+      profile: flux
+      count: 1

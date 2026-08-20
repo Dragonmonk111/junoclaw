@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JunoClaw Fleet Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0e17;
+            color: #c8d6e5;
+            min-height: 100vh;
+        }
+        .header {
+            background: #111827;
+            border-bottom: 1px solid #1e293b;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { font-size: 1.25rem; color: #38bdf8; }
+        .header .status { font-size: 0.875rem; color: #64748b; }
+        .container { padding: 2rem; max-width: 1400px; margin: 0 auto; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem; }
+        .card {
+            background: #111827;
+            border: 1px solid #1e293b;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+        }
+        .card h2 { font-size: 1rem; color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .metric { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #1e293b; }
+        .metric:last-child { border-bottom: none; }
+        .metric .label { color: #64748b; }
+        .metric .value { color: #e2e8f0; font-weight: 600; }
+        .robot-card { cursor: pointer; transition: border-color 0.2s; }
+        .robot-card:hover { border-color: #38bdf8; }
+        .robot-card.tripped { border-color: #ef4444; }
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-ok { background: #064e3b; color: #34d399; }
+        .badge-warn { background: #78350f; color: #fbbf24; }
+        .badge-error { background: #7f1d1d; color: #f87171; }
+        .badge-locked { background: #7f1d1d; color: #f87171; }
+        .badge-operational { background: #064e3b; color: #34d399; }
+        .refresh-btn {
+            background: #1e293b;
+            color: #38bdf8;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .refresh-btn:hover { background: #334155; }
+        .empty { text-align: center; color: #475569; padding: 3rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>JunoClaw Fleet Dashboard</h1>
+        <div>
+            <span class="status" id="last-update">Loading...</span>
+            <button class="refresh-btn" onclick="loadData()">Refresh</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="grid" style="margin-bottom: 2rem;">
+            <div class="card">
+                <h2>Fleet Overview</h2>
+                <div class="metric"><span class="label">Total Robots</span><span class="value" id="total-robots">—</span></div>
+                <div class="metric"><span class="label">Operational</span><span class="value" id="operational">—</span></div>
+                <div class="metric"><span class="label">Locked</span><span class="value" id="locked">—</span></div>
+                <div class="metric"><span class="label">Proofs Today</span><span class="value" id="proofs-today">—</span></div>
+            </div>
+            <div class="card">
+                <h2>Chain Status</h2>
+                <div class="metric"><span class="label">Block Height</span><span class="value" id="block-height">—</span></div>
+                <div class="metric"><span class="label">Block Time</span><span class="value" id="block-time">2.8s</span></div>
+                <div class="metric"><span class="label">Syncing</span><span class="value" id="syncing">—</span></div>
+            </div>
+            <div class="card">
+                <h2>Gas Costs (Today)</h2>
+                <div class="metric"><span class="label">Total Gas Used</span><span class="value" id="gas-today">—</span></div>
+                <div class="metric"><span class="label">Est. Cost (USD)</span><span class="value" id="cost-today">—</span></div>
+                <div class="metric"><span class="label">Avg Gas/Proof</span><span class="value" id="avg-gas">203K</span></div>
+            </div>
+        </div>
+
+        <h2 style="color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em; font-size: 1rem;">Robots</h2>
+        <div class="grid" id="robots-grid">
+            <div class="empty">No robots registered. Use the bridge to register robots.</div>
+        </div>
+    </div>
+
+    <script>
+        const CHAIN_RPC = window.location.hostname === 'localhost'
+            ? 'http://localhost:26657'
+            : (window.env?.CHAIN_RPC || 'http://junod:26657');
+        const LCD_URL = window.location.hostname === 'localhost'
+            ? 'http://localhost:1317'
+            : (window.env?.LCD_URL || 'http://junod:1317');
+
+        async function fetchJSON(url) {
+            try {
+                const resp = await fetch(url);
+                if (!resp.ok) return null;
+                return await resp.json();
+            } catch (e) {
+                console.error(`fetch failed: ${url}`, e);
+                return null;
+            }
+        }
+
+        async function loadData() {
+            document.getElementById('last-update').textContent = 'Updating...';
+
+            // Chain status
+            const status = await fetchJSON(`${CHAIN_RPC}/status`);
+            if (status) {
+                const si = status.result?.sync_info;
+                document.getElementById('block-height').textContent = si?.latest_block_height || '—';
+                document.getElementById('syncing').textContent = si?.catching_up ? 'Yes' : 'No';
+            }
+
+            // Robots (query skill-registry for registered robots)
+            // In production, this would query the skill-registry contract
+            // For now, show a placeholder
+            const robots = [
+                { id: 'warehouse-bot-01', status: 'operational', proofs: 288, lastProof: '2s ago' },
+                { id: 'warehouse-bot-02', status: 'operational', proofs: 286, lastProof: '5s ago' },
+                { id: 'delivery-bot-01', status: 'locked', proofs: 142, lastProof: '15m ago', reason: 'max_speed violation' },
+            ];
+
+            document.getElementById('total-robots').textContent = robots.length;
+            document.getElementById('operational').textContent = robots.filter(r => r.status === 'operational').length;
+            document.getElementById('locked').textContent = robots.filter(r => r.status === 'locked').length;
+            document.getElementById('proofs-today').textContent = robots.reduce((s, r) => s + r.proofs, 0);
+
+            // Gas estimate
+            const totalGas = robots.reduce((s, r) => s + r.proofs, 0) * 203000;
+            document.getElementById('gas-today').textContent = totalGas.toLocaleString();
+            document.getElementById('cost-today').textContent = `$${(totalGas * 0.025 * 0.25 / 1e6).toFixed(2)}`;
+
+            // Robot cards
+            const grid = document.getElementById('robots-grid');
+            if (robots.length === 0) {
+                grid.innerHTML = '<div class="empty">No robots registered.</div>';
+            } else {
+                grid.innerHTML = robots.map(r => `
+                    <div class="card robot-card ${r.status === 'locked' ? 'tripped' : ''}">
+                        <h2>${r.id}</h2>
+                        <div class="metric">
+                            <span class="label">Status</span>
+                            <span class="value">
+                                <span class="badge ${r.status === 'locked' ? 'badge-locked' : 'badge-operational'}">
+                                    ${r.status === 'locked' ? 'LOCKED' : 'OPERATIONAL'}
+                                </span>
+                            </span>
+                        </div>
+                        <div class="metric"><span class="label">Proofs Today</span><span class="value">${r.proofs}</span></div>
+                        <div class="metric"><span class="label">Last Proof</span><span class="value">${r.lastProof}</span></div>
+                        ${r.reason ? `<div class="metric"><span class="label">Violation</span><span class="value" style="color:#f87171">${r.reason}</span></div>` : ''}
+                    </div>
+                `).join('');
+            }
+
+            document.getElementById('last-update').textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+        }
+
+        loadData();
+        setInterval(loadData, 10000);
+    </script>
+</body>
+</html>

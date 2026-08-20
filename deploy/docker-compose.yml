@@ -1,0 +1,109 @@
+version: "3.9"
+
+services:
+  # ─── Juno Chain ───
+  junod:
+    image: junoclaw/junod-bn254:v30
+    container_name: junoclaw-junod
+    ports:
+      - "26657:26657"   # RPC
+      - "1317:1317"     # LCD
+      - "9090:9090"     # gRPC
+    volumes:
+      - junod-data:/root/.juno
+      - ./scripts/init-chain.sh:/init-chain.sh:ro
+    environment:
+      - CHAIN_ID=junoclaw-local
+      - MONIKER=junoclaw-local
+    command: >
+      sh -c "/init-chain.sh && junod start --rpc.laddr tcp://0.0.0.0:26657"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:26657/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - junoclaw-net
+
+  # ─── ROS2 Bridge ───
+  ros2-bridge:
+    build:
+      context: ../plugins/plugin-ros2/bridge
+      dockerfile: Dockerfile
+    container_name: junoclaw-bridge
+    ports:
+      - "${BRIDGE_PORT:-8080}:8080"
+    environment:
+      - JUNOCLAW_ROBOT_ID=${ROBOT_ID:-robot-01}
+      - JUNOCLAW_BRIDGE_PORT=8080
+      - JUNOCLAW_SIMULATE=${BRIDGE_SIMULATE:-true}
+    command: >
+      junoclaw-ros2-bridge
+      --robot-id ${ROBOT_ID:-robot-01}
+      ${BRIDGE_SIMULATE:-true:+--simulate}
+      --port 8080
+    depends_on:
+      junod:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - junoclaw-net
+
+  # ─── Prover Daemon ───
+  prover-daemon:
+    build:
+      context: ../prover-daemon
+      dockerfile: Dockerfile
+    container_name: junoclaw-prover
+    environment:
+      - ROBOT_ID=${ROBOT_ID:-robot-01}
+      - BRIDGE_URL=http://ros2-bridge:8080
+      - CHAIN_RPC=http://junod:26657
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - PROVER_INTERVAL=${PROVER_INTERVAL:-10}
+    volumes:
+      - prover-keys:/keys:ro
+    command: >
+      junoclaw-prover run
+      --config /etc/prover/config.toml
+      --bridge-url http://ros2-bridge:8080
+      --chain-rpc http://junod:26657
+      --interval ${PROVER_INTERVAL:-10}
+    depends_on:
+      ros2-bridge:
+        condition: service_healthy
+      junod:
+        condition: service_healthy
+    networks:
+      - junoclaw-net
+
+  # ─── Fleet Dashboard (optional) ───
+  fleet-dashboard:
+    build:
+      context: ../dashboard
+      dockerfile: Dockerfile
+    container_name: junoclaw-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - CHAIN_RPC=http://junod:26657
+      - LCD_URL=http://junod:1317
+    depends_on:
+      junod:
+        condition: service_healthy
+    profiles:
+      - dashboard
+    networks:
+      - junoclaw-net
+
+volumes:
+  junod-data:
+  prover-keys:
+
+networks:
+  junoclaw-net:
+    driver: bridge
