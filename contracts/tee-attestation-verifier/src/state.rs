@@ -1,9 +1,10 @@
-use cosmwasm_std::{ensure, Addr};
+use cosmwasm_std::Addr;
 use cw_storage_plus::{Item, Map};
 use serde::{Deserialize, Serialize};
 
 pub const ADMIN: Item<Addr> = Item::new("admin");
 pub const TRUSTED_MEASUREMENT: Item<String> = Item::new("trusted_measurement");
+pub const TRUSTED_SIGNER_PUBKEY: Item<String> = Item::new("trusted_signer_pubkey");
 
 /// Last attestation result per robot
 pub const ATTESTATIONS: Map<&str, AttestationRecord> = Map::new("attestations");

@@ -1,13 +1,15 @@
 use cosmwasm_std::{
-    ensure, Addr, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Storage,
+    ensure, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
 };
 use sha2::{Digest, Sha256};
 
 use crate::msg::{
     AdminResponse, AttestationResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
-    TrustedMeasurementResponse,
+    TrustedMeasurementResponse, TrustedSignerResponse,
 };
-use crate::state::{ADMIN, ATTESTATIONS, TRUSTED_MEASUREMENT, AttestationRecord};
+use crate::state::{
+    ADMIN, ATTESTATIONS, TRUSTED_MEASUREMENT, TRUSTED_SIGNER_PUBKEY, AttestationRecord,
+};
 
 pub fn instantiate(
     deps: DepsMut,
@@ -18,10 +20,12 @@ pub fn instantiate(
     let admin = deps.api.addr_validate(&msg.admin)?;
     ADMIN.save(deps.storage, &admin)?;
     TRUSTED_MEASUREMENT.save(deps.storage, &msg.trusted_measurement)?;
+    TRUSTED_SIGNER_PUBKEY.save(deps.storage, &msg.trusted_signer_pubkey)?;
     Ok(Response::new()
         .add_attribute("method", "instantiate")
         .add_attribute("admin", msg.admin)
-        .add_attribute("trusted_measurement", msg.trusted_measurement))
+        .add_attribute("trusted_measurement", msg.trusted_measurement)
+        .add_attribute("trusted_signer_pubkey", msg.trusted_signer_pubkey))
 }
 
 pub fn execute(
@@ -46,6 +50,9 @@ pub fn execute(
         ExecuteMsg::UpdateTrustedMeasurement { measurement } => {
             execute_update_measurement(deps, info, measurement)
         }
+        ExecuteMsg::UpdateTrustedSigner { signer_pubkey } => {
+            execute_update_signer(deps, info, signer_pubkey)
+        }
         ExecuteMsg::TransferAdmin { new_admin } => execute_transfer_admin(deps, info, new_admin),
     }
 }
@@ -53,7 +60,7 @@ pub fn execute(
 fn execute_verify_attestation(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
+    _info: MessageInfo,
     robot_id: String,
     attestation_type: String,
     measurement: String,
@@ -78,44 +85,43 @@ fn execute_verify_attestation(
         ))
     );
 
-    // 3. Verify that the report_data contains the hash of the ZK proof
-    // In production, this would verify the actual attestation signature
-    // using the platform's attestation verification key (VCEK for SEV-SNP,
-    // or Intel Attestation Service for SGX).
-    //
-    // For now, we verify:
-    //   a) The signature is a valid Ed25519 signature over the report
-    //   b) The report_data is bound to the report
-    //   c) The measurement is embedded in the report
+    // 3. Verify signer pubkey matches trusted signer
+    let trusted_signer = TRUSTED_SIGNER_PUBKEY.load(deps.storage)?;
+    ensure!(
+        signer_pubkey_hex == trusted_signer,
+        StdError::generic_err("signer pubkey does not match trusted signer")
+    );
 
-    // Verify report_data is bound: hash(report_hex) should relate to report_data
+    // 4. Decode report, signature, and pubkey
     let report_bytes = hex::decode(&report_hex)
         .map_err(|e| StdError::generic_err(format!("invalid report hex: {}", e)))?;
-    let report_hash = hex::encode(Sha256::digest(&report_bytes));
-
-    // Verify signature is non-empty and well-formed hex
     let sig_bytes = hex::decode(&signature_hex)
         .map_err(|e| StdError::generic_err(format!("invalid signature hex: {}", e)))?;
+    let pubkey_bytes = hex::decode(&signer_pubkey_hex)
+        .map_err(|e| StdError::generic_err(format!("invalid pubkey hex: {}", e)))?;
+
     ensure!(
         sig_bytes.len() == 64,
         StdError::generic_err("signature must be 64 bytes (Ed25519)")
     );
-
-    let pubkey_bytes = hex::decode(&signer_pubkey_hex)
-        .map_err(|e| StdError::generic_err(format!("invalid pubkey hex: {}", e)))?;
     ensure!(
         pubkey_bytes.len() == 32,
         StdError::generic_err("public key must be 32 bytes (Ed25519)")
     );
 
-    // In production: verify Ed25519 signature over report_hash using signer_pubkey
-    // For now, we accept the attestation if:
-    //   - measurement matches trusted
-    //   - report_data is non-empty
-    //   - signature and pubkey are well-formed
-    // This is a placeholder for real attestation verification.
+    // 5. Bind report_data to report: report_data must equal sha256(report_hex) hex
+    let report_hash = hex::encode(Sha256::digest(&report_bytes));
+    ensure!(
+        report_data == report_hash,
+        StdError::generic_err("report_data does not match sha256(report)")
+    );
 
-    // 4. Store attestation record
+    // 6. Verify Ed25519 signature over the report bytes
+    let valid = deps.api.ed25519_verify(&report_bytes, &sig_bytes, &pubkey_bytes)
+        .map_err(|e| StdError::generic_err(format!("ed25519 verification failed: {}", e)))?;
+    ensure!(valid, StdError::generic_err("ed25519 signature verification failed"));
+
+    // 7. Store attestation record
     let record = AttestationRecord {
         verified: true,
         attestation_type: attestation_type.clone(),
@@ -125,7 +131,7 @@ fn execute_verify_attestation(
     };
     ATTESTATIONS.save(deps.storage, &robot_id, &record)?;
 
-    // 5. Emit event
+    // 8. Emit event
     Ok(Response::new()
         .add_attribute("method", "verify_attestation")
         .add_attribute("robot_id", &robot_id)
@@ -150,6 +156,22 @@ fn execute_update_measurement(
     Ok(Response::new()
         .add_attribute("method", "update_measurement")
         .add_attribute("new_measurement", measurement))
+}
+
+fn execute_update_signer(
+    deps: DepsMut,
+    info: MessageInfo,
+    signer_pubkey: String,
+) -> StdResult<Response> {
+    let admin = ADMIN.load(deps.storage)?;
+    ensure!(
+        info.sender == admin,
+        StdError::generic_err("unauthorized: only admin can update signer")
+    );
+    TRUSTED_SIGNER_PUBKEY.save(deps.storage, &signer_pubkey)?;
+    Ok(Response::new()
+        .add_attribute("method", "update_signer")
+        .add_attribute("new_signer_pubkey", signer_pubkey))
 }
 
 fn execute_transfer_admin(
@@ -203,6 +225,10 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
                 admin: admin.to_string(),
             })?)
         }
+        QueryMsg::GetTrustedSigner {} => {
+            let signer_pubkey = TRUSTED_SIGNER_PUBKEY.load(deps.storage)?;
+            Ok(cosmwasm_std::to_json_binary(&TrustedSignerResponse { signer_pubkey })?)
+        }
     }
 }
 
@@ -215,13 +241,15 @@ mod tests {
     use super::*;
     use cosmwasm_std::Addr;
     use cw_multi_test::{App, ContractWrapper, Executor};
+    use ed25519_compact::KeyPair;
     use hex;
+    use sha2::{Digest, Sha256};
 
     fn valid_hex(len: usize) -> String {
         hex::encode(&vec![0u8; len])
     }
 
-    fn setup_contract(app: &mut App, admin: &Addr) -> Addr {
+    fn setup_contract(app: &mut App, admin: &Addr, trusted_signer: &str) -> Addr {
         let code = ContractWrapper::new(execute, instantiate, query);
         let code_id = app.store_code(Box::new(code));
         app.instantiate_contract(
@@ -230,6 +258,7 @@ mod tests {
             &InstantiateMsg {
                 admin: admin.to_string(),
                 trusted_measurement: "abcd1234".to_string(),
+                trusted_signer_pubkey: trusted_signer.to_string(),
             },
             &[],
             "tee-attestation-verifier",
@@ -238,11 +267,15 @@ mod tests {
         .unwrap()
     }
 
+    fn setup_contract_default(app: &mut App, admin: &Addr) -> Addr {
+        setup_contract(app, admin, &valid_hex(32))
+    }
+
     #[test]
     fn test_instantiate() {
         let mut app = App::default();
         let admin = app.api().addr_make("admin");
-        let contract = setup_contract(&mut app, &admin);
+        let contract = setup_contract_default(&mut app, &admin);
 
         // Query trusted measurement
         let resp: TrustedMeasurementResponse = app
@@ -257,13 +290,33 @@ mod tests {
             .query_wasm_smart(&contract, &QueryMsg::GetAdmin {})
             .unwrap();
         assert_eq!(resp.admin, admin.to_string());
+
+        // Query trusted signer
+        let resp: TrustedSignerResponse = app
+            .wrap()
+            .query_wasm_smart(&contract, &QueryMsg::GetTrustedSigner {})
+            .unwrap();
+        assert_eq!(resp.signer_pubkey, valid_hex(32));
     }
 
     #[test]
     fn test_verify_attestation_success() {
         let mut app = App::default();
         let admin = app.api().addr_make("admin");
-        let contract = setup_contract(&mut app, &admin);
+
+        // Generate a real Ed25519 keypair
+        let kp = KeyPair::generate();
+        let pubkey_hex = hex::encode(kp.pk.as_slice());
+        let contract = setup_contract(&mut app, &admin, &pubkey_hex);
+
+        // Create a real attestation report
+        let report = b"attestation_report_data";
+        let report_hex = hex::encode(report);
+        let report_hash = hex::encode(Sha256::digest(report));
+
+        // Sign the report with the private key
+        let sig = kp.sk.sign(report, None);
+        let sig_hex = hex::encode(sig.as_slice());
 
         let anyone = app.api().addr_make("anyone");
         app.execute_contract(
@@ -273,10 +326,10 @@ mod tests {
                 robot_id: "robot-001".to_string(),
                 attestation_type: "sev-snp".to_string(),
                 measurement: "abcd1234".to_string(),
-                report_data: "zk_proof_hash_123".to_string(),
-                report_hex: hex::encode(b"attestation_report_data"),
-                signature_hex: valid_hex(64),
-                signer_pubkey_hex: valid_hex(32),
+                report_data: report_hash,
+                report_hex,
+                signature_hex: sig_hex,
+                signer_pubkey_hex: pubkey_hex,
             },
             &[],
         )
@@ -301,7 +354,7 @@ mod tests {
     fn test_verify_attestation_wrong_measurement() {
         let mut app = App::default();
         let admin = app.api().addr_make("admin");
-        let contract = setup_contract(&mut app, &admin);
+        let contract = setup_contract_default(&mut app, &admin);
 
         let anyone = app.api().addr_make("anyone");
         let err = app
@@ -327,7 +380,7 @@ mod tests {
     fn test_verify_attestation_unsupported_type() {
         let mut app = App::default();
         let admin = app.api().addr_make("admin");
-        let contract = setup_contract(&mut app, &admin);
+        let contract = setup_contract_default(&mut app, &admin);
 
         let anyone = app.api().addr_make("anyone");
         let err = app
@@ -350,10 +403,74 @@ mod tests {
     }
 
     #[test]
+    fn test_verify_attestation_wrong_signer() {
+        let mut app = App::default();
+        let admin = app.api().addr_make("admin");
+        let contract = setup_contract_default(&mut app, &admin);
+
+        let kp = KeyPair::generate();
+        let wrong_pubkey_hex = hex::encode(kp.pk.as_slice());
+        let report = b"report";
+        let report_hash = hex::encode(Sha256::digest(report));
+        let sig = kp.sk.sign(report, None);
+
+        let anyone = app.api().addr_make("anyone");
+        let err = app
+            .execute_contract(
+                anyone.clone(),
+                contract.clone(),
+                &ExecuteMsg::VerifyAttestation {
+                    robot_id: "robot-004".to_string(),
+                    attestation_type: "sgx".to_string(),
+                    measurement: "abcd1234".to_string(),
+                    report_data: report_hash,
+                    report_hex: hex::encode(report),
+                    signature_hex: hex::encode(sig.as_slice()),
+                    signer_pubkey_hex: wrong_pubkey_hex,
+                },
+                &[],
+            )
+            .unwrap_err();
+        assert!(format!("{:?}", err).contains("signer pubkey does not match"));
+    }
+
+    #[test]
+    fn test_verify_attestation_report_data_mismatch() {
+        let mut app = App::default();
+        let admin = app.api().addr_make("admin");
+
+        let kp = KeyPair::generate();
+        let pubkey_hex = hex::encode(kp.pk.as_slice());
+        let contract = setup_contract(&mut app, &admin, &pubkey_hex);
+
+        let report = b"report";
+        let sig = kp.sk.sign(report, None);
+
+        let anyone = app.api().addr_make("anyone");
+        let err = app
+            .execute_contract(
+                anyone.clone(),
+                contract.clone(),
+                &ExecuteMsg::VerifyAttestation {
+                    robot_id: "robot-005".to_string(),
+                    attestation_type: "sgx".to_string(),
+                    measurement: "abcd1234".to_string(),
+                    report_data: "wrong_hash".to_string(),
+                    report_hex: hex::encode(report),
+                    signature_hex: hex::encode(sig.as_slice()),
+                    signer_pubkey_hex: pubkey_hex,
+                },
+                &[],
+            )
+            .unwrap_err();
+        assert!(format!("{:?}", err).contains("report_data does not match"));
+    }
+
+    #[test]
     fn test_update_measurement_unauthorized() {
         let mut app = App::default();
         let admin = app.api().addr_make("admin");
-        let contract = setup_contract(&mut app, &admin);
+        let contract = setup_contract_default(&mut app, &admin);
 
         let not_admin = app.api().addr_make("not_admin");
         let err = app
@@ -373,7 +490,7 @@ mod tests {
     fn test_update_measurement_authorized() {
         let mut app = App::default();
         let admin = app.api().addr_make("admin");
-        let contract = setup_contract(&mut app, &admin);
+        let contract = setup_contract_default(&mut app, &admin);
 
         app.execute_contract(
             admin.clone(),
@@ -385,11 +502,36 @@ mod tests {
         )
         .unwrap();
 
-        // Verify
         let resp: TrustedMeasurementResponse = app
             .wrap()
             .query_wasm_smart(&contract, &QueryMsg::GetTrustedMeasurement {})
             .unwrap();
         assert_eq!(resp.measurement, "new_measurement");
+    }
+
+    #[test]
+    fn test_update_signer_authorized() {
+        let mut app = App::default();
+        let admin = app.api().addr_make("admin");
+        let contract = setup_contract_default(&mut app, &admin);
+
+        let new_kp = KeyPair::generate();
+        let new_pubkey_hex = hex::encode(new_kp.pk.as_slice());
+
+        app.execute_contract(
+            admin.clone(),
+            contract.clone(),
+            &ExecuteMsg::UpdateTrustedSigner {
+                signer_pubkey: new_pubkey_hex.clone(),
+            },
+            &[],
+        )
+        .unwrap();
+
+        let resp: TrustedSignerResponse = app
+            .wrap()
+            .query_wasm_smart(&contract, &QueryMsg::GetTrustedSigner {})
+            .unwrap();
+        assert_eq!(resp.signer_pubkey, new_pubkey_hex);
     }
 }

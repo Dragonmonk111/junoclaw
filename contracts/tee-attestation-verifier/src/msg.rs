@@ -6,6 +6,9 @@ pub struct InstantiateMsg {
     pub admin: String,
     /// Trusted attestation measurement (MRENCLAVE for SGX, launch digest for SEV-SNP)
     pub trusted_measurement: String,
+    /// Trusted signer public key (hex-encoded, 32 bytes Ed25519)
+    /// Attestations must be signed by this key to be accepted.
+    pub trusted_signer_pubkey: String,
 }
 
 #[cw_serde]
@@ -33,6 +36,11 @@ pub enum ExecuteMsg {
         measurement: String,
     },
 
+    /// Update the trusted signer public key (admin only)
+    UpdateTrustedSigner {
+        signer_pubkey: String,
+    },
+
     /// Transfer admin
     TransferAdmin {
         new_admin: String,
@@ -53,6 +61,10 @@ pub enum QueryMsg {
     /// Get the admin address
     #[returns(AdminResponse)]
     GetAdmin {},
+
+    /// Get the trusted signer public key
+    #[returns(TrustedSignerResponse)]
+    GetTrustedSigner {},
 }
 
 #[cw_serde]
@@ -73,4 +85,9 @@ pub struct TrustedMeasurementResponse {
 #[cw_serde]
 pub struct AdminResponse {
     pub admin: String,
+}
+
+#[cw_serde]
+pub struct TrustedSignerResponse {
+    pub signer_pubkey: String,
 }
