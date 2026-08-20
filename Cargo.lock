@@ -3167,6 +3167,8 @@ name = "junoclaw-coordination"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
+ "axum 0.8.9",
  "bytes",
  "commonware-actor",
  "commonware-codec",
@@ -3187,8 +3189,10 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.20",
  "tokio",
+ "tower-http",
  "tracing",
  "tracing-subscriber 0.3.23",
+ "urlencoding",
 ]
 
 [[package]]
@@ -3307,6 +3311,21 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber 0.3.23",
+]
+
+[[package]]
+name = "junoclaw-physics"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "junoclaw-coordination",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

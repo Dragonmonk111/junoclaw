@@ -1,0 +1,34 @@
+[package]
+name = "junoclaw-physics"
+version = "0.1.0"
+edition = "2021"
+description = "Physics simulation for JunoClaw reflex-tier attestation — MuJoCo backend + simulated backend"
+
+[dependencies]
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Cryptography
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Async runtime (for continuous simulation mode)
+tokio = { workspace = true }
+
+# JunoClaw coordination (for ReflexBatchAttestation, SafetyEnvelope)
+junoclaw-coordination = { path = "../junoclaw-coordination" }
+
+[features]
+default = ["simulated"]
+# Simulated physics backend (no external deps)
+simulated = []
+# MuJoCo backend (requires MuJoCo SDK installed)
+# mujoco = ["dep:mujoco-rs"]

@@ -11,6 +11,7 @@ members = [
     "crates/junoclaw-ibc-relay",
     "crates/junoclaw-coordination",
     "crates/junoclaw-coordination-napi",
+    "crates/junoclaw-physics",
     "crates/junoclaw-relayer",
     "crates/junoclaw-test-mesh",
     "plugins/plugin-llm",
