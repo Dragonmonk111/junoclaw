@@ -253,10 +253,14 @@ mod tests {
     fn extract_tasks_from_empty_batch() {
         let batch = FinalizedBatch {
             commonware_height: 1,
-            messages_hash: [0u8; 32],
-            certificate: vec![],
+            messages_hash: hex::encode([0u8; 32]),
+            certificate: String::new(),
             timestamp: 1000,
             payload_size_bytes: 0,
+            breaker_actions: Vec::new(),
+            context_digest: None,
+            batch_hash: hex::encode([0u8; 32]),
+            message_count: 0,
         };
         assert!(extract_tasks(&batch).is_empty());
     }

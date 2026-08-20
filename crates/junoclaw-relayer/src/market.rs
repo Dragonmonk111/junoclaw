@@ -50,7 +50,7 @@ pub async fn finalize_epoch(
     let msg = FinalizeEpochMsg {
         batch_height: batch.commonware_height,
         consensus_verdict: "green".to_string(),
-        messages_hash: hex::encode(&batch.messages_hash),
+        messages_hash: batch.messages_hash.clone(),
     };
 
     info!(
@@ -119,10 +119,14 @@ mod tests {
         };
         let batch = FinalizedBatch {
             commonware_height: 42,
-            messages_hash: [0xAB; 32],
-            certificate: vec![],
+            messages_hash: hex::encode([0xAB; 32]),
+            certificate: String::new(),
             timestamp: 1000,
             payload_size_bytes: 0,
+            breaker_actions: Vec::new(),
+            context_digest: None,
+            batch_hash: hex::encode([0xAB; 32]),
+            message_count: 0,
         };
         finalize_epoch("http://rpc", "key", &config, &batch)
             .await

@@ -14,6 +14,7 @@ use clap::{Parser, Subcommand};
 use tracing::info;
 
 mod bridge;
+mod breaker;
 mod executor;
 mod market;
 mod moult;
@@ -80,6 +81,12 @@ enum Commands {
         /// finalizes eval epochs after each batch settlement (Layer 6).
         #[arg(long)]
         truth_market: Option<String>,
+
+        /// Optional circuit-breaker contract address. When set, the relayer
+        /// submits TripBreaker transactions for any BreakerActions detected
+        /// in finalized batches.
+        #[arg(long)]
+        breaker: Option<String>,
     },
 }
 
@@ -102,6 +109,7 @@ async fn main() -> Result<()> {
             task_ledger,
             agent_registry,
             truth_market,
+            breaker,
         } => {
             info!("Starting JunoClaw relayer daemon");
             info!("  RPC: {}", rpc);
@@ -144,6 +152,13 @@ async fn main() -> Result<()> {
                 }
             });
 
+            let breaker_cfg = breaker.map(|addr| {
+                info!("  Circuit Breaker: {}", addr);
+                breaker::BreakerConfig {
+                    breaker_addr: addr,
+                }
+            });
+
             let config = watcher::WatcherConfig {
                 rpc_endpoint: rpc,
                 contract_addr: contract,
@@ -153,6 +168,7 @@ async fn main() -> Result<()> {
                 moult,
                 executor: executor_cfg,
                 market: market_cfg,
+                breaker: breaker_cfg,
             };
 
             let watcher = watcher::BatchWatcher::new(config);

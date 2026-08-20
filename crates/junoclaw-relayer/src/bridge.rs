@@ -40,12 +40,12 @@ pub async fn submit_batch(
     relayer_key: &str,
     batch: &FinalizedBatch,
 ) -> Result<()> {
-    let cert_hex = hex::encode(&batch.certificate);
-    let msg_hash_hex = hex::encode(&batch.messages_hash);
+    let cert_hex = &batch.certificate;
+    let msg_hash_hex = &batch.messages_hash;
 
     info!(
         "Built SubmitBatch tx for contract {} (height={}, cert={}..., msg_hash={})",
-        contract_addr, batch.commonware_height, &cert_hex[..16], msg_hash_hex
+        contract_addr, batch.commonware_height, &cert_hex[..cert_hex.len().min(16)], msg_hash_hex
     );
 
     // Dry-run mode: just log, don't submit
@@ -56,8 +56,8 @@ pub async fn submit_batch(
 
     // Build the ExecuteMsg JSON
     let msg = SubmitBatchMsg {
-        certificate: cert_hex,
-        messages_hash: msg_hash_hex,
+        certificate: cert_hex.clone(),
+        messages_hash: msg_hash_hex.clone(),
         commonware_height: batch.commonware_height,
         timestamp: batch.timestamp,
     };

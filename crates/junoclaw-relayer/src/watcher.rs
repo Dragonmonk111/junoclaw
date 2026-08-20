@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::{error, info, warn};
 
+use crate::breaker::BreakerConfig;
 use crate::executor::ExecutorConfig;
 use crate::market::MarketConfig;
 use crate::moult::MoultConfig;
@@ -27,20 +28,41 @@ pub struct WatcherConfig {
     /// Layer 6: when set, eval epochs are finalized after each batch
     /// settlement (truth market reward/slash distribution).
     pub market: Option<MarketConfig>,
+    /// Circuit breaker: when set, TripBreaker txs are submitted for
+    /// any BreakerActions detected in finalized batches.
+    pub breaker: Option<BreakerConfig>,
 }
 
 /// A finalized batch from the coordination network.
 /// This is the format the coordination node exposes via its REST API.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FinalizedBatch {
+    /// Block height (aliased from API's "height" field)
+    #[serde(alias = "height")]
     pub commonware_height: u64,
-    pub messages_hash: [u8; 32],
-    pub certificate: Vec<u8>,
+    /// Messages hash (hex-encoded string from API)
+    #[serde(default)]
+    pub messages_hash: String,
+    /// Certificate (hex-encoded string from API)
+    #[serde(default)]
+    pub certificate: String,
     pub timestamp: u64,
     /// Off-chain payload size in bytes, if the coordination node reports it.
     /// 0 = unknown (recorded as-is in the moultbook entry).
     #[serde(default)]
     pub payload_size_bytes: u64,
+    /// Breaker actions emitted during consensus (e.g. red-gated robot intents).
+    #[serde(default)]
+    pub breaker_actions: Vec<junoclaw_coordination::BreakerAction>,
+    /// Moultbook context digest fetched during consensus.
+    #[serde(default)]
+    pub context_digest: Option<String>,
+    /// Batch hash (hex-encoded, from API)
+    #[serde(default)]
+    pub batch_hash: String,
+    /// Message count in the batch
+    #[serde(default)]
+    pub message_count: usize,
 }
 
 /// Response from the coordination node's /finalized endpoint.
@@ -98,7 +120,7 @@ impl BatchWatcher {
             }
 
             info!(
-                "Relaying batch at height {} ({} bytes cert)",
+                "Relaying batch at height {} ({} cert chars)",
                 batch.commonware_height,
                 batch.certificate.len()
             );
@@ -170,6 +192,31 @@ impl BatchWatcher {
                             );
                         }
                     }
+
+                    // Circuit Breaker: submit TripBreaker txs for any
+                    // BreakerActions detected during consensus. Best-effort.
+                    if let Some(breaker_cfg) = &self.config.breaker {
+                        if !batch.breaker_actions.is_empty() {
+                            info!(
+                                "Submitting {} breaker actions for batch {}",
+                                batch.breaker_actions.len(),
+                                batch.commonware_height
+                            );
+                            if let Err(e) = crate::breaker::submit_breaker_actions(
+                                &self.config.rpc_endpoint,
+                                &self.config.relayer_key,
+                                breaker_cfg,
+                                &batch.breaker_actions,
+                            )
+                            .await
+                            {
+                                warn!(
+                                    "Circuit breaker submission failed for batch {}: {}",
+                                    batch.commonware_height, e
+                                );
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     error!(
@@ -220,10 +267,10 @@ impl BatchWatcher {
         // or a direct cosmrs/cosmrs-based signer.
 
         info!(
-            "Would submit SubmitBatch to {} at height {} (cert_hash={})",
+            "Would submit SubmitBatch to {} at height {} (batch_hash={})",
             self.config.contract_addr,
             batch.commonware_height,
-            hex::encode(&batch.messages_hash)
+            batch.messages_hash,
         );
 
         // Placeholder: in production, this calls bridge::submit_batch()

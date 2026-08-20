@@ -66,8 +66,10 @@ pub fn topic_hash(namespace: &str) -> String {
 
 /// Build the Post message for a settled batch.
 pub fn build_batch_post(config: &MoultConfig, batch: &FinalizedBatch) -> serde_json::Value {
+    let commitment_bytes = hex::decode(&batch.messages_hash)
+        .unwrap_or_else(|_| batch.messages_hash.as_bytes().to_vec());
     let msg = MoultExecuteMsg::Post {
-        commitment: Binary::from(batch.messages_hash),
+        commitment: Binary::from(commitment_bytes),
         content_type: BATCH_CONTENT_TYPE.to_string(),
         size_bytes: batch.payload_size_bytes,
         attestation_ref: None,
@@ -98,7 +100,7 @@ pub async fn post_batch_moult(
         config.moultbook_addr,
         batch.commonware_height,
         topic_hash(&config.topic_namespace),
-        hex::encode(batch.messages_hash),
+        hex::encode(batch.messages_hash.as_bytes()),
     );
 
     // TODO: sign and broadcast, same signer decision as bridge::submit_batch.
@@ -116,10 +118,14 @@ mod tests {
     fn test_batch() -> FinalizedBatch {
         FinalizedBatch {
             commonware_height: 4041,
-            messages_hash: [0xAB; 32],
-            certificate: vec![0xCD; 32],
+            messages_hash: hex::encode([0xAB; 32]),
+            certificate: hex::encode([0xCD; 32]),
             timestamp: 1_755_000_000,
             payload_size_bytes: 12_400,
+            breaker_actions: Vec::new(),
+            context_digest: None,
+            batch_hash: hex::encode([0xAB; 32]),
+            message_count: 0,
         }
     }
 
