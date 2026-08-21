@@ -96,9 +96,10 @@ The fleet operator funds the FeePay pool via `FundContract`. They set per-wallet
 | Step | Status | Who |
 |------|--------|-----|
 | v31 PR #1223 merged | Ready for review | Juno maintainers |
+| FeePay ante handler ordering | **Confirmed blocked on v30** — GlobalFee rejects zero-fee txs before FeePay can escrow. v31 reorders. | Us (tested Aug 21) |
 | v31 testnet deployment | Pending PR merge | Juno team |
 | v31 mainnet governance proposal | After testnet | Juno community |
-| JunoClaw FeePay integration spec | Not started | Us |
+| JunoClaw FeePay integration spec | Written, testnet-verified | Us |
 | FeePay-registered JunoClaw contracts | After v31 mainnet | Us |
 | Aegis PQC rebase onto v31 | After v31 mainnet | Us |
 
@@ -128,4 +129,4 @@ Tracking: [juno-ai-dev/juno issues #6–#20](https://github.com/juno-ai-dev/juno
 
 ---
 
-*August 2026. v30 live on Juno mainnet. v31 ready for testnet. FeePay fixes make gasless robot operations real. JunoClaw fleet operators pay the gas. Robot operators just send. Trust Wallet works. The friction disappears.*
+*August 2026. v30 live on Juno mainnet. v31 ready for testnet. FeePay registration, funding, and pool accounting verified on uni-7 (Aug 21, 2026). Gasless tx blocked by GlobalFee ante handler ordering on v30 — v31 reorders so FeePay intercepts first. JunoClaw fleet operators pay the gas. Robot operators just send. Trust Wallet works. The friction disappears.*

@@ -178,20 +178,26 @@ If a JunoClaw contract is migrated (e.g., zk-verifier precompile variant), the F
 
 - [ ] v31 mainnet upgrade passes governance
 - [ ] FeePay module enabled on mainnet (verify via `junod query feepay params`)
-- [ ] Register merkle-verifier, zk-verifier, circuit-breaker, moultbook with FeePay
+- [x] FeePay module enabled on testnet (uni-7) — confirmed Aug 21, 2026
+- [x] Register contract with FeePay on testnet — `MsgRegisterFeePayContract` succeeded, tx A3287D06...
+- [x] Fund FeePay pool on testnet — `MsgFundFeePayContract` succeeded, 1M ujunox, tx 932518DC...
+- [x] Query pool balance on testnet — confirmed via REST, `fee_pay_contract.balance = 1000000`
+- [x] Normal tx (with fees) to registered contract — succeeded, 211,707 gas, tx DBD4974D...
+- [x] Gasless tx (fees=0) on v30 — **failed**, GlobalFee blocks before FeePay (confirmed root cause)
+- [ ] Test gasless tx flow on v31 testnet (after v31 lands on uni-7)
+- [ ] Register merkle-verifier, zk-verifier, circuit-breaker, moultbook with FeePay on mainnet
 - [ ] Fund each pool per fleet scale table
 - [ ] Set per-wallet limits for each registered robot operator
 - [ ] Add FeePay monitoring endpoints to fleet coordinator
 - [ ] Update fleet dashboard to show pool balances
 - [ ] Update SDK integration guide with FeePay section
-- [ ] Test gasless tx flow from Trust Wallet on v31 testnet
 - [ ] Document pool top-up procedure for fleet operators
 
 ---
 
 ## Open Questions
 
-1. **FeePay + GlobalFee interaction** — does GlobalFee floor affect FeePay-eligible txs? Need to verify on v31 testnet. If GlobalFee rejects zero-fee txs before FeePay ante handler runs, the ordering matters.
+1. **FeePay + GlobalFee interaction** — **ANSWERED (Aug 21, 2026).** Tested on uni-7 v30: GlobalFee ante handler runs BEFORE FeePay ante handler, rejecting zero-fee txs (`insufficient fee: got 0ujunox required 22500ujunox`) before FeePay can escrow from the pool. FeePay registration, funding, pool accounting, and wallet-limit tracking all work correctly on v30 — only the gasless tx flow is blocked by ante handler ordering. v31 PR #1223 reorders the ante chain so FeePay intercepts first. Same modules, same logic, different sequence.
 
 2. **FeePay + feemarket post-handler** — if feemarket adjusts gas prices post-ante, does FeePay cover the adjusted amount or the original? Need to confirm against v31 implementation.
 
@@ -201,4 +207,4 @@ If a JunoClaw contract is migrated (e.g., zk-verifier precompile variant), the F
 
 ---
 
-*Spec version: 2026-08-20. Blocked on v31 mainnet. All JunoClaw contracts are deployed and tested — only the FeePay registration layer is new work.*
+*Spec version: 2026-08-21. Blocked on v31 mainnet. FeePay registration, funding, and pool accounting verified on uni-7 v30 testnet. Gasless tx flow confirmed blocked by GlobalFee ante handler ordering — fixed in v31 PR #1223. All JunoClaw contracts are deployed and tested — only the FeePay gasless tx flow awaits v31.*

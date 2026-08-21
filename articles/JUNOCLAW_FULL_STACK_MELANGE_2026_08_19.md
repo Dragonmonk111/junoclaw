@@ -29,8 +29,8 @@ And it does all this in **187 milliseconds** — fast enough that the robot does
 - **4 smart contracts live on Juno mainnet** (real blockchain, real money, running today)
 - **4 coordination contracts on the BN254 devnet** (tested, ready for mainnet)
 - **5 zero-knowledge proof circuits** — mathematical guarantees that safety rules were followed
-- **7-day endurance test: 1,033+ cycles, zero crashes**
-- **108 tests passing** (73 coordination + 35 physics)
+- **7-day endurance test: 2,015 cycles, 605,083 seconds (168 hours), zero crashes, 4/4 nodes alive**
+- **183+ tests passing** across coordination, physics, FeePay monitoring, precompiles, circuits, and TEE attestation
 - **Cost: $0.004 per robot per day** at current gas prices
 
 ---
@@ -450,7 +450,7 @@ Full details: [Robot Scaling Ages](articles/ROBOT_SCALING_AGES_2026_08_19.md)
 
 ---
 
-*August 2026. 4 contracts on Juno mainnet. 4 coordination contracts on BN254 devnet. 5 ZK circuits tested. 45 precompile tests. 1,033+ soak cycles, 0 crashes. Physics engine producing real reflex cycle hashes — 35 tests. Fleet coordinator managing multi-robot fleets — 14 tests. 108 tests total across coordination + physics. TEE attestation verifier with real Ed25519 — 9/9 tests. Post-quantum ready (Aegis). $0.004 per robot per day. Four timescales: 1 ms physics, 187 ms proof, ~300 ms coordination, 2.8 s settlement. The product does what it says.*
+*August 2026. 4 contracts on Juno mainnet. 4 coordination contracts on BN254 devnet. 5 ZK circuits tested. 183+ tests passing. 7-day soak: 2,015 cycles, 605,083 seconds, 0 crashes, 4/4 nodes alive. Akash soak: live, 544+ cycles. Physics engine — 35 tests. Fleet coordinator — 14 tests. TEE attestation verifier with real Ed25519 — 9/9 tests. FeePay tested on uni-7: registration, funding, pool accounting verified on-chain. Gasless tx blocked by GlobalFee ante handler ordering — fixed in v31 PR #1223. Post-quantum ready (Aegis). $0.004 per robot per day. Four timescales: 1 ms physics, 187 ms proof, ~300 ms coordination, 2.8 s settlement. The product does what it says.*
 
 ---
 

@@ -31,5 +31,9 @@
     "tx": "8CEE223F573DD44B1E2EEA50C6BC8BA1B17D51B13363FF96EA87B25333DF16FD",
     "address": "juno16gp6mm7ehhrx0ls4s77yk668cclq5gyc09x7k45f28apwmsqkg0qhmmnc8",
     "instantiateTx": "8591CF1EAF5F3A17517EBFE0856FBBF3C9F8F51712A6E555741C219065CAACAC"
+  },
+  "feepay-test-moultbook": {
+    "codeId": 80,
+    "address": "juno1d0czmatlccgg4v9mjw6ycvtz6ugtym0ac37gvsctm8lykce97wpsmlnrp5"
   }
 }

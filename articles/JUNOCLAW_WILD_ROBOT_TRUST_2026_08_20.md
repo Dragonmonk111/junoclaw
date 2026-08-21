@@ -101,9 +101,11 @@ A **fleet coordinator** manages all the robots together:
 This isn't science fiction. It's running right now.
 
 - **4 smart contracts on Juno mainnet** — real blockchain, real money, running today
+- **5 contracts on Juno testnet (uni-7)** — FeePay module enabled, registration + funding verified on-chain
 - **4 coordination contracts on the BN254 devnet** — tested, ready for mainnet
 - **5 zero-knowledge proof circuits** — all tested, all passing
-- **7-day endurance test** — 2,015 cycles, 605,083 seconds (168 hours), zero crashes, 4/4 nodes alive throughout
+- **7-day local endurance test** — 2,015 cycles, 605,083 seconds (168 hours), zero crashes, 4/4 nodes alive throughout
+- **Akash soak test — LIVE** — 4-node P2P mesh running on Akash mainnet, 544+ cycles and counting, all tests passing, zero crashes
 - **183+ tests passing** across coordination, physics, FeePay monitoring, precompiles, circuits, and TEE attestation
 - **Physics engine** producing real cryptographic hashes from rigid-body dynamics — 35 tests
 - **Fleet coordinator** managing multi-robot fleets — 14 tests
@@ -118,6 +120,40 @@ JunoClaw does the same thing — but in milliseconds, with mathematics, at scale
 Every robot gets the same treatment Roz got on the island: **prove what you did, let independent observers check it, and if you break the rules, you stop.** Not by trusting the robot's manufacturer. Not by trusting the robot's software. By trusting math.
 
 Roz became more than she was programmed to be. JunoClaw makes sure every robot can prove it did the same.
+
+## Gasless Robots (What's Next)
+
+There's one problem we haven't solved yet: **gas**.
+
+Every transaction on Juno — every proof verification, every Merkle root anchor, every circuit breaker trip — requires a small fee. Less than half a cent per robot per day. But someone has to pay it. And if you're running 10,000 robots, that's 10,000 wallets that need JUNO, 10,000 gas strategies, 10,000 ways for things to go wrong during a spike.
+
+**Juno v31 fixes this.** The FeePay module — already live on testnet — lets a fleet operator prepay gas for every robot under their care. The robot sends a transaction with zero fees. The pool covers it. The robot operator never thinks about gas.
+
+V31 ([PR #1223](https://github.com/CosmosContracts/juno/pull/1223), opened August 18, 2026) fixes four critical bugs that made FeePay unreliable for production:
+- **Denom overflow** — pools could misallocate funds with multiple denominations
+- **Sender accounting** — the wrong wallet was sometimes credited for usage
+- **Pool cleanup** — withdrawing funds left orphaned state in the database
+- **Zero-fee rejection** — when the pool was exhausted, transactions silently consumed sequence numbers without executing
+
+With v31, FeePay becomes production-reliable. A fleet operator funds one pool. Every robot operator sends gasless transactions. The operator doesn't need JUNO. Doesn't need a wallet with gas. Doesn't need to understand gas prices. Just sends the transaction.
+
+Think of it like Roz not needing to forage for herself — the island provides. Except in this case, the fleet operator provides, and the math makes sure nobody can game the system.
+
+### What We Proved (August 21, 2026)
+
+We ran the full FeePay flow on uni-7 against a live moultbook contract:
+
+- **FeePay enabled** on the chain — confirmed via REST query
+- **Contract registered** — `MsgRegisterFeePayContract` broadcast, code 0, tx hash on-chain
+- **Pool funded** — 1,000,000 ujunox escrowed into the FeePay pool, balance confirmed via query
+- **Normal transaction** (with fees) — succeeded, 211,707 gas, 22,500 ujunox paid by sender
+- **Gasless transaction** (fees=0) — **failed**: `insufficient fee: got 0ujunox required 22500ujunox`
+
+The gasless tx failure is the whole story. On v30, the **GlobalFee ante handler runs before the FeePay ante handler** in the chain's transaction validation pipeline. GlobalFee sees a zero-fee transaction, calculates `minGasPrice × gas = 22,500 ujunox`, and rejects it — before FeePay ever gets a chance to escrow from the pool and cover the cost.
+
+This is not a FeePay bug. FeePay did everything right: registration, funding, pool balance accounting, wallet limit tracking — all working. The problem is **ordering**: who checks first. v31 reorders the ante chain so FeePay intercepts before GlobalFee. Same modules, same logic, different sequence. The fix is a reordering, not a rewrite.
+
+When v31 lands on uni-7, we rerun the same script. Same contract, same pool, same zero-fee transaction. If the ante handler reorder works, the gasless tx succeeds, the pool is deducted, and the sender pays nothing. That's the moment gasless robots become real.
 
 ---
 
@@ -139,4 +175,4 @@ Open-source. Apache 2.0. [github.com/Dragonmonk111/junoclaw](https://github.com/
 
 *Inspired by The Wild Robot (2026), now on Netflix. Roz didn't choose to be on that island. But she chose to be trustworthy. JunoClaw makes that choice verifiable.*
 
-*August 2026. 4 contracts on Juno mainnet. 5 ZK circuits. 183+ tests. 2,015 soak cycles over 168 hours, 0 crashes, 4/4 nodes alive. Physics engine. Fleet coordinator. FeePay monitoring. TEE attestation with real Ed25519. Post-quantum ready. $0.004/robot/day. The product does what it says.*
+*August 2026. 4 contracts on Juno mainnet. 5 ZK circuits. 183+ tests. Local soak: 2,015 cycles over 168 hours, 0 crashes, 4/4 nodes alive. Akash soak: live now, 544+ cycles and counting. Physics engine. Fleet coordinator. FeePay tested on uni-7: registration, funding, pool accounting all verified on-chain. Gasless tx blocked by GlobalFee ante handler ordering — confirmed root cause, fixed in Juno v31 (PR #1223). TEE attestation with real Ed25519. Post-quantum ready. $0.004/robot/day. The product does what it says.*
