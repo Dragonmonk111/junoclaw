@@ -103,8 +103,8 @@ This isn't science fiction. It's running right now.
 - **4 smart contracts on Juno mainnet** — real blockchain, real money, running today
 - **4 coordination contracts on the BN254 devnet** — tested, ready for mainnet
 - **5 zero-knowledge proof circuits** — all tested, all passing
-- **7-day endurance test** — 1,033+ cycles, zero crashes, 4/4 nodes alive
-- **174+ tests passing** across coordination, physics, precompiles, circuits, and TEE attestation
+- **7-day endurance test** — 2,015 cycles, 605,083 seconds (168 hours), zero crashes, 4/4 nodes alive throughout
+- **183+ tests passing** across coordination, physics, FeePay monitoring, precompiles, circuits, and TEE attestation
 - **Physics engine** producing real cryptographic hashes from rigid-body dynamics — 35 tests
 - **Fleet coordinator** managing multi-robot fleets — 14 tests
 - **Cost: $0.004 per robot per day** — less than half a cent
@@ -139,4 +139,4 @@ Open-source. Apache 2.0. [github.com/Dragonmonk111/junoclaw](https://github.com/
 
 *Inspired by The Wild Robot (2026), now on Netflix. Roz didn't choose to be on that island. But she chose to be trustworthy. JunoClaw makes that choice verifiable.*
 
-*August 2026. 4 contracts on Juno mainnet. 5 ZK circuits. 174+ tests. 1,033+ soak cycles, 0 crashes. Physics engine. Fleet coordinator. TEE attestation with real Ed25519. Post-quantum ready. $0.004/robot/day. The product does what it says.*
+*August 2026. 4 contracts on Juno mainnet. 5 ZK circuits. 183+ tests. 2,015 soak cycles over 168 hours, 0 crashes, 4/4 nodes alive. Physics engine. Fleet coordinator. FeePay monitoring. TEE attestation with real Ed25519. Post-quantum ready. $0.004/robot/day. The product does what it says.*
