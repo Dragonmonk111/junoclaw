@@ -124,6 +124,16 @@ enum Commands {
     /// Request unstake from truth market
     Unstake,
 
+    /// Withdraw unstaked funds after cooldown
+    Withdraw,
+
+    /// Deposit funds into the reward pool
+    DepositRewards {
+        /// Amount to deposit in ujunox
+        #[arg(long)]
+        amount: u128,
+    },
+
     /// Show or create miner identity
     Identity {
         /// Model identifier
@@ -179,22 +189,64 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let address = cli.address.expect("--address or MINER_ADDRESS is required for registration");
             let identity = build_identity(&address, &model, &hardware, &identity_type, credential_token_id, None);
+            let fingerprint = identity.fingerprint_hash();
 
             println!("═══ Register Truth Market Operator ═══");
             println!("Address:     {}", identity.address);
             println!("Type:        {:?}", identity.identity_type);
             println!("Model:       {}", identity.model_id);
             println!("Hardware:    {}", identity.hardware_id);
-            println!("Fingerprint: {}", identity.fingerprint_hash());
+            println!("Fingerprint: {}", fingerprint);
             println!("Stake:       {} ujunox", stake);
+            println!("Contract:    {}", config.truth_market_contract);
             println!();
 
             if config.submit_on_chain {
-                println!("Submitting registration on-chain...");
-                // TODO: Wire to cosmjs — broadcast RegisterOperator { fingerprint } with stake
-                println!("TODO: Wire to cosmjs for on-chain registration");
+                let wallet_id = config.mnemonic.as_deref().expect("--mnemonic or MINER_MNEMONIC (wallet ID) is required for on-chain submission");
+                println!("Submitting registration on-chain via wallet '{}'...", wallet_id);
+
+                let msg = serde_json::json!({
+                    "register_operator": {
+                        "fingerprint": fingerprint,
+                    }
+                });
+                let msg_json = serde_json::to_string(&msg)?;
+                let funds_str = format!("{}ujunox", stake);
+
+                let mcp_path = std::env::var("MCP_CLI_PATH")
+                    .unwrap_or_else(|_| "node".to_string());
+
+                let output = tokio::process::Command::new(&mcp_path)
+                    .arg("mcp/dist/index.js")
+                    .arg("wallet")
+                    .arg("exec")
+                    .arg(wallet_id)
+                    .arg(&config.truth_market_contract)
+                    .arg(&msg_json)
+                    .arg("--rpc")
+                    .arg(&config.juno_rpc)
+                    .arg("--funds")
+                    .arg(&funds_str)
+                    .output()
+                    .await;
+
+                match output {
+                    Ok(out) if out.status.success() => {
+                        let stdout = String::from_utf8_lossy(&out.stdout);
+                        println!("✓ Registration submitted: {}", stdout.trim());
+                    }
+                    Ok(out) => {
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        eprintln!("✗ Registration failed: {}", stderr.trim());
+                    }
+                    Err(e) => {
+                        eprintln!("✗ Failed to spawn cosmos-mcp CLI: {}", e);
+                    }
+                }
             } else {
                 println!("Dry run — set --submit-on-chain to register on-chain");
+                println!("Message: {{\"register_operator\": {{\"fingerprint\": \"{}\"}}}}", fingerprint);
+                println!("Funds:  {}ujunox", stake);
             }
         }
 
@@ -263,11 +315,127 @@ async fn main() -> anyhow::Result<()> {
             println!("═══ Request Unstake ═══");
             println!("Address: {}", address);
             if config.submit_on_chain {
-                println!("Submitting unstake request on-chain...");
-                // TODO: Wire to cosmjs — broadcast RequestUnstake {}
-                println!("TODO: Wire to cosmjs for on-chain unstake");
+                let wallet_id = config.mnemonic.as_deref().expect("--mnemonic or MINER_MNEMONIC (wallet ID) is required");
+                let msg = serde_json::json!({"request_unstake": {}});
+                let msg_json = serde_json::to_string(&msg)?;
+
+                let mcp_path = std::env::var("MCP_CLI_PATH")
+                    .unwrap_or_else(|_| "node".to_string());
+
+                let output = tokio::process::Command::new(&mcp_path)
+                    .arg("mcp/dist/index.js")
+                    .arg("wallet")
+                    .arg("exec")
+                    .arg(wallet_id)
+                    .arg(&config.truth_market_contract)
+                    .arg(&msg_json)
+                    .arg("--rpc")
+                    .arg(&config.juno_rpc)
+                    .output()
+                    .await;
+
+                match output {
+                    Ok(out) if out.status.success() => {
+                        let stdout = String::from_utf8_lossy(&out.stdout);
+                        println!("✓ Unstake request submitted: {}", stdout.trim());
+                    }
+                    Ok(out) => {
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        eprintln!("✗ Unstake failed: {}", stderr.trim());
+                    }
+                    Err(e) => {
+                        eprintln!("✗ Failed to spawn cosmos-mcp CLI: {}", e);
+                    }
+                }
             } else {
                 println!("Dry run — set --submit-on-chain to submit on-chain");
+            }
+        }
+
+        Commands::Withdraw => {
+            let address = cli.address.expect("--address or MINER_ADDRESS is required");
+            println!("═══ Withdraw Unstaked Funds ═══");
+            println!("Address: {}", address);
+            if config.submit_on_chain {
+                let wallet_id = config.mnemonic.as_deref().expect("--mnemonic or MINER_MNEMONIC (wallet ID) is required");
+                let msg = serde_json::json!({"withdraw_unstake": {}});
+                let msg_json = serde_json::to_string(&msg)?;
+
+                let mcp_path = std::env::var("MCP_CLI_PATH")
+                    .unwrap_or_else(|_| "node".to_string());
+
+                let output = tokio::process::Command::new(&mcp_path)
+                    .arg("mcp/dist/index.js")
+                    .arg("wallet")
+                    .arg("exec")
+                    .arg(wallet_id)
+                    .arg(&config.truth_market_contract)
+                    .arg(&msg_json)
+                    .arg("--rpc")
+                    .arg(&config.juno_rpc)
+                    .output()
+                    .await;
+
+                match output {
+                    Ok(out) if out.status.success() => {
+                        let stdout = String::from_utf8_lossy(&out.stdout);
+                        println!("✓ Withdrawal submitted: {}", stdout.trim());
+                    }
+                    Ok(out) => {
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        eprintln!("✗ Withdraw failed: {}", stderr.trim());
+                    }
+                    Err(e) => {
+                        eprintln!("✗ Failed to spawn cosmos-mcp CLI: {}", e);
+                    }
+                }
+            } else {
+                println!("Dry run — set --submit-on-chain to submit on-chain");
+            }
+        }
+
+        Commands::DepositRewards { amount } => {
+            println!("═══ Deposit Rewards ═══");
+            println!("Amount:   {} ujunox", amount);
+            println!("Contract: {}", config.truth_market_contract);
+            if config.submit_on_chain {
+                let wallet_id = config.mnemonic.as_deref().expect("--mnemonic or MINER_MNEMONIC (wallet ID) is required");
+                let msg = serde_json::json!({"deposit_rewards": {}});
+                let msg_json = serde_json::to_string(&msg)?;
+                let funds_str = format!("{}ujunox", amount);
+
+                let mcp_path = std::env::var("MCP_CLI_PATH")
+                    .unwrap_or_else(|_| "node".to_string());
+
+                let output = tokio::process::Command::new(&mcp_path)
+                    .arg("mcp/dist/index.js")
+                    .arg("wallet")
+                    .arg("exec")
+                    .arg(wallet_id)
+                    .arg(&config.truth_market_contract)
+                    .arg(&msg_json)
+                    .arg("--rpc")
+                    .arg(&config.juno_rpc)
+                    .arg("--funds")
+                    .arg(&funds_str)
+                    .output()
+                    .await;
+
+                match output {
+                    Ok(out) if out.status.success() => {
+                        let stdout = String::from_utf8_lossy(&out.stdout);
+                        println!("✓ Rewards deposited: {}", stdout.trim());
+                    }
+                    Ok(out) => {
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        eprintln!("✗ Deposit failed: {}", stderr.trim());
+                    }
+                    Err(e) => {
+                        eprintln!("✗ Failed to spawn cosmos-mcp CLI: {}", e);
+                    }
+                }
+            } else {
+                println!("Dry run — set --submit-on-chain to deposit on-chain");
             }
         }
 
