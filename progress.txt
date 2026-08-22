@@ -4,8 +4,16 @@ JunoClaw progress log
 Format: newest first. Pure text. Update at end of each session.
 Live status line below; everything else is dated entries.
 
-Last update: 2026-08-19 UTC+1
-Status: ZK trust stack complete — 5 Groth16 circuits on BN254 (sensor, batch, intent, consensus, aggregation). Plan D (ZK+TEE hybrid aggregation) implemented. Actual proving times: 187ms parallelized, 318ms sequential — 15× faster than 2.8s consensus block. 12/12 circuit tests pass. All pushed to main. Aegis pending tasks verified complete (done 2026-06-24). Next: no pending tasks.
+Last update: 2026-08-22 12:45 UTC+1
+Status: Truth Market Miner crate built (junoclaw-miner — 6 modules, 3 tests passing). Open-weight models only (Llama, Qwen, Mistral) — closed APIs (GPT-4o, Claude) can't be verified. Three miner types: Robot (Jetson Orin idle mining), GPU (bare-metal), Akash TEE (confidential compute). Batch compression module (Commonware Bajillion-inspired Merkle root — 70× at 100 batches, 700× at 1,000). MCAP telemetry reader built. On-chain verdict submission wired via cosmos-mcp CLI. Frontend MinerPanel live with 15-sec polling, mining guide, operator list, fingerprint diversity. New article: ROSIE_MINES_TRUTH_2026_08_22.md. Plan doc: docs/TRUTH_MARKET_MINER_PLAN.md. All compiles clean (Rust + TypeScript).
+
+== Plan for Aug 23 ==
+1. Register first operators on truth market contract (uni-7)
+2. Native MCAP parsing (mcap Rust crate dependency)
+3. McapEvaluator — verdict from telemetry data directly
+4. Fingerprint diversity enforcement in relayer
+5. Frontend polish: ChatPanel backend, DexPanel attestations, Qu-Zeno live feed
+6. Blocked/passive: v31 testnet, CosmWasm #2685, wasmvm #735, Fable fork, Aegis rebase, bud addresses, $JClaw, A18d/A18e
 
 == 2026-08-19 ==
 

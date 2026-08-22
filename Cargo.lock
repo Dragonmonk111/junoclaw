@@ -3293,6 +3293,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "junoclaw-miner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "clap",
+ "futures",
+ "hex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.23",
+]
+
+[[package]]
 name = "junoclaw-nostr-bridge"
 version = "0.1.0"
 dependencies = [

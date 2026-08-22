@@ -1,0 +1,40 @@
+[package]
+name = "junoclaw-miner"
+version = "0.1.0"
+edition = "2021"
+description = "Truth market miner — watches coordination batches, evaluates robot decisions, submits verdicts, earns rewards"
+
+[[bin]]
+name = "junoclaw-miner"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# HTTP client
+reqwest = { workspace = true }
+
+# Crypto
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# Misc
+chrono = { version = "0.4", features = ["serde"] }

@@ -8,11 +8,13 @@ import { UpdatesPanel } from './components/UpdatesPanel'
 import { ContractsPanel } from './components/ContractsPanel'
 import { CommonwealthPanel } from './components/CommonwealthPanel'
 import { RobotOpsPanel } from './components/RobotOpsPanel'
+import { FeePayPanel } from './components/FeePayPanel'
+import { MinerPanel } from './components/MinerPanel'
 import { StatusBar } from './components/StatusBar'
 import { useStore } from './store'
-import { MessageSquare, Building2, RefreshCw, ArrowLeftRight, Eye, FileCode2, HeartPulse, Cpu } from 'lucide-react'
+import { MessageSquare, Building2, RefreshCw, ArrowLeftRight, Eye, FileCode2, HeartPulse, Cpu, Fuel, Pickaxe } from 'lucide-react'
 
-type MainTab = 'chat' | 'dao' | 'commonwealth' | 'dex' | 'intel' | 'contracts' | 'updates' | 'robotops'
+type MainTab = 'chat' | 'dao' | 'commonwealth' | 'dex' | 'intel' | 'contracts' | 'updates' | 'robotops' | 'feepay' | 'miner'
 
 const TABS: { id: MainTab; label: string; icon: React.ReactNode }[] = [
   { id: 'chat',      label: 'Chat',      icon: <MessageSquare   className="h-3.5 w-3.5" /> },
@@ -21,6 +23,8 @@ const TABS: { id: MainTab; label: string; icon: React.ReactNode }[] = [
   { id: 'dex',       label: 'DEX',       icon: <ArrowLeftRight  className="h-3.5 w-3.5" /> },
   { id: 'intel',     label: 'Qu-Zeno',   icon: <Eye             className="h-3.5 w-3.5" /> },
   { id: 'robotops',  label: 'Robot Ops', icon: <Cpu             className="h-3.5 w-3.5" /> },
+  { id: 'feepay',    label: 'FeePay',    icon: <Fuel            className="h-3.5 w-3.5" /> },
+  { id: 'miner',     label: 'Miners',    icon: <Pickaxe         className="h-3.5 w-3.5" /> },
   { id: 'contracts', label: 'Contracts', icon: <FileCode2       className="h-3.5 w-3.5" /> },
   { id: 'updates',   label: 'Updates',   icon: <RefreshCw       className="h-3.5 w-3.5" /> },
 ]
@@ -74,6 +78,8 @@ export default function App() {
             {activeTab === 'dex'       && <DexPanel />}
             {activeTab === 'intel'     && <IntelPanel />}
             {activeTab === 'robotops'  && <RobotOpsPanel />}
+            {activeTab === 'feepay'    && <FeePayPanel />}
+            {activeTab === 'miner'     && <MinerPanel />}
             {activeTab === 'contracts' && <ContractsPanel />}
             {activeTab === 'updates'   && <UpdatesPanel />}
           </div>

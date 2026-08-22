@@ -436,6 +436,7 @@ Full details: [Robot Scaling Ages](articles/ROBOT_SCALING_AGES_2026_08_19.md)
 | 16 | [Full Stack Product Picture](articles/JUNOCLAW_FULL_STACK_MELANGE_2026_08_19.md) | Aug 20 | Full stack product picture |
 | 17 | [Gasless Robots](articles/JUNOCLAW_V31_GASLESS_ROBOTS_2026_08_20.md) | Aug 20 | v31 FeePay + Trust Wallet gas fix for JunoClaw fleets |
 | 18 | [What Roz Taught Us About Robot Trust](articles/JUNOCLAW_WILD_ROBOT_TRUST_2026_08_20.md) | Aug 20 | Wild Robot-inspired pitch for non-technical readers |
+| 19 | [Rosie Mines Truth](articles/ROSIE_MINES_TRUTH_2026_08_22.md) | Aug 22 | Truth market miners — idle robots earn rewards evaluating other robots |
 
 ---
 
@@ -450,7 +451,7 @@ Full details: [Robot Scaling Ages](articles/ROBOT_SCALING_AGES_2026_08_19.md)
 
 ---
 
-*August 2026. 4 contracts on Juno mainnet. 4 coordination contracts on BN254 devnet. 5 ZK circuits tested. 183+ tests passing. 7-day soak: 2,015 cycles, 605,083 seconds, 0 crashes, 4/4 nodes alive. Akash soak: live, 544+ cycles. Physics engine — 35 tests. Fleet coordinator — 14 tests. TEE attestation verifier with real Ed25519 — 9/9 tests. FeePay tested on uni-7: registration, funding, pool accounting verified on-chain. Gasless tx blocked by GlobalFee ante handler ordering — fixed in v31 PR #1223. Post-quantum ready (Aegis). $0.004 per robot per day. Four timescales: 1 ms physics, 187 ms proof, ~300 ms coordination, 2.8 s settlement. The product does what it says.*
+*August 2026. 4 contracts on Juno mainnet. 4 coordination contracts on BN254 devnet. 5 ZK circuits tested. 183+ tests passing. 7-day soak: 2,015 cycles, 605,083 seconds, 0 crashes, 4/4 nodes alive. Akash soak: live, 544+ cycles. Physics engine — 35 tests. Fleet coordinator — 14 tests. TEE attestation verifier with real Ed25519 — 9/9 tests. FeePay tested on uni-7: registration, funding, pool accounting verified on-chain. Gasless tx blocked by GlobalFee ante handler ordering — fixed in v31 PR #1223. Truth market miner crate built — 6 modules, 3 tests, open-weight models only, Akash TEE supported, batch compression 70-7000×. MinerPanel live in frontend. Post-quantum ready (Aegis). $0.004 per robot per day. Four timescales: 1 ms physics, 187 ms proof, ~300 ms coordination, 2.8 s settlement. The product does what it says.*
 
 ---
 

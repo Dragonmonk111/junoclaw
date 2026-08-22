@@ -13,6 +13,7 @@ members = [
     "crates/junoclaw-coordination-napi",
     "crates/junoclaw-physics",
     "crates/junoclaw-relayer",
+    "crates/junoclaw-miner",
     "crates/junoclaw-test-mesh",
     "plugins/plugin-llm",
     "plugins/plugin-compute-local",
