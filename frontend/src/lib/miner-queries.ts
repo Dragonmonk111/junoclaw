@@ -44,6 +44,7 @@ export interface MinerConfig {
   unstakeCooldownSecs: number
   minOperators: number
   rewardMode: string
+  verificationFee: string
 }
 
 export interface FingerprintEntry {
@@ -104,6 +105,7 @@ export async function queryMinerConfig(): Promise<MinerConfig> {
     unstakeCooldownSecs: Number(raw.unstake_cooldown_secs ?? 0),
     minOperators: Number(raw.min_operators ?? 3),
     rewardMode: String(raw.reward_mode ?? 'equal'),
+    verificationFee: String(raw.verification_fee ?? '0'),
   }
 }
 

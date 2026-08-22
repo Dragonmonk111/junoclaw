@@ -31,6 +31,7 @@ pub fn instantiate(
         unstake_cooldown_secs: msg.unstake_cooldown_secs,
         min_operators: msg.min_operators.unwrap_or(3),
         reward_mode: msg.reward_mode.unwrap_or_default(),
+        verification_fee: msg.verification_fee.unwrap_or(Uint128::zero()),
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -84,8 +85,10 @@ pub fn execute(
             unstake_cooldown_secs,
             min_operators,
             reward_mode,
-        } => execute_update_config(deps, info, min_stake, slash_percent, reward_percent, unstake_cooldown_secs, min_operators, reward_mode),
+            verification_fee,
+        } => execute_update_config(deps, info, min_stake, slash_percent, reward_percent, unstake_cooldown_secs, min_operators, reward_mode, verification_fee),
         ExecuteMsg::DepositRewards {} => execute_deposit_rewards(deps, info),
+        ExecuteMsg::PayVerificationFee { batch_height, robot_id } => execute_pay_verification_fee(deps, info, batch_height, robot_id),
     }
 }
 
@@ -114,6 +117,7 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, C
                 unstake_cooldown_secs: old.unstake_cooldown_secs,
                 min_operators: 3,
                 reward_mode: RewardMode::default(),
+                verification_fee: Uint128::zero(),
             };
             CONFIG.save(deps.storage, &new_config)?;
             // Patch existing operators: add fingerprint=None for old state.
@@ -605,6 +609,7 @@ fn execute_update_config(
     unstake_cooldown_secs: Option<u64>,
     min_operators: Option<u32>,
     reward_mode: Option<RewardMode>,
+    verification_fee: Option<Uint128>,
 ) -> Result<Response, ContractError> {
     let mut config = CONFIG.load(deps.storage)?;
     ensure_eq!(info.sender, config.admin, ContractError::Unauthorized {});
@@ -626,6 +631,9 @@ fn execute_update_config(
     }
     if let Some(rm) = reward_mode {
         config.reward_mode = rm;
+    }
+    if let Some(vf) = verification_fee {
+        config.verification_fee = vf;
     }
     CONFIG.save(deps.storage, &config)?;
 
@@ -661,6 +669,47 @@ fn execute_deposit_rewards(
         .add_attribute("new_pool", pool))
 }
 
+fn execute_pay_verification_fee(
+    deps: DepsMut,
+    info: MessageInfo,
+    batch_height: u64,
+    robot_id: Option<String>,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let amount = info
+        .funds
+        .iter()
+        .find(|c| c.denom == config.denom)
+        .map(|c| c.amount)
+        .unwrap_or(Uint128::zero());
+
+    if amount.is_zero() {
+        return Err(ContractError::InsufficientStake {
+            required: Uint128::from(1u128),
+            sent: Uint128::zero(),
+        });
+    }
+
+    // If verification_fee is set, enforce exact match
+    if !config.verification_fee.is_zero() && amount != config.verification_fee {
+        return Err(ContractError::InsufficientStake {
+            required: config.verification_fee,
+            sent: amount,
+        });
+    }
+
+    let mut pool = REWARD_POOL.load(deps.storage)?;
+    pool += amount;
+    REWARD_POOL.save(deps.storage, &pool)?;
+
+    Ok(Response::new()
+        .add_attribute("method", "pay_verification_fee")
+        .add_attribute("batch_height", batch_height.to_string())
+        .add_attribute("amount", amount)
+        .add_attribute("robot_id", robot_id.as_deref().unwrap_or("unknown"))
+        .add_attribute("new_pool", pool))
+}
+
 // ──────────────────────────────────────────────
 // Query handlers
 // ──────────────────────────────────────────────
@@ -676,6 +725,7 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         unstake_cooldown_secs: config.unstake_cooldown_secs,
         min_operators: config.min_operators,
         reward_mode: config.reward_mode,
+        verification_fee: config.verification_fee,
     })
 }
 

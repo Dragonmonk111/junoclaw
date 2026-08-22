@@ -13,6 +13,10 @@ pub struct InstantiateMsg {
     pub min_operators: Option<u32>,
     /// Reward distribution mode (default Equal if None).
     pub reward_mode: Option<RewardMode>,
+    /// Per-batch verification fee in denom's smallest unit (default 0 if None).
+    /// When >0, PayVerificationFee requires exactly this amount.
+    /// Set to 0 for open access mode (no fee enforcement).
+    pub verification_fee: Option<Uint128>,
 }
 
 #[cw_serde]
@@ -60,10 +64,20 @@ pub enum ExecuteMsg {
         unstake_cooldown_secs: Option<u64>,
         min_operators: Option<u32>,
         reward_mode: Option<RewardMode>,
+        verification_fee: Option<Uint128>,
     },
 
     /// Deposit funds into the reward pool (anyone can contribute).
     DepositRewards {},
+
+    /// Pay a per-batch verification fee. The sent funds are added to the
+    /// reward pool. Typically called by the relayer on behalf of a robot
+    /// operator, or directly by the operator. The batch_height links the
+    /// fee to the batch being verified.
+    PayVerificationFee {
+        batch_height: u64,
+        robot_id: Option<String>,
+    },
 }
 
 #[cw_serde]
@@ -91,6 +105,7 @@ pub struct ConfigResponse {
     pub unstake_cooldown_secs: u64,
     pub min_operators: u32,
     pub reward_mode: RewardMode,
+    pub verification_fee: Uint128,
 }
 
 #[cw_serde]

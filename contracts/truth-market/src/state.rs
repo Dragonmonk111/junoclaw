@@ -38,6 +38,10 @@ pub struct Config {
     pub min_operators: u32,
     /// How rewards are distributed among matching operators.
     pub reward_mode: RewardMode,
+    /// Per-batch verification fee (in denom's smallest unit).
+    /// When >0, PayVerificationFee requires exactly this amount.
+    /// 0 = open access mode (no fee enforcement).
+    pub verification_fee: Uint128,
 }
 
 #[cw_serde]

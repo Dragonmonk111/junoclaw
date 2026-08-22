@@ -86,6 +86,7 @@ fn store_and_instantiate(app: &mut App, admin: &Addr) -> Addr {
             unstake_cooldown_secs: 86400,
             min_operators: None,
             reward_mode: None,
+            verification_fee: None,
         },
         &[],
         "truth-market",
@@ -651,6 +652,7 @@ fn test_finalize_epoch_min_operators_configurable() {
                 unstake_cooldown_secs: 86400,
                 min_operators: Some(1),
                 reward_mode: None,
+                verification_fee: None,
             },
             &[],
             "truth-market",
@@ -718,6 +720,7 @@ fn test_update_config_min_operators() {
             unstake_cooldown_secs: None,
             min_operators: Some(5),
             reward_mode: None,
+            verification_fee: None,
         },
         &[],
     )
@@ -834,6 +837,7 @@ fn test_stake_weighted_rewards() {
                 unstake_cooldown_secs: 86400,
                 min_operators: Some(2),
                 reward_mode: Some(RewardMode::StakeWeighted),
+                verification_fee: None,
             },
             &[],
             "truth-market",
@@ -947,6 +951,7 @@ fn test_stake_times_accuracy_rewards() {
                 unstake_cooldown_secs: 86400,
                 min_operators: Some(2),
                 reward_mode: Some(RewardMode::StakeTimesAccuracy),
+                verification_fee: None,
             },
             &[],
             "truth-market",
@@ -1134,4 +1139,99 @@ fn test_stake_times_accuracy_rewards() {
         op_a_epoch3_reward > op_a_epoch1_reward,
         "opA should earn more in epoch 3 (accuracy boost) than epoch 1 (cold start)"
     );
+}
+
+#[test]
+fn test_verification_fee_routes_to_reward_pool() {
+    let mut app = setup_app();
+    let admin = make_addr(&app, "admin");
+
+    // Instantiate with verification_fee = 50,000 ujuno per batch
+    let code = ContractWrapper::new(
+        crate::contract::execute,
+        crate::contract::instantiate,
+        crate::contract::query,
+    );
+    let code_id = app.store_code(Box::new(code));
+    let contract = app
+        .instantiate_contract(
+            code_id,
+            admin.clone(),
+            &InstantiateMsg {
+                min_stake: Uint128::from(1_000_000u128),
+                slash_percent: 10,
+                reward_percent: 80,
+                denom: UJUNO.to_string(),
+                unstake_cooldown_secs: 86400,
+                min_operators: Some(2),
+                reward_mode: None,
+                verification_fee: Some(Uint128::from(50_000u128)),
+            },
+            &[],
+            "truth-market",
+            None,
+        )
+        .unwrap();
+
+    // Robot operator pays verification fee for batch 100
+    let robot_owner = make_addr(&app, "op1");
+    app.execute_contract(
+        robot_owner.clone(),
+        contract.clone(),
+        &ExecuteMsg::PayVerificationFee {
+            batch_height: 100,
+            robot_id: Some("robot-tokyo-001".to_string()),
+        },
+        &coins(50_000, UJUNO),
+    )
+    .unwrap();
+
+    // Check reward pool increased
+    let pool: crate::msg::StatsResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetStats {})
+        .unwrap();
+    assert_eq!(pool.reward_pool, Uint128::from(50_000u128));
+
+    // Wrong amount should fail
+    app.execute_contract(
+        robot_owner.clone(),
+        contract.clone(),
+        &ExecuteMsg::PayVerificationFee {
+            batch_height: 101,
+            robot_id: None,
+        },
+        &coins(30_000, UJUNO),
+    )
+    .unwrap_err();
+
+    // Config query should show verification_fee
+    let config: crate::msg::ConfigResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(config.verification_fee, Uint128::from(50_000u128));
+
+    // Admin can update verification_fee
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::UpdateConfig {
+            min_stake: None,
+            slash_percent: None,
+            reward_percent: None,
+            unstake_cooldown_secs: None,
+            min_operators: None,
+            reward_mode: None,
+            verification_fee: Some(Uint128::from(100_000u128)),
+        },
+        &[],
+    )
+    .unwrap();
+
+    let config2: crate::msg::ConfigResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(config2.verification_fee, Uint128::from(100_000u128));
 }
