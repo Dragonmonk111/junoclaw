@@ -180,9 +180,193 @@ It implements:
 - **Epoch finalization** — relayer calls `finalize_epoch`, contract compares verdicts, distributes rewards to matching operators, slashes diverging ones
 - **Unstake/withdraw** — request unstake, wait cooldown, withdraw stake
 - **Fingerprint tracking** — self-reported model + hardware hash for diversity detection
-- **Config governance** — admin can adjust min stake, slash %, reward %, cooldown, min operators
+- **Config governance** — admin can adjust min stake, slash %, reward %, cooldown, min operators, verification fee
+- **Verification fee payment** — `PayVerificationFee` message routes robot-paid fees directly into the reward pool
+- **Three reward modes** — Equal, StakeWeighted, StakeTimesAccuracy (stake × Laplace-smoothed accuracy)
 
 As of today, the contract has **zero registered operators** — because the miner software didn't exist. Now it does.
+
+---
+
+## Protocol Fee Routing: The Closed Loop
+
+The initial design had a sustainability problem: the reward pool was funded only by deposits. Someone had to keep depositing. DAO grants are finite. Sponsorships end. Without a revenue stream, the pool drains and miners stop earning.
+
+That's now solved. Every time a robot submits a batch for safety verification, the operator pays a **verification fee**. This fee flows directly into the truth market reward pool. The miners who evaluate that batch earn from the pool.
+
+```
+Robot submits batch → Pays verification fee → Fee enters REWARD_POOL
+                                                         ↓
+                                    Miners evaluate batch → Earn from pool
+                                    (weighted by stake × accuracy)
+```
+
+### The Contract Interface
+
+| Message | Caller | Purpose |
+|---------|--------|---------|
+| `PayVerificationFee { batch_height, robot_id }` | Robot operator or relayer | Per-batch fee → reward pool |
+| `DepositRewards {}` | Anyone (DAO, grants, sponsors) | Bulk deposit into pool |
+| `UpdateConfig { verification_fee: Some(amount) }` | Admin | Set per-batch fee (0 = open access) |
+
+### Fee Modes
+
+- **`verification_fee = 0`**: Open access — anyone can submit batches, pool funded by grants only. Good for bootstrapping.
+- **`verification_fee > 0`**: Fee-enforced — `PayVerificationFee` requires exactly the configured amount. Wrong amount = rejected. Good for production.
+
+### Relayer Integration
+
+The relayer daemon now calls `PayVerificationFee` **before** finalizing each epoch. The flow:
+
+1. Batch settled on coordination-settler contract
+2. Relayer calls `PayVerificationFee` on truth-market contract (funds the pool)
+3. Relayer calls `FinalizeEpoch` on truth-market contract (distributes rewards)
+
+CLI flag `--verification-fee` controls the per-batch fee amount. Set to 0 to skip fee payment (open access mode).
+
+### Three Revenue Streams for Miners
+
+| Stream | Source | Status |
+|--------|--------|--------|
+| **Verification fees** | Robot operators pay per batch | ✅ Implemented |
+| **Grant deposits** | DAO treasury, sponsors, insurers | ✅ Implemented |
+| **Slashed stake** | Diverging operators' slashed funds return to pool | ✅ Implemented |
+
+The third stream is elegant: when a miner submits a wrong verdict, they get slashed. The slashed amount goes **back into the reward pool**. Bad miners fund good miners. This creates a negative feedback loop — as accuracy drops, slashing increases, which increases the pool for accurate miners, which attracts more miners, which increases accuracy.
+
+### Why Not Inflation?
+
+This is the key distinction from Bitcoin mining:
+
+```
+Bitcoin:           Chain mints BTC → miners earn → inflation dilutes all holders
+Juno validators:   Chain mints JUNO → validators earn → inflation dilutes all holders
+Truth market:      Robot pays existing JUNO → miners earn → NO inflation, NO dilution
+```
+
+The truth market is a **closed-loop bounty system**, not an inflationary mining scheme. The JUNO that robots pay as verification fees is the same JUNO that miners receive as rewards. It circulates. No new tokens are created.
+
+### FeePay: Gasless Robots
+
+Robot operators shouldn't need to manage gas. With Juno's FeePay module, a robot can submit a `PayVerificationFee` transaction with **zero gas fees** — FeePay sponsors the gas from a separate pool. The verification fee itself still flows to the reward pool. The robot operator never touches JUNO for gas.
+
+**Status**: FeePay is live on uni-7 testnet. Gasless tx flow requires v31's ante handler reordering (FeePay before GlobalFee). The contract integration is ready; the chain-level fix is pending.
+
+---
+
+## The Incentive: Why Would Anyone Mine?
+
+The obvious question: if you stake JUNO and get the verdict right, you earn rewards. If you get it wrong, you lose part of your stake. So what's the profit?
+
+**The stake is not consumed. It's locked, not spent.**
+
+```
+You stake 1M JUNO  →  locked (you get it ALL back when you unstake, minus any slashing)
+You run inference   →  costs ~30W of electricity (trivial on a robot)
+You get it right    →  earn rewards from the pool (verification fees paid by robots)
+You get it wrong    →  lose slash_percent (10%) of your stake → goes to reward pool
+```
+
+### The Math
+
+| Scenario | What happens | Net |
+|----------|-------------|-----|
+| **Right verdict** | Earn share of reward pool | **+rewards** (pure profit) |
+| **Wrong verdict** | Lose 10% of stake, earn nothing | **-100K JUNO** (stake slashed) |
+| **Unstake (anytime)** | Get full stake back (minus prior slashes) | **stake returned** |
+
+The rewards come from the **verification fees robots pay**, not from your stake. Your stake is collateral — skin in the game to prevent Sybiling. It's like a security deposit on an apartment: you get it back if you don't trash the place.
+
+### Sustainability Math
+
+Assume:
+- 1,000 robots globally, each submitting 10 batches/day
+- Verification fee: 50,000 ujunox (~0.05 JUNO) per batch
+- 10,000 batches/day × 50,000 ujunox = 500M ujunox/day into reward pool
+- ~500 JUNO/day distributed to miners
+
+A Jetson Orin miner with 1M stake and 100% accuracy, competing against 99 similar miners, would earn ~5 JUNO/day. At 30W power consumption, that's profitable in any energy market.
+
+At 10,000 robots (still small scale): ~5,000 JUNO/day into the pool. The truth market becomes a meaningful income stream for idle GPU operators worldwide.
+
+---
+
+## The Model IS the Mining Rig
+
+In Bitcoin:
+```
+ASIC hardware → runs SHA-256 → mines hashes → earns BTC
+```
+
+In JunoClaw:
+```
+GPU hardware → runs open-weights model → mines truth verdicts → earns JUNO
+```
+
+The model is not a separate cost — it **is** the mining algorithm. Qwen-3B is the "SHA-256" of truth mining. The difference is that Qwen-3B produces something useful (a safety verdict) instead of a useless hash.
+
+### Complete Miner Cost Breakdown
+
+**CapEx (one-time):**
+
+| Cost | Jetson Orin (robot) | DGX Spark (GPU) | Akash TEE (cloud) |
+|------|---------------------|-----------------|-------------------|
+| Hardware | ~$250 (already on robot) | ~$4,000 | $0 (rented) |
+| Model weights | Free (open-weight) | Free (open-weight) | Free (open-weight) |
+| Stake (locked, returned) | 1M JUNO | 5M JUNO | 2M JUNO |
+
+**OpEx (per day):**
+
+| Cost | Jetson Orin | DGX Spark | Akash TEE |
+|------|------------|-----------|-----------|
+| Electricity | 30W → ~$0.05 | 2,400W → ~$4.00 | included in rent |
+| Akash rent | — | — | ~$5-20/day (H100) |
+| Stake opportunity cost | ~274 JUNO/day foregone | ~1,370 JUNO/day foregone | ~548 JUNO/day foregone |
+| Inference time per batch | 15 tok/s → ~30s | 200 tok/s → ~3s | 500 tok/s → ~1s |
+
+### Three Tiers of Profitability
+
+| Tier | Hardware | Opportunity Cost | Profitability |
+|------|----------|-----------------|---------------|
+| **Robot (idle mining)** | Already owned, already powered | Near-zero (GPU was idle) | **Most profitable** — pure upside |
+| **Dedicated GPU miner** | Bought for mining | High (GPU could do other work) | Profitable if fees > GPU rental rates |
+| **Akash TEE miner** | Rented | Medium (rent is the cost) | Profitable if fees > Akash rent |
+
+The system is self-balancing. The robot tier guarantees a baseline of miners (because it's nearly free). The dedicated GPU tier scales up when fees are high enough. The Akash tier provides TEE-attested verification for high-value use cases.
+
+### The Robot Advantage: Zero Opportunity Cost
+
+A Jetson Orin on a delivery robot has **zero opportunity cost**:
+- The hardware is already paid for (it's on the robot)
+- The GPU is idle during charging (not doing anything else)
+- The electricity is already being consumed (charging the battery)
+- The stake is the only real cost
+
+```
+Delivery robot economics:
+  Day:   delivers packages (revenue from deliveries)
+  Night: mines truth (revenue from verification fees)
+  Same hardware. Same electricity. Additional revenue stream.
+```
+
+This is the **free money** tier. The robot is already built, already charging, already has a GPU. Truth mining is pure upside.
+
+### Bitcoin vs Truth Market Mining
+
+| Factor | Bitcoin Mining | Truth Market Mining |
+|--------|---------------|-------------------|
+| Hardware | ASIC (single-purpose, e-waste when unprofitable) | GPU (general-purpose, broad resale value) |
+| Algorithm | SHA-256 (free, hardcoded) | Open-weights model (free, swappable) |
+| Work output | Hash collision (discarded) | Safety verdict (used by robots) |
+| Scale economics | Bigger farm = more hashes | Bigger model = better accuracy = more rewards |
+| Moore's law | ASICs obsolete fast | Models improve → better accuracy → more rewards |
+
+### Self-Regulating Market
+
+- If verification fees are too low → miners leave → fewer miners → safety verification degrades → robots pay higher fees to attract miners back
+- If verification fees are high → miners join → more miners → more competition → fees stabilize
+
+**The market finds equilibrium.** Just like Bitcoin difficulty adjustment, but through fee economics instead of hash difficulty.
 
 ---
 
@@ -216,6 +400,19 @@ All data is polled live from the truth market contract on uni-7 via CosmWasm que
 | CLI (register, run, status, unstake, identity) | Built | — |
 | Frontend MinerPanel + live queries | Built, TypeScript clean | — |
 | Truth market contract on uni-7 | Live since Aug 17 | — |
+| `RewardMode::Equal` | ✅ Live | ✅ |
+| `RewardMode::StakeWeighted` | ✅ Live | ✅ |
+| `RewardMode::StakeTimesAccuracy` | ✅ Live | ✅ |
+| `PayVerificationFee` message | ✅ Live | ✅ |
+| `verification_fee` config field | ✅ Live | ✅ |
+| `DepositRewards` (anyone can fund pool) | ✅ Live | ✅ |
+| Slashing → reward pool | ✅ Live | ✅ |
+| Relayer fee routing (`pay_verification_fee`) | ✅ Built | ✅ |
+| CLI `--verification-fee` flag | ✅ Built | ✅ |
+| Frontend verification fee display | ✅ Live | — |
+| FeePay gasless fees | ⏳ Pending v31 | — |
+| Truth market contract tests | 21/21 pass | ✅ |
+| Relayer tests | 14/14 pass | ✅ |
 
 ---
 
@@ -225,7 +422,7 @@ All data is polled live from the truth market contract on uni-7 via CosmWasm que
 - **Native MCAP parsing** — add the `mcap` Rust crate for direct .mcap file reading
 - **McapEvaluator** — verdict from telemetry data directly, no LLM needed
 - **Fingerprint diversity enforcement** — relayer rejects correlated miners
-- **Reward pool funding** — who funds the rewards? DAO treasury? Protocol fees? Robot manufacturers?
+- **FeePay v31 integration** — gasless `PayVerificationFee` for robot operators (pending ante handler reorder)
 - **Cross-chain IBC verdicts** — miners on Juno evaluate robots on other chains
 - **MCAP → IPFS → on-chain archive** — permanent telemetry storage
 
@@ -239,11 +436,13 @@ The truth market is the layer where **the crowd checks the robot's work**. Not a
 
 And now, the software to participate in that market exists. A robot in Tokyo can mine truth for a robot in São Paulo. A GPU rig in Berlin can earn rewards for verifying surgical robot decisions in Mumbai. An Akash TEE deployment can provide verifiable computation without owning a single piece of hardware.
 
+The funding is solved: robots pay verification fees, fees flow to the reward pool, miners earn from the pool. No inflation. No grants needed. A closed loop where the robots being verified fund the miners verifying them.
+
 **Rosie mines truth after housekeeping. And her owner wakes up richer.**
 
 ---
 
-*August 22, 2026. `junoclaw-miner` crate built — 6 modules, 3 tests passing. Truth market contract live on uni-7 since Aug 17. Frontend MinerPanel live with 15-second polling. Three miner types: Robot (Jetson Orin), GPU (bare-metal), Akash TEE. Open-weight models only — closed APIs can't be verified. Batch compression: 70× at 100 batches, 700× at 1,000. MCAP telemetry reader built. On-chain verdict submission wired via cosmos-mcp CLI. The truth market has zero operators today. Tomorrow, it won't.*
+*August 22, 2026. `junoclaw-miner` crate built — 6 modules, 3 tests passing. Truth market contract live on uni-7 since Aug 17, 21/21 tests passing. Protocol fee routing implemented — `PayVerificationFee` routes robot fees into the reward pool. Relayer calls fee payment before epoch finalization. Three reward modes: Equal, StakeWeighted, StakeTimesAccuracy. Three miner types: Robot (Jetson Orin, zero opportunity cost), GPU (bare-metal), Akash TEE. Open-weight models only — closed APIs can't be verified. Batch compression: 70× at 100 batches, 700× at 1,000. MCAP telemetry reader built. On-chain verdict submission wired via cosmos-mcp CLI. Relayer fee routing wired via `--verification-fee` CLI flag. 14/14 relayer tests passing. The truth market has zero operators today. Tomorrow, it won't.*
 
 ---
 
