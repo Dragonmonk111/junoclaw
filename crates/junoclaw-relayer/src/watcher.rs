@@ -174,10 +174,27 @@ impl BatchWatcher {
                         }
                     }
 
-                    // Layer 6 — Truth Market: finalize the eval epoch
-                    // for this batch, distributing rewards to matching
-                    // evaluators and slashing diverging ones. Best-effort.
+                    // Layer 6 — Truth Market: pay verification fee for this
+                    // batch (routes funds into reward pool), then finalize the
+                    // eval epoch to distribute rewards and slashes. Best-effort.
                     if let Some(market_cfg) = &self.config.market {
+                        // Pay the verification fee first — funds the reward pool
+                        // before miners earn from it.
+                        if let Err(e) = crate::market::pay_verification_fee(
+                            &self.config.rpc_endpoint,
+                            &self.config.relayer_key,
+                            market_cfg,
+                            &batch,
+                        )
+                        .await
+                        {
+                            warn!(
+                                "Verification fee payment failed for batch {}: {}",
+                                batch.commonware_height, e
+                            );
+                        }
+
+                        // Then finalize the epoch — distribute rewards/slashes
                         if let Err(e) = crate::market::finalize_epoch(
                             &self.config.rpc_endpoint,
                             &self.config.relayer_key,

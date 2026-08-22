@@ -82,6 +82,13 @@ enum Commands {
         #[arg(long)]
         truth_market: Option<String>,
 
+        /// Per-batch verification fee to pay to the truth market (in ujuno).
+        /// When >0, the relayer calls PayVerificationFee before finalizing
+        /// each epoch, routing the fee into the reward pool.
+        /// Only used when --truth-market is set. Default: 0 (skip fee).
+        #[arg(long)]
+        verification_fee: Option<u128>,
+
         /// Optional circuit-breaker contract address. When set, the relayer
         /// submits TripBreaker transactions for any BreakerActions detected
         /// in finalized batches.
@@ -109,6 +116,7 @@ async fn main() -> Result<()> {
             task_ledger,
             agent_registry,
             truth_market,
+            verification_fee,
             breaker,
         } => {
             info!("Starting JunoClaw relayer daemon");
@@ -146,9 +154,16 @@ async fn main() -> Result<()> {
             };
 
             let market_cfg = truth_market.map(|addr| {
-                info!("  Truth Market: {}", addr);
+                let fee = verification_fee.unwrap_or(0);
+                if fee > 0 {
+                    info!("  Truth Market: {} (verification fee: {} ujuno)", addr, fee);
+                } else {
+                    info!("  Truth Market: {} (no verification fee)", addr);
+                }
                 market::MarketConfig {
                     truth_market_addr: addr,
+                    verification_fee: fee,
+                    robot_id: None,
                 }
             });
 
