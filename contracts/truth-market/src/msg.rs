@@ -1,5 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Uint128;
+use crate::state::RewardMode;
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -10,6 +11,8 @@ pub struct InstantiateMsg {
     pub unstake_cooldown_secs: u64,
     /// Minimum operators required to finalize an epoch (default 3 if None).
     pub min_operators: Option<u32>,
+    /// Reward distribution mode (default Equal if None).
+    pub reward_mode: Option<RewardMode>,
 }
 
 #[cw_serde]
@@ -56,6 +59,7 @@ pub enum ExecuteMsg {
         reward_percent: Option<u8>,
         unstake_cooldown_secs: Option<u64>,
         min_operators: Option<u32>,
+        reward_mode: Option<RewardMode>,
     },
 
     /// Deposit funds into the reward pool (anyone can contribute).
@@ -86,6 +90,7 @@ pub struct ConfigResponse {
     pub denom: String,
     pub unstake_cooldown_secs: u64,
     pub min_operators: u32,
+    pub reward_mode: RewardMode,
 }
 
 #[cw_serde]

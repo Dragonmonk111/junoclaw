@@ -2,6 +2,21 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Uint128};
 use cw_storage_plus::{Item, Map};
 
+/// Reward distribution mode for epoch finalization.
+#[cw_serde]
+pub enum RewardMode {
+    /// Equal split among all matching operators (default, backwards-compatible).
+    Equal,
+    /// Stake-weighted: each matching operator gets a share proportional to their stake.
+    StakeWeighted,
+}
+
+impl Default for RewardMode {
+    fn default() -> Self {
+        RewardMode::Equal
+    }
+}
+
 #[cw_serde]
 pub struct Config {
     pub admin: Addr,
@@ -18,6 +33,8 @@ pub struct Config {
     /// Minimum number of operators required to finalize an epoch.
     /// Prevents a single operator from trivially self-consensing.
     pub min_operators: u32,
+    /// How rewards are distributed among matching operators.
+    pub reward_mode: RewardMode,
 }
 
 #[cw_serde]

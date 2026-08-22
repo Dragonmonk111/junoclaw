@@ -167,6 +167,7 @@ export function MinerPanel() {
             <span style={{ color: '#6b6a8a' }}>Slash: <span style={{ color: '#ff4d6a' }}>{config.slashPercent}%</span></span>
             <span style={{ color: '#6b6a8a' }}>Reward: <span style={{ color: '#00d4aa' }}>{config.rewardPercent}%</span></span>
             <span style={{ color: '#6b6a8a' }}>Min operators: <span style={{ color: '#c0bfd6' }}>{config.minOperators}</span></span>
+            <span style={{ color: '#6b6a8a' }}>Rewards: <span style={{ color: config.rewardMode === 'stake_weighted' ? '#7c6bff' : '#c0bfd6' }}>{config.rewardMode === 'stake_weighted' ? 'stake-weighted' : 'equal'}</span></span>
             {config.unstakeCooldownSecs > 0 && (
               <span style={{ color: '#6b6a8a' }}>Cooldown: <span style={{ color: '#c0bfd6' }}>{Math.round(config.unstakeCooldownSecs / 3600)}h</span></span>
             )}

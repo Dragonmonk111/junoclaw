@@ -43,6 +43,7 @@ export interface MinerConfig {
   denom: string
   unstakeCooldownSecs: number
   minOperators: number
+  rewardMode: string
 }
 
 export interface FingerprintEntry {
@@ -102,6 +103,7 @@ export async function queryMinerConfig(): Promise<MinerConfig> {
     denom: String(raw.denom ?? 'ujunox'),
     unstakeCooldownSecs: Number(raw.unstake_cooldown_secs ?? 0),
     minOperators: Number(raw.min_operators ?? 3),
+    rewardMode: String(raw.reward_mode ?? 'equal'),
   }
 }
 

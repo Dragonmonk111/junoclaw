@@ -2,6 +2,7 @@ use cosmwasm_std::{coins, Addr, Uint128};
 use cw_multi_test::{App, ContractWrapper, Executor};
 
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::state::RewardMode;
 
 const UJUNO: &str = "ujuno";
 
@@ -84,6 +85,7 @@ fn store_and_instantiate(app: &mut App, admin: &Addr) -> Addr {
             denom: UJUNO.to_string(),
             unstake_cooldown_secs: 86400,
             min_operators: None,
+            reward_mode: None,
         },
         &[],
         "truth-market",
@@ -648,6 +650,7 @@ fn test_finalize_epoch_min_operators_configurable() {
                 denom: UJUNO.to_string(),
                 unstake_cooldown_secs: 86400,
                 min_operators: Some(1),
+                reward_mode: None,
             },
             &[],
             "truth-market",
@@ -714,6 +717,7 @@ fn test_update_config_min_operators() {
             reward_percent: None,
             unstake_cooldown_secs: None,
             min_operators: Some(5),
+            reward_mode: None,
         },
         &[],
     )
@@ -804,4 +808,117 @@ fn test_fingerprints_mixed_and_none() {
     assert_eq!(fps.fingerprints.len(), 1);
     assert_eq!(fps.fingerprints[0].operator_count, 1);
     assert_eq!(fps.operators_without_fingerprint, 1);
+}
+
+#[test]
+fn test_stake_weighted_rewards() {
+    let mut app = setup_app();
+    let admin = make_addr(&app, "admin");
+
+    // Instantiate with stake-weighted rewards
+    let code = ContractWrapper::new(
+        crate::contract::execute,
+        crate::contract::instantiate,
+        crate::contract::query,
+    );
+    let code_id = app.store_code(Box::new(code));
+    let contract = app
+        .instantiate_contract(
+            code_id,
+            admin.clone(),
+            &InstantiateMsg {
+                min_stake: Uint128::from(1_000_000u128),
+                slash_percent: 10,
+                reward_percent: 80,
+                denom: UJUNO.to_string(),
+                unstake_cooldown_secs: 86400,
+                min_operators: Some(2),
+                reward_mode: Some(RewardMode::StakeWeighted),
+            },
+            &[],
+            "truth-market",
+            None,
+        )
+        .unwrap();
+
+    // Register 2 operators with different stakes
+    let op_a = make_addr(&app, "opA");
+    let op_b = make_addr(&app, "opB");
+
+    // opA stakes 1,000,000 (small — like a Jetson Orin)
+    app.execute_contract(
+        op_a.clone(),
+        contract.clone(),
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
+        &coins(1_000_000, UJUNO),
+    )
+    .unwrap();
+
+    // opB stakes 5,000,000 (large — like a DGX Spark)
+    app.execute_contract(
+        op_b.clone(),
+        contract.clone(),
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
+        &coins(5_000_000, UJUNO),
+    )
+    .unwrap();
+
+    // Deposit rewards
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::DepositRewards {},
+        &coins(600_000, UJUNO),
+    )
+    .unwrap();
+
+    // Both submit green verdicts
+    for op in [&op_a, &op_b] {
+        app.execute_contract(
+            op.clone(),
+            contract.clone(),
+            &ExecuteMsg::SubmitVerdict {
+                batch_height: 50,
+                verdict: "green".to_string(),
+                messages_hash: "hash50".to_string(),
+            },
+            &[],
+        )
+        .unwrap();
+    }
+
+    // Finalize epoch
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::FinalizeEpoch {
+            batch_height: 50,
+            consensus_verdict: "green".to_string(),
+            messages_hash: "hash50".to_string(),
+        },
+        &[],
+    )
+    .unwrap();
+
+    // Check rewards: opA should get 1/6, opB should get 5/6 of total reward pool
+    // Total reward pool = 600_000 * 80% = 480_000
+    // opA stake = 1M, opB stake = 5M, total = 6M
+    // opA reward = 480_000 * 1/6 = 80_000
+    // opB reward = 480_000 * 5/6 = 400_000
+    let op_a_resp: crate::msg::OperatorResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetOperator { address: op_a.to_string() })
+        .unwrap();
+    let op_b_resp: crate::msg::OperatorResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetOperator { address: op_b.to_string() })
+        .unwrap();
+
+    assert!(op_a_resp.total_rewards > Uint128::zero());
+    assert!(op_b_resp.total_rewards > Uint128::zero());
+    // opB should earn ~5x what opA earns
+    assert!(
+        op_b_resp.total_rewards > op_a_resp.total_rewards,
+        "stake-weighted: opB (5M stake) should earn more than opA (1M stake)"
+    );
 }

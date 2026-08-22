@@ -9,7 +9,7 @@ use crate::msg::{
     InstantiateMsg, MigrateMsg, OperatorResponse, OperatorsResponse, QueryMsg, StatsResponse,
 };
 use crate::state::{
-    Config, EpochResult, MarketStats, Operator, VerdictRecord, CONFIG, EPOCHS,
+    Config, EpochResult, MarketStats, Operator, RewardMode, VerdictRecord, CONFIG, EPOCHS,
     FINGERPRINT_COUNTS, MARKET_STATS, NEXT_OPERATOR_ID, OPERATORS, REWARD_POOL, VERDICTS,
 };
 
@@ -30,6 +30,7 @@ pub fn instantiate(
         denom: msg.denom,
         unstake_cooldown_secs: msg.unstake_cooldown_secs,
         min_operators: msg.min_operators.unwrap_or(3),
+        reward_mode: msg.reward_mode.unwrap_or_default(),
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -82,7 +83,8 @@ pub fn execute(
             reward_percent,
             unstake_cooldown_secs,
             min_operators,
-        } => execute_update_config(deps, info, min_stake, slash_percent, reward_percent, unstake_cooldown_secs, min_operators),
+            reward_mode,
+        } => execute_update_config(deps, info, min_stake, slash_percent, reward_percent, unstake_cooldown_secs, min_operators, reward_mode),
         ExecuteMsg::DepositRewards {} => execute_deposit_rewards(deps, info),
     }
 }
@@ -111,6 +113,7 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, C
                 denom: old.denom,
                 unstake_cooldown_secs: old.unstake_cooldown_secs,
                 min_operators: 3,
+                reward_mode: RewardMode::default(),
             };
             CONFIG.save(deps.storage, &new_config)?;
             // Patch existing operators: add fingerprint=None for old state.
@@ -328,13 +331,41 @@ fn execute_finalize_epoch(
 
     // Distribute rewards from the reward pool to matching operators
     let reward_pool = REWARD_POOL.load(deps.storage)?;
-    let per_operator_reward = if matching_count > 0 && !reward_pool.is_zero() {
-        reward_pool.multiply_ratio(config.reward_percent as u64, 100u64) / Uint128::from(matching_count)
+    let total_reward_pool = if matching_count > 0 && !reward_pool.is_zero() {
+        reward_pool.multiply_ratio(config.reward_percent as u64, 100u64)
     } else {
         Uint128::zero()
     };
 
-    let total_rewards_distributed = per_operator_reward * Uint128::from(matching_count);
+    // Calculate per-operator reward based on reward mode
+    let matching_stakes: Vec<Uint128> = matching
+        .iter()
+        .map(|addr| OPERATORS.load(deps.storage, addr).map(|op| op.stake).unwrap_or(Uint128::zero()))
+        .collect();
+    let total_matching_stake: Uint128 = matching_stakes.iter().sum();
+
+    let per_operator_rewards: Vec<Uint128> = match config.reward_mode {
+        RewardMode::Equal => {
+            let per = if matching_count > 0 {
+                total_reward_pool / Uint128::from(matching_count)
+            } else {
+                Uint128::zero()
+            };
+            vec![per; matching.len()]
+        }
+        RewardMode::StakeWeighted => {
+            if !total_matching_stake.is_zero() {
+                matching_stakes
+                    .iter()
+                    .map(|&s| total_reward_pool.multiply_ratio(s.u128(), total_matching_stake.u128()))
+                    .collect()
+            } else {
+                vec![Uint128::zero(); matching.len()]
+            }
+        }
+    };
+
+    let total_rewards_distributed: Uint128 = per_operator_rewards.iter().sum();
 
     // Slash diverging operators
     let mut total_slashed = Uint128::zero();
@@ -351,16 +382,17 @@ fn execute_finalize_epoch(
 
     // Reward matching operators
     let mut reward_msgs: Vec<cosmwasm_std::BankMsg> = Vec::new();
-    for addr in &matching {
+    for (i, addr) in matching.iter().enumerate() {
         let mut op = OPERATORS.load(deps.storage, addr)?;
-        op.total_rewards += per_operator_reward;
+        let reward = per_operator_rewards[i];
+        op.total_rewards += reward;
         op.correct_verdicts += 1;
         OPERATORS.save(deps.storage, addr, &op)?;
 
-        if !per_operator_reward.is_zero() {
+        if !reward.is_zero() {
             reward_msgs.push(BankMsg::Send {
                 to_address: addr.to_string(),
-                amount: coins(per_operator_reward.u128(), &config.denom),
+                amount: coins(reward.u128(), &config.denom),
             });
         }
     }
@@ -537,6 +569,7 @@ fn execute_update_config(
     reward_percent: Option<u8>,
     unstake_cooldown_secs: Option<u64>,
     min_operators: Option<u32>,
+    reward_mode: Option<RewardMode>,
 ) -> Result<Response, ContractError> {
     let mut config = CONFIG.load(deps.storage)?;
     ensure_eq!(info.sender, config.admin, ContractError::Unauthorized {});
@@ -555,6 +588,9 @@ fn execute_update_config(
     }
     if let Some(mo) = min_operators {
         config.min_operators = mo;
+    }
+    if let Some(rm) = reward_mode {
+        config.reward_mode = rm;
     }
     CONFIG.save(deps.storage, &config)?;
 
@@ -604,6 +640,7 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         denom: config.denom,
         unstake_cooldown_secs: config.unstake_cooldown_secs,
         min_operators: config.min_operators,
+        reward_mode: config.reward_mode,
     })
 }
 
