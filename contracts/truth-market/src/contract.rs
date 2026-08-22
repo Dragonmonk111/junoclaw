@@ -363,6 +363,41 @@ fn execute_finalize_epoch(
                 vec![Uint128::zero(); matching.len()]
             }
         }
+        RewardMode::StakeTimesAccuracy => {
+            // Laplace-smoothed accuracy: (correct + 1) / (epochs + 1)
+            // New operators start at 100% (benefit of the doubt).
+            let weights: Vec<u128> = matching
+                .iter()
+                .zip(matching_stakes.iter())
+                .map(|(addr, &stake)| {
+                    let op = OPERATORS.load(deps.storage, addr).unwrap_or(Operator {
+                        address: addr.clone(),
+                        stake,
+                        total_rewards: Uint128::zero(),
+                        total_slashed: Uint128::zero(),
+                        epochs_participated: 0,
+                        correct_verdicts: 0,
+                        incorrect_verdicts: 0,
+                        active: true,
+                        unstake_request_time: 0,
+                        fingerprint: None,
+                    });
+                    let correct = op.correct_verdicts as u128 + 1;
+                    let epochs = op.epochs_participated as u128 + 1;
+                    let accuracy = correct * 1000 / epochs; // scaled by 1000 for precision
+                    stake.u128() * accuracy
+                })
+                .collect();
+            let total_weight: u128 = weights.iter().sum();
+            if total_weight > 0 {
+                weights
+                    .iter()
+                    .map(|&w| total_reward_pool.multiply_ratio(w, total_weight))
+                    .collect()
+            } else {
+                vec![Uint128::zero(); matching.len()]
+            }
+        }
     };
 
     let total_rewards_distributed: Uint128 = per_operator_rewards.iter().sum();

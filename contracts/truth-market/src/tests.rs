@@ -922,3 +922,216 @@ fn test_stake_weighted_rewards() {
         "stake-weighted: opB (5M stake) should earn more than opA (1M stake)"
     );
 }
+
+#[test]
+fn test_stake_times_accuracy_rewards() {
+    let mut app = setup_app();
+    let admin = make_addr(&app, "admin");
+
+    // Instantiate with StakeTimesAccuracy rewards
+    let code = ContractWrapper::new(
+        crate::contract::execute,
+        crate::contract::instantiate,
+        crate::contract::query,
+    );
+    let code_id = app.store_code(Box::new(code));
+    let contract = app
+        .instantiate_contract(
+            code_id,
+            admin.clone(),
+            &InstantiateMsg {
+                min_stake: Uint128::from(1_000_000u128),
+                slash_percent: 10,
+                reward_percent: 80,
+                denom: UJUNO.to_string(),
+                unstake_cooldown_secs: 86400,
+                min_operators: Some(2),
+                reward_mode: Some(RewardMode::StakeTimesAccuracy),
+            },
+            &[],
+            "truth-market",
+            None,
+        )
+        .unwrap();
+
+    let op_a = make_addr(&app, "opA");
+    let op_b = make_addr(&app, "opB");
+
+    // opA stakes 1M, opB stakes 5M
+    app.execute_contract(
+        op_a.clone(),
+        contract.clone(),
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
+        &coins(1_000_000, UJUNO),
+    )
+    .unwrap();
+    app.execute_contract(
+        op_b.clone(),
+        contract.clone(),
+        &ExecuteMsg::RegisterOperator { fingerprint: None },
+        &coins(5_000_000, UJUNO),
+    )
+    .unwrap();
+
+    // Deposit rewards
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::DepositRewards {},
+        &coins(600_000, UJUNO),
+    )
+    .unwrap();
+
+    // Epoch 1: both correct (both start at Laplace accuracy = 1/1 = 100%)
+    // Weights: opA = 1M * 1000 = 1,000,000; opB = 5M * 1000 = 5,000,000
+    // opA gets 1/6, opB gets 5/6 — same as pure stake-weighted for first epoch
+    for op in [&op_a, &op_b] {
+        app.execute_contract(
+            op.clone(),
+            contract.clone(),
+            &ExecuteMsg::SubmitVerdict {
+                batch_height: 1,
+                verdict: "green".to_string(),
+                messages_hash: "hash1".to_string(),
+            },
+            &[],
+        )
+        .unwrap();
+    }
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::FinalizeEpoch {
+            batch_height: 1,
+            consensus_verdict: "green".to_string(),
+            messages_hash: "hash1".to_string(),
+        },
+        &[],
+    )
+    .unwrap();
+
+    let op_a_after1: crate::msg::OperatorResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetOperator { address: op_a.to_string() })
+        .unwrap();
+    let op_b_after1: crate::msg::OperatorResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetOperator { address: op_b.to_string() })
+        .unwrap();
+
+    // After epoch 1: opA accuracy = 2/2 = 100%, opB accuracy = 2/2 = 100%
+    // Both still at 100%, so stake dominates — opB earns more
+    assert!(
+        op_b_after1.total_rewards > op_a_after1.total_rewards,
+        "epoch 1: opB should earn more (both 100% accuracy, opB has 5x stake)"
+    );
+
+    // Epoch 2: opA correct, opB WRONG (opB gets slashed, accuracy drops)
+    app.execute_contract(
+        op_a.clone(),
+        contract.clone(),
+        &ExecuteMsg::SubmitVerdict {
+            batch_height: 2,
+            verdict: "green".to_string(),
+            messages_hash: "hash2".to_string(),
+        },
+        &[],
+    )
+    .unwrap();
+    app.execute_contract(
+        op_b.clone(),
+        contract.clone(),
+        &ExecuteMsg::SubmitVerdict {
+            batch_height: 2,
+            verdict: "red".to_string(),
+            messages_hash: "hash2".to_string(),
+        },
+        &[],
+    )
+    .unwrap();
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::FinalizeEpoch {
+            batch_height: 2,
+            consensus_verdict: "green".to_string(),
+            messages_hash: "hash2".to_string(),
+        },
+        &[],
+    )
+    .unwrap();
+
+    // After epoch 2: only opA matched, so only opA gets rewarded
+    let op_a_after2: crate::msg::OperatorResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetOperator { address: op_a.to_string() })
+        .unwrap();
+    let op_b_after2: crate::msg::OperatorResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetOperator { address: op_b.to_string() })
+        .unwrap();
+
+    // opA: correct_verdicts=2, epochs=2, accuracy = 3/3 = 100%
+    // opB: correct_verdicts=1, epochs=2, accuracy = 2/3 = 66.7%
+    assert_eq!(op_a_after2.correct_verdicts, 2);
+    assert_eq!(op_b_after2.correct_verdicts, 1);
+    assert_eq!(op_b_after2.incorrect_verdicts, 1);
+    assert!(op_b_after2.total_slashed > Uint128::zero());
+
+    // Epoch 3: both correct again — now accuracy matters
+    // opA weight = 1M * (3/3 * 1000) = 1,000,000
+    // opB weight = 5M * (2/3 * 1000) = 5M * 667 = 3,335,000
+    // opA share = 1M / 4.335M = 23.1%
+    // opB share = 3.335M / 4.335M = 76.9%
+    // With pure stake-weighting, opA would get 16.7% — accuracy boosted it to 23.1%
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::DepositRewards {},
+        &coins(600_000, UJUNO),
+    )
+    .unwrap();
+    for op in [&op_a, &op_b] {
+        app.execute_contract(
+            op.clone(),
+            contract.clone(),
+            &ExecuteMsg::SubmitVerdict {
+                batch_height: 3,
+                verdict: "green".to_string(),
+                messages_hash: "hash3".to_string(),
+            },
+            &[],
+        )
+        .unwrap();
+    }
+    let op_a_before3 = op_a_after2.total_rewards;
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::FinalizeEpoch {
+            batch_height: 3,
+            consensus_verdict: "green".to_string(),
+            messages_hash: "hash3".to_string(),
+        },
+        &[],
+    )
+    .unwrap();
+
+    let op_a_after3: crate::msg::OperatorResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetOperator { address: op_a.to_string() })
+        .unwrap();
+
+    let op_a_epoch3_reward = op_a_after3.total_rewards - op_a_before3;
+    // opA should have earned more in epoch 3 than epoch 1 (accuracy boost)
+    let op_a_epoch1_reward = op_a_after1.total_rewards;
+    assert!(
+        op_a_epoch3_reward > Uint128::zero(),
+        "opA should earn rewards in epoch 3"
+    );
+    // With accuracy boost, opA's share in epoch 3 (23.1%) > epoch 1 (16.7%)
+    assert!(
+        op_a_epoch3_reward > op_a_epoch1_reward,
+        "opA should earn more in epoch 3 (accuracy boost) than epoch 1 (cold start)"
+    );
+}

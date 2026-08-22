@@ -9,6 +9,9 @@ pub enum RewardMode {
     Equal,
     /// Stake-weighted: each matching operator gets a share proportional to their stake.
     StakeWeighted,
+    /// Stake × accuracy: share proportional to stake times historical accuracy (Laplace-smoothed).
+    /// New operators start at accuracy = 1/1 = 100% (benefit of the doubt).
+    StakeTimesAccuracy,
 }
 
 impl Default for RewardMode {
