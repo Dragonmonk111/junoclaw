@@ -94,8 +94,8 @@ pub fn execute(
 
 #[entry_point]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
-    // Patch stored Config: old state lacks min_operators field.
-    // Load with old shape, save back with min_operators=3 default.
+    // Try loading the current Config shape first (already migrated).
+    // If that fails, fall back to OldConfig (pre-migration shape).
     #[derive(serde::Deserialize)]
     struct OldConfig {
         admin: Addr,
@@ -107,7 +107,12 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, C
     }
     let raw = deps.storage.get(b"config");
     if let Some(data) = raw {
-        if let Ok(old) = cosmwasm_std::from_json::<OldConfig>(&data) {
+        // Try current shape first
+        if let Ok(current) = cosmwasm_std::from_json::<Config>(&data) {
+            // Already has all fields — just save it back to ensure storage format is current
+            CONFIG.save(deps.storage, &current)?;
+        } else if let Ok(old) = cosmwasm_std::from_json::<OldConfig>(&data) {
+            // Old shape — migrate up with defaults for new fields
             let new_config = Config {
                 admin: old.admin,
                 min_stake: old.min_stake,
@@ -121,11 +126,11 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, C
             };
             CONFIG.save(deps.storage, &new_config)?;
             // Patch existing operators: add fingerprint=None for old state.
-            for (addr, mut op) in OPERATORS.range(deps.storage, None, None, cosmwasm_std::Order::Ascending).filter_map(|r| r.ok()) {
+            let ops: Vec<_> = OPERATORS.range(deps.storage, None, None, cosmwasm_std::Order::Ascending).filter_map(|r| r.ok()).collect();
+            for (addr, mut op) in ops {
                 if op.fingerprint.is_none() {
-                    // Old operators have no fingerprint field — leave as None.
-                    let _ = addr;
-                    let _ = &mut op;
+                    op.fingerprint = None;
+                    OPERATORS.save(deps.storage, &addr, &op)?;
                 }
             }
         }
@@ -406,12 +411,24 @@ fn execute_finalize_epoch(
 
     let total_rewards_distributed: Uint128 = per_operator_rewards.iter().sum();
 
-    // Slash diverging operators
+    // Slash diverging operators.
+    // When verification_fee is set, slash equals the fee amount — aligning
+    // the penalty with what robots pay for verification. When fee is 0
+    // (open access mode), fall back to slash_percent of stake.
     let mut total_slashed = Uint128::zero();
 
     for addr in &diverging {
         let mut op = OPERATORS.load(deps.storage, addr)?;
-        let slash_amount = op.stake.multiply_ratio(config.slash_percent as u64, 100u64);
+        let slash_amount = if !config.verification_fee.is_zero() {
+            // Slash = verification fee, capped at remaining stake
+            if config.verification_fee > op.stake {
+                op.stake
+            } else {
+                config.verification_fee
+            }
+        } else {
+            op.stake.multiply_ratio(config.slash_percent as u64, 100u64)
+        };
         op.stake = op.stake.checked_sub(slash_amount).unwrap_or(Uint128::zero());
         op.total_slashed += slash_amount;
         op.incorrect_verdicts += 1;
