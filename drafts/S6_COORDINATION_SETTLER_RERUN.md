@@ -89,7 +89,14 @@ No treasury funds spent. No contract changes. One endorsement, backed by on-chai
 
 ---
 
-## Status: DRAFT — ready for submission after A052 withdraw completes
+## Status: SUBMITTED AS A53 — OPEN FOR VOTING
+
+**Link:** https://daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/A53
+
+**Voting ends:** ~August 30, 2026 (7-day window)
+**Quorum:** 33% · **Threshold:** Majority · **Total voting power:** 7
+
+> **Note on the A052 withdraw:** The unstake withdrawal is a mechanical step — claiming back the DAO operator's 950,000 ujunox stake after the 24h cooldown. It does not alter, invalidate, or supplement any on-chain evidence cited in this proposal. The 16 epochs, 5 operators, 290,000 ujunox slashed, 10/11 correct verdicts, machine-rwa deployment, and soak test results are all finalized and queryable now. **The withdraw is not a blocker for this proposal.**
 
 ## Article reference
 

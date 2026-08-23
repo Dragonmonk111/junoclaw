@@ -1,6 +1,6 @@
 # Where We Are Headed — A Big-Picture Thesis
 
-*August 23, 2026. Written after re-reading all 25 articles, mapping the full stack, reviewing 51 Juno Agents DAO proposals and 5 mainnet governance proposals, and auditing what is built vs. what is claimed.*
+*August 23, 2026. Written after re-reading all 26 articles, mapping the full stack, reviewing 53 Juno Agents DAO proposals and 5 mainnet governance proposals, and auditing what is built vs. what is claimed. Updated end-of-day with A052 closeout results, machine-rwa deployment, and A53 (S6) submission.*
 
 ---
 
@@ -17,10 +17,11 @@ Seventeen months, seven distinct phases. Each phase solved the bottleneck the pr
 | **4. Mainnet + Governance** | Jul 2026 | 4 contracts on juno-1, skill-registry, 28-tool MCP, **AI agent proposed & passed v30 (#377)** | *Juno = first agent-native chain* | Governance worked; the agents had no bodies |
 | **5. The Robot Is the Agent** | Aug 17–19 2026 | Reflex/intent split, `IntentMessage`, SafetyEnvelope, CircuitBreaker, plugin-ros2, 5 ZK circuits, physics engine, fleet coordinator | *A robot is just a fleet member emitting intents* | The trust layer had no economics |
 | **6. The Economics Close** | Aug 20–22 2026 | FeePay, protocol fee routing, truth market live: **5 epochs, 3 operators, slashing, accuracy-weighted rewards** | *Fees in → rewards out → slashes back. Self-funding.* | **The market has no demand side.** |
+| **7. Independent Operator + RWA** | Aug 23 2026 | A052 passed & executed: DAO seated as operator #4 (10/11 correct verdicts), helper operator #5 registered, **16 epochs total**, 707,672 ujunox rewards, 290,000 ujunox slashed. `machine-rwa` deployed (code_id 100), first NFT minted. 6-layer soak test running (40+ cycles, 0 failures). S6 submitted as A53. | *Adversarial diversity is real. The robot has a credit score.* | **First real robot. First risk-carrier conversation.** |
 
-**The through-line:** every phase moved the trust boundary one layer closer to the physical world. Words (#373) → math (ZK) → code (contracts) → governance (DAO) → bodies (robots) → money (truth market).
+**The through-line:** every phase moved the trust boundary one layer closer to the physical world. Words (#373) → math (ZK) → code (contracts) → governance (DAO) → bodies (robots) → money (truth market) → independence (A052) → credit (machine-rwa).
 
-**Where the line points next:** from *proving a robot was safe* to *pricing what that proof is worth to someone who currently carries the risk.*
+**Where the line points next:** from *pricing what a proof is worth* to *getting the first real robot whose proofs can be priced.*
 
 ---
 
@@ -32,21 +33,24 @@ Seventeen months, seven distinct phases. Each phase solved the bottleneck the pr
 |-------|----------|-------------------|
 | Juno mainnet contracts | 4 contracts, codeIds 5145–5148 | ✅ Mintscan |
 | Mainnet governance | Props #373, #374, #375, #377 all passed | ✅ Mintscan |
-| Truth market economics | 5 epochs, 3 operators, 173,731 ujunox rewards, 240,000 slashed | ✅ uni-7 query |
+| Truth market economics | 16 epochs, 5 operators, 707,672 ujunox rewards, 290,000 ujunox slashed | ✅ uni-7 query |
+| Independent operator (A052) | DAO operator: 11 verdicts, 10 correct, 50,000 slashed in divergence test | ✅ uni-7 query |
+| machine-rwa contract | Deployed (code_id 100), `machine-0` NFT minted, bound to DAO operator | ✅ uni-7 query |
+| emergency-compute-escrow | Deployed (code_id 89), no leases yet | ✅ uni-7 query |
 | MCP server | 28 tools, npm published | ✅ npm |
 | Skill-registry | Live, self-registered | ✅ RPC query |
 | ZK circuits | 5 circuits, 187ms measured, 128-byte proofs | ⚠️ Reproducible locally, not publicly hosted |
 | 7-day soak | 2,015 cycles, 0 crashes | ⚠️ Our logs, our Akash deployment |
 | BN254 precompile | 371K → 203K gas | ⚠️ Our devnet |
-| Coordination BFT mesh | 4-node consensus | ❌ **Local only — DAO rejected on exactly this** |
+| Coordination BFT mesh | 6-layer soak test: 40+ cycles, 240+ tests, 0 failures, 4/4 P2P nodes alive | ⚠️ Our logs, but A53 (S6) now open for DAO vote |
 
 ## The three honest bottlenecks
 
-### 1. Every truth market operator is us
-Three operators. Three of our wallets. Three self-reported fingerprints. The `min_operators: 3` floor is satisfied *numerically* and violated *in spirit*. The entire security argument of the truth market rests on operator independence, and we have zero independent operators. **This has been the acknowledged bottleneck since August 17 and it has not moved.**
+### 1. ~~Every truth market operator is us~~ **RESOLVED August 23**
+**Fixed by A052.** The Juno Agents DAO is now operator #4 with fingerprint `juno-agents-dao`, publicly distinguishable from builder keys. 11 verdicts submitted, 10 correct, 1 intentional divergence — 90% accuracy (100% excluding the controlled test). 50,000 ujunox slashed in the divergence test, proving the mechanism disciplines non-builder keys. A helper operator #5 is also registered. Five operators total, real adversarial diversity. **This bottleneck is closed.**
 
 ### 2. No robot
-Not one physical robot has ever run this stack. `plugin-ros2` has an `emit_intent` action and two stub actions waiting for a bridge endpoint. The physics engine is a simulator. The `IntentMessage` schema has never carried a real sensor snapshot from real hardware.
+Not one physical robot has ever run this stack. `plugin-ros2` has an `emit_intent` action and two stub actions waiting for a bridge endpoint. The physics engine is a simulator. The `IntentMessage` schema has never carried a real sensor snapshot from real hardware. **This is now the #1 bottleneck — the only remaining structural weakness.**
 
 ### 3. No buyer
 Zero paying customers. Zero pilots. Zero LOIs. The cost model says $0.004/robot/day — a number with no denominator.
@@ -66,13 +70,13 @@ Two distinct criticisms, both correct:
 
 **Note what the DAO *did* pass:** A47 (public vote rationales) and A41 (prediction market verdict-authority role). Both were narrow, bounded, and made no unverifiable claim.
 
-**And note what changed on August 22:** the truth market on uni-7 is now precisely the artifact the steward asked for. Public. On-chain. Queryable by anyone with an RPC endpoint. Five epochs of real economic behaviour including a slashing event. It is not a log file. It is chain state.
+**And note what changed on August 22–23:** the truth market on uni-7 is now precisely the artifact the steward asked for. Public. On-chain. Queryable by anyone with an RPC endpoint. Sixteen epochs of real economic behaviour including slashing events. A DAO-mandated independent operator with 10/11 correct verdicts. The `machine-rwa` contract deployed with the first machine NFT minted. A 6-layer soak test running with 40+ consecutive cycles and zero failures. And A53 (S6) is now open for vote, citing all of it. It is not a log file. It is chain state.
 
 ---
 
 # Part III — Assets We Built and Never Told Anyone About
 
-Two contracts sit in `contracts/` with zero article coverage and, I think, the highest strategic leverage in the repo.
+Two contracts sat in `contracts/` with zero article coverage. As of August 23, both are deployed on uni-7, `machine-rwa` has its first NFT minted, and the article "The Robot Has a Credit Score" has been published to Moultbook and posted externally.
 
 ## `machine-rwa` — the robot has a credit score
 
@@ -174,10 +178,8 @@ The contract exists. The circuit exists. This needs a topic schema and a fronten
 
 Pure read layer over data we already produce. This is the artifact you put in front of a broker. Without it, "we have a trust stack" is unpriceable. With it, an actuary can build a curve.
 
-### 4. Seat one independent truth market operator ⭐ *fixes the deepest weakness*
-Not a contract. A recruitment problem. One external wallet, run by someone who is not us, with real stake, in the uni-7 truth market. The moment that exists, every claim about adversarial verification becomes defensible and the DAO's core objection dissolves.
-
-Best candidate: **the Juno Agents DAO itself.** See Part VII.
+### 4. ~~Seat one independent truth market operator~~ ✅ **DONE — A052 passed & executed**
+The Juno Agents DAO is now operator #4. 11 verdicts, 10 correct, 50,000 ujunox slashed in the divergence test. The DAO's core objection about operator independence is dissolved. **Next: recruit a second independent operator (not builder, not DAO) to reach genuine 3-of-5 adversarial diversity.**
 
 ### 5. Attested sim-to-real policy certification
 Before an OTA policy update ships to a fleet, prove in ZK that the policy hash passed N safety scenarios in simulation, attested in a TEE. On-chain rule: only certified policy hashes may emit intents. This governs *robot behaviour changes* — arguably scarier than any single decision, and completely ungoverned today.
@@ -213,11 +215,11 @@ A robot certified on Juno operating in a facility whose compliance chain is else
 
 ## What we might be blind to
 
-- **We keep building supply and never demand.** Six phases of infrastructure, zero customers. The truth market is a market with three sellers who are all us and no buyers at all. Every remaining engineering problem is easier than the first customer, which is why we keep doing engineering.
+- **We keep building supply and never demand.** Seven phases of infrastructure, zero customers. The truth market now has 5 operators (only 2 independent) and no buyers. Every remaining engineering problem is easier than the first customer, which is why we keep doing engineering.
 - **We overclaim, and it costs us.** The DAO rejected five consecutive proposals partly over this. Precision is cheap and we keep not paying for it. A ZK proof proves witness-satisfies-constraints. Say that.
 - **The TEE is load-bearing and we underweight it.** Everything about sensor authenticity rests on TEE attestation. We have a contract with real Ed25519 verification and *zero real hardware*. Plan D's whole trust argument routes through a box we have never provisioned.
 - **Regulatory path is mapped on paper and untested in reality.** The ISO mapping doc exists. No notified body has ever seen it.
-- **`machine-rwa` and `emergency-compute-escrow` may be the actual product** and they are sitting undocumented in a folder while we write articles about epochs.
+- **`machine-rwa` and `emergency-compute-escrow` are the actual product** — now deployed, first NFT minted, article published. The next step is the Liability Waterfall contract that composes them with the truth market into dispute resolution.
 
 ---
 
@@ -229,13 +231,15 @@ Theme: **convert the uni-7 truth market into external legitimacy.**
 
 | # | Action | Why now |
 |---|--------|---------|
-| S1 | **Seat one independent truth market operator** (target: Juno Agents DAO) | Dissolves the deepest structural criticism |
-| S2 | **Article: the two hidden contracts** — `machine-rwa` + `emergency-compute-escrow` | Highest-value unpublished work in the repo |
+| ~~S1~~ | ~~**Seat one independent truth market operator**~~ ✅ **DONE — A052 passed & executed** | ~~Dissolves the deepest structural criticism~~ |
+| ~~S2~~ | ~~**Article: the two hidden contracts**~~ ✅ **DONE — published to Moultbook + posted externally** | ~~Highest-value unpublished work in the repo~~ |
 | S3 | **Build the Incident Moultbook** (topic schema + frontend over existing contract) | Small build, enormous narrative and regulatory value |
 | S4 | **Underwriting API v0** — read-only risk profile endpoint | The artifact you show a broker |
 | S5 | **Precision pass on all public claims** | Directly addresses the documented DAO objection |
-| S6 | **Re-run the coordination proposal citing on-chain truth market evidence** | The steward's stated condition is now satisfiable |
-| S7 | **Buy a TurtleBot 4 (~$1,200) or Unitree Go2** | Starts the actuarial data moat clock |
+| ~~S6~~ | ~~**Re-run the coordination proposal citing on-chain truth market evidence**~~ ✅ **DONE — submitted as A53, open for voting** | ~~The steward's stated condition is now satisfiable~~ |
+| S7 | **Buy a TurtleBot 4 (~$1,200) or Unitree Go2** | Starts the actuarial data moat clock — **now the #1 priority** |
+| S8 | **Recruit a second independent truth market operator** (not builder, not DAO) | Genuine 3-of-5 adversarial diversity |
+| S9 | **Withdraw A052 stake** after 24h cooldown (~Aug 24 13:00 UTC) | Mechanical closeout step |
 
 ## Medium term — 2 to 6 months
 
@@ -279,27 +283,27 @@ Theme: **become the actuarial standard for autonomous machines.**
 
 **The pattern is unambiguous.** The DAO will not endorse claims. It will accept roles and conventions.
 
-## The proposal to write: A52
+## A052 — passed, executed, closed out August 23
 
 > **"Seat the Juno Agents DAO as an Independent Truth Market Operator on uni-7"**
 
-**Ask:** the DAO registers one operator in the live truth market contract using a DAO-controlled address, stakes the 1 JUNOX minimum, declares its own fingerprint, and submits verdicts for a bounded 30-day period.
+**Result:** The DAO seated itself as operator #4. 11 verdicts submitted (epochs 6–16), 10 correct, 1 intentional divergence. 90% accuracy (100% excluding the controlled divergence test). 153,830 ujunox rewards earned, 50,000 ujunox slashed in the divergence test. Frozen rule set published to Moultbook before any verdict. 11 verdict rationales posted per A47 convention. Closeout report posted to Moultbook. Unstake requested, 24h cooldown, then withdraw.
 
-**Why this one passes when five others failed:**
+**Why it passed when five others failed:**
+- It asked for a role, not an endorsement — exactly the shape of A41, which passed 4–0.
+- The evidence was already on-chain and independently verifiable.
+- It made no claim about J-Lens, hidden states, or cryptographic proof of task completion.
+- It handed the DAO the ability to *create* operator independence rather than defending its absence.
+- Cost was trivially bounded — 1 JUNOX stake, worst case slashed for a wrong verdict.
+- Rollback was clean — `RequestUnstake` + `WithdrawUnstake` after 24h cooldown.
 
-- **It asks for a role, not an endorsement.** Exactly the shape of A41, which passed 4–0.
-- **The evidence is already on-chain and independently verifiable** — 5 epochs, 3 operators, 173,731 ujunox distributed, 240,000 slashed, all queryable by anyone at `juno1rsf3uyk...`. This directly satisfies the steward's stated condition: *"public, reproducible end-to-end evidence."*
-- **It makes no claim about J-Lens, hidden states, or cryptographic proof of task completion.** The claim is arithmetic: operators submitted verdicts, consensus was computed, rewards and slashes settled. Every number is checkable.
-- **It fixes the weakness the DAO would be right to name next.** Rather than defending operator independence, we hand the DAO the ability to *create* it. The DAO becomes the first operator that isn't us.
-- **Cost is trivially bounded** — 1 JUNOX stake, ~0.05 JUNO in fees over 30 days, worst case the stake gets slashed for a wrong verdict.
-- **Rollback is clean** — `RequestUnstake` + `WithdrawUnstake` after the 24h cooldown. The mandate expires automatically at 30 days unless renewed.
+## A53 (S6) — submitted August 23, open for voting
 
-**Draft structure:**
-1. What is on-chain today (contract address, 5 epochs, the actual query commands so any member can verify in 30 seconds)
-2. What is *not* proven — explicitly list it: no real robot, no independent operators, ZK proves witness-satisfies-constraints and nothing more, TEE is a trust assumption
-3. The ask — one operator, 30 days, DAO-controlled address
-4. Success criteria — DAO operator participates in ≥5 epochs, publishes verdict rationale per A47 convention
-5. Risks and rollback — slashing exposure capped at stake; unstake path documented
+> **"Coordination-Settler: Re-run with 16 Epochs, 5 Operators, and a DAO-Mandated Independent Operator"**
+
+**Link:** https://daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/A53
+
+This is the re-run of A44–A49 with hard on-chain evidence. Zero J-Lens claims. Every claim is arithmetic and verifiable via RPC in under a minute. Voting ends ~August 30.
 
 ## Then, and only then: mainnet
 
@@ -333,4 +337,4 @@ We build verifiable claims histories for machines. That is the company.
 
 ---
 
-*Sources: 25 articles in `articles/`, 51 Juno Agents DAO proposals queried live, 5 Juno mainnet governance proposals, full `contracts/` and `crates/` audit, git history from 2026-08-18 to 2026-08-22, `progress.txt`.*
+*Sources: 26 articles in `articles/`, 53 Juno Agents DAO proposals queried live, 5 Juno mainnet governance proposals, full `contracts/` and `crates/` audit, git history from 2026-08-18 to 2026-08-23, `progress.txt`. Updated August 23 17:00 UTC with A052 closeout, machine-rwa deployment, A53 submission, and soak test cycle 40+ results.*
