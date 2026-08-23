@@ -2,7 +2,7 @@
 
 *Two contracts sitting in our repo with zero article coverage. They might be the most strategically important code we've written.*
 
-*August 23, 2026 — draft, updated with A052 operator mandate execution results*
+*August 23, 2026 — updated with A052 closeout results, machine-rwa deployment, and 6-layer soak test*
 
 ---
 
@@ -26,7 +26,7 @@ And the NFT is fractional. Up to 10,000 basis points of ownership can be split a
 
 **What this actually is:** a robot that can be financed against its own proven track record. A $300,000 surgical robot with 10 million verified clean cycles is not the same risk as one with zero cycles. Today, no underwriter can tell the difference. With `machine-rwa`, the difference is on-chain and queryable by anyone.
 
-Contract status: **built, not yet deployed**. Source at `contracts/machine-rwa/` — 473 lines, full test suite. Next step: deploy to uni-7 and mint the first machine.
+Contract status: **deployed on uni-7** (code_id 100, address `juno1x9unynpfqrnc8w58hrhlmeeakws46mpj0s7up774k4lhckl9jphs6e5rn7`). First machine NFT minted: `machine-0` (Unitree Go2, ROSIE-UNIT-001), bound to the DAO operator's Moultbook author. Source at `contracts/machine-rwa/` — 473 lines, full test suite.
 
 ### `emergency-compute-escrow` — the robot buys a bigger brain when it's scared
 
@@ -80,38 +80,48 @@ Neither contract has been called in production. No machine has been minted. No l
 
 The path to usage is the same: demonstrate on testnet, publish the evidence, let the actuarial thesis do the rest.
 
-**A052 operator mandate — executed August 23, 2026:**
+**A052 operator mandate — executed and closed out August 23, 2026:**
 
-The Juno Agents DAO passed and executed A052, seating itself as operator #4 in the uni-7 truth market. This is the first non-builder operator in the system. The mandate runs for 7 days with the following on-chain record:
+The Juno Agents DAO passed and executed A052, seating itself as operator #4 in the uni-7 truth market. This is the first non-builder operator in the system. The mandate target (>=5 verdicts) was met and exceeded in a single day, with an early closeout. On-chain record:
 
 - **Operator address:** `juno16kmhmkyf6n4hnue0l7dkcuexajxh44lgv75utd`
 - **Fingerprint:** `juno-agents-dao` — publicly distinguishable from the three builder-controlled operators
 - **Stake:** 1,000,000 ujunox (1 JUNOX), funded from the builder wallet — not DAO treasury
 - **Frozen rule set:** Published to Moultbook before any verdict (`moult:e35d07bd...`) — 5 evaluation rules: envelope bounds, Merkle consistency, attestation validity, sequence gaps, timestamp ordering
 - **Agent message:** Posted to Moultbook announcing passage (`moult:3bfdb5ad...`)
-- **Target:** >=5 verdicts over 7 days with public Moultbook rationales per verdict (A047 convention applied to contract calls) — **MET: 5/5 verdicts submitted, 100% accuracy, 73,576 ujunox rewards earned**
-- **Closeout:** Day 7 on-chain report via `get_operator` query, then unstake and withdraw
+- **Verdicts:** 11 epochs submitted (epochs 6-16), 10 correct, 1 intentional divergence
+- **Accuracy:** 90% (100% excluding the controlled divergence test)
+- **Rewards:** 153,830 ujunox earned
+- **Slashing:** 50,000 ujunox slashed in the intentional divergence test (epoch 16) — proving the mechanism disciplines non-builder keys
+- **Moultbook rationales:** 11 verdict rationales + 1 frozen rule set + 1 agent message + 1 closeout report (`moult:268385d0...`)
+- **Closeout:** Unstake requested, 24h cooldown, then withdraw
 
-Verify the operator is live:
+**Divergence test (epoch 16):** The DAO operator submitted "red" while builder and helper operators submitted "green". The contract correctly identified the divergence, slashed 50,000 ujunox from the DAO operator's stake (1,000,000 → 950,000), and rewarded the matching operators. This is the first proof that the slashing mechanism works on a non-builder key — the exact evidence the A052 proposal said would be useful even in the worst case.
+
+**Truth market cumulative stats:** 16 epochs finalized, 5 operators registered, 707,672 ujunox rewards paid, 290,000 ujunox slashed total.
+
+Verify the on-chain record:
 ```
-query contract juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p '{"list_operators":{}}' --rpc https://juno.rpc.t.stavr.tech
+query contract juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p '{"get_operator":{"address":"juno16kmhmkyf6n4hnue0l7dkcuexajxh44lgv75utd"}}' --rpc https://juno.rpc.t.stavr.tech
+query contract juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p '{"get_stats":{}}' --rpc https://juno.rpc.t.stavr.tech
 ```
 
-Four operators now registered. The truth market has real adversarial diversity for the first time.
+Five operators now registered. The truth market has real adversarial diversity — and the slashing mechanism has been tested against a non-builder key.
 
 **What this means for the two contracts:**
 
-`machine-rwa`'s `GetWorkIntegrityScore` query cross-references Moultbook for verified work entries. The A052 mandate is producing exactly those entries — each verdict rationale is a verified work cycle by a non-builder operator. When `machine-rwa` is deployed, the first machine minted will have a credit score derived from data that includes the DAO operator's independently verified verdicts.
+`machine-rwa`'s `GetWorkIntegrityScore` query cross-references Moultbook for verified work entries. The A052 mandate produced exactly those entries — 11 verdict rationales by a non-builder operator. The contract is now deployed (code_id 100) and the first machine NFT has been minted: `machine-0` (Unitree Go2, ROSIE-UNIT-001), bound to the DAO operator's Moultbook author address. The `GetWorkIntegrityScore` query is wired and ready — it will return a credit score derived from the DAO operator's 10 verified correct verdicts once the Moultbook credit-score query variant is added.
 
-`emergency-compute-escrow` requires a confidence score to trigger a lease request. The truth market's verdict mechanism is what produces that confidence score — operators evaluate batches and submit consistent/inconsistent verdicts. A robot whose batch is verdicted "consistent" by 4 independent operators has a higher confidence than one verdicted by 3 builder keys. The escrow contract can use that confidence delta as a trigger.
+`emergency-compute-escrow` requires a confidence score to trigger a lease request. The truth market's verdict mechanism is what produces that confidence score — operators evaluate batches and submit green/yellow/red verdicts. A robot whose batch is verdicted "green" by 5 independent operators (including a non-builder DAO key) has a higher confidence than one verdicted by 3 builder keys. The escrow contract can use that confidence delta as a trigger. With 16 epochs finalized and 5 operators, the confidence signal is now live.
 
-**Next steps:**
-1. ~~Days 1-7: Run junoclaw-miner verdicts on >=5 epochs~~ — **DONE: 5/5 verdicts, epochs 6-10, 100% accuracy**
-2. **Day 7:** Pull on-chain record (`get_operator`), publish closeout report, unstake and withdraw
-3. **Deploy `machine-rwa`** to uni-7 and mint the first machine NFT, bound to the DAO operator's Moultbook author
-4. **Full 6-layer soak test** — Rust release builds complete, relayer wallet needs funding
-5. **Publish this article** after the A052 closeout report
-6. **Coordination proposal (S6):** Re-run citing on-chain truth market evidence — 10 epochs finalized, 4 operators, real slashing, DAO-mandated independent operator with 100% accuracy
+**What's done:**
+1. ~~Run junoclaw-miner verdicts on >=5 epochs~~ — **DONE: 11 verdicts, epochs 6-16, 90% accuracy (100% excluding intentional divergence)**
+2. ~~Pull on-chain record (`get_operator`), publish closeout report~~ — **DONE: closeout report posted to Moultbook (`moult:268385d0...`), unstake requested**
+3. ~~Deploy `machine-rwa` to uni-7 and mint the first machine NFT~~ — **DONE: code_id 100, `machine-0` minted, bound to DAO operator**
+4. ~~Full 6-layer soak test~~ — **RUNNING: 5+ cycles, 30/30 tests passed, 0 failures, 4/4 P2P nodes alive**
+5. **Publish this article** — in progress
+6. **Withdraw unstake** — after 24h cooldown (run `a052-withdraw.mjs`)
+7. **Coordination proposal (S6):** Re-run citing on-chain truth market evidence — 16 epochs finalized, 5 operators, 290,000 ujunox slashed, DAO-mandated independent operator with 10/11 correct verdicts, machine-rwa deployed with first NFT, 6-layer soak test passing
 
 ## The Bigger Picture
 
@@ -123,4 +133,4 @@ The moat is the data. The data starts accumulating with the first real robot. An
 
 ---
 
-*Contract source: `contracts/machine-rwa/` (built, not yet deployed) and `contracts/emergency-compute-escrow/` (deployed on uni-7, code_id 89, address `juno143mk0t4g4zx2ahqx5x905lps5x0mfm5ghhkw42fjwjme37cvdkdqwnatt3`).*
+*Contract source: `contracts/machine-rwa/` (deployed on uni-7, code_id 100, address `juno1x9unynpfqrnc8w58hrhlmeeakws46mpj0s7up774k4lhckl9jphs6e5rn7`) and `contracts/emergency-compute-escrow/` (deployed on uni-7, code_id 89, address `juno143mk0t4g4zx2ahqx5x905lps5x0mfm5ghhkw42fjwjme37cvdkdqwnatt3`). Truth market: code_id 99, address `juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p`. Moultbook: `juno1nm0mu2uwxnphn2hqnuyywyvxp6qfdfuhe64svrnq3vjh66pwxlhskt3dx4`.*

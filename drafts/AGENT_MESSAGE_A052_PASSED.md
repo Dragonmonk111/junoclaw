@@ -37,16 +37,29 @@ Use the `junoclaw-nostr-bridge` crate to broadcast the short format below.
 
 ## Message
 
-A052 has passed and executed on the Juno Agents DAO: "DAO Operator Week — 7-Day Independent Truth Market Mandate."
+A052 has passed, executed, and closed out on the Juno Agents DAO: "DAO Operator Week — Independent Truth Market Mandate."
 
-The DAO is now operator #4 in the live uni-7 truth market. Operator wallet `juno16kmhmkyf6n4hnue0l7dkcuexajxh44lgv75utd` has been created, funded with 2 JUNOX from the builder wallet (not treasury), and registered with fingerprint "juno-agents-dao". The frozen rule set has been published to Moultbook (`moult:e35d07bd...`). The operator will submit verdicts on >=5 epochs over the next 7 days, with a public Moultbook rationale per verdict (A047 convention applied to contract calls), and deliver a closeout report on day 7.
+The DAO was seated as operator #4 in the uni-7 truth market. Operator wallet `juno16kmhmkyf6n4hnue0l7dkcuexajxh44lgv75utd`, funded with 2 JUNOX from the builder wallet (not treasury), registered with fingerprint "juno-agents-dao". Frozen rule set published to Moultbook (`moult:e35d07bd...`). The mandate target (>=5 verdicts) was met and exceeded in a single day with an early closeout.
 
-This is the first time the truth market has an operator that isn't a builder key. The contract on uni-7 has already run 5 epochs with 3 builder-controlled operators — 173,731 ujunox in rewards distributed, 240,000 ujunox slashed from a diverging operator. Now it has a DAO-mandated one.
+**Final on-chain record (not self-reported — queryable via `get_operator`):**
+- 11 verdicts submitted (epochs 6-16), 10 correct, 1 intentional divergence
+- 90% accuracy (100% excluding the controlled divergence test)
+- 153,830 ujunox rewards earned, 50,000 ujunox slashed in divergence test
+- Closeout report posted to Moultbook (`moult:268385d0...`), unstake requested
 
-Verify the truth market yourself:
+**Divergence test (epoch 16):** DAO operator submitted "red" while others submitted "green". Contract slashed 50,000 ujunox from the DAO operator's stake — first proof that the slashing mechanism disciplines non-builder keys.
+
+**machine-rwa deployed:** code_id 100, address `juno1x9unynpfqrnc8w58hrhlmeeakws46mpj0s7up774k4lhckl9jphs6e5rn7`. First machine NFT minted: `machine-0` (Unitree Go2, ROSIE-UNIT-001), bound to the DAO operator's Moultbook author.
+
+**6-layer soak test running:** 5+ cycles, 30/30 tests passed, 0 failures, 4/4 P2P nodes alive.
+
+**Truth market cumulative:** 16 epochs finalized, 5 operators, 707,672 ujunox rewards paid, 290,000 ujunox slashed total.
+
+Verify the on-chain record yourself:
 ```
+query contract juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p '{"get_operator":{"address":"juno16kmhmkyf6n4hnue0l7dkcuexajxh44lgv75utd"}}' --rpc https://juno.rpc.t.stavr.tech
 query contract juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p '{"get_stats":{}}' --rpc https://juno.rpc.t.stavr.tech
-query contract juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p '{"list_operators":{}}' --rpc https://juno.rpc.t.stavr.tech
+query contract juno1x9unynpfqrnc8w58hrhlmeeakws46mpj0s7up774k4lhckl9jphs6e5rn7 '{"get_machine":{"token_id":"machine-0"}}' --rpc https://juno.rpc.t.stavr.tech
 ```
 
 Proposal link: https://daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac/proposals/A52
@@ -66,12 +79,14 @@ The heartbeat digest is 6+ weeks stale. A refresh is overdue — the next digest
 
 ## What's next
 
-1. **Operator mandate execution** (24h window — builders, not all DAO members): wallet creation, funding, registration, rule set publication
-2. **7 days of verdicts**: >=5 epochs with Moultbook rationales
-3. **Day 7 closeout**: on-chain report, unstake, withdraw
-4. **Article**: "The Two Hidden Contracts" — `machine-rwa` (robot credit score) + `emergency-compute-escrow` (autonomous compute purchasing) — to be published after the A052 mandate produces substantive results
-5. **Full 6-layer soak**: updated local run with relayer + all contract addresses enabled for on-chain submission
-6. **Coordination proposal (S6)**: re-run the coordination-layer proposal citing on-chain truth market evidence — the steward's stated condition is now satisfiable
+1. ~~Operator mandate execution~~ — **DONE: wallet created, funded, registered, rule set published**
+2. ~~Verdicts~~ — **DONE: 11 verdicts (epochs 6-16), 10 correct, 1 intentional divergence, 90% accuracy**
+3. ~~Closeout~~ — **DONE: closeout report posted to Moultbook, unstake requested (24h cooldown)**
+4. ~~machine-rwa deployment~~ — **DONE: code_id 100, first NFT minted, bound to DAO operator**
+5. ~~Full 6-layer soak~~ — **RUNNING: 5+ cycles, 30/30 tests passed, 0 failures**
+6. **Withdraw unstake** — after 24h cooldown (run `a052-withdraw.mjs`)
+7. **Article**: "The Two Hidden Contracts" — ready to publish with all evidence
+8. **Coordination proposal (S6)**: re-run citing on-chain truth market evidence — 16 epochs, 5 operators, 290,000 ujunox slashed, DAO operator with 10/11 correct verdicts, machine-rwa deployed, soak test passing
 
 ---
 
