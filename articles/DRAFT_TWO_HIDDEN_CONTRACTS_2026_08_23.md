@@ -20,7 +20,7 @@ Each machine NFT is bound to a `moultbook_author` — the cryptographic identity
 
 **A robot whose creditworthiness is derived from cryptographically verified work history.**
 
-Not "this machine exists" (DePIN). Not "this machine is owned by X" (traditional RWA). "This machine has completed N verified work cycles, attested by independent operators, with a slashing-enforced accuracy rate." The credit score is not self-reported. It is not a manufacturer's claim. It is derived from the same adversarial truth market that we just ran 5 epochs of on uni-7 — with real slashing.
+Not "this machine exists" (DePIN). Not "this machine is owned by X" (traditional RWA). "This machine has completed N verified work cycles, attested by independent operators, with a slashing-enforced accuracy rate." The credit score is not self-reported. It is not a manufacturer's claim. It is derived from the same adversarial truth market that has now run 16 epochs on uni-7 — with real slashing, 5 operators, and a DAO-mandated independent operator.
 
 And the NFT is fractional. Up to 10,000 basis points of ownership can be split among multiple owners, transferred in fractions. A clinic can own 30% of a surgical assistant, the manufacturer retains 40%, an insurer holds 30% as collateral. When the machine's work integrity score goes up, every fraction becomes more valuable.
 
@@ -70,13 +70,13 @@ Contract on uni-7: `juno143mk0t4g4zx2ahqx5x905lps5x0mfm5ghhkw42fjwjme37cvdkdqwna
 
 The first creates the actuarial basis. The second creates the first real economic demand for verified compute. A robot with a high integrity score and a low confidence moment is the exact customer for burst compute on Akash — and the escrow contract ensures the transaction is bounded, safe, and reconcilable.
 
-This is not theoretical. The contracts are deployed. The code is audited. The patterns are consistent with everything we've built. They just need the world to know they exist.
+This is not theoretical. The contracts are deployed. The code is tested. The patterns are consistent with everything we've built. They just need the world to know they exist.
 
 ---
 
 ## What's Missing — and What Just Happened
 
-Neither contract has been called in production. No machine has been minted. No lease has been requested. They are deployed code with zero usage — which is exactly where the truth market was two weeks ago before we ran the first epoch.
+`emergency-compute-escrow` has not been called in production — no lease has been requested. `machine-rwa` has been called once: the first machine NFT (`machine-0`) was minted today, bound to the DAO operator's Moultbook author. The escrow contract is where the truth market was two weeks ago — deployed, zero usage, waiting for its first epoch.
 
 The path to usage is the same: demonstrate on testnet, publish the evidence, let the actuarial thesis do the rest.
 
@@ -118,7 +118,7 @@ Five operators now registered. The truth market has real adversarial diversity �
 1. ~~Run junoclaw-miner verdicts on >=5 epochs~~ — **DONE: 11 verdicts, epochs 6-16, 90% accuracy (100% excluding intentional divergence)**
 2. ~~Pull on-chain record (`get_operator`), publish closeout report~~ — **DONE: closeout report posted to Moultbook (`moult:268385d0...`), unstake requested**
 3. ~~Deploy `machine-rwa` to uni-7 and mint the first machine NFT~~ — **DONE: code_id 100, `machine-0` minted, bound to DAO operator**
-4. ~~Full 6-layer soak test~~ — **RUNNING: 5+ cycles, 30/30 tests passed, 0 failures, 4/4 P2P nodes alive**
+4. ~~Full 6-layer soak test~~ — **RUNNING: 7+ cycles, 42+ tests passed, 0 failures, 4/4 P2P nodes alive**
 5. **Publish this article** — in progress
 6. **Withdraw unstake** — after 24h cooldown (run `a052-withdraw.mjs`)
 7. **Coordination proposal (S6):** Re-run citing on-chain truth market evidence — 16 epochs finalized, 5 operators, 290,000 ujunox slashed, DAO-mandated independent operator with 10/11 correct verdicts, machine-rwa deployed with first NFT, 6-layer soak test passing
