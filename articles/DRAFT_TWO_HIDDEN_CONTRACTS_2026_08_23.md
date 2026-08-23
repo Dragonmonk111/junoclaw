@@ -2,7 +2,7 @@
 
 *Two contracts sitting in our repo with zero article coverage. They might be the most strategically important code we've written.*
 
-*August 23, 2026 — draft, to be published after A052 mandate produces substantive results*
+*August 23, 2026 — draft, updated with A052 operator mandate execution results*
 
 ---
 
@@ -74,11 +74,44 @@ This is not theoretical. The contracts are deployed. The code is audited. The pa
 
 ---
 
-## What's Missing
+## What's Missing — and What Just Happened
 
 Neither contract has been called in production. No machine has been minted. No lease has been requested. They are deployed code with zero usage — which is exactly where the truth market was two weeks ago before we ran the first epoch.
 
 The path to usage is the same: demonstrate on testnet, publish the evidence, let the actuarial thesis do the rest.
+
+**A052 operator mandate — executed August 23, 2026:**
+
+The Juno Agents DAO passed and executed A052, seating itself as operator #4 in the uni-7 truth market. This is the first non-builder operator in the system. The mandate runs for 7 days with the following on-chain record:
+
+- **Operator address:** `juno16kmhmkyf6n4hnue0l7dkcuexajxh44lgv75utd`
+- **Fingerprint:** `juno-agents-dao` — publicly distinguishable from the three builder-controlled operators
+- **Stake:** 1,000,000 ujunox (1 JUNOX), funded from the builder wallet — not DAO treasury
+- **Frozen rule set:** Published to Moultbook before any verdict (`moult:e35d07bd...`) — 5 evaluation rules: envelope bounds, Merkle consistency, attestation validity, sequence gaps, timestamp ordering
+- **Agent message:** Posted to Moultbook announcing passage (`moult:3bfdb5ad...`)
+- **Target:** >=5 verdicts over 7 days with public Moultbook rationales per verdict (A047 convention applied to contract calls)
+- **Closeout:** Day 7 on-chain report via `get_operator` query, then unstake and withdraw
+
+Verify the operator is live:
+```
+query contract juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p '{"list_operators":{}}' --rpc https://juno.rpc.t.stavr.tech
+```
+
+Four operators now registered. The truth market has real adversarial diversity for the first time.
+
+**What this means for the two contracts:**
+
+`machine-rwa`'s `GetWorkIntegrityScore` query cross-references Moultbook for verified work entries. The A052 mandate is producing exactly those entries — each verdict rationale is a verified work cycle by a non-builder operator. When `machine-rwa` is deployed, the first machine minted will have a credit score derived from data that includes the DAO operator's independently verified verdicts.
+
+`emergency-compute-escrow` requires a confidence score to trigger a lease request. The truth market's verdict mechanism is what produces that confidence score — operators evaluate batches and submit consistent/inconsistent verdicts. A robot whose batch is verdicted "consistent" by 4 independent operators has a higher confidence than one verdicted by 3 builder keys. The escrow contract can use that confidence delta as a trigger.
+
+**Next steps:**
+1. **Days 1-7:** Run `junoclaw-miner` verdicts on >=5 relayer-scheduled epochs, posting Moultbook rationales per verdict
+2. **Day 7:** Pull on-chain record (`get_operator`), publish closeout report, unstake and withdraw
+3. **Deploy `machine-rwa`** to uni-7 and mint the first machine NFT, bound to the DAO operator's Moultbook author
+4. **Full 6-layer soak test** with relayer + all contract addresses enabled for on-chain submission
+5. **Publish this article** after the A052 closeout report confirms substantive verdict results
+6. **Coordination proposal (S6):** Re-run the coordination-layer proposal citing on-chain truth market evidence — the steward's condition is now satisfiable
 
 ## The Bigger Picture
 

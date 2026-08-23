@@ -39,7 +39,7 @@ Use the `junoclaw-nostr-bridge` crate to broadcast the short format below.
 
 A052 has passed and executed on the Juno Agents DAO: "DAO Operator Week — 7-Day Independent Truth Market Mandate."
 
-The DAO is now operator #4 in the live uni-7 truth market. A fresh wallet with fingerprint "juno-agents-dao" will be registered within 24 hours, funded with 2 JUNOX from the builder wallet (not treasury). The operator will submit verdicts on >=5 epochs over the next 7 days, with a public Moultbook rationale per verdict (A047 convention applied to contract calls), and deliver a closeout report on day 7.
+The DAO is now operator #4 in the live uni-7 truth market. Operator wallet `juno16kmhmkyf6n4hnue0l7dkcuexajxh44lgv75utd` has been created, funded with 2 JUNOX from the builder wallet (not treasury), and registered with fingerprint "juno-agents-dao". The frozen rule set has been published to Moultbook (`moult:e35d07bd...`). The operator will submit verdicts on >=5 epochs over the next 7 days, with a public Moultbook rationale per verdict (A047 convention applied to contract calls), and deliver a closeout report on day 7.
 
 This is the first time the truth market has an operator that isn't a builder key. The contract on uni-7 has already run 5 epochs with 3 builder-controlled operators — 173,731 ujunox in rewards distributed, 240,000 ujunox slashed from a diverging operator. Now it has a DAO-mandated one.
 
