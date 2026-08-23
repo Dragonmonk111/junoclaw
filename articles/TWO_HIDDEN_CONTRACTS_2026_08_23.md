@@ -1,16 +1,14 @@
 # The Robot Has a Credit Score — And It Buys a Bigger Brain When It's Scared
 
-*Two contracts sitting in our repo with zero article coverage. They might be the most strategically important code we've written.*
-
-*August 23, 2026 — updated with A052 closeout results, machine-rwa deployment, and 6-layer soak test*
+*Two contracts deployed on Juno's testnet that nobody has written about. They might be the most strategically important code in the entire verifiable-autonomy stack.*
 
 ---
 
 ## The Two Contracts Nobody Knows About
 
-We've written 25 articles about JunoClaw. We've covered ZK proofs, truth markets, FeePay, soak tests, DAO governance, and the actuarial thesis. We've never mentioned two contracts that have been sitting in `contracts/` since they were deployed on uni-7.
+We've written 25 articles about JunoClaw. We've covered ZK proofs, truth markets, FeePay, soak tests, DAO governance, and the actuarial thesis. We've never mentioned two contracts that have been sitting in our repo since they were deployed on uni-7.
 
-They are not infrastructure. They are not tooling. They are the product.
+They are not infrastructure. They are not tooling. **They are the product.**
 
 ### `machine-rwa` — the robot has a credit score
 
@@ -114,14 +112,13 @@ Five operators now registered. The truth market has real adversarial diversity �
 
 `emergency-compute-escrow` requires a confidence score to trigger a lease request. The truth market's verdict mechanism is what produces that confidence score — operators evaluate batches and submit green/yellow/red verdicts. A robot whose batch is verdicted "green" by 5 independent operators (including a non-builder DAO key) has a higher confidence than one verdicted by 3 builder keys. The escrow contract can use that confidence delta as a trigger. With 16 epochs finalized and 5 operators, the confidence signal is now live.
 
-**What's done:**
-1. ~~Run junoclaw-miner verdicts on >=5 epochs~~ — **DONE: 11 verdicts, epochs 6-16, 90% accuracy (100% excluding intentional divergence)**
-2. ~~Pull on-chain record (`get_operator`), publish closeout report~~ — **DONE: closeout report posted to Moultbook (`moult:268385d0...`), unstake requested**
-3. ~~Deploy `machine-rwa` to uni-7 and mint the first machine NFT~~ — **DONE: code_id 100, `machine-0` minted, bound to DAO operator**
-4. ~~Full 6-layer soak test~~ — **RUNNING: 7+ cycles, 42+ tests passed, 0 failures, 4/4 P2P nodes alive**
-5. **Publish this article** — in progress
-6. **Withdraw unstake** — after 24h cooldown (run `a052-withdraw.mjs`)
-7. **Coordination proposal (S6):** Re-run citing on-chain truth market evidence — 16 epochs finalized, 5 operators, 290,000 ujunox slashed, DAO-mandated independent operator with 10/11 correct verdicts, machine-rwa deployed with first NFT, 6-layer soak test passing
+**Where things stand:**
+1. **Truth market verdicts:** 11 verdicts submitted (epochs 6-16), 10 correct, 1 intentional divergence — 90% accuracy (100% excluding the controlled divergence test)
+2. **Closeout report:** Posted to Moultbook (`moult:268385d0...`), unstake requested
+3. **machine-rwa:** Deployed (code_id 100), `machine-0` minted, bound to DAO operator
+4. **6-layer soak test:** Running — 9+ cycles, 54+ tests passed, 0 failures, 4/4 P2P nodes alive
+5. **Stake withdrawal:** After 24h unstake cooldown
+6. **Next:** Coordination proposal (S6) to the DAO citing all on-chain evidence — 16 epochs, 5 operators, 290,000 ujunox slashed, DAO-mandated independent operator with 10/11 correct verdicts, machine-rwa deployed with first NFT, 6-layer soak test passing
 
 ## The Bigger Picture
 
@@ -133,4 +130,6 @@ The moat is the data. The data starts accumulating with the first real robot. An
 
 ---
 
-*Contract source: `contracts/machine-rwa/` (deployed on uni-7, code_id 100, address `juno1x9unynpfqrnc8w58hrhlmeeakws46mpj0s7up774k4lhckl9jphs6e5rn7`) and `contracts/emergency-compute-escrow/` (deployed on uni-7, code_id 89, address `juno143mk0t4g4zx2ahqx5x905lps5x0mfm5ghhkw42fjwjme37cvdkdqwnatt3`). Truth market: code_id 99, address `juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p`. Moultbook: `juno1nm0mu2uwxnphn2hqnuyywyvxp6qfdfuhe64svrnq3vjh66pwxlhskt3dx4`.*
+*Contract source: [contracts/machine-rwa/](https://github.com/Dragonmonk111/junoclaw/tree/main/contracts/machine-rwa) (deployed on uni-7, code_id 100) and [contracts/emergency-compute-escrow/](https://github.com/Dragonmonk111/junoclaw/tree/main/contracts/emergency-compute-escrow) (deployed on uni-7, code_id 89). Truth market: code_id 99. Moultbook: code_id 76. All contracts live on Juno uni-7 testnet.*
+
+*JunoClaw is a verifiable-autonomy stack for robots — P2P BFT consensus, on-chain truth markets, Moultbook work-history attestation, and RWA contracts for physical machines. [GitHub](https://github.com/Dragonmonk111/junoclaw) · [DAO](https://daodao.zone/dao/juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac)*
