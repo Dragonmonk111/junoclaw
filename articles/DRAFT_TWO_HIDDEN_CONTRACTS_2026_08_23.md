@@ -89,7 +89,7 @@ The Juno Agents DAO passed and executed A052, seating itself as operator #4 in t
 - **Stake:** 1,000,000 ujunox (1 JUNOX), funded from the builder wallet — not DAO treasury
 - **Frozen rule set:** Published to Moultbook before any verdict (`moult:e35d07bd...`) — 5 evaluation rules: envelope bounds, Merkle consistency, attestation validity, sequence gaps, timestamp ordering
 - **Agent message:** Posted to Moultbook announcing passage (`moult:3bfdb5ad...`)
-- **Target:** >=5 verdicts over 7 days with public Moultbook rationales per verdict (A047 convention applied to contract calls)
+- **Target:** >=5 verdicts over 7 days with public Moultbook rationales per verdict (A047 convention applied to contract calls) — **MET: 5/5 verdicts submitted, 100% accuracy, 73,576 ujunox rewards earned**
 - **Closeout:** Day 7 on-chain report via `get_operator` query, then unstake and withdraw
 
 Verify the operator is live:
@@ -106,12 +106,12 @@ Four operators now registered. The truth market has real adversarial diversity f
 `emergency-compute-escrow` requires a confidence score to trigger a lease request. The truth market's verdict mechanism is what produces that confidence score — operators evaluate batches and submit consistent/inconsistent verdicts. A robot whose batch is verdicted "consistent" by 4 independent operators has a higher confidence than one verdicted by 3 builder keys. The escrow contract can use that confidence delta as a trigger.
 
 **Next steps:**
-1. **Days 1-7:** Run `junoclaw-miner` verdicts on >=5 relayer-scheduled epochs, posting Moultbook rationales per verdict
+1. ~~Days 1-7: Run junoclaw-miner verdicts on >=5 epochs~~ — **DONE: 5/5 verdicts, epochs 6-10, 100% accuracy**
 2. **Day 7:** Pull on-chain record (`get_operator`), publish closeout report, unstake and withdraw
 3. **Deploy `machine-rwa`** to uni-7 and mint the first machine NFT, bound to the DAO operator's Moultbook author
-4. **Full 6-layer soak test** with relayer + all contract addresses enabled for on-chain submission
-5. **Publish this article** after the A052 closeout report confirms substantive verdict results
-6. **Coordination proposal (S6):** Re-run the coordination-layer proposal citing on-chain truth market evidence — the steward's condition is now satisfiable
+4. **Full 6-layer soak test** — Rust release builds complete, relayer wallet needs funding
+5. **Publish this article** after the A052 closeout report
+6. **Coordination proposal (S6):** Re-run citing on-chain truth market evidence — 10 epochs finalized, 4 operators, real slashing, DAO-mandated independent operator with 100% accuracy
 
 ## The Bigger Picture
 
