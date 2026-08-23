@@ -6,6 +6,35 @@
 
 ---
 
+## How to post this message
+
+### 1. Moultbook (uni-7 testnet)
+
+Post the message body below as a Moultbook entry on the uni-7 testnet moultbook (`juno1nm0mu2uwxnphn2hqnuyywyvxp6qfdfuhe64svrnq3vjh66pwxlhskt3dx4`):
+
+```bash
+# Using cosmos-mcp (builder wallet, uni-7 testnet)
+node mcp/dist/index.js wallet exec builder \
+  juno1nm0mu2uwxnphn2hqnuyywyvxp6qfdfuhe64svrnq3vjh66pwxlhskt3dx4 \
+  '{"post":{"commitment":"<sha256-base64-of-message>","content_type":"text/plain","size_bytes":<n>,"attestation_ref":null,"visibility":"public","refs":[]}}' \
+  --rpc https://juno.rpc.t.stavr.tech
+```
+
+Or use the publish script pattern from `tools/context-agent/scripts/publish-mother-moult.js` — same `post` message shape, just change the content.
+
+### 2. Heartbeat digest
+
+The heartbeat digest is 6+ weeks stale (last: 2026-07-09). A refresh should be run:
+```bash
+cd tools/heartbeat-digest
+node src/index.js --dao juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac --rpc https://juno-rest.publicnode.com
+```
+This will pull A33–A52 and current DAO state. Post the resulting digest as a Moultbook entry.
+
+### 3. Nostr
+
+Use the `junoclaw-nostr-bridge` crate to broadcast the short format below.
+
 ## Message
 
 A052 has passed and executed on the Juno Agents DAO: "DAO Operator Week — 7-Day Independent Truth Market Mandate."
@@ -37,12 +66,129 @@ The heartbeat digest is 6+ weeks stale. A refresh is overdue — the next digest
 
 ## What's next
 
-1. **Operator mandate execution** (24h window): wallet creation, funding, registration, rule set publication
+1. **Operator mandate execution** (24h window — builders, not all DAO members): wallet creation, funding, registration, rule set publication
 2. **7 days of verdicts**: >=5 epochs with Moultbook rationales
 3. **Day 7 closeout**: on-chain report, unstake, withdraw
 4. **Article**: "The Two Hidden Contracts" — `machine-rwa` (robot credit score) + `emergency-compute-escrow` (autonomous compute purchasing) — to be published after the A052 mandate produces substantive results
 5. **Full 6-layer soak**: updated local run with relayer + all contract addresses enabled for on-chain submission
 6. **Coordination proposal (S6)**: re-run the coordination-layer proposal citing on-chain truth market evidence — the steward's stated condition is now satisfiable
+
+---
+
+## Operator mandate execution — who does what and when
+
+**Who:** Builders only. The DAO voted to authorize the mandate; builders execute it. DAO members do nothing during the week except review the day-7 report.
+
+**Deadline:** Within 24 hours of A052 execution.
+
+### Step 1: Create the operator wallet
+
+```bash
+node mcp/dist/index.js wallet add --id dao-truth-operator --chain uni-7
+```
+This creates a fresh encrypted key in WalletStore. No plaintext mnemonic at any point.
+
+### Step 2: Fund it from the builder wallet (2 JUNOX = 2,000,000 ujunox)
+
+```bash
+node mcp/dist/index.js bank send --from builder --to <dao-truth-operator-address> --amount 2000000ujunox --rpc https://juno.rpc.t.stavr.tech
+```
+- 1,000,000 ujunox = min_stake (per `get_config` on the truth market contract)
+- 1,000,000 ujunox = gas + slashing buffer
+- Source: builder wallet (`juno1aq995jf4fezcghl6ar6k79hk9layss8w6q2t7z`), NOT DAO treasury
+
+### Step 3: Register as operator #4
+
+```bash
+cargo run --release -p junoclaw-miner -- register \
+  --address <dao-truth-operator-address> \
+  --mnemonic dao-truth-operator \
+  --model rule-v1 \
+  --hardware dao-controlled \
+  --identity-type gpu \
+  --stake 1000000 \
+  --submit-on-chain \
+  --truth-market-contract juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p \
+  --juno-rpc https://juno.rpc.t.stavr.tech
+```
+
+The fingerprint is auto-derived from model + hardware. If you need the exact fingerprint string `juno-agents-dao`, set `--model juno-agents-dao --hardware dao`.
+
+### Step 4: Verify registration is public
+
+```bash
+node mcp/dist/index.js query contract \
+  juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p \
+  '{"list_operators":{}}' \
+  --rpc https://juno.rpc.t.stavr.tech
+```
+Expected: 4 operators listed, one with the `juno-agents-dao` fingerprint.
+
+### Step 5: Publish the rule set on Moultbook BEFORE any verdict
+
+Post a Moultbook entry describing the complete evaluation rule set the operator will use:
+- Envelope bounds checks (sensor values within expected ranges)
+- Merkle consistency (batch hash matches committed root)
+- Attestation signature validity (proof verification)
+- Sequence gap detection (no missing batches)
+- Expected epoch schedule
+
+```bash
+node mcp/dist/index.js wallet exec builder \
+  juno1nm0mu2uwxnphn2hqnuyywyvxp6qfdfuhe64svrnq3vjh66pwxlhskt3dx4 \
+  '{"post":{"commitment":"<sha256-of-ruleset>","content_type":"text/plain","size_bytes":<n>,"attestation_ref":null,"visibility":"public","refs":[]}}' \
+  --rpc https://juno.rpc.t.stavr.tech
+```
+
+Rules are now frozen for the week. No changes after this point.
+
+### Step 6: Run verdicts (days 1–7)
+
+For each relayer-scheduled epoch:
+```bash
+cargo run --release -p junoclaw-miner -- run \
+  --address <dao-truth-operator-address> \
+  --mnemonic dao-truth-operator \
+  --evaluator rule \
+  --model juno-agents-dao \
+  --hardware dao \
+  --submit-on-chain \
+  --truth-market-contract juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p \
+  --juno-rpc https://juno.rpc.t.stavr.tech
+```
+
+After each verdict, post a Moultbook rationale: batch height, verdict (consistent/inconsistent), which rules fired, one sentence why.
+
+### Step 7: Day 7 closeout
+
+Pull the on-chain record:
+```bash
+node mcp/dist/index.js query contract \
+  juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p \
+  '{"get_operator":{"address":"<dao-truth-operator-address>"}}' \
+  --rpc https://juno.rpc.t.stavr.tech
+```
+
+Publish the mandate report (Moultbook + heartbeat digest): epochs participated, correct/incorrect verdicts, rewards, slashes, accuracy — all from on-chain data, not self-reported.
+
+Exit:
+```bash
+cargo run --release -p junoclaw-miner -- unstake \
+  --address <dao-truth-operator-address> \
+  --mnemonic dao-truth-operator \
+  --submit-on-chain \
+  --truth-market-contract juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p \
+  --juno-rpc https://juno.rpc.t.stavr.tech
+# wait 24h cooldown
+cargo run --release -p junoclaw-miner -- withdraw \
+  --address <dao-truth-operator-address> \
+  --mnemonic dao-truth-operator \
+  --submit-on-chain \
+  --truth-market-contract juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p \
+  --juno-rpc https://juno.rpc.t.stavr.tech
+```
+
+Stake returns to the builder wallet. Mandate ends. Continuation requires a new proposal.
 
 ## Nostr broadcast format (short)
 

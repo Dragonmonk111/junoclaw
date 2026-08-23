@@ -34,13 +34,16 @@ services:
     env:
       - SOAK_DAYS=7
       - SOAK_INTERVAL=300
-      - MOULTBOOK_ADDR=
+      - MOULTBOOK_ADDR=juno1nm0mu2uwxnphn2hqnuyywyvxp6qfdfuhe64svrnq3vjh66pwxlhskt3dx4
       - MOULTBOOK_TOPIC=soak-test
-      - SETTLER_ADDR=
-      - TASK_LEDGER_ADDR=
-      - AGENT_REGISTRY_ADDR=
-      - TRUTH_MARKET_ADDR=
-      - EXECUTE=
+      - SETTLER_ADDR=juno16gp6mm7ehhrx0ls4s77yk668cclq5gyc09x7k45f28apwmsqkg0qhmmnc8
+      - TASK_LEDGER_ADDR=juno1cp88zj8vn5mdszjee8cu753eczjg9krtsmz0v65apzhp89y392mqwnehfm
+      - AGENT_REGISTRY_ADDR=juno15683x0sa06yr4ejuwenxszclkvpjekxmldlxe8qsltfkhm3qpm5sy0vuep
+      - TRUTH_MARKET_ADDR=juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p
+      - EXECUTE=1
+      # RELAYER_KEY: testnet wallet mnemonic for on-chain settlement (Layer 4).
+      # REQUIRED for relayer to start. Use a disposable testnet wallet.
+      - RELAYER_KEY=
     expose:
       - port: 8080
         as: 80

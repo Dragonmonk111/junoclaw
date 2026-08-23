@@ -39,6 +39,11 @@ services:
       - AGENT_REGISTRY_ADDR=juno15683x0sa06yr4ejuwenxszclkvpjekxmldlxe8qsltfkhm3qpm5sy0vuep
       - TRUTH_MARKET_ADDR=juno1rsf3uykfj6qqnzjhsaur8zgctrkapxhx0e7p507v2rh77v8kv37q8gqe8p
       - EXECUTE=1
+      # RELAYER_KEY: testnet wallet mnemonic for on-chain settlement.
+      # REQUIRED for Layer 4 (relayer + Moultbook posting) to start.
+      # Use a disposable testnet wallet with minimal JUNOX for gas.
+      # WARNING: this is visible in the Akash deployment manifest — testnet only!
+      - RELAYER_KEY=
     command:
       - /bin/bash
     args:

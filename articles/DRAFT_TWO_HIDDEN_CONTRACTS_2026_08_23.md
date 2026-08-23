@@ -26,7 +26,7 @@ And the NFT is fractional. Up to 10,000 basis points of ownership can be split a
 
 **What this actually is:** a robot that can be financed against its own proven track record. A $300,000 surgical robot with 10 million verified clean cycles is not the same risk as one with zero cycles. Today, no underwriter can tell the difference. With `machine-rwa`, the difference is on-chain and queryable by anyone.
 
-Contract on uni-7: `juno143mk0t4g4zx2ahqx5x905lps5x0mfm5ghhkw42fjwjme37cvdkdqwnatt3` (code_id 89)
+Contract status: **built, not yet deployed**. Source at `contracts/machine-rwa/` — 473 lines, full test suite. Next step: deploy to uni-7 and mint the first machine.
 
 ### `emergency-compute-escrow` — the robot buys a bigger brain when it's scared
 
@@ -58,7 +58,7 @@ The robot doesn't block on the blockchain. It fires the escrow request and simul
 
 **What this actually is:** the first primitive for a machine making an autonomous economic decision under uncertainty, with a hard spend cap, a safe fallback, and on-chain reconciliation. It is the reflex/intent split applied to *money* instead of motion.
 
-Contract on uni-7: `juno143mk0t4g4zx2ahqx5x905lps5x0mfm5ghhkw42fjwjme37cvdkdqwnatt3` (code_id 89)
+Contract on uni-7: `juno143mk0t4g4zx2ahqx5x905lps5x0mfm5ghhkw42fjwjme37cvdkdqwnatt3` (code_id 89). Verify: `junod query wasm contract juno143mk0t4g4zx2ahqx5x905lps5x0mfm5ghhkw42fjwjme37cvdkdqwnatt3 '{"get_stats":{}}' --node https://juno.rpc.t.stavr.tech`
 
 ---
 
@@ -90,4 +90,4 @@ The moat is the data. The data starts accumulating with the first real robot. An
 
 ---
 
-*Contract source: `contracts/machine-rwa/` and `contracts/emergency-compute-escrow/` — deployed on uni-7 testnet, code_ids 89 and 89 respectively. Verify with `junod query wasm contract juno143mk0t4g4zx2ahqx5x905lps5x0mfm5ghhkw42fjwjme37cvdkdqwnatt3 '{"get_config":{}}' --rpc https://juno.rpc.t.stavr.tech`*
+*Contract source: `contracts/machine-rwa/` (built, not yet deployed) and `contracts/emergency-compute-escrow/` (deployed on uni-7, code_id 89, address `juno143mk0t4g4zx2ahqx5x905lps5x0mfm5ghhkw42fjwjme37cvdkdqwnatt3`).*
