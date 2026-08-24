@@ -202,7 +202,7 @@ pub fn check_invariants(state: &PhysicsState, envelope: &SafetyEnvelope) -> Vec<
 
     if envelope.max_joint_torque > 0.0 {
         for joint in &state.joints {
-            if joint.torque > envelope.max_joint_torque {
+            if joint.torque.abs() > envelope.max_joint_torque {
                 violated.push("max_joint_torque".to_string());
                 break;
             }
