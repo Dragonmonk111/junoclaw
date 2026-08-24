@@ -51,6 +51,10 @@ pub struct EnvelopeParams {
     pub max_tilt_milli_degrees: u64,
     pub max_acceleration_milli: u64,
     pub human_proximity_allowed: bool,
+    #[serde(default)]
+    pub max_arm_force_milli: u64,
+    #[serde(default)]
+    pub max_joint_torque_milli: u64,
 }
 
 impl OnChainClient {

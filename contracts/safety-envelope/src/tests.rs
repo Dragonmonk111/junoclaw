@@ -36,6 +36,8 @@ fn sample_params() -> SafetyEnvelopeParams {
         max_tilt_milli_degrees: 30000,
         max_acceleration_milli: 3000,
         human_proximity_allowed: true,
+        max_arm_force_milli: 0,
+        max_joint_torque_milli: 0,
     }
 }
 
@@ -310,6 +312,8 @@ fn test_invalid_params() {
         max_tilt_milli_degrees: 30000,
         max_acceleration_milli: 3000,
         human_proximity_allowed: true,
+        max_arm_force_milli: 0,
+        max_joint_torque_milli: 0,
     };
 
     let err = app

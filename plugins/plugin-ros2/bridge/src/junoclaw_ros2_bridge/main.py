@@ -38,20 +38,32 @@ def main():
         help="HTTP server host (default: 0.0.0.0)",
     )
     parser.add_argument(
+        "--robot-type",
+        default="wheeled",
+        choices=["wheeled", "quadruped"],
+        help="Robot type: wheeled (default) or quadruped (12-DOF, e.g. DOGZILLA S2)",
+    )
+    parser.add_argument(
         "--sensor-topics",
-        default="/cmd_vel,/scan,/imu",
-        help="Comma-separated sensor topics to subscribe (default: /cmd_vel,/scan,/imu)",
+        default=None,
+        help="Comma-separated sensor topics (default: auto-selected based on robot-type)",
     )
     parser.add_argument(
         "--action-servers",
-        default="navigate,pick_object,place_object",
-        help="Comma-separated action servers to monitor (default: navigate,pick_object,place_object)",
+        default=None,
+        help="Comma-separated action servers (default: auto-selected based on robot-type)",
     )
 
     args = parser.parse_args()
 
-    sensor_topics = [t.strip() for t in args.sensor_topics.split(",")]
-    action_servers = [s.strip() for s in args.action_servers.split(",")]
+    if args.sensor_topics:
+        sensor_topics = [t.strip() for t in args.sensor_topics.split(",")]
+    else:
+        sensor_topics = None  # let bridge auto-select based on robot_type
+    if args.action_servers:
+        action_servers = [s.strip() for s in args.action_servers.split(",")]
+    else:
+        action_servers = None  # let bridge auto-select based on robot_type
 
     app = create_app(
         robot_id=args.robot_id,
@@ -59,14 +71,16 @@ def main():
         ros2_domain=args.ros2_domain,
         sensor_topics=sensor_topics,
         action_servers=action_servers,
+        robot_type=args.robot_type,
     )
 
     print(f"JunoClaw ROS2 Bridge starting...")
     print(f"  Robot ID: {args.robot_id}")
+    print(f"  Robot type: {args.robot_type}")
     print(f"  Mode: {'SIMULATE' if args.simulate else 'ROS2'}")
     print(f"  Port: {args.port}")
-    print(f"  Sensor topics: {sensor_topics}")
-    print(f"  Action servers: {action_servers}")
+    print(f"  Sensor topics: {sensor_topics or '(auto)'}")
+    print(f"  Action servers: {action_servers or '(auto)'}")
 
     try:
         import uvicorn

@@ -14,6 +14,12 @@ pub struct SafetyEnvelopeParams {
     pub max_acceleration_milli: u64,
     /// Whether the robot is permitted to operate in human-proximity zones
     pub human_proximity_allowed: bool,
+    /// Maximum force exerted by robotic arm (milli-Newtons, 0 = no arm)
+    #[serde(default)]
+    pub max_arm_force_milli: u64,
+    /// Maximum torque per joint (milli-N·m, 0 = unchecked)
+    #[serde(default)]
+    pub max_joint_torque_milli: u64,
 }
 
 #[cw_serde]

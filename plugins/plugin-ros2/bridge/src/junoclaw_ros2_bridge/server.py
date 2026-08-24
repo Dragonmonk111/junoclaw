@@ -10,7 +10,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, Request
     from fastapi.responses import JSONResponse
 except ImportError:
     raise ImportError(
@@ -58,6 +58,15 @@ class HealthResponse(BaseModel):
 class Ros2Bridge:
     """Core bridge logic — works with or without a real ROS2 installation."""
 
+    # Quadruped joint names for DOGZILLA-Lite (15 DOF: 12 leg + 3 arm)
+    QUADRUPED_JOINTS = [
+        "fl_hip", "fl_thigh", "fl_calf",
+        "fr_hip", "fr_thigh", "fr_calf",
+        "rl_hip", "rl_thigh", "rl_calf",
+        "rr_hip", "rr_thigh", "rr_calf",
+        "arm_base", "arm_shoulder", "arm_gripper",
+    ]
+
     def __init__(
         self,
         robot_id: str,
@@ -65,16 +74,25 @@ class Ros2Bridge:
         ros2_domain: int = 0,
         sensor_topics: list[str] | None = None,
         action_servers: list[str] | None = None,
+        robot_type: str = "wheeled",
     ):
         self.robot_id = robot_id
         self.simulate = simulate
         self.ros2_domain = ros2_domain
-        self.sensor_topics = sensor_topics or ["/cmd_vel", "/scan", "/imu"]
-        self.action_servers = action_servers or ["navigate", "pick_object", "place_object"]
+        self.robot_type = robot_type
+        if sensor_topics is not None:
+            self.sensor_topics = sensor_topics
+        elif robot_type == "quadruped":
+            self.sensor_topics = ["/cmd_vel", "/scan", "/imu/data", "/joint_states"]
+        else:
+            self.sensor_topics = ["/cmd_vel", "/scan", "/imu"]
+        self.action_servers = action_servers or ["navigate", "stand", "sit", "gait_trot"]
         self.start_time = time.time()
         self._ros2_node = None
         self._intent_store: dict[str, IntentResult] = {}
         self._batch_store: dict[str, BatchResult] = {}
+        self._latest_joint_states: dict[str, float] = {}
+        self._latest_imu: dict[str, float] = {}
 
         if not simulate:
             self._init_ros2()
@@ -91,6 +109,8 @@ class Ros2Bridge:
             rclpy.init()
             self._ros2_node = Node("junoclaw_bridge")
 
+            from sensor_msgs.msg import JointState
+
             for topic in self.sensor_topics:
                 if topic == "/cmd_vel":
                     self._ros2_node.create_subscription(
@@ -100,9 +120,13 @@ class Ros2Bridge:
                     self._ros2_node.create_subscription(
                         LaserScan, topic, self._on_scan, 10
                     )
-                elif topic == "/imu":
+                elif topic in ("/imu", "/imu/data"):
                     self._ros2_node.create_subscription(
                         Imu, topic, self._on_imu, 10
+                    )
+                elif topic == "/joint_states":
+                    self._ros2_node.create_subscription(
+                        JointState, topic, self._on_joint_states, 10
                     )
 
             self._ros2_node.get_logger().info(
@@ -123,8 +147,24 @@ class Ros2Bridge:
         pass
 
     def _on_imu(self, msg):
-        """Callback for /imu topic."""
-        pass
+        """Callback for /imu or /imu/data topic."""
+        self._latest_imu = {
+            "accel_x": msg.linear_acceleration.x,
+            "accel_y": msg.linear_acceleration.y,
+            "accel_z": msg.linear_acceleration.z,
+            "gyro_x": msg.angular_velocity.x,
+            "gyro_y": msg.angular_velocity.y,
+            "gyro_z": msg.angular_velocity.z,
+            "orient_w": msg.orientation.w,
+            "orient_x": msg.orientation.x,
+            "orient_y": msg.orientation.y,
+            "orient_z": msg.orientation.z,
+        }
+
+    def _on_joint_states(self, msg):
+        """Callback for /joint_states topic (quadruped)."""
+        for name, pos, vel, eff in zip(msg.name, msg.position, msg.velocity, msg.effort):
+            self._latest_joint_states[name] = pos
 
     def store_intent(self, intent: IntentResult):
         """Store an intent result from an action server callback."""
@@ -163,6 +203,7 @@ class Ros2Bridge:
         """Generate a simulated reflex batch for testing without a robot."""
         cycles = []
         violated = []
+        is_quadruped = self.robot_type == "quadruped"
 
         for i in range(cycle_count):
             ts = int(time.time() * 1000) - (cycle_count - i) * 10
@@ -170,15 +211,28 @@ class Ros2Bridge:
             if violate and i == cycle_count // 2:
                 speed = 3.5
                 distance = 0.3
-                checks = {"max_speed": False, "min_collision_distance": False}
-                violated = ["max_speed", "min_collision_distance"]
+                tilt = 38.0
+                checks = {"max_speed": False, "min_collision_distance": False, "max_tilt": False}
+                violated = ["max_speed", "min_collision_distance", "max_tilt"]
             else:
-                speed = 1.2
+                speed = 1.2 if not is_quadruped else 0.8
                 distance = 3.5
-                checks = {"max_speed": True, "min_collision_distance": True}
+                tilt = 2.1 if not is_quadruped else 12.0
+                checks = {"max_speed": True, "min_collision_distance": True, "max_tilt": True}
 
-            readings = {"speed": speed, "distance": distance, "tilt": 2.1}
-            outputs = {"left_motor": 0.8, "right_motor": 0.8}
+            readings = {"speed": speed, "distance": distance, "tilt": tilt}
+
+            if is_quadruped:
+                readings["imu_accel_z"] = 9.81
+                readings["imu_gyro_x"] = 0.02
+                readings["imu_gyro_y"] = 0.01
+                readings["num_contacts"] = 4
+
+                outputs = {}
+                for jn in self.QUADRUPED_JOINTS:
+                    outputs[jn] = round(0.5 + 0.3 * ((i + hash(jn)) % 100) / 100.0, 4)
+            else:
+                outputs = {"left_motor": 0.8, "right_motor": 0.8}
 
             cycle_hash = hashlib.sha256(
                 json.dumps(
@@ -237,9 +291,26 @@ class Ros2Bridge:
         target_y: float = 8.3,
     ) -> IntentResult:
         """Generate a simulated intent for testing without a robot."""
-        sensor_data = json.dumps(
-            {"speed": 1.2, "position": {"x": 5.0, "y": 3.0}, "obstacles": 2}
-        ).encode()
+        is_quadruped = self.robot_type == "quadruped"
+
+        if is_quadruped:
+            sensor_data = json.dumps({
+                "speed": 0.8,
+                "position": {"x": 5.0, "y": 3.0},
+                "obstacles": 2,
+                "tilt": 12.0,
+                "imu": self._latest_imu or {
+                    "accel_z": 9.81, "gyro_x": 0.02, "gyro_y": 0.01,
+                },
+                "joints": self._latest_joint_states or {
+                    jn: 0.5 for jn in self.QUADRUPED_JOINTS
+                },
+                "contacts": 4,
+            }).encode()
+        else:
+            sensor_data = json.dumps(
+                {"speed": 1.2, "position": {"x": 5.0, "y": 3.0}, "obstacles": 2}
+            ).encode()
 
         import base64
 
@@ -272,6 +343,7 @@ def create_app(
     ros2_domain: int = 0,
     sensor_topics: list[str] | None = None,
     action_servers: list[str] | None = None,
+    robot_type: str = "wheeled",
 ) -> FastAPI:
     """Create the FastAPI app for the JunoClaw ROS2 bridge."""
     bridge = Ros2Bridge(
@@ -280,6 +352,7 @@ def create_app(
         ros2_domain=ros2_domain,
         sensor_topics=sensor_topics,
         action_servers=action_servers,
+        robot_type=robot_type,
     )
 
     app = FastAPI(
@@ -332,6 +405,48 @@ def create_app(
             "sensor_topics": bridge.sensor_topics,
         }
 
+    @app.post("/robot/expression")
+    async def set_expression(request: Request):
+        """Set the robot's face screen expression.
+        
+        Maps trust layer verdicts to DOGZILLA-Lite's IPS display expressions.
+        In simulate mode, just logs the expression. In ROS2 mode, publishes
+        to /display/expression topic which the CM5 maps to one of 35 expressions.
+        """
+        body = await request.json()
+        expression = body.get("expression", "neutral")
+        source = body.get("source", "unknown")
+
+        valid = ["happy", "neutral", "alert", "confused", "sleeping", "angry", "scared", "curious"]
+        if expression not in valid:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"invalid expression '{expression}'", "valid": valid},
+            )
+
+        if bridge.simulate:
+            print(f"[Expression] {expression} (source={source}, robot={bridge.robot_id})")
+        else:
+            # In real ROS2 mode, publish to /display/expression
+            # The DOGZILLA-Lite CM5 subscriber maps this to the IPS display
+            try:
+                from std_msgs.msg import String
+                if bridge._ros2_node:
+                    pub = bridge._ros2_node.create_publisher(String, "/display/expression", 10)
+                    msg = String()
+                    msg.data = expression
+                    pub.publish(msg)
+            except Exception as e:
+                print(f"[Expression] Failed to publish: {e}")
+
+        return {
+            "status": "ok",
+            "robot_id": bridge.robot_id,
+            "expression": expression,
+            "source": source,
+            "simulate": bridge.simulate,
+        }
+
     @app.get("/", response_class=JSONResponse)
     async def root():
         return {
@@ -346,7 +461,9 @@ def create_app(
                 "GET /rosbag/{batch_id}",
                 "POST /rosbag/simulate",
                 "POST /robot/register",
+                "POST /robot/expression",
             ],
+            "robot_type": bridge.robot_type,
         }
 
     app.state.bridge = bridge

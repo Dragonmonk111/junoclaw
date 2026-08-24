@@ -33,6 +33,7 @@ pub struct Ros2Plugin {
     enabled: bool,
     ros2_bridge_url: String,
     robot_id: String,
+    robot_type: String,
     circuit_breaker: CircuitBreakerState,
     /// Optional on-chain client for querying SafetyEnvelope + CircuitBreaker contracts.
     /// When set, the plugin queries on-chain state instead of relying solely on
@@ -48,6 +49,7 @@ impl Ros2Plugin {
             enabled: false,
             ros2_bridge_url: String::new(),
             robot_id: String::new(),
+            robot_type: "wheeled".to_string(),
             circuit_breaker: CircuitBreakerState::Closed,
             onchain_client: None,
             cached_envelope_version: Arc::new(RwLock::new(None)),
@@ -133,6 +135,11 @@ impl Plugin for Ros2Plugin {
                     "type": "string",
                     "description": "Unique robot identifier for execution proof anchoring"
                 },
+                "robot_type": {
+                    "type": "string",
+                    "description": "Robot type: \"wheeled\" or \"quadruped\" (default: wheeled)",
+                    "default": "wheeled"
+                },
                 "chain_rpc_url": {
                     "type": "string",
                     "description": "Chain RPC endpoint for on-chain contract queries (e.g. http://localhost:26657)"
@@ -168,6 +175,11 @@ impl Plugin for Ros2Plugin {
             .get("robot_id")
             .and_then(|v| v.as_str())
             .unwrap_or("")
+            .to_string();
+        self.robot_type = config
+            .get("robot_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("wheeled")
             .to_string();
 
         if self.enabled && self.ros2_bridge_url.is_empty() {
@@ -211,10 +223,11 @@ impl Plugin for Ros2Plugin {
         }
 
         tracing::info!(
-            "ros2 plugin initialized (enabled={}, bridge={}, robot={}, onchain={})",
+            "ros2 plugin initialized (enabled={}, bridge={}, robot={}, type={}, onchain={})",
             self.enabled,
             self.ros2_bridge_url,
             self.robot_id,
+            self.robot_type,
             self.onchain_client.is_some()
         );
         Ok(())
@@ -690,6 +703,123 @@ impl Plugin for Ros2Plugin {
                     })?;
 
                 let output = serde_json::to_string(&reg_json)
+                    .map_err(|e| JunoClawError::TaskExecution(format!("serialize error: {}", e)))?;
+
+                let mut hasher = Sha256::new();
+                hasher.update(output.as_bytes());
+                let output_hash = hex::encode(hasher.finalize());
+
+                Ok(TaskResult {
+                    output,
+                    output_hash,
+                    tool_calls: Vec::new(),
+                    tokens_used: junoclaw_core::types::TokenUsage::default(),
+                })
+            }
+
+            "simulate_batch" => {
+                // Trigger a simulated reflex batch via the ROS2 bridge.
+                // Useful for testing the full pipeline without hardware.
+                let cycle_count = input
+                    .get("cycle_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(1000);
+                let violate = input
+                    .get("violate")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
+                let url = format!(
+                    "{}/rosbag/simulate?cycle_count={}&violate={}",
+                    self.ros2_bridge_url.trim_end_matches('/'),
+                    cycle_count,
+                    violate
+                );
+                tracing::info!(
+                    "Triggering simulated batch: robot={}, cycles={}, violate={}",
+                    self.robot_id, cycle_count, violate
+                );
+
+                let resp = reqwest::Client::new().post(&url).send().await
+                    .map_err(|e| JunoClawError::Plugin {
+                        plugin: "plugin-ros2".to_string(),
+                        message: format!("bridge POST failed: {}", e),
+                    })?;
+
+                let batch_json: Value = resp.json().await
+                    .map_err(|e| JunoClawError::Plugin {
+                        plugin: "plugin-ros2".to_string(),
+                        message: format!("failed to parse bridge response: {}", e),
+                    })?;
+
+                let output = serde_json::to_string(&batch_json)
+                    .map_err(|e| JunoClawError::TaskExecution(format!("serialize error: {}", e)))?;
+
+                let mut hasher = Sha256::new();
+                hasher.update(output.as_bytes());
+                let output_hash = hex::encode(hasher.finalize());
+
+                Ok(TaskResult {
+                    output,
+                    output_hash,
+                    tool_calls: Vec::new(),
+                    tokens_used: junoclaw_core::types::TokenUsage::default(),
+                })
+            }
+
+            "set_expression" => {
+                // Set the robot's face screen expression based on trust verdict.
+                // Maps truth market verdicts to DOGZILLA-Lite's 35 expressions.
+                // The bridge forwards this to the robot's display topic.
+                let expression = input
+                    .get("expression")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        JunoClawError::TaskExecution("missing 'expression' parameter".to_string())
+                    })?;
+
+                let valid_expressions = [
+                    "happy", "neutral", "alert", "confused",
+                    "sleeping", "angry", "scared", "curious",
+                ];
+                if !valid_expressions.contains(&expression) {
+                    return Err(JunoClawError::TaskExecution(format!(
+                        "invalid expression '{}': must be one of {:?}",
+                        expression, valid_expressions
+                    )));
+                }
+
+                tracing::info!(
+                    "Setting robot expression: robot={}, expression={}",
+                    self.robot_id, expression
+                );
+
+                // The bridge will publish to /display/expression ROS2 topic
+                // which the DOGZILLA-Lite CM5 maps to one of 35 IPS display expressions.
+                let url = format!(
+                    "{}/robot/expression",
+                    self.ros2_bridge_url.trim_end_matches('/')
+                );
+                let body = serde_json::json!({
+                    "robot_id": self.robot_id,
+                    "expression": expression,
+                    "source": "junoclaw-trust-layer",
+                });
+
+                let resp = reqwest::Client::new().post(&url).json(&body).send().await
+                    .map_err(|e| JunoClawError::Plugin {
+                        plugin: "plugin-ros2".to_string(),
+                        message: format!("bridge POST expression failed: {}", e),
+                    })?;
+
+                let expr_json: Value = resp.json().await
+                    .unwrap_or(serde_json::json!({
+                        "status": "sent",
+                        "expression": expression,
+                        "robot_id": self.robot_id,
+                    }));
+
+                let output = serde_json::to_string(&expr_json)
                     .map_err(|e| JunoClawError::TaskExecution(format!("serialize error: {}", e)))?;
 
                 let mut hasher = Sha256::new();
