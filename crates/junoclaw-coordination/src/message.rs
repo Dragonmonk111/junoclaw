@@ -244,7 +244,7 @@ pub struct SafetyEnvelope {
     pub robot_id: String,
     /// Maximum linear speed (m/s)
     pub max_speed: f64,
-    /// Maximum force exerted (Newtons)
+    /// Maximum force exerted by any leg actuator (Newtons)
     pub max_force: f64,
     /// Minimum collision distance (meters)
     pub min_collision_distance: f64,
@@ -254,6 +254,12 @@ pub struct SafetyEnvelope {
     pub max_acceleration: f64,
     /// Whether the robot is permitted to operate in human-proximity zones
     pub human_proximity_allowed: bool,
+    /// Maximum force exerted by the robotic arm (Newtons, 0 = no arm)
+    #[serde(default)]
+    pub max_arm_force: f64,
+    /// Maximum torque per joint (N·m, 0 = unchecked)
+    #[serde(default)]
+    pub max_joint_torque: f64,
     /// Governance version (incremented on each update)
     pub version: u32,
 }
@@ -794,6 +800,8 @@ mod tests {
             max_tilt_degrees: 15.0,
             max_acceleration: 2.0,
             human_proximity_allowed: true,
+            max_arm_force: 0.0,
+            max_joint_torque: 0.0,
             version: 1,
         };
         let encoded = envelope.encode().unwrap();
@@ -817,6 +825,8 @@ mod tests {
             max_tilt_degrees: 30.0,
             max_acceleration: 3.0,
             human_proximity_allowed: true,
+            max_arm_force: 0.0,
+            max_joint_torque: 0.0,
             version: 1,
         };
         let v2 = SafetyEnvelope {
@@ -827,6 +837,8 @@ mod tests {
             max_tilt_degrees: 30.0,
             max_acceleration: 3.0,
             human_proximity_allowed: true,
+            max_arm_force: 0.0,
+            max_joint_torque: 0.0,
             version: 2,
         };
         assert_ne!(v1.version, v2.version);

@@ -26,6 +26,10 @@ tokio = { workspace = true }
 # JunoClaw coordination (for ReflexBatchAttestation, SafetyEnvelope)
 junoclaw-coordination = { path = "../junoclaw-coordination" }
 
+[dev-dependencies]
+# SVG chart rendering for the visual receipt example (no external image codecs needed)
+plotters = { version = "0.3", default-features = false, features = ["svg_backend", "line_series", "point_series", "all_elements"] }
+
 [features]
 default = ["simulated"]
 # Simulated physics backend (no external deps)

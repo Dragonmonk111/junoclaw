@@ -1,6 +1,9 @@
 # Build artifacts
 target/
 target-wsl/
+__pycache__/
+*.egg-info/
+receipt_*.svg
 *.wasm
 artifacts/
 # Exception: committed cross-arch determinism artifacts from CI.

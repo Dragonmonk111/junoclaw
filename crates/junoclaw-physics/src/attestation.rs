@@ -40,9 +40,35 @@ impl Default for BatchConfig {
                 max_tilt_degrees: 15.0,
                 max_acceleration: 3.0,
                 human_proximity_allowed: true,
+                max_arm_force: 0.0,
+                max_joint_torque: 0.0,
                 version: 1,
             },
             rosbag_ref: "sim_batch".to_string(),
+        }
+    }
+}
+
+impl BatchConfig {
+    /// Quadruped preset for DOGZILLA-Lite (15-DOF: 12 leg + 3 arm).
+    /// Tuned for a 575g desktop robot with conservative safety margins.
+    pub fn quadruped_preset(robot_id: &str) -> Self {
+        Self {
+            cycle_count: 1000,
+            cycle_dt_ms: 1,
+            envelope: SafetyEnvelope {
+                robot_id: robot_id.to_string(),
+                max_speed: 1.5,
+                max_force: 30.0,
+                min_collision_distance: 0.15,
+                max_tilt_degrees: 35.0,
+                max_acceleration: 2.0,
+                human_proximity_allowed: true,
+                max_arm_force: 10.0,
+                max_joint_torque: 5.0,
+                version: 1,
+            },
+            rosbag_ref: "quadruped_sim_batch".to_string(),
         }
     }
 }
@@ -169,13 +195,27 @@ pub fn check_invariants(state: &PhysicsState, envelope: &SafetyEnvelope) -> Vec<
         violated.push("max_acceleration".to_string());
     }
 
+    // Arm-specific invariants (only checked if envelope specifies limits)
+    if envelope.max_arm_force > 0.0 && state.sensors.max_force > envelope.max_arm_force {
+        violated.push("max_arm_force".to_string());
+    }
+
+    if envelope.max_joint_torque > 0.0 {
+        for joint in &state.joints {
+            if joint.torque > envelope.max_joint_torque {
+                violated.push("max_joint_torque".to_string());
+                break;
+            }
+        }
+    }
+
     violated
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::simulator::{SimConfig, SimulatedBackend};
+    use crate::simulator::{SimConfig, SimulatedBackend, QuadrupedBackend, QuadrupedConfig};
 
     #[test]
     fn test_clean_batch() {
@@ -191,6 +231,8 @@ mod tests {
                 max_tilt_degrees: 45.0,
                 max_acceleration: 10.0,
                 human_proximity_allowed: true,
+                max_arm_force: 0.0,
+                max_joint_torque: 0.0,
                 version: 1,
             },
             rosbag_ref: "test_clean".to_string(),
@@ -224,6 +266,8 @@ mod tests {
                 max_tilt_degrees: 45.0,
                 max_acceleration: 100.0,
                 human_proximity_allowed: true,
+                max_arm_force: 0.0,
+                max_joint_torque: 0.0,
                 version: 1,
             },
             rosbag_ref: "test_speed".to_string(),
@@ -254,6 +298,8 @@ mod tests {
                 max_tilt_degrees: 45.0,
                 max_acceleration: 100.0,
                 human_proximity_allowed: true,
+                max_arm_force: 0.0,
+                max_joint_torque: 0.0,
                 version: 1,
             },
             rosbag_ref: "test_collision".to_string(),
@@ -281,6 +327,8 @@ mod tests {
                 max_tilt_degrees: 45.0,
                 max_acceleration: 100.0,
                 human_proximity_allowed: true,
+                max_arm_force: 0.0,
+                max_joint_torque: 0.0,
                 version: 1,
             },
             rosbag_ref: "test".to_string(),
@@ -311,6 +359,8 @@ mod tests {
                 max_tilt_degrees: 45.0,
                 max_acceleration: 100.0,
                 human_proximity_allowed: true,
+                max_arm_force: 0.0,
+                max_joint_torque: 0.0,
                 version: 1,
             },
             rosbag_ref: "test".to_string(),
@@ -339,6 +389,8 @@ mod tests {
                 max_tilt_degrees: 45.0,
                 max_acceleration: 100.0,
                 human_proximity_allowed: true,
+                max_arm_force: 0.0,
+                max_joint_torque: 0.0,
                 version: 1,
             },
             rosbag_ref: "test".to_string(),
@@ -376,6 +428,8 @@ mod tests {
             max_tilt_degrees: 15.0,
             max_acceleration: 3.0,
             human_proximity_allowed: true,
+            max_arm_force: 0.0,
+            max_joint_torque: 0.0,
             version: 1,
         };
 
@@ -410,6 +464,8 @@ mod tests {
             max_tilt_degrees: 15.0,
             max_acceleration: 3.0,
             human_proximity_allowed: true,
+            max_arm_force: 0.0,
+            max_joint_torque: 0.0,
             version: 1,
         };
 
@@ -445,6 +501,8 @@ mod tests {
                 max_tilt_degrees: 20.0,
                 max_acceleration: 5.0,
                 human_proximity_allowed: true,
+                max_arm_force: 0.0,
+                max_joint_torque: 0.0,
                 version: 1,
             },
             rosbag_ref: "obstacle_course_001".to_string(),
@@ -474,6 +532,8 @@ mod tests {
                 max_tilt_degrees: 45.0,
                 max_acceleration: 100.0,
                 human_proximity_allowed: true,
+                max_arm_force: 0.0,
+                max_joint_torque: 0.0,
                 version: 7, // specific version
             },
             rosbag_ref: "test".to_string(),
@@ -481,5 +541,213 @@ mod tests {
 
         let result = run_reflex_batch(&mut sim, &config);
         assert_eq!(result.attestation.envelope_version, 7);
+    }
+
+    // --- Quadruped-specific attestation tests ---
+
+    #[test]
+    fn test_quadruped_preset_values() {
+        let config = BatchConfig::quadruped_preset("dogzilla-lite-001");
+        assert_eq!(config.envelope.max_speed, 1.5);
+        assert_eq!(config.envelope.max_tilt_degrees, 35.0);
+        assert_eq!(config.envelope.max_arm_force, 10.0);
+        assert_eq!(config.envelope.max_joint_torque, 5.0);
+        assert_eq!(config.envelope.robot_id, "dogzilla-lite-001");
+        assert_eq!(config.rosbag_ref, "quadruped_sim_batch");
+    }
+
+    #[test]
+    fn test_quadruped_clean_batch() {
+        let mut sim = QuadrupedBackend::new(
+            "dogzilla-lite-001".to_string(),
+            QuadrupedConfig::default(),
+        );
+        let config = BatchConfig::quadruped_preset("dogzilla-lite-001");
+
+        let result = run_reflex_batch(&mut sim, &config);
+
+        assert!(result.attestation.all_invariants_maintained,
+            "clean quadruped batch should maintain all invariants, violations: {:?}",
+            result.attestation.violated_invariants);
+        assert!(result.attestation.violated_invariants.is_empty());
+        assert_eq!(result.attestation.cycle_count, 1000);
+        assert_eq!(result.cycle_hashes.len(), 1000);
+        assert!(!result.attestation.merkle_root.is_empty());
+        assert_eq!(result.attestation.merkle_root.len(), 64);
+        // All states should have 15 joints
+        assert!(result.states.iter().all(|s| s.joints.len() == 15),
+            "all states should have 15 joints");
+    }
+
+    #[test]
+    fn test_quadruped_joint_torque_violation() {
+        let mut sim = QuadrupedBackend::new(
+            "dogzilla-lite-001".to_string(),
+            QuadrupedConfig::default(),
+        );
+
+        // Set torque on all joints above the 5.0 N·m limit
+        let torques = [6.0; 15];
+        // But arm joints can't exceed max_joint_torque in config (5.0)
+        // The QuadrupedConfig clamps to 5.0, so we need to lower the envelope
+        sim.set_joint_controls(&torques);
+
+        let config = BatchConfig {
+            cycle_count: 100,
+            cycle_dt_ms: 1,
+            envelope: SafetyEnvelope {
+                robot_id: "dogzilla-lite-001".to_string(),
+                max_speed: 10.0,
+                max_force: 100.0,
+                min_collision_distance: 0.01,
+                max_tilt_degrees: 45.0,
+                max_acceleration: 100.0,
+                human_proximity_allowed: true,
+                max_arm_force: 0.0,
+                max_joint_torque: 3.0, // lower than the 5.0 clamp
+                version: 1,
+            },
+            rosbag_ref: "test_quadruped_torque".to_string(),
+        };
+
+        let result = run_reflex_batch(&mut sim, &config);
+
+        // Torques are clamped to 5.0 by the simulator, but envelope limit is 3.0
+        assert!(!result.attestation.all_invariants_maintained,
+            "should detect torque violation");
+        assert!(result.attestation.violated_invariants.contains(&"max_joint_torque".to_string()),
+            "violations: {:?}", result.attestation.violated_invariants);
+    }
+
+    #[test]
+    fn test_quadruped_arm_force_violation() {
+        let mut sim = QuadrupedBackend::new(
+            "dogzilla-lite-001".to_string(),
+            QuadrupedConfig::default(),
+        );
+
+        // Set high torque on arm_shoulder joint to trigger arm force
+        let mut torques = [0.0; 15];
+        torques[13] = 5.0; // arm_shoulder at max
+        sim.set_joint_controls(&torques);
+
+        // Use a very low arm force limit
+        let config = BatchConfig {
+            cycle_count: 100,
+            cycle_dt_ms: 1,
+            envelope: SafetyEnvelope {
+                robot_id: "dogzilla-lite-001".to_string(),
+                max_speed: 10.0,
+                max_force: 100.0,
+                min_collision_distance: 0.01,
+                max_tilt_degrees: 45.0,
+                max_acceleration: 100.0,
+                human_proximity_allowed: true,
+                max_arm_force: 0.1, // very low limit
+                max_joint_torque: 0.0,
+                version: 1,
+            },
+            rosbag_ref: "test_quadruped_arm".to_string(),
+        };
+
+        let result = run_reflex_batch(&mut sim, &config);
+
+        // arm_force = torque * 0.1 = 5.0 * 0.1 = 0.5, which exceeds 0.1
+        assert!(!result.attestation.all_invariants_maintained,
+            "should detect arm force violation");
+        assert!(result.attestation.violated_invariants.contains(&"max_arm_force".to_string()),
+            "violations: {:?}", result.attestation.violated_invariants);
+    }
+
+    #[test]
+    fn test_quadruped_tilt_violation() {
+        let mut sim = QuadrupedBackend::new(
+            "dogzilla-lite-001".to_string(),
+            QuadrupedConfig::default(),
+        );
+
+        // Forward + turn to induce body pitch and roll
+        sim.set_control(2.0, 0.5);
+
+        let config = BatchConfig {
+            cycle_count: 500,
+            cycle_dt_ms: 1,
+            envelope: SafetyEnvelope {
+                robot_id: "dogzilla-lite-001".to_string(),
+                max_speed: 10.0,
+                max_force: 100.0,
+                min_collision_distance: 0.01,
+                max_tilt_degrees: 0.0, // zero limit: any nonzero tilt violates
+                max_acceleration: 100.0,
+                human_proximity_allowed: true,
+                max_arm_force: 0.0,
+                max_joint_torque: 0.0,
+                version: 1,
+            },
+            rosbag_ref: "test_quadruped_tilt".to_string(),
+        };
+
+        let result = run_reflex_batch(&mut sim, &config);
+
+        assert!(!result.attestation.all_invariants_maintained,
+            "should detect tilt violation with 0° limit");
+        assert!(result.attestation.violated_invariants.contains(&"max_tilt_degrees".to_string()),
+            "violations: {:?}", result.attestation.violated_invariants);
+    }
+
+    #[test]
+    fn test_quadruped_merkle_root_deterministic() {
+        let config = BatchConfig::quadruped_preset("dog-1");
+
+        let mut sim1 = QuadrupedBackend::new(
+            "dog-1".to_string(),
+            QuadrupedConfig::default(),
+        );
+        let result1 = run_reflex_batch(&mut sim1, &config);
+
+        let mut sim2 = QuadrupedBackend::new(
+            "dog-1".to_string(),
+            QuadrupedConfig::default(),
+        );
+        let result2 = run_reflex_batch(&mut sim2, &config);
+
+        assert_eq!(result1.attestation.merkle_root, result2.attestation.merkle_root,
+            "same config should produce same merkle root");
+    }
+
+    #[test]
+    fn test_quadruped_differs_from_wheeled() {
+        let mut quad_sim = QuadrupedBackend::new(
+            "dog-1".to_string(),
+            QuadrupedConfig::default(),
+        );
+        let mut wheeled_sim = SimulatedBackend::new(
+            "dog-1".to_string(),
+            SimConfig::default(),
+        );
+
+        let config = BatchConfig {
+            cycle_count: 100,
+            cycle_dt_ms: 1,
+            envelope: SafetyEnvelope {
+                robot_id: "dog-1".to_string(),
+                max_speed: 10.0,
+                max_force: 100.0,
+                min_collision_distance: 0.01,
+                max_tilt_degrees: 45.0,
+                max_acceleration: 100.0,
+                human_proximity_allowed: true,
+                max_arm_force: 0.0,
+                max_joint_torque: 0.0,
+                version: 1,
+            },
+            rosbag_ref: "test".to_string(),
+        };
+
+        let quad_result = run_reflex_batch(&mut quad_sim, &config);
+        let wheeled_result = run_reflex_batch(&mut wheeled_sim, &config);
+
+        assert_ne!(quad_result.attestation.merkle_root, wheeled_result.attestation.merkle_root,
+            "quadruped and wheeled should produce different merkle roots");
     }
 }
