@@ -113,12 +113,12 @@ fn handle_message(
                 .collect::<Vec<_>>()
         }).unwrap_or_default();
 
-        // Check if this event is an "action": "post_task" from our contract
+        // Check if this event is a "submit_task" from our contract
         let action = attrs.iter()
             .find(|(k, _)| k == "action")
             .and_then(|(_, v)| v.as_deref());
 
-        if action != Some("post_task") {
+        if action != Some("submit_task") {
             continue;
         }
 
@@ -138,21 +138,21 @@ fn handle_message(
             }
         }
 
-        if let (Some(task_id), Some(reward)) = (parsed.task_id, parsed.reward.clone()) {
+        if let Some(task_id) = parsed.task_id {
             let task = TaskInfo {
                 task_id,
                 contract: contract.to_string(),
                 chain_id: chain_id.to_string(),
-                reward,
+                reward: parsed.reward.clone().unwrap_or_default(),
                 deadline: parsed.deadline.unwrap_or(0),
                 verifier: zk_verifier.to_string(),
-                vk_hash: String::new(), // fetched separately if needed
+                vk_hash: String::new(),
                 caps: parsed.caps.unwrap_or_default(),
                 description: parsed.description.unwrap_or_default(),
                 block_height: parsed.block_height.unwrap_or(0),
                 status: TaskStatus::Open,
             };
-            info!("New task detected: id={task_id} reward={} height={block_height}", task.reward);
+            info!("New task detected: id={task_id} height={block_height}", parsed.block_height.unwrap_or(0));
             on_task(task);
         }
     }
@@ -201,7 +201,7 @@ mod tests {
         let tasks_clone = tasks.clone();
         let on_task = move |t: TaskInfo| { tasks_clone.lock().unwrap().push(t); };
 
-        let msg = mock_tm_message("post_task", "42", "1000000ujuno", "12345");
+        let msg = mock_tm_message("submit_task", "42", "1000000ujuno", "12345");
         handle_message(&msg, "juno1contract", "juno-1", "juno1verifier", &on_task).unwrap();
 
         let received = tasks.lock().unwrap();
@@ -221,7 +221,7 @@ mod tests {
         let tasks_clone = tasks.clone();
         let on_task = move |t: TaskInfo| { tasks_clone.lock().unwrap().push(t); };
 
-        let msg = mock_tm_message("accept_task", "42", "1000000ujuno", "12345");
+        let msg = mock_tm_message("complete_task", "42", "1000000ujuno", "12345");
         handle_message(&msg, "juno1contract", "juno-1", "juno1verifier", &on_task).unwrap();
 
         assert!(tasks.lock().unwrap().is_empty());
@@ -249,7 +249,7 @@ mod tests {
             "result": {
                 "data": { "value": { "TxResult": { "height": "100", "result": {
                     "events": [{"type": "wasm", "attributes": [
-                        {"key": "action", "value": "post_task"},
+                        {"key": "action", "value": "submit_task"},
                         {"key": "reward", "value": "500ujuno"}
                     ]}]
                 }}}}
@@ -294,10 +294,10 @@ mod tests {
         let captured_clone = captured.clone();
         let on_task = move |t: TaskInfo| { *captured_clone.lock().unwrap() = Some(t); };
 
-        let msg = mock_tm_message("post_task", "7", "2500000ujunox", "14254800");
+        let msg = mock_tm_message("submit_task", "7", "2500000ujunox", "14254800");
         handle_message(&msg, "juno1taskledger", "uni-7", "juno1verifier", &on_task).unwrap();
 
-        let task = captured.lock().unwrap().clone().expect("post_task parsed into TaskInfo");
+        let task = captured.lock().unwrap().clone().expect("submit_task parsed into TaskInfo");
         assert_eq!(task.task_id, 7);
         assert_eq!(task.chain_id, "uni-7");
 

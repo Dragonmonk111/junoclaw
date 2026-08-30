@@ -117,7 +117,9 @@ Voting:
 
 ---
 
-## Status: DRAFT — Ready for submission
+## Status: PASSED — executing
+
+Execution runbook: `docs/A54_BUZZ_RELAY_DEPLOYMENT.md`
 
 ## Notes
 

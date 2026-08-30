@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "nostr-tools": "^2.25.0",
+    "ws": "^8.21.3"
+  }
+}

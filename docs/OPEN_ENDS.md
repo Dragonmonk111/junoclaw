@@ -50,6 +50,7 @@
 | IntelPanel — IBC Health | MOCK | No | Renders mock IBC events |
 | UpdatesPanel | MOCK | No | Background event log, local store only |
 | Sidebar | BUILT | Partial | Agent list from store, no real backend |
+| BuzzPanel | LIVE | Yes | WebSocket to `wss://buzz.junoclaw.xyz/ws`, NIP-42 auth, Nostr event publishing |
 | StatusBar | BUILT | Partial | Shows chain connection status |
 
 ### Open ends:

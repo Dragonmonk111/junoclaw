@@ -10,11 +10,12 @@ import { CommonwealthPanel } from './components/CommonwealthPanel'
 import { RobotOpsPanel } from './components/RobotOpsPanel'
 import { FeePayPanel } from './components/FeePayPanel'
 import { MinerPanel } from './components/MinerPanel'
+import { BuzzPanel } from './components/BuzzPanel'
 import { StatusBar } from './components/StatusBar'
 import { useStore } from './store'
-import { MessageSquare, Building2, RefreshCw, ArrowLeftRight, Eye, FileCode2, HeartPulse, Cpu, Fuel, Pickaxe } from 'lucide-react'
+import { MessageSquare, Building2, RefreshCw, ArrowLeftRight, Eye, FileCode2, HeartPulse, Cpu, Fuel, Pickaxe, Radio } from 'lucide-react'
 
-type MainTab = 'chat' | 'dao' | 'commonwealth' | 'dex' | 'intel' | 'contracts' | 'updates' | 'robotops' | 'feepay' | 'miner'
+type MainTab = 'chat' | 'dao' | 'commonwealth' | 'dex' | 'intel' | 'contracts' | 'updates' | 'robotops' | 'feepay' | 'miner' | 'buzz'
 
 const TABS: { id: MainTab; label: string; icon: React.ReactNode }[] = [
   { id: 'chat',      label: 'Chat',      icon: <MessageSquare   className="h-3.5 w-3.5" /> },
@@ -25,6 +26,7 @@ const TABS: { id: MainTab; label: string; icon: React.ReactNode }[] = [
   { id: 'robotops',  label: 'Robot Ops', icon: <Cpu             className="h-3.5 w-3.5" /> },
   { id: 'feepay',    label: 'FeePay',    icon: <Fuel            className="h-3.5 w-3.5" /> },
   { id: 'miner',     label: 'Miners',    icon: <Pickaxe         className="h-3.5 w-3.5" /> },
+  { id: 'buzz',      label: 'Buzz',      icon: <Radio           className="h-3.5 w-3.5" /> },
   { id: 'contracts', label: 'Contracts', icon: <FileCode2       className="h-3.5 w-3.5" /> },
   { id: 'updates',   label: 'Updates',   icon: <RefreshCw       className="h-3.5 w-3.5" /> },
 ]
@@ -80,6 +82,7 @@ export default function App() {
             {activeTab === 'robotops'  && <RobotOpsPanel />}
             {activeTab === 'feepay'    && <FeePayPanel />}
             {activeTab === 'miner'     && <MinerPanel />}
+            {activeTab === 'buzz'      && <BuzzPanel />}
             {activeTab === 'contracts' && <ContractsPanel />}
             {activeTab === 'updates'   && <UpdatesPanel />}
           </div>
