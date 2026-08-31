@@ -1,6 +1,7 @@
 # Build artifacts
 target/
 target-wsl/
+aegis-kem-diff/target/
 __pycache__/
 *.egg-info/
 receipt_*.svg
@@ -144,3 +145,6 @@ bin/
 
 # GPU probe results
 tools/akash/probe-batch-glm45air-results.json
+
+# Buzz relay SDL — contains secrets (private keys, DB passwords, MinIO creds)
+tools/akash/sdl-buzz-relay.yml
