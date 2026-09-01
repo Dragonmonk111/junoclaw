@@ -70,7 +70,7 @@ pub fn build_task_event(task: &TaskInfo, keys: &Keys) -> Result<TaskEvent> {
         Tag::custom(nostr_sdk::TagKind::Custom("height".into()), vec![height_str]),
     ];
 
-    let builder = EventBuilder::new(Kind::TextNote, content, tags);
+    let builder = EventBuilder::new(Kind::Custom(KIND_TASK_DISCOVERY), content, tags);
     let event = builder.to_event(keys)?;
     let event_json = event.as_json();
 

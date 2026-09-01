@@ -152,7 +152,7 @@ fn handle_message(
                 block_height: parsed.block_height.unwrap_or(0),
                 status: TaskStatus::Open,
             };
-            info!("New task detected: id={task_id} height={block_height}", parsed.block_height.unwrap_or(0));
+            info!("New task detected: id={task_id} height={block_height}", block_height = parsed.block_height.unwrap_or(0));
             on_task(task);
         }
     }
