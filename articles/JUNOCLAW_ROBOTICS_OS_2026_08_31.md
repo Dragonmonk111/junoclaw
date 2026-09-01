@@ -104,11 +104,25 @@ POST /skills/{name}/play           — retarget onto this robot's schema, execut
 
 Full loop verified against a live instance today: record a demonstration → export it → mutate the joint schema to simulate a different robot → import → get an honest partial-coverage report → play the retargeted version → confirm it only commanded the joints it actually had a match for. The `/viewer` page wraps all six endpoints in a UI: Start Recording, pose the robot, Stop & Save, then Play / Export / Import buttons per skill.
 
+### Gated playback: the safety half, closed
+
+Exporting and retargeting a skill is only half the trust problem — the other half is what happens the instant before a joint actually moves. Two things now exist for that:
+
+- **`SkillGate` (`crates/junoclaw-physics/src/skill.rs`)** — checks every frame of a skill against the L2 `WorldModel` and L1 memory before it's allowed to play: predict the consequence, reject if it lands near a state memory has flagged red. 12 tests, all passing. This is the real, model-informed gate.
+- **A hard kinematic safety clamp in the ROS2 bridge (`server.py::play_skill`)** — `plugin-ros2` doesn't yet depend on `junoclaw-physics` in-process (it only talks to this bridge over HTTP), so there's no live `WorldModel` to consult there today. Rather than skip gating on real hardware until that wiring exists, playback fails closed on any single-frame joint delta over `0.6` rad, checked every cycle, abort-don't-clip. Honest interim measure, not the final answer — `GET /skills/playback/status` reports exactly which frame it rejected and why.
+
 ### Where sharing goes next
 
-A skill is just JSON — small enough that the existing Buzz relay infrastructure already carries it without any new backend work. Upload the artifact through the relay's Blossom endpoint (`PUT /upload`, already NIP-98 authenticated, content-addressed by SHA-256), reference the resulting blob from a Nostr event (`POST /events`), and it's discoverable per-community today. A proper skill marketplace — listings, discovery, reputation, Truth-Market-gated trust the way `machine-rwa` NFTs work for robot reputation — is the natural next step, and there's already a placeholder for it in the bridge's `register_robot` endpoint (`"message": "Create skill-registry entry with robotics capability + marketplace listing gated by Truth Market"`). That placeholder has been sitting there since before this week; today's work is what makes it buildable instead of aspirational.
+A skill is just JSON — small enough that the existing Buzz relay infrastructure already carries it without any new backend work. Upload the artifact through the relay's Blossom endpoint (`PUT /upload`, already NIP-98 authenticated, content-addressed by SHA-256), reference the resulting blob from a Nostr event (`POST /events`), and it's discoverable per-community today. For on-chain listing, the bridge now generates ready-to-sign CosmWasm messages directly:
 
-We're not claiming that part is done. It isn't. What's done is the object that a marketplace would trade.
+```
+GET /skills/{name}/registry_msg      — PublishSkill for the deployed skill-registry contract
+GET /skills/{name}/marketplace_msg   — ListService for the marketplace contract
+```
+
+`skill-registry` is deployed on testnet and mainnet, so `registry_msg` returns a real sha256 hash, a real contract address, and an execute_msg an operator can submit today with their own signer — the bridge holds no wallet key and broadcasts nothing itself. `marketplace` (and `truth-market`) are built and tested but not yet deployed, and `marketplace_msg` says so explicitly (`marketplace_deployed: false`) rather than implying it's live. `POST /robot/register` ties it together: it now returns a real per-skill entry for everything this robot has taught, not a fixed placeholder string.
+
+We're not claiming the marketplace is deployed. It isn't. What's done is the message format and the contract it targets, so listing a skill is a deploy-and-submit away, not a from-scratch build.
 
 ---
 
@@ -151,6 +165,8 @@ None of this replaces L0's classical control — the robot still balances on 1ms
 | Skill provenance (who taught it, when, proven) | Unclear | ✅ `provenance_batch_root` → Merkle-anchored batch |
 | Cross-fleet memory (avoid others' mistakes) | Unclear | ✅ `fleet.rs`, trust-gated, slashable |
 | World model / consequence prediction | Unclear | ✅ `worldmodel.rs`, gates action approval |
+| Skill playback safety-gated (SkillGate + interim kinematic clamp) | Unclear | ✅ `skill.rs::SkillGate` (L2+L1) + bridge clamp (fail-closed) |
+| On-chain skill registry / marketplace listing message | Unclear | ✅ ready-to-sign CosmWasm `ExecuteMsg` for deployed `skill-registry` |
 | LLM / agent layer | None publicly shown | ✅ Hermes agents over Buzz relay, Truth Market verdicts |
 | Open source | ✅ | ✅ |
 | Skills carry a license marker | Unclear | ✅ (CC0 / MIT / Apache-2.0 per skill) |
@@ -163,12 +179,13 @@ We're leaving several rows "Unclear" rather than "No" — we've only seen the pu
 
 ```
 $ cargo test -p junoclaw-physics
-144 passed; 0 failed
+163 passed; 0 failed
 ```
 
 | Component | Status | Tests |
 |---|---|---|
 | `Skill`, `SkillRecorder`, `retarget` (new) | ✅ Built | 8 |
+| `SkillGate` — L2 `WorldModel` + L1 memory gated playback (new) | ✅ Built | 12 |
 | `MemoryIndex`, `MemoryFetch`, `RootCache` (L1) | ✅ Built | 15 |
 | `WorldModel` (L2) | ✅ Built | 8 |
 | `FleetRegistry` (cross-fleet memory) | ✅ Built | 8 |
@@ -177,11 +194,12 @@ $ cargo test -p junoclaw-physics
 | `ReplayLog`, `Watchdog`, `AuditBundle` | ✅ Built | — |
 | ROS2 bridge `/viewer` — live telemetry, teleop | ✅ Built, tested against a running instance | — |
 | ROS2 bridge skill record/export/import/play | ✅ Built, tested end to end (cross-embodiment retarget verified) | — |
-| Skill safety-gating through L2 `WorldModel` | ⬜ Not built — playback is open-loop today | — |
-| Skill marketplace / DAO-gated listing | ⬜ Not built — placeholder exists in `bridge.rs` | — |
-| Real-hardware validation | ⬜ CM5 arrived Aug 31; Phase 0 (unbox) not started | — |
+| Bridge kinematic safety clamp on playback (interim, until `plugin-ros2` embeds `SkillGate` directly) | ✅ Built, fail-closed, tested | 9 |
+| `registry_msg` / `marketplace_msg` — ready-to-sign CosmWasm payloads | ✅ Built, tested against deployed `skill-registry` | — |
+| Skill marketplace / DAO-gated listing — contract deployment | ⬜ `contracts/marketplace` built and tested, not yet deployed | — |
+| Real-hardware validation | ⬜ CM5 arrived Aug 31; full DOGZILLA unit arriving imminently; Phase 0 (unbox) starts on arrival | — |
 
-The gaps are listed on purpose. "Teach once, run anywhere" is true today for the software; it is not yet true for a physical DOGZILLA-Lite, because Phase 0 of `drafts/PLAN_DOGZILLA_LITE_CM5_DEPLOYMENT.md` hasn't happened yet. That's tomorrow's work, not today's claim.
+The remaining gaps are narrower than they were: gating and on-chain message generation are done. What's left is deploying `marketplace` itself, and running all of the above against real hardware instead of `--simulate`. That's the next work, not today's claim.
 
 ---
 
@@ -199,4 +217,4 @@ Open source, sim-to-real, cross-robot, provable, and reasoned about by language 
 
 ---
 
-*August 31, 2026. `cargo test -p junoclaw-physics` passes 144/144, including 8 new tests for the `Skill` layer built and verified today. ROS2 bridge extended with a no-install browser viewer and full skill teach/export/import/retarget/play loop, tested end to end against a live instance. DOGZILLA-Lite CM5 hardware arrived today; Phase 0 begins next. Buzz relay REST API fixed today (nginx was dropping several real routes to the SPA fallback) so Hermes agents can actually reach it.*
+*August 31–September 1, 2026. `cargo test -p junoclaw-physics` passes 163/163, including 8 tests for the `Skill` layer and 12 for `SkillGate` (L2 world-model + L1 memory gated playback). ROS2 bridge extended with a no-install browser viewer, full skill teach/export/import/retarget/play loop, a fail-closed kinematic safety clamp on live playback, and `registry_msg`/`marketplace_msg` endpoints generating ready-to-sign CosmWasm payloads against the deployed `skill-registry` contract — 28/28 bridge tests passing. DOGZILLA-Lite CM5 hardware arrived Aug 31; the full DOGZILLA unit is arriving in the coming hours, at which point Phase 0 (unbox and inspect) begins. Buzz relay REST API fixed (nginx was dropping several real routes to the SPA fallback) so Hermes agents can actually reach it.*

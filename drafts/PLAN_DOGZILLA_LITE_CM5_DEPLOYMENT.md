@@ -2,9 +2,39 @@
 
 *Plan for bringing the JunoClaw stack from simulation to the DOGZILLA-Lite CM5 robot.*
 
+## ⚡ Arrival Quick-Start (do this first, in order)
+
+The CM5 compute module arrived Aug 31; the full DOGZILLA unit is arriving in
+the coming hours. When the box is open, work Phase 0 → Phase 4 below in
+order before anything else — everything past Phase 4 needs a working bridge
+first. Condensed punch-list:
+
+1. **Unbox** (Phase 0) — check all 15 servos move freely by hand, confirm CM5
+   boots, note the factory OS, **pull the battery when not actively testing**
+   (main switch does not fully cut power per reviews).
+2. **Mount on foam/a book** so feet can't slip or the robot can't walk off a
+   table during first power-on.
+3. **Base OS** (Phase 1) — SSH + tailscale up first, so the rest can be done
+   remotely instead of hunched over a monitor.
+4. **ROS2 Humble + bridge repo** (Phase 2) — get `plugin-ros2/bridge` built
+   and importable before touching the servo bus.
+5. **Before wiring the real servo driver (Phase 3): run the bridge in
+   `--simulate` mode first** and open `/viewer` from a phone — confirms the
+   whole software stack (bridge, viewer, skills) works before any real
+   joint is commanded. This is the fastest way to catch a config problem
+   with zero physical risk.
+6. **Servo driver** (Phase 3) — low power, no table, map joints to
+   `QUADRUPED_JOINT_NAMES` by name (this is what makes skill retargeting work
+   later).
+7. **First live checks** (Phase 4/6) — `/health`, one expression, 15
+   `/joint_states`, trot-in-place on foam only. Do not skip straight to
+   walking.
+
+Everything below is the full detail behind each of those steps.
+
 ## Hardware on Order
 
-- **Delivery: August 31, 2026** (arrived ahead of original Sept 4 ETA)
+- **CM5 module delivered: August 31, 2026** (ahead of original Sept 4 ETA); **full DOGZILLA-Lite unit arriving in the coming hours**
 - **DOGZILLA-Lite with Raspberry Pi CM5** (~$639)
 - 15 DOF: 12 leg + 3 arm (arm + gripper)
 - IPS face display
@@ -174,9 +204,26 @@ dedicated skill-registry / marketplace listing (gated by Truth Market, per
 the TODO in `bridge.rs::register_robot`) is the natural next step once
 there's a second real skill to trade.
 
-Playback today is open-loop (a position sequence) — gating it through the
-L2 `WorldModel` (reject a frame if its predicted next state matches an L1
-red memory) is the natural safety hardening step, not yet implemented.
+**Safety gating is now built, two layers deep:**
+
+- `crates/junoclaw-physics/src/skill.rs::SkillGate` checks every frame
+  against the L2 `WorldModel` + L1 memory before it plays — reject if the
+  predicted next state lands near a red memory. 12 tests passing.
+- The bridge's `play_skill` doesn't yet embed `junoclaw-physics` in-process
+  (it only talks to it over HTTP today), so it enforces a hard kinematic
+  safety clamp instead — reject any single-frame joint delta over
+  `MAX_JOINT_DELTA_PER_CYCLE_RAD` (0.6 rad), fail-closed, checked every
+  cycle. `GET /skills/playback/status` reports exactly which frame was
+  rejected and why. This is the honest interim measure until `plugin-ros2`
+  wires `SkillGate` in directly.
+
+**On-chain listing:** `GET /skills/{name}/registry_msg` and
+`GET /skills/{name}/marketplace_msg` generate ready-to-sign CosmWasm
+`ExecuteMsg` payloads — `registry_msg` against the already-deployed
+`skill-registry` contract (real sha256 hash, real address), `marketplace_msg`
+against the built-but-undeployed `marketplace` contract (honestly flagged
+`marketplace_deployed: false`). Nothing is broadcast by the bridge itself —
+it holds no wallet key.
 
 ---
 
@@ -280,4 +327,4 @@ Given the fragility reported in reviews:
 
 ---
 
-*Status: All software built and tested in simulation. L0 (QuadrupedBackend), L1 (MemoryFetch), L2 (WorldModel), ReflexPipeline, DatasetExporter, FleetRegistry, Replay, Watchdog, Audit, Skill (teach/retarget/export/import) — all compiled and tested (144 tests in junoclaw-physics, 80/80 coordination tests). ROS2 bridge extended with a no-install browser viewer (`/viewer`: live telemetry, joint teleop, skill record/play/import/export). Buzz relay live on Akash for fleet sync. DOGZILLA-Lite CM5 hardware delivered Aug 31, 2026 — Phase 0 (unbox & inspect) next.*
+*Status: All software built and tested in simulation. L0 (QuadrupedBackend), L1 (MemoryFetch), L2 (WorldModel), ReflexPipeline, DatasetExporter, FleetRegistry, Replay, Watchdog, Audit, Skill (teach/retarget/export/import), SkillGate (L2+L1 gated playback) — all compiled and tested (163 tests in junoclaw-physics, 80/80 coordination tests). ROS2 bridge extended with a no-install browser viewer (`/viewer`: live telemetry, joint teleop, skill record/play/import/export), a fail-closed kinematic safety clamp on playback, and registry/marketplace message generation (28/28 bridge tests). Buzz relay live on Akash for fleet sync. DOGZILLA-Lite CM5 module delivered Aug 31, 2026; full unit arriving in the coming hours — Phase 0 (unbox & inspect) starts on arrival.*
