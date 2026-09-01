@@ -1,5 +1,9 @@
 """Tests for the JunoClaw ROS2 bridge — run without ROS2 using simulation mode."""
 
+import asyncio
+import hashlib
+import json
+
 import pytest
 from httpx import AsyncClient, ASGITransport
 
@@ -91,7 +95,10 @@ async def test_register_robot(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["robot_id"] == "test-bot-01"
-    assert data["status"] == "registration_pending"
+    assert data["status"] == "no_skills_taught_yet"
+    assert data["skill_registry"]["deployed"] is True
+    assert data["skill_registry"]["skills"] == []
+    assert data["marketplace"]["deployed"] is False
 
 
 async def test_merkle_root_deterministic():
@@ -236,3 +243,158 @@ async def test_expression_quadruped(quad_client):
     data = resp.json()
     assert data["expression"] == "alert"
     assert data["robot_id"] == "dogzilla-s2-001"
+
+
+def _inject_skill(app, name, joint_names, keyframes, cycle_dt_ms=10):
+    """Directly install a skill artifact on the bridge, bypassing live
+    recording, so playback/registry tests can use precise keyframes."""
+    bridge = app.state.bridge
+    bridge.skills[name] = {
+        "manifest": {
+            "name": name,
+            "description": "test skill",
+            "author_robot_id": bridge.robot_id,
+            "joint_names": joint_names,
+            "frame_count": len(keyframes),
+            "cycle_dt_ms": cycle_dt_ms,
+            "license": "CC0",
+            "provenance_batch_root": "",
+            "created_at_ms": 0,
+        },
+        "keyframes": keyframes,
+    }
+
+
+async def test_skill_record_export_roundtrip(client, app):
+    resp = await client.post("/skills/record/start", json={"cycle_dt_ms": 10})
+    assert resp.status_code == 200
+    await asyncio.sleep(0.05)
+    resp = await client.post(
+        "/skills/record/stop",
+        json={"name": "wave", "description": "test wave", "license": "CC0", "cycle_dt_ms": 10},
+    )
+    assert resp.status_code == 200
+    manifest = resp.json()
+    assert manifest["name"] == "wave"
+    assert manifest["frame_count"] > 0
+
+    resp = await client.get("/skills")
+    assert any(s["name"] == "wave" for s in resp.json()["skills"])
+
+    resp = await client.get("/skills/wave/export")
+    assert resp.status_code == 200
+    exported = resp.json()
+    assert exported["manifest"]["name"] == "wave"
+
+    resp = await client.get("/skills/nonexistent/export")
+    assert resp.status_code == 404
+
+
+async def test_skill_import_retarget_report(client):
+    skill = {
+        "manifest": {
+            "name": "imported-skill",
+            "description": "",
+            "author_robot_id": "other-bot",
+            "joint_names": ["fl_hip", "made_up_joint"],
+            "frame_count": 1,
+            "cycle_dt_ms": 100,
+            "license": "CC0",
+            "provenance_batch_root": "",
+            "created_at_ms": 0,
+        },
+        "keyframes": [[0.2, 0.3]],
+    }
+    resp = await client.post("/skills/import", json=skill)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "imported-skill"
+    report = data["retarget_report"]
+    assert "fl_hip" in report["matched_joints"]
+    assert "made_up_joint" in report["missing_in_target"]
+    assert 0.0 < report["coverage"] < 1.0
+
+
+async def test_skill_play_completes_within_clamp(client, app):
+    _inject_skill(app, "safe-move", ["fl_hip"], [[0.3], [0.6]], cycle_dt_ms=10)
+    resp = await client.post("/skills/safe-move/play")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "playing"
+
+    await asyncio.sleep(0.2)
+    resp = await client.get("/skills/playback/status")
+    status = resp.json()
+    assert status["name"] == "safe-move"
+    assert status["status"] == "completed"
+    assert status["frames_executed"] == 2
+    assert status["rejected_at_frame"] is None
+
+
+async def test_skill_play_rejects_over_clamp(client, app):
+    _inject_skill(app, "unsafe-jump", ["fl_hip"], [[1.5]], cycle_dt_ms=10)
+    resp = await client.post("/skills/unsafe-jump/play")
+    assert resp.status_code == 200
+
+    await asyncio.sleep(0.1)
+    resp = await client.get("/skills/playback/status")
+    status = resp.json()
+    assert status["name"] == "unsafe-jump"
+    assert status["status"] == "rejected"
+    assert status["rejected_at_frame"] == 0
+    assert "safety clamp" in status["reason"]
+    assert status["frames_executed"] == 0
+
+
+async def test_skill_play_not_found(client):
+    resp = await client.post("/skills/nonexistent/play")
+    assert resp.status_code == 404
+
+
+async def test_skill_registry_msg(client, app):
+    _inject_skill(app, "bow", ["fl_hip"], [[0.1]])
+    resp = await client.get("/skills/bow/registry_msg")
+    assert resp.status_code == 200
+    data = resp.json()
+    msg = data["execute_msg"]["publish_skill"]
+    assert msg["dapp_name"] == "bow"
+    assert msg["chain_id"] == "juno-1"
+    assert "testnet" in data["contract_addresses"]
+    assert "mainnet" in data["contract_addresses"]
+
+    expected_hash = hashlib.sha256(
+        json.dumps(app.state.bridge.skills["bow"], sort_keys=True).encode()
+    ).hexdigest()
+    assert msg["skill_hash"] == expected_hash
+    assert msg["skill_uri"].endswith("/skills/bow/export")
+
+    resp = await client.get("/skills/nonexistent/registry_msg")
+    assert resp.status_code == 404
+
+
+async def test_skill_marketplace_msg(client, app):
+    _inject_skill(app, "spin", ["fl_hip"], [[0.1]])
+    resp = await client.get("/skills/spin/marketplace_msg?price_ujuno=1000000&description=spin+in+place")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["marketplace_deployed"] is False
+    msg = data["execute_msg"]["list_service"]
+    assert msg["skill_ref"] == "spin"
+    assert msg["price"] == "1000000"
+    assert msg["description"] == "spin in place"
+
+    resp = await client.get("/skills/nonexistent/marketplace_msg")
+    assert resp.status_code == 404
+
+
+async def test_register_robot_with_taught_skill(client, app):
+    _inject_skill(app, "sit", ["fl_hip"], [[0.1]])
+    resp = await client.post("/robot/register")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ready_to_register"
+    entries = data["skill_registry"]["skills"]
+    assert len(entries) == 1
+    assert entries[0]["dapp_name"] == "sit"
+    assert "registry_msg_url" in entries[0]
+    assert "marketplace_msg_url" in entries[0]
+    assert data["marketplace"]["deployed"] is False

@@ -4,7 +4,7 @@
 
 ## Hardware on Order
 
-- **Delivery ETA: 4th September 2026**
+- **Delivery: August 31, 2026** (arrived ahead of original Sept 4 ETA)
 - **DOGZILLA-Lite with Raspberry Pi CM5** (~$639)
 - 15 DOF: 12 leg + 3 arm (arm + gripper)
 - IPS face display
@@ -112,6 +112,74 @@ The robot likely uses FE-URT-1 or similar 12-bit servos with a UART/485 bus.
 
 ---
 
+## Phase 4.5 — No-Install Browser Viewer
+
+Bridge now serves a single-file live viewer at `GET /viewer` — no app install,
+just open the URL from any phone or PC on the same network (or over
+Tailscale). Parity with "Open Duck Mini Viewer" demos:
+
+- Live joint + IMU telemetry via `WS /ws/state` (~10Hz)
+- 15 joint teleop sliders → `POST /robot/joint_command`
+- 8 expression buttons → existing `POST /robot/expression`
+- Works standalone in `--simulate` mode before hardware is even wired up
+
+```bash
+# from the bridge host
+python3 -m junoclaw_ros2_bridge.server --ros-args
+# then on phone/PC:
+http://<cm5-ip>:8000/viewer
+```
+
+In simulate mode, joint sliders directly update the reported state (no
+physical robot needed) — good for a quick demo of the UI itself before
+Phase 3's servo driver is wired in. Once the servo driver publishes real
+`/joint_states`, the viewer reflects live hardware telemetry automatically.
+
+---
+
+## Phase 4.6 — Skills: Teach Once, Run Anywhere
+
+The `/viewer` page has a Skills panel: **Start Recording**, pose or drive
+the robot (sliders, or physically move real hardware once wired), **Stop &
+Save**, and the demonstration is captured as a named, portable artifact —
+manifest (name, description, author, joint schema, license) + a keyframe
+sequence. Export downloads it as JSON; Import accepts any robot's exported
+skill and reports a **retarget coverage** (what fraction of the skill's
+joints exist, by name, on this robot) before playing it back.
+
+This is implemented twice, JSON-schema-compatible:
+
+- `crates/junoclaw-physics/src/skill.rs` — `Skill`, `SkillRecorder`,
+  `retarget()` (Rust side, for sim-trained or replay-derived skills, with
+  `provenance_batch_root` tying a skill to the Merkle-anchored batch it was
+  captured within — the same provenance property as everything else in
+  this crate)
+- `plugins/plugin-ros2/bridge/.../server.py` — `POST /skills/record/start`,
+  `POST /skills/record/stop`, `GET /skills`, `GET /skills/{name}/export`,
+  `POST /skills/import`, `POST /skills/{name}/play` (bridge side, for
+  teaching directly on hardware or via the browser viewer)
+
+Retargeting is intentionally honest, not magic: a joint only transfers if
+the importing robot has a joint with the *same name*. Two robots that share
+`QUADRUPED_JOINT_NAMES` (any robot built against this stack) get full
+coverage automatically; anything else gets a transparent partial-coverage
+report instead of a silent wrong mapping.
+
+**Sharing / open-source distribution:** a skill is just JSON, so the
+existing Buzz relay infra already carries it — upload via the relay's
+Blossom endpoint (`PUT /upload`, already NIP-98 authed, content-addressed
+by sha256) and reference the blob from a Nostr event (`POST /events`) so
+it's discoverable per-community. No new relay schema needed for v0. A
+dedicated skill-registry / marketplace listing (gated by Truth Market, per
+the TODO in `bridge.rs::register_robot`) is the natural next step once
+there's a second real skill to trade.
+
+Playback today is open-loop (a position sequence) — gating it through the
+L2 `WorldModel` (reject a frame if its predicted next state matches an L1
+red memory) is the natural safety hardening step, not yet implemented.
+
+---
+
 ## Phase 5 — JunoClaw Plugin-ros2 on CM5
 
 1. On a build host or on the CM5 itself, compile `plugin-ros2` Rust crate:
@@ -194,13 +262,22 @@ Given the fragility reported in reviews:
 
 ## Files to Watch
 
-- `crates/junoclaw-physics/src/simulator.rs` — `QuadrupedBackend`
+- `crates/junoclaw-physics/src/simulator.rs` — `QuadrupedBackend` (L0 reflex)
 - `crates/junoclaw-physics/src/learning.rs` — `TrustLearner`
 - `crates/junoclaw-physics/src/attestation.rs` — `quadruped_preset`
+- `crates/junoclaw-physics/src/memory.rs` — `MemoryIndex`, `MemoryFetch`, `RootCache` (L1 memory)
+- `crates/junoclaw-physics/src/worldmodel.rs` — `WorldModel`, `evaluate_action`, `select_action` (L2 world model)
+- `crates/junoclaw-physics/src/pipeline.rs` — `ReflexPipeline` (wires L2→L1→L0)
+- `crates/junoclaw-physics/src/dataset.rs` — `DatasetExporter` (transition corpus export)
+- `crates/junoclaw-physics/src/fleet.rs` — `FleetRegistry` (cross-fleet memory)
+- `crates/junoclaw-physics/src/skill.rs` — `Skill`, `SkillRecorder`, `retarget` (teach-once, cross-embodiment transfer)
+- `crates/junoclaw-physics/src/replay.rs` — deterministic replay from Merkle log
+- `crates/junoclaw-physics/src/watchdog.rs` — redundant reflex path
+- `crates/junoclaw-physics/src/audit.rs` — audit bundle export
 - `plugins/plugin-ros2/src/lib.rs` — ROS2 plugin
 - `plugins/plugin-ros2/bridge/src/junoclaw_ros2_bridge/server.py` — bridge endpoints
 - `plugins/plugin-ros2/bridge/tests/test_bridge.py` — bridge test cases
 
 ---
 
-*Status: Plan ready. Awaits DOGZILLA-Lite CM5 delivery.*
+*Status: All software built and tested in simulation. L0 (QuadrupedBackend), L1 (MemoryFetch), L2 (WorldModel), ReflexPipeline, DatasetExporter, FleetRegistry, Replay, Watchdog, Audit, Skill (teach/retarget/export/import) — all compiled and tested (144 tests in junoclaw-physics, 80/80 coordination tests). ROS2 bridge extended with a no-install browser viewer (`/viewer`: live telemetry, joint teleop, skill record/play/import/export). Buzz relay live on Akash for fleet sync. DOGZILLA-Lite CM5 hardware delivered Aug 31, 2026 — Phase 0 (unbox & inspect) next.*

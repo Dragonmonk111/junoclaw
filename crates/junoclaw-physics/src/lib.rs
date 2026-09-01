@@ -38,6 +38,7 @@ pub mod replay;
 pub mod watchdog;
 pub mod audit;
 pub mod fleet;
+pub mod skill;
 
 pub use state::{PhysicsState, SensorReadings, JointState, ContactInfo, ImuReading};
 pub use simulator::{PhysicsSimulator, SimulatedBackend, SimConfig, QuadrupedBackend, QuadrupedConfig, QUADRUPED_JOINT_NAMES};
@@ -52,3 +53,4 @@ pub use replay::{ReplayCycle, ReplayLog, Recorder, ReplayVerification, replay};
 pub use watchdog::{redundant_check, dual_channel_check, WatchdogVerdict};
 pub use audit::{AuditBundle, AuditVerification, SampleProof};
 pub use fleet::{FleetRegistry, ContributorStats, FleetRejection, SyncSummary};
+pub use skill::{Skill, SkillManifest, SkillRecorder, RetargetedSkill, RetargetReport, SkillGate, GatedFrameDecision};
