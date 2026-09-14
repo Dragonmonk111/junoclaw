@@ -1,0 +1,35 @@
+[package]
+name = "jolt-cw-verifier"
+version = "0.1.0"
+edition = "2021"
+description = "CosmWasm wrapper for Lattice Jolt verifier — on-chain ZK proof verification"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cw2 = { workspace = true }
+cw-storage-plus = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+sha2 = "0.10"
+hex = "0.4"
+
+# Phase 2: Full cryptographic verification (BN254 / Dory backend).
+# Path deps point at the local Jolt clone; pin to a git rev for production.
+# The `bn254` feature exposes jolt_verifier::bn254::verify_bn254, the concrete
+# Fr/DoryScheme/Pedersen<Bn254G1>/Blake2b instantiation of the generic verifier.
+# bincode 2.x serde API matches the prover's canonical proof serialization
+# (bincode::serde::encode_to_vec with config::standard()).
+jolt-verifier = { path = "C:/Temp/jolt/crates/jolt-verifier", optional = true, features = ["bn254"] }
+bincode = { version = "2", features = ["serde"], optional = true }
+
+[features]
+default = []
+# Enable full Jolt proof verification (sumcheck + PCS).
+# Requires wasmvm with bulk memory support (memory.copy instruction).
+full-verification = ["dep:jolt-verifier", "dep:bincode"]
+

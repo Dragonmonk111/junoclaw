@@ -25,6 +25,7 @@ members = [
     "merkle-verifier",
     "integration-tests",
     "tee-attestation-verifier",
+    "jolt-cw-verifier",
 ]
 resolver = "2"
 
@@ -54,6 +55,18 @@ ark-std = "0.5"
 ark-relations = "0.5"
 ark-snark = "0.5"
 ark-r1cs-std = "0.5"
+
+# Match the jolt workspace's arkworks overrides: jolt-verifier (used by
+# jolt-cw-verifier's full-verification feature) is built against the a16z
+# arkworks-algebra fork. [patch] tables do not propagate to downstream
+# consumers, so the same entries must live in this workspace root — otherwise
+# crates.io ark-ff 0.5.0 and the git fork coexist and trait bounds fail.
+# The fork reports version 0.5.0, so the ark-* = "0.5" deps above still resolve.
+[patch.crates-io]
+ark-bn254 = { git = "https://github.com/a16z/arkworks-algebra", branch = "dev/twist-shout" }
+ark-ff = { git = "https://github.com/a16z/arkworks-algebra", branch = "dev/twist-shout" }
+ark-ec = { git = "https://github.com/a16z/arkworks-algebra", branch = "dev/twist-shout" }
+ark-serialize = { git = "https://github.com/a16z/arkworks-algebra", branch = "dev/twist-shout" }
 
 [profile.release]
 opt-level = 3
