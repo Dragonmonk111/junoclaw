@@ -1,0 +1,23 @@
+[package]
+name = "cw-ics20-transfer"
+version = "0.1.0"
+edition = "2021"
+description = "ICS-20 fungible token transfer as a CosmWasm contract for JunoClaw sovereign chain"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cosmwasm-std = { workspace = true, features = ["stargate"] }
+cosmwasm-schema = { workspace = true }
+cw2 = { workspace = true }
+cw-storage-plus = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }
+
+[features]
+default = []

@@ -6,8 +6,12 @@ already runs on Juno uni-7 at
 uses pure-Wasm arkworks for the full Groth16 verification (~371 486
 gas). The `bn254-precompile` feature flag produces a second .wasm that
 delegates the pairing check and the public-input linear combination to
-the three BN254 host functions added by `wasmvm-fork/` (~187 000 gas
-target — a ~2× reduction matching EIP-1108).
+the three BN254 host functions added by `wasmvm-fork/`. **Measured on
+JunoClaw's `cosmwasm-vm` v2.3.2 (Sept 14, 2026): `verify_proof` =
+77 590 SDK gas — a ~4.8× reduction.** The host functions are metered
+with a time-based schedule (`measured_µs × GAS_PER_US`, converted at
+`SDK_TO_WASMER_GAS_FACTOR = 150_000`), not EIP-1108 — see
+`crypto-bn254/src/gas.rs` for the rationale.
 
 ## Quick build recipe
 

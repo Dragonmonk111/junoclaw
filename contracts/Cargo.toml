@@ -23,9 +23,12 @@ members = [
     "safety-envelope",
     "circuit-breaker",
     "merkle-verifier",
+    "airdrop-claim",
+    "junoclaw-dao",
     "integration-tests",
     "tee-attestation-verifier",
     "jolt-cw-verifier",
+    "cw-ics20-transfer",
 ]
 resolver = "2"
 
@@ -67,6 +70,18 @@ ark-bn254 = { git = "https://github.com/a16z/arkworks-algebra", branch = "dev/tw
 ark-ff = { git = "https://github.com/a16z/arkworks-algebra", branch = "dev/twist-shout" }
 ark-ec = { git = "https://github.com/a16z/arkworks-algebra", branch = "dev/twist-shout" }
 ark-serialize = { git = "https://github.com/a16z/arkworks-algebra", branch = "dev/twist-shout" }
+
+# JunoClaw's sovereign chain runs a patched cosmwasm-vm/std (v2.3.2) that
+# exposes the BN254 host functions (`bn254_add`, `bn254_scalar_mul`,
+# `bn254_pairing_equality`) on the `Api` trait behind the `cosmwasm_2_3`
+# feature. Point cosmwasm-std at the junoclaw-chain submodule so contracts
+# build against the same std the chain runs. The patched std is a superset of
+# crates.io 2.3.2 — contracts that don't enable `cosmwasm_2_3` build
+# identically. Its `workspace = true` internal deps resolve against
+# lib/cosmwasm's own workspace (pinned =2.3.2 → crates.io for unchanged
+# crates); only `cosmwasm-crypto-bn254` is new and resolves via its
+# `path = "../crypto-bn254"`.
+cosmwasm-std = { path = "../../junoclaw-chain/lib/cosmwasm/packages/std" }
 
 [profile.release]
 opt-level = 3

@@ -119,7 +119,7 @@ fn execute_verify_proof(
     // Both paths produce identical accept/reject decisions by design —
     // differential testing against 1 000 random proofs is documented in
     // `wasmvm-fork/BUILD_AND_TEST.md`.
-    let valid = crate::bn254_backend::verify_groth16(&vk, &proof, &public_inputs)?;
+    let valid = crate::bn254_backend::verify_groth16(deps.api, &vk, &proof, &public_inputs)?;
 
     if !valid {
         return Err(ContractError::ProofInvalid {});

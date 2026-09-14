@@ -788,6 +788,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cosmwasm-crypto-bn254"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
+ "ark-std 0.5.0",
+]
+
+[[package]]
 name = "cosmwasm-derive"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -825,14 +836,13 @@ dependencies = [
 [[package]]
 name = "cosmwasm-std"
 version = "2.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80d40d789c6d5d9b560927712c836237a3f29ea75fb09ef8718d4036bf2b8965"
 dependencies = [
  "base64",
  "bech32",
  "bnum",
  "cosmwasm-core",
  "cosmwasm-crypto",
+ "cosmwasm-crypto-bn254",
  "cosmwasm-derive",
  "derive_more 1.0.0",
  "hex",
@@ -3134,7 +3144,6 @@ dependencies = [
  "ark-std 0.5.0",
  "cosmwasm-schema",
  "cosmwasm-std",
- "cosmwasm-std-bn254-ext",
  "cw-multi-test",
  "cw-storage-plus",
  "cw2",

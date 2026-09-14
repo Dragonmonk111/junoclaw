@@ -21,6 +21,7 @@
 
 use ark_bn254::{Bn254, Fr};
 use ark_groth16::{Proof, VerifyingKey};
+use cosmwasm_std::Api;
 
 use crate::error::ContractError;
 
@@ -39,20 +40,25 @@ use ark_groth16::Groth16;
 ///
 /// - **off (default):** `Groth16::<Bn254>::verify_proof` via arkworks.
 /// - **on:** custom 4-pair equality form evaluated through
-///   `bn254_pairing_equality`, with the `vk_x` linear combination also
-///   computed through `bn254_scalar_mul` + `bn254_add`.
+///   `api.bn254_pairing_equality`, with the `vk_x` linear combination also
+///   computed through `api.bn254_scalar_mul` + `api.bn254_add`.
+///
+/// `api` is the CosmWasm `Api` handle (`deps.api`). The pure-Wasm path ignores
+/// it; the precompile path uses it to reach the `cosmwasm_2_3` host functions.
 pub fn verify_groth16(
+    api: &dyn Api,
     vk: &VerifyingKey<Bn254>,
     proof: &Proof<Bn254>,
     public_inputs: &[Fr],
 ) -> Result<bool, ContractError> {
     #[cfg(not(feature = "bn254-precompile"))]
     {
+        let _ = api;
         verify_pure_wasm(vk, proof, public_inputs)
     }
     #[cfg(feature = "bn254-precompile")]
     {
-        precompile::verify_via_precompile(vk, proof, public_inputs)
+        precompile::verify_via_precompile(api, vk, proof, public_inputs)
     }
 }
 
@@ -80,12 +86,9 @@ mod precompile {
     use ark_bn254::{Fq, G1Affine, G2Affine};
     use ark_ec::{AffineRepr, CurveGroup};
     use ark_ff::{BigInteger, PrimeField};
+    use cosmwasm_std::VerificationError;
 
-    use cosmwasm_std_bn254_ext::{
-        bn254_add_call, bn254_pairing_equality_call, bn254_scalar_mul_call, Bn254ExtError,
-    };
-
-    /// Byte size constants (mirror `wasmvm-fork/cosmwasm-crypto-bn254`).
+    /// Byte size constants (mirror `cosmwasm-crypto-bn254`).
     const FQ: usize = 32;
     const FR: usize = 32;
     const G1: usize = 64;
@@ -93,6 +96,7 @@ mod precompile {
     const PAIR: usize = G1 + G2;
 
     pub(super) fn verify_via_precompile(
+        api: &dyn Api,
         vk: &VerifyingKey<Bn254>,
         proof: &Proof<Bn254>,
         public_inputs: &[Fr],
@@ -119,12 +123,11 @@ mod precompile {
             let mut mul_input = [0u8; G1 + FR];
             mul_input[..G1].copy_from_slice(&encode_g1(&vk.gamma_abc_g1[i + 1]));
             mul_input[G1..].copy_from_slice(&encode_fr(x));
-            let term = bn254_scalar_mul_call(&mul_input).map_err(ext_err)?;
+            let term = api.bn254_scalar_mul(&mul_input).map_err(ext_err)?;
             let mut add_input = [0u8; 2 * G1];
             add_input[..G1].copy_from_slice(&acc_bytes);
             add_input[G1..].copy_from_slice(&term);
-            let sum = bn254_add_call(&add_input).map_err(ext_err)?;
-            acc_bytes = slice_to_64(&sum)?;
+            acc_bytes = api.bn254_add(&add_input).map_err(ext_err)?;
         }
 
         // ─── 2. Assemble the 4-pair pairing equality input ───────────────
@@ -161,7 +164,7 @@ mod precompile {
         );
 
         // ─── 3. One host call covers the whole pairing ──────────────────
-        bn254_pairing_equality_call(&input).map_err(ext_err)
+        api.bn254_pairing_equality(&input).map_err(ext_err)
     }
 
     // ── Encoders / decoders ────────────────────────────────────────────
@@ -218,19 +221,13 @@ mod precompile {
         out
     }
 
-    fn slice_to_64(v: &[u8]) -> Result<[u8; 64], ContractError> {
-        v.try_into().map_err(|_| ContractError::PrecompileError {
-            reason: format!("host returned {} bytes, expected 64", v.len()),
-        })
-    }
-
     fn copy_pair(dst: &mut [u8], g1: &[u8; G1], g2: &[u8; G2]) {
         debug_assert_eq!(dst.len(), PAIR);
         dst[..G1].copy_from_slice(g1);
         dst[G1..].copy_from_slice(g2);
     }
 
-    fn ext_err(e: Bn254ExtError) -> ContractError {
+    fn ext_err(e: VerificationError) -> ContractError {
         ContractError::PrecompileError {
             reason: e.to_string(),
         }
