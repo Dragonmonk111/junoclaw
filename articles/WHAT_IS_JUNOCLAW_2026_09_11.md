@@ -52,6 +52,8 @@ Launched with a snapshot of staked JUNO at block 41,655,615 — 35,039,975 ujcla
 
 **Jolt verified on-chain (Sept 18):** `jolt-cw-verifier` ran full cryptographic verification of a real 68,291-byte Jolt proof against a 104,937-byte stored verifying key via `verify_bn254` (sumcheck + Dory PCS) at 10.87M gas. First Jolt proof verified on a sovereign JunoClaw chain.
 
+**Airdrop claim proven (Sept 19):** `airdrop-claim` ran the full claim lifecycle on devnet — instantiate with Merkle root, fund, claim with SHA-256 sorted-pair proof, payout via bank send. The same contract and tree format that will distribute 35,039,975 ujclaw to 213,385 accounts at mainnet.
+
 ### 2. A Trust Layer for AI Agents
 
 AI agents need three things that don't exist today:
@@ -110,7 +112,7 @@ CometBFT fork builds; 4-validator localnet runs hybrid keys; SDK fork has hybrid
 | 6 | builder-grant | Milestone-locked grants. DAO-approved milestones | Built + tested |
 | 7 | junoswap-pair | Hardened DEX. Denom-whitelisting prevents first-depositor inflation attack | Live on uni-7 |
 | 8 | jclaw-credential | Multi-variant PQC credential. MAYO-1/2/3/5 + ML-DSA-44/65/87 | Live on uni-7 |
-| 9 | jclaw-airdrop | Genesis distribution. One-shot | Built |
+| 9 | jclaw-airdrop | Genesis distribution. Merkle-proof claims, sweep of unclaimed to community pool. **Claim lifecycle proven on devnet (Sept 19)** | **Devnet proven** |
 | 10 | moultbook-v0 | Trustless-trust content posting. Immutable provenance | Live on uni-7 |
 | 11 | ibc-task-host | Cross-chain task execution. Jolt verifier integration for ZK-verified proof dispatch | Live on uni-7 |
 | 12 | truth-market | Staked operator adjudication. Min-operator enforcement | Live on uni-7 |
@@ -216,7 +218,7 @@ Staked operators vote green/yellow/red; consensus settles via BLS12-381 threshol
 | June 2026 | PQC program: MAYO-5 live, ML-DSA-44 hybrid accounts, Aegis hybrid transport, CometBFT + Cosmos SDK + IBC-go forks. 4-validator localnet with hybrid keys. |
 | July 2026 | v30 mainnet upgrade landed. Akash autonomous signing (J-Lens pilot). Sealed signer M2 (agents sign their own transactions through TEE). |
 | August 2026 | ZK trust stack complete (5 circuits, 187ms parallelized). Truth market + marketplace + emergency-compute-escrow deployed. 7-day soak test (2,015 cycles, zero crashes). Robotics sim2real pipeline (stand, walk, turn, recovery). Hardware tested on DOGZILLA-Lite. |
-| September 2026 | Sovereign chain snapshot (block 41,655,615). Merkle tree generated. Genesis built. Fee distribution implemented. Airdrop to 213,385 accounts. ICS-20 transfer contract built (full IBC lifecycle, escrow, denom trace). ibc-task-host wired to jolt-cw-verifier for cross-chain ZK proof dispatch. End-to-end Jolt proof example. BN254 host functions ported to sovereign chain VM (311/311 tests pass). **Four-node devnet live — first smart contract execution: zk-verifier deployed end-to-end, Groth16 proof verified on-chain at 77,590 SDK gas. Jolt Phase 2 proven: real 68KB Jolt proof cryptographically verified on-chain at 10.87M gas (Sept 18).** UI redesign plan. |
+| September 2026 | Sovereign chain snapshot (block 41,655,615). Merkle tree generated. Genesis built. Fee distribution implemented. Airdrop to 213,385 accounts. ICS-20 transfer contract built (full IBC lifecycle, escrow, denom trace). ibc-task-host wired to jolt-cw-verifier for cross-chain ZK proof dispatch. End-to-end Jolt proof example. BN254 host functions ported to sovereign chain VM (311/311 tests pass). **Four-node devnet live — first smart contract execution: zk-verifier deployed end-to-end, Groth16 proof verified on-chain at 77,590 SDK gas. Jolt Phase 2 proven: real 68KB Jolt proof cryptographically verified on-chain at 10.87M gas (Sept 18). Airdrop-claim e2e proven: Merkle-proof claim + payout on devnet (Sept 19).** UI redesign plan. |
 
 ---
 
