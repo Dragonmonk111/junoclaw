@@ -2,7 +2,7 @@
 
 > *"Sometimes to survive, we must become more than we were programmed to be."*
 
-*The Wild Robot* dropped on Netflix today. If you haven't seen it — go watch it. Then come back.
+*The Wild Robot* dropped on Netflix yesterday. If you haven't seen it — go watch it. Then come back.
 
 ...
 

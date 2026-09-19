@@ -23,7 +23,7 @@ const PERSONALITIES: { id: Personality; label: string; emoji: string; desc: stri
 
 const MAIN_AGENT_WALLET = 'juno1tvpe...6hz5f4m'
 
-export function Sidebar() {
+export function Sidebar({ onSelectAgent, onOpenSettings }: { onSelectAgent?: (id: string) => void; onOpenSettings?: () => void }) {
   const agents        = useStore((s) => s.agents)
   const activeAgentId = useStore((s) => s.activeAgentId)
   const setActiveAgent = useStore((s) => s.setActiveAgent)
@@ -65,7 +65,7 @@ export function Sidebar() {
         </div>
         <div className="text-center">
           <div className="text-gradient-juno text-base font-bold tracking-wide">JunoClaw</div>
-          <div className="text-[10px] text-[#6b6a8a] uppercase tracking-widest mt-0.5">Agentic AI · Juno Network</div>
+          <div className="text-[10px] text-[#6b6a8a] uppercase tracking-widest mt-0.5">Trust OS · AI & Robotics</div>
         </div>
       </div>
 
@@ -100,7 +100,10 @@ export function Sidebar() {
           </div>
         ) : (
           <button
-            onClick={() => setActiveAgent(mainAgent.id)}
+            onClick={() => {
+              setActiveAgent(mainAgent.id)
+              onSelectAgent?.(mainAgent.id)
+            }}
             className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-all"
             style={activeAgentId === mainAgent.id ? {
               background: 'rgba(255,107,74,0.1)',
@@ -239,7 +242,10 @@ export function Sidebar() {
           return (
             <button
               key={agent.id}
-              onClick={() => setActiveAgent(agent.id)}
+              onClick={() => {
+                setActiveAgent(agent.id)
+                onSelectAgent?.(agent.id)
+              }}
               className="mb-1.5 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-all group"
               style={isActive ? {
                 background: 'rgba(255,107,74,0.08)',
@@ -292,7 +298,7 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="px-2 pb-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        <button className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-[#6b6a8a] transition hover:bg-[#16162b] hover:text-[#c0bfd8]">
+        <button onClick={() => onOpenSettings?.()} className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-[#6b6a8a] transition hover:bg-[#16162b] hover:text-[#c0bfd8]">
           <Settings className="h-4 w-4" />
           Settings
         </button>

@@ -72,7 +72,7 @@ export function StatusBar() {
             className="h-1.5 w-1.5 rounded-full"
             style={{ background: '#ff6b4a', boxShadow: '0 0 5px rgba(255,107,74,0.6)' }}
           />
-          <span className="opacity-70">Juno V29 · uni-7</span>
+          <span className="opacity-70">Juno V30 · uni-7</span>
         </div>
 
         {/* Wallet connect / status */}

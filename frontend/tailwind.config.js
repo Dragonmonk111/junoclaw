@@ -40,10 +40,40 @@ export default {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4,0,0.6,1) infinite',
         'fade-in':    'fadeIn 0.3s ease-out',
         'slide-up':   'slideUp 0.25s ease-out',
+        'rise':       'rise 0.45s cubic-bezier(0.22,1,0.36,1) both',
+        'radar':      'radar 2.4s cubic-bezier(0,0,0.2,1) infinite',
+        'sweep':      'sweep 3.5s ease-in-out infinite',
+        'breathe':    'breathe 4s ease-in-out infinite',
+        'tick':       'tick 1.6s ease-in-out infinite',
       },
       keyframes: {
         fadeIn:  { from: { opacity: '0' }, to: { opacity: '1' } },
         slideUp: { from: { opacity: '0', transform: 'translateY(6px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
+        rise: {
+          from: { opacity: '0', transform: 'translateY(10px) scale(0.985)' },
+          to:   { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+        // Radar ping — expands outward from a live status dot
+        radar: {
+          '0%':   { transform: 'scale(1)',   opacity: '0.55' },
+          '70%':  { transform: 'scale(2.8)', opacity: '0' },
+          '100%': { transform: 'scale(2.8)', opacity: '0' },
+        },
+        // Light sweep across a surface, used for the claim CTA
+        sweep: {
+          '0%':        { transform: 'translateX(-120%)' },
+          '55%, 100%': { transform: 'translateX(320%)' },
+        },
+        // Slow scale/opacity breath for ambient glows
+        breathe: {
+          '0%, 100%': { opacity: '0.35', transform: 'scale(1)' },
+          '50%':      { opacity: '0.7',  transform: 'scale(1.06)' },
+        },
+        // Discrete step, mirrors a reflex cycle firing
+        tick: {
+          '0%, 100%': { opacity: '0.25' },
+          '50%':      { opacity: '1' },
+        },
       },
     },
   },

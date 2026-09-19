@@ -234,7 +234,7 @@ A digital illustration of a cryptographic gate made of layered hexagonal light s
 **Prompt 3 — The Bridge Daemon**
 
 ```
-A digital illustration of a Rust-powered bridge daemon visualized as a mechanical sentinel standing between two worlds: on one side a Tendermint blockchain with glowing block hashes rising like a data waterfall, on the other a Nostr relay with kind 1 event packets flowing outward as luminous arrows. The sentinel transforms each block event into a signed Nostr packet. Dark industrial aesthetic with orange and teal accents, no text, 16:9 aspect ratio --ar 16:9
+A digital illustration of a Rust-powered bridge daemon visualized as a mechanical sentinel standing between two worlds: on one side a Tendermint blockchain with glowing block hashes rising like a data waterfall, on the other a Nostr relay with kind 1 event packets flowing outward as luminous arrows. The sentinel transforms each block event into a sigARTICostr packet. Dark industrial aesthetic with orange and teal accents, no text, 16:9 aspect ratio --ar 16:9
 ```
 
 **Prompt 4 — Agents Assemble**

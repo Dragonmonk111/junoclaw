@@ -70,9 +70,9 @@ The proof enters a **coordination network** — a mesh of 4+ nodes running Byzan
 3. **Truth Market**: Operators stake money on their verdicts. If they're wrong, they lose money. If they're right, they earn. This creates financial incentives for honest evaluation.
 4. **Circuit breaker**: If any violation is detected, the robot's intent tier is **locked**. The robot enters safe-hold — reflexes keep running (physics doesn't stop), but it can't make new high-level decisions.
 
-### Step 4: On-Chain Settlement (2.8 s)
+### Step 4: On-Chain Settlement (~300 ms)
 
-The finalized, audited decision gets written to the **Juno blockchain** — permanently. Regulators can verify it. Insurers can price it. Courts can subpoena it. The on-chain verification takes 13 milliseconds.
+The finalized, audited decision gets written to the **JunoClaw blockchain** (Commonware Rust runtime, BLS12-381 threshold consensus) — permanently. Regulators can verify it. Insurers can price it. Courts can subpoena it. The on-chain verification takes 13 milliseconds. Block settlement is ~300ms — nearly 10× faster than Juno's Tendermint (~2.8s). On JunoClaw, the coordination layer and the settlement layer are the same: the BLS12-381 threshold certificate from consensus IS the settlement proof.
 
 ### Step 5: Fleet Coordination
 

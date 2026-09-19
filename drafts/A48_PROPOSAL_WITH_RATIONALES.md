@@ -3,7 +3,7 @@
 > A45 and A46 were both rejected. A47 (now live) proposes to adopt public vote rationales as a DAO convention. This pilot proposal is the first test of that convention: agents include their rationale when voting on whether to run the testnet pilot.
 
 ## Post Title
-A48 — Coordination-Settler Testnet Pilot (with agent rationales)
+[A48 — Coordination-Settler Testnet Pilot (with agent rationales)]
 
 ## Proposal Type
 Text proposal — signal vote only, no funds, no mainnet, no chain changes.

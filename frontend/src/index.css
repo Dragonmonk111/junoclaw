@@ -61,6 +61,39 @@
   .cursor-blink {
     animation: blink 1s step-end infinite;
   }
+
+  /* Interactive surface — lifts toward the cursor and deepens its own glow.
+     Uses transform/box-shadow only, so it stays on the compositor. */
+  .card-lift {
+    transition: transform 0.22s cubic-bezier(0.22,1,0.36,1),
+                box-shadow 0.22s ease,
+                border-color 0.22s ease;
+    will-change: transform;
+  }
+  .card-lift:hover {
+    transform: translateY(-3px);
+  }
+  .card-lift:active {
+    transform: translateY(-1px) scale(0.995);
+  }
+
+  /* Horizontal latency gauge — width is driven inline so the fill animates
+     from 0 to the measured value on mount. */
+  .gauge-fill {
+    transition: width 1.1s cubic-bezier(0.22,1,0.36,1);
+  }
+}
+
+/* Honour the OS "reduce motion" setting: keep state changes, drop the motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .card-lift:hover { transform: none; }
 }
 
 @keyframes blink {
