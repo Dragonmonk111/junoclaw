@@ -35,5 +35,36 @@
   "feepay-test-moultbook": {
     "codeId": 80,
     "address": "juno1d0czmatlccgg4v9mjw6ycvtz6ugtym0ac37gvsctm8lykce97wpsmlnrp5"
+  },
+  "jolt-cw-verifier-v1-deprecated": {
+    "codeId": 103,
+    "storeTx": "29C7EBF7283FE461D5700D75858A29981CE87BF1CE495A5070D55E63D5122BA3",
+    "wasmFile": "jolt_cw_verifier_opt.wasm",
+    "wasmSizeBytes": 198008,
+    "address": "juno1gkyjms6uwfc3nugumttnww6ye4mtv25c3npys09zu0w5qyyxqzds0k9vd9",
+    "instantiateTx": "F01A68EFB3D56B92F0B632CFCBB6C82B0FF14470201E3805F8C75DA629C474EC",
+    "deprecated": "2026-09-19 — superseded: Item<T> JSON-serialization exceeded 128KB db limit on store_proof/store_vk; fixed by raw-bytes storage (commit 7e13d47)"
+  },
+  "cw-ics20-transfer": {
+    "codeId": 107,
+    "storeTx": "unknown (tx indexing disabled)",
+    "wasmSizeBytes": 435146,
+    "address": "juno1e2zsnjl7ft37y45jcztucqlmez4m4ylge202dlmaln3aw99lu2ssdeust2",
+    "instantiateTx": "unknown (tx indexing disabled)"
+  },
+  "ibc-task-host": {
+    "codeId": 108,
+    "address": "juno1vgqk2wew7355unyg9uelnck5tudwkjdx2mlkzvrpu0wgd6jtvj4s4mqtk3",
+    "storeTx": "unknown (tx indexing disabled)",
+    "instantiateTx": "unknown (tx indexing disabled)",
+    "wasmSizeBytes": 352698
+  },
+  "jolt-cw-verifier": {
+    "codeId": 113,
+    "storeTx": "45EF3E6CD8122C90B56D846BF36FFE7D1FE3FE3A87C901DE87DD963600283668",
+    "wasmFile": "jolt_cw_verifier_opt.wasm",
+    "wasmSizeBytes": 217612,
+    "address": "juno1h7z2pmmfhgdmhaljyrkeca655l0gcdkwgn5kzes6wcmgwrndyscsmg3zvr",
+    "instantiateTx": "99DB11234A20079EC88CD07CC3653660718EB0422E4DE55EE35619D183F523FE"
   }
 }
