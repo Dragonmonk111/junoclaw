@@ -1,0 +1,15 @@
+[package]
+name = "jolt-guests"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Jolt guest programs — 5 safety checks as RISC-V provable functions for the lattice ZK path"
+
+[dependencies]
+sha2 = "0.10"
+
+[features]
+default = []
+# When compiled with Jolt SDK, enables #[jolt::provable] macros
+# jolt-sdk = ["jolt"]
+# jolt = []

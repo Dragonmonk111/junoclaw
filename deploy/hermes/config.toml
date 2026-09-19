@@ -1,0 +1,93 @@
+# Hermes IBC Relayer Config — uni-7 ↔ osmo-test-5
+#
+# Hermes is an IBC relayer by Informal Systems.
+# It creates IBC clients, connections, and channels between two chains,
+# then relays packets (token transfers, acks, timeouts) between them.
+#
+# Install: cargo install hermes --version latest
+# Docs:    https://hermes.informal.systems/
+#
+# Usage:
+#   1. Add keys (see hermes-setup.sh)
+#   2. Create connection: hermes create connection uni-7
+#   3. Create channel:    hermes create channel uni-7 --port-a transfer --port-b transfer
+#   4. Start relaying:    hermes start
+#
+# The cw-ics20-transfer contract on uni-7 binds to port "transfer".
+# Osmosis testnet has a native transfer module on port "transfer".
+
+[global]
+log_level = "info"
+
+[mode]
+
+[mode.clients]
+enabled = true
+refresh = true
+misbehaviour = true
+
+[mode.connections]
+enabled = true
+
+[mode.channels]
+enabled = true
+
+[mode.packets]
+enabled = true
+clear_interval = 100
+clear_on_start = true
+tx_confirmation = true
+
+[rest]
+enabled = true
+host = "127.0.0.1"
+port = 3000
+
+[telemetry]
+enabled = false
+
+# ── uni-7 (Juno Testnet) ─────────────────────────────────────────────────────
+
+[[chains]]
+id = "uni-7"
+rpc_addr = "https://junotestnet-rpc.kleomedes.network:443"
+grpc_addr = "https://junotestnet-rpc.kleomedes.network:443"
+event_source = { mode = "pull", interval = "500ms" }
+rpc_timeout = "30s"
+account_prefix = "juno"
+key_name = "junoclaw-builder"
+store_prefix = "ibc"
+default_gas = 200000
+max_gas = 2000000
+gas_multiplier = 1.4
+gas_price = { price = 0.075, denom = "ujunox" }
+max_msg_num = 10
+max_tx_size = 180000
+clock_drift = "15s"
+max_block_time = "10s"
+trusting_period = "14days"
+trust_threshold = { numerator = "1", denominator = "3" }
+address_type = { derivation = "cosmos" }
+
+# ── osmo-test-5 (Osmosis Testnet) ────────────────────────────────────────────
+
+[[chains]]
+id = "osmo-test-5"
+rpc_addr = "https://rpc.osmotest5.osmosis.zone:443"
+grpc_addr = "https://grpc.osmotest5.osmosis.zone:443"
+event_source = { mode = "pull", interval = "500ms" }
+rpc_timeout = "30s"
+account_prefix = "osmo"
+key_name = "junoclaw-builder"
+store_prefix = "ibc"
+default_gas = 200000
+max_gas = 2000000
+gas_multiplier = 1.4
+gas_price = { price = 0.025, denom = "uosmo" }
+max_msg_num = 10
+max_tx_size = 180000
+clock_drift = "15s"
+max_block_time = "10s"
+trusting_period = "14days"
+trust_threshold = { numerator = "1", denominator = "3" }
+address_type = { derivation = "cosmos" }

@@ -11,8 +11,10 @@ pub struct HostConfig {
     pub task_ledger: Option<Addr>,
     /// escrow contract for ReclaimExpired dispatch
     pub escrow: Option<Addr>,
-    /// zk-verifier contract for SubmitProof dispatch
+    /// zk-verifier contract for SubmitProof dispatch (legacy Groth16)
     pub zk_verifier: Option<Addr>,
+    /// jolt-cw-verifier contract for Jolt ZK proof verification
+    pub jolt_verifier: Option<Addr>,
     /// Whitelist of allowed junoswap-pair contracts for Swap dispatch
     pub allowed_pairs: Vec<Addr>,
 }

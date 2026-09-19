@@ -10,6 +10,7 @@ struct TestAddrs {
     task_ledger: Addr,
     escrow: Addr,
     zk_verifier: Addr,
+    jolt_verifier: Addr,
     pair: Addr,
     sender: Addr,
     hacker: Addr,
@@ -21,6 +22,7 @@ fn make_addrs(app: &App) -> TestAddrs {
         task_ledger: app.api().addr_make("task_ledger"),
         escrow: app.api().addr_make("escrow"),
         zk_verifier: app.api().addr_make("zk_verifier"),
+        jolt_verifier: app.api().addr_make("jolt_verifier"),
         pair: app.api().addr_make("pair_juno_osmo"),
         sender: app.api().addr_make("ibc_module"),
         hacker: app.api().addr_make("hacker"),
@@ -38,6 +40,7 @@ fn store_and_instantiate(app: &mut App, addrs: &TestAddrs) -> Addr {
             task_ledger: Some(addrs.task_ledger.to_string()),
             escrow: Some(addrs.escrow.to_string()),
             zk_verifier: Some(addrs.zk_verifier.to_string()),
+            jolt_verifier: Some(addrs.jolt_verifier.to_string()),
             allowed_pairs: vec![addrs.pair.to_string()],
         },
         &[],
@@ -137,6 +140,7 @@ fn test_update_config_admin_only() {
         task_ledger: Some(new_tl.to_string()),
         escrow: None,
         zk_verifier: None,
+        jolt_verifier: None,
         allowed_pairs: None,
     };
     let err = app
@@ -149,6 +153,7 @@ fn test_update_config_admin_only() {
         task_ledger: Some(new_tl.to_string()),
         escrow: None,
         zk_verifier: None,
+        jolt_verifier: None,
         allowed_pairs: Some(vec![addrs.pair.to_string(), new_pair.to_string()]),
     };
     app.execute_contract(addrs.admin.clone(), host.clone(), &msg, &[]).unwrap();
@@ -178,6 +183,7 @@ fn test_instantiate_all_optional_none() {
                 task_ledger: None,
                 escrow: None,
                 zk_verifier: None,
+                jolt_verifier: None,
                 allowed_pairs: vec![],
             },
             &[],
@@ -193,6 +199,7 @@ fn test_instantiate_all_optional_none() {
     assert_eq!(config.task_ledger, None);
     assert_eq!(config.escrow, None);
     assert_eq!(config.zk_verifier, None);
+    assert_eq!(config.jolt_verifier, None);
     assert!(config.allowed_pairs.is_empty());
 }
 
@@ -209,6 +216,7 @@ fn store_and_instantiate_minimal(app: &mut App, admin: &Addr) -> Addr {
             task_ledger: None,
             escrow: None,
             zk_verifier: None,
+            jolt_verifier: None,
             allowed_pairs: vec![],
         },
         &[],
@@ -257,8 +265,8 @@ fn test_submit_proof_no_zk_verifier() {
         .execute_contract(addrs.sender.clone(), host, &msg, &[])
         .unwrap_err();
     assert!(
-        err.root_cause().to_string().contains("zk-verifier"),
-        "expected zk-verifier error, got: {}",
+        err.root_cause().to_string().contains("verifier"),
+        "expected verifier error, got: {}",
         err.root_cause()
     );
 }
@@ -429,6 +437,7 @@ fn test_update_config_partial_update() {
         task_ledger: None,
         escrow: Some(new_escrow.to_string()),
         zk_verifier: None,
+        jolt_verifier: None,
         allowed_pairs: None,
     };
     app.execute_contract(addrs.admin.clone(), host.clone(), &msg, &[])

@@ -83,6 +83,12 @@ pub struct Config {
     /// `execute_submit_attestation` docstring for the authorisation matrix.
     #[serde(default)]
     pub zk_verifier: Option<Addr>,
+    /// Optional `jolt-cw-verifier` contract address (lattice ZK path).
+    /// When set, attestations may carry a Jolt proof blob that is
+    /// cross-verified via the Jolt verifier contract. Takes precedence
+    /// over `zk_verifier` when both are set.
+    #[serde(default)]
+    pub jolt_verifier: Option<Addr>,
     pub escrow_contract: Addr,
     pub agent_registry: Addr,
     /// Optional task-ledger address for WavsPush proposals

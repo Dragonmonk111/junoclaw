@@ -71,6 +71,11 @@ pub struct InstantiateMsg {
     /// atomically. When `None`, attestation flow is unchanged (hash-only).
     #[serde(default)]
     pub zk_verifier: Option<String>,
+    /// Optional `jolt-cw-verifier` contract address (lattice ZK path).
+    /// When set, attestations may carry a Jolt proof blob. Takes
+    /// precedence over `zk_verifier` when both are set.
+    #[serde(default)]
+    pub jolt_verifier: Option<String>,
     /// Optional `moultbook-v0` contract address. When set, Skill-Staking
     /// Circle and similar templates can publish anonymous, ZK-protected
     /// endorsements (ADR-005). When `None`, the anonymous endorsement path
@@ -119,6 +124,7 @@ impl Default for InstantiateMsg {
             governance: None,
             wavs_operator: None,
             zk_verifier: None,
+            jolt_verifier: None,
             moultbook: None,
             relayer: None,
             sealed_signer: None,
@@ -191,6 +197,10 @@ pub enum ExecuteMsg {
     /// / emergency knob. Decentralized rotation is a future `ConfigChange`
     /// extension.
     RotateZkVerifier { new_verifier: Option<String> },
+
+    /// Admin-only: rotate the jolt-cw-verifier contract address (lattice ZK path).
+    /// `new_verifier = None` clears it, reverting to BN254 or hash-only mode.
+    RotateJoltVerifier { new_verifier: Option<String> },
 
     /// Admin-only: rotate the moultbook contract address. `new_moultbook =
     /// None` clears it, disabling the anonymous endorsement path entirely

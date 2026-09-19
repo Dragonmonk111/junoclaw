@@ -75,6 +75,10 @@ pub fn instantiate(
         .zk_verifier
         .map(|v| deps.api.addr_validate(&v))
         .transpose()?;
+    let jolt_verifier = msg
+        .jolt_verifier
+        .map(|v| deps.api.addr_validate(&v))
+        .transpose()?;
     let moultbook = msg
         .moultbook
         .map(|m| deps.api.addr_validate(&m))
@@ -134,6 +138,7 @@ pub fn instantiate(
         governance,
         wavs_operator,
         zk_verifier,
+        jolt_verifier,
         escrow_contract,
         agent_registry,
         task_ledger,
@@ -197,6 +202,8 @@ pub fn execute(
             execute_rotate_wavs_operator(deps, info, new_operator),
         ExecuteMsg::RotateZkVerifier { new_verifier } =>
             execute_rotate_zk_verifier(deps, info, new_verifier),
+        ExecuteMsg::RotateJoltVerifier { new_verifier } =>
+            execute_rotate_jolt_verifier(deps, info, new_verifier),
         ExecuteMsg::RotateMoultbook { new_moultbook } =>
             execute_rotate_moultbook(deps, info, new_moultbook),
         ExecuteMsg::RotateRelayer { new_relayer } =>
@@ -1228,6 +1235,33 @@ fn execute_submit_attestation(
         .add_attribute("data_hash", data_hash)
         .add_attribute("attestation_hash", attestation_hash);
 
+    // Jolt verifier takes precedence over BN254 when both are configured.
+    // Jolt's VerifyProof takes only proof_base64 (no public_inputs_base64).
+    if let Some(jolt_addr) = &cfg.jolt_verifier {
+        if proof_some {
+            let proof = proof_base64.unwrap();
+            #[derive(serde::Serialize)]
+            #[serde(rename_all = "snake_case")]
+            enum JoltVerifierExecute {
+                VerifyProof { proof_base64: Option<String> },
+            }
+            let verify_msg = WasmMsg::Execute {
+                contract_addr: jolt_addr.to_string(),
+                msg: to_json_binary(&JoltVerifierExecute::VerifyProof {
+                    proof_base64: Some(proof),
+                })?,
+                funds: vec![],
+            };
+            response = response
+                .add_submessage(SubMsg::new(verify_msg))
+                .add_attribute("zk_verified", "true")
+                .add_attribute("verifier_type", "jolt");
+        } else {
+            response = response
+                .add_attribute("zk_verified", "false")
+                .add_attribute("verifier_type", "jolt");
+        }
+    } else {
     match (&cfg.zk_verifier, proof_some, inputs_some) {
         (Some(verifier_addr), true, true) => {
             // Unwraps are safe: we just proved both are `Some`.
@@ -1251,13 +1285,16 @@ fn execute_submit_attestation(
             };
             response = response
                 .add_submessage(SubMsg::new(verify_msg))
-                .add_attribute("zk_verified", "true");
+                .add_attribute("zk_verified", "true")
+                .add_attribute("verifier_type", "bn254");
         }
         (Some(_), true, false) | (Some(_), false, true) => {
             return Err(ContractError::IncompleteZkProofBundle { proof_some, inputs_some });
         }
         (Some(_), false, false) => {
-            response = response.add_attribute("zk_verified", "false");
+            response = response
+                .add_attribute("zk_verified", "false")
+                .add_attribute("verifier_type", "bn254");
         }
         (None, false, false) => {
             // Pre-v7 behaviour — hash-only attestation, no verifier wired.
@@ -1265,6 +1302,7 @@ fn execute_submit_attestation(
         (None, _, _) => {
             return Err(ContractError::ZkVerifierNotConfigured {});
         }
+    }
     }
 
     // ── ADR-005: moultbook endorsement trigger ──
@@ -1274,7 +1312,7 @@ fn execute_submit_attestation(
     // proof for the endorser's moult-key, and submits `PublishAnon` to the
     // moultbook contract. This keeps the on-chain contract stateless w.r.t.
     // moultbook proofs — only the trigger responsibility lives here.
-    if cfg.moultbook.is_some() && proof_some && inputs_some {
+    if cfg.moultbook.is_some() && proof_some && (inputs_some || cfg.jolt_verifier.is_some()) {
         let endorsement_event = Event::new("moultbook_endorsement_ready")
             .add_attribute("proposal_id", proposal_id.to_string())
             .add_attribute("moultbook", cfg.moultbook.unwrap().to_string())
@@ -1371,6 +1409,29 @@ fn execute_rotate_zk_verifier(
     CONFIG.save(deps.storage, &cfg)?;
     Ok(Response::new()
         .add_attribute("action", "rotate_zk_verifier")
+        .add_attribute(
+            "new_verifier",
+            new_verifier.unwrap_or_else(|| "<cleared>".to_string()),
+        ))
+}
+
+fn execute_rotate_jolt_verifier(
+    deps: DepsMut,
+    info: MessageInfo,
+    new_verifier: Option<String>,
+) -> Result<Response, ContractError> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+    if info.sender != cfg.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let resolved = match &new_verifier {
+        Some(raw) => Some(deps.api.addr_validate(raw)?),
+        None => None,
+    };
+    cfg.jolt_verifier = resolved;
+    CONFIG.save(deps.storage, &cfg)?;
+    Ok(Response::new()
+        .add_attribute("action", "rotate_jolt_verifier")
         .add_attribute(
             "new_verifier",
             new_verifier.unwrap_or_else(|| "<cleared>".to_string()),

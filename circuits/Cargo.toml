@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = [
+    "sensor-safety",
+    "intent-safety",
+    "consensus-safety",
+    "batch-safety",
+    "proof-aggregation",
+    "moultbook-membership",
+    "jolt-guests",
+]

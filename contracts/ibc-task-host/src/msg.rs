@@ -8,6 +8,7 @@ pub struct InstantiateMsg {
     pub task_ledger: Option<String>,
     pub escrow: Option<String>,
     pub zk_verifier: Option<String>,
+    pub jolt_verifier: Option<String>,
     /// Whitelisted junoswap-pair contracts for cross-chain swap
     pub allowed_pairs: Vec<String>,
 }
@@ -25,6 +26,7 @@ pub enum ExecuteMsg {
         task_ledger: Option<String>,
         escrow: Option<String>,
         zk_verifier: Option<String>,
+        jolt_verifier: Option<String>,
         allowed_pairs: Option<Vec<String>>,
     },
 }
@@ -67,6 +69,19 @@ pub enum QueryMsg {
     Config {},
     #[returns(HostStatsResponse)]
     Stats {},
+    #[returns(ProofStatusResponse)]
+    ProofStatus {},
+}
+
+#[cw_serde]
+pub struct ProofStatusResponse {
+    pub has_proof: bool,
+    pub proof_size_bytes: u64,
+    pub program_hash: Option<String>,
+    pub proof_sha256: Option<String>,
+    pub last_verify_verified: bool,
+    pub last_verify_block: u64,
+    pub verifier_mode: Option<String>,
 }
 
 #[cw_serde]
@@ -75,6 +90,7 @@ pub struct HostConfigResponse {
     pub task_ledger: Option<Addr>,
     pub escrow: Option<Addr>,
     pub zk_verifier: Option<Addr>,
+    pub jolt_verifier: Option<Addr>,
     pub allowed_pairs: Vec<Addr>,
 }
 

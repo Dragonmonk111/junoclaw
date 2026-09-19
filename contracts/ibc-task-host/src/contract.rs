@@ -40,6 +40,10 @@ pub fn instantiate(
             .zk_verifier
             .map(|a| deps.api.addr_validate(&a))
             .transpose()?,
+        jolt_verifier: msg
+            .jolt_verifier
+            .map(|a| deps.api.addr_validate(&a))
+            .transpose()?,
         allowed_pairs,
     };
 
@@ -62,8 +66,9 @@ pub fn execute(
             task_ledger,
             escrow,
             zk_verifier,
+            jolt_verifier,
             allowed_pairs,
-        } => execute_update_config(deps, info, task_ledger, escrow, zk_verifier, allowed_pairs),
+        } => execute_update_config(deps, info, task_ledger, escrow, zk_verifier, jolt_verifier, allowed_pairs),
     }
 }
 
@@ -157,7 +162,7 @@ fn execute_accept_task(
         .add_attribute("action", "ibc_accept_task"))
 }
 
-/// SubmitProof — forward to zk-verifier
+/// SubmitProof — forward to jolt-verifier (preferred) or zk-verifier (legacy)
 fn execute_submit_proof(
     deps: DepsMut,
     _env: Env,
@@ -169,39 +174,69 @@ fn execute_submit_proof(
     agent_origin_addr: String,
 ) -> Result<Response, ContractError> {
     let config = HOST_CONFIG.load(deps.storage)?;
-    let zk_verifier = config
-        .zk_verifier
-        .ok_or(ContractError::Unauthorized {
-            reason: "zk-verifier not configured".into(),
-        })?;
 
     let mut stats = HOST_STATS.load(deps.storage)?;
     stats.total_submit_proof += 1;
     HOST_STATS.save(deps.storage, &stats)?;
 
-    let verify_msg = serde_json::json!({
-        "verify_proof": {
-            "task_id": task_id,
-            "proof_base64": proof_b64,
-            "public_inputs_base64": public_inputs_b64,
-        }
-    });
-
-    let sub_msg = SubMsg::new(WasmMsg::Execute {
-        contract_addr: zk_verifier.to_string(),
-        msg: to_json_binary(&verify_msg)?,
-        funds: vec![],
-    });
+    let (verifier_addr, sub_msgs) = if let Some(jv) = &config.jolt_verifier {
+        // Jolt verifier path: StoreProof then VerifyProof
+        let store_msg = serde_json::json!({
+            "store_proof": {
+                "proof_base64": &proof_b64,
+                "program_hash": None::<String>,
+            }
+        });
+        let verify_msg = serde_json::json!({
+            "verify_proof": {
+                "proof_base64": &proof_b64,
+            }
+        });
+        let store_sub = SubMsg::new(WasmMsg::Execute {
+            contract_addr: jv.to_string(),
+            msg: to_json_binary(&store_msg)?,
+            funds: vec![],
+        });
+        let verify_sub = SubMsg::new(WasmMsg::Execute {
+            contract_addr: jv.to_string(),
+            msg: to_json_binary(&verify_msg)?,
+            funds: vec![],
+        });
+        (jv.clone(), vec![store_sub, verify_sub])
+    } else if let Some(zv) = &config.zk_verifier {
+        // Legacy Groth16 verifier path
+        let verify_msg = serde_json::json!({
+            "verify_proof": {
+                "task_id": task_id,
+                "proof_base64": &proof_b64,
+                "public_inputs_base64": &public_inputs_b64,
+            }
+        });
+        let sub = SubMsg::new(WasmMsg::Execute {
+            contract_addr: zv.to_string(),
+            msg: to_json_binary(&verify_msg)?,
+            funds: vec![],
+        });
+        (zv.clone(), vec![sub])
+    } else {
+        return Err(ContractError::Unauthorized {
+            reason: "no verifier configured (set jolt_verifier or zk_verifier)".into(),
+        });
+    };
 
     let event = Event::new("wasm-ibc_submit_proof")
         .add_attribute("task_id", task_id.to_string())
+        .add_attribute("verifier", verifier_addr.to_string())
         .add_attribute("origin_chain", &agent_origin_chain)
         .add_attribute("origin_addr", &agent_origin_addr);
 
-    Ok(Response::new()
-        .add_submessage(sub_msg)
+    let mut response = Response::new()
         .add_event(event)
-        .add_attribute("action", "ibc_submit_proof"))
+        .add_attribute("action", "ibc_submit_proof");
+    for sm in sub_msgs {
+        response = response.add_submessage(sm);
+    }
+    Ok(response)
 }
 
 /// ReclaimExpired — forward to escrow
@@ -337,6 +372,7 @@ fn execute_update_config(
     task_ledger: Option<String>,
     escrow: Option<String>,
     zk_verifier: Option<String>,
+    jolt_verifier: Option<String>,
     allowed_pairs: Option<Vec<String>>,
 ) -> Result<Response, ContractError> {
     let mut config = HOST_CONFIG.load(deps.storage)?;
@@ -355,6 +391,9 @@ fn execute_update_config(
     }
     if let Some(zk) = zk_verifier {
         config.zk_verifier = Some(deps.api.addr_validate(&zk)?);
+    }
+    if let Some(jv) = jolt_verifier {
+        config.jolt_verifier = Some(deps.api.addr_validate(&jv)?);
     }
     if let Some(pairs) = allowed_pairs {
         config.allowed_pairs = pairs
@@ -378,6 +417,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
                 task_ledger: config.task_ledger,
                 escrow: config.escrow,
                 zk_verifier: config.zk_verifier,
+                jolt_verifier: config.jolt_verifier,
                 allowed_pairs: config.allowed_pairs,
             })
         }
@@ -389,6 +429,32 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
                 total_reclaim: stats.total_reclaim,
                 total_swap: stats.total_swap,
             })
+        }
+        QueryMsg::ProofStatus {} => {
+            let config = HOST_CONFIG.load(deps.storage)?;
+            let verifier = config.jolt_verifier.or(config.zk_verifier);
+            match verifier {
+                Some(addr) => {
+                    let query_msg = serde_json::json!({"proof_status": {}});
+                    let resp: ProofStatusResponse = deps.querier.query_wasm_smart(
+                        addr,
+                        &query_msg,
+                    )?;
+                    to_json_binary(&resp)
+                }
+                None => {
+                    let resp = ProofStatusResponse {
+                        has_proof: false,
+                        proof_size_bytes: 0,
+                        program_hash: None,
+                        proof_sha256: None,
+                        last_verify_verified: false,
+                        last_verify_block: 0,
+                        verifier_mode: None,
+                    };
+                    to_json_binary(&resp)
+                }
+            }
         }
     }
 }

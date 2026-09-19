@@ -18,6 +18,7 @@ ark-r1cs-std = "0.5"
 sensor-safety-circuit = { path = "../sensor-safety" }
 intent-safety-circuit = { path = "../intent-safety" }
 consensus-safety-circuit = { path = "../consensus-safety" }
+batch-safety-circuit = { path = "../batch-safety" }
 sha2 = "0.10"
 rand = "0.8"
 
