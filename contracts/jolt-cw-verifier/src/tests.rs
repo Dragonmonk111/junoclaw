@@ -139,6 +139,87 @@ mod tests {
     }
 
     #[test]
+    fn query_msg_json_wire_format() {
+        // The exact JSON tx-sender puts in SmartContractState.query_data.
+        let msg: QueryMsg = from_json(br#"{"proof_status":{}}"#).unwrap();
+        assert!(matches!(msg, QueryMsg::ProofStatus {}));
+        let msg: QueryMsg = from_json(br#"{"admin":{}}"#).unwrap();
+        assert!(matches!(msg, QueryMsg::Admin {}));
+    }
+
+    #[test]
+    fn store_large_proof_raw_bytes() {
+        // Regression: a 68KB proof JSON-serializes to ~239KB as Vec<u8>,
+        // exceeding the 128KB MAX_LENGTH_DB_VALUE. Raw storage must succeed.
+        let mut deps = mock_dependencies();
+        let info = mock_info("creator", &[]);
+        instantiate(
+            deps.as_mut(),
+            mock_env(),
+            info.clone(),
+            InstantiateMsg { admin: None },
+        )
+        .unwrap();
+
+        let big_proof = vec![7u8; 68291]; // same size as fib_proof.bin
+        let proof_b64 = cosmwasm_std::to_base64(&big_proof);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info.clone(),
+            ExecuteMsg::StoreProof {
+                proof_base64: proof_b64,
+                program_hash: None,
+            },
+        )
+        .unwrap();
+
+        // Stored proof must be retrievable by verify_proof (no inline proof).
+        let res = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::VerifyProof {
+                proof_base64: None,
+                public_io_base64: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(res.attributes[2].value, "true");
+
+        let q_res = query(deps.as_ref(), mock_env(), QueryMsg::ProofStatus {}).unwrap();
+        let status: ProofStatusResponse = from_json(q_res).unwrap();
+        assert!(status.has_proof);
+        assert_eq!(status.proof_size_bytes, 68291);
+    }
+
+    #[test]
+    fn store_large_vk_raw_bytes() {
+        // Regression: a ~105KB VK base64-encodes to ~140KB as Binary,
+        // exceeding the 128KB limit. Raw storage must succeed.
+        let mut deps = mock_dependencies();
+        let info = mock_info("creator", &[]);
+        instantiate(
+            deps.as_mut(),
+            mock_env(),
+            info.clone(),
+            InstantiateMsg { admin: None },
+        )
+        .unwrap();
+
+        let big_vk = vec![9u8; 104000];
+        let vk_b64 = cosmwasm_std::to_base64(&big_vk);
+        let res = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::StoreVerifyingKey { vk_base64: vk_b64 },
+        )
+        .unwrap();
+        assert_eq!(res.attributes[1].value, "104000");
+    }
+
+    #[test]
     fn verify_empty_proof_fails() {
         let mut deps = mock_dependencies();
         let info = mock_info("creator", &[]);

@@ -8,7 +8,10 @@ use crate::error::ContractError;
 use crate::msg::{
     AdminResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, ProofStatusResponse, QueryMsg,
 };
-use crate::state::{Config, LastVerifyResult, StoredProof, CONFIG, LAST_VERIFY, STORED_PROOF, VERIFIER_MODE, VERIFYING_KEY};
+use crate::state::{
+    Config, LastVerifyResult, StoredProof, CONFIG, LAST_VERIFY, PROOF_DATA_KEY, STORED_PROOF,
+    VERIFIER_MODE, VERIFYING_KEY_KEY,
+};
 
 const CONTRACT_NAME: &str = "crates.io:jolt-cw-verifier";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -106,8 +109,12 @@ fn execute_store_proof(
     let proof_hash: [u8; 32] = hasher.finalize().into();
     let proof_hash_hex = hex::encode(proof_hash);
 
+    // Store proof bytes raw — Item<T> JSON-serializes Vec<u8> into an array
+    // of numbers (~3.5x expansion), which exceeds the 128KB db value limit.
+    deps.storage.set(PROOF_DATA_KEY, &proof_data);
+
     let stored = StoredProof {
-        data: proof_data.clone(),
+        size: proof_data.len() as u64,
         program_hash: program_hash.clone(),
         proof_hash: proof_hash_hex.clone(),
     };
@@ -143,7 +150,9 @@ fn execute_store_verifying_key(
     }
 
     let vk_size = vk_data.len();
-    VERIFYING_KEY.save(deps.storage, &Binary::from(vk_data))?;
+    // Store VK bytes raw — Item<Binary> base64-encodes (~1.33x expansion),
+    // which exceeds the 128KB db value limit for ~105KB keys.
+    deps.storage.set(VERIFYING_KEY_KEY, &vk_data);
 
     Ok(Response::new()
         .add_attribute("action", "store_verifying_key")
@@ -158,11 +167,10 @@ fn execute_verify_proof(
 ) -> Result<Response, ContractError> {
     let proof_data = match proof_base64 {
         Some(b64) => cosmwasm_std::from_base64(&b64)?,
-        None => STORED_PROOF
-            .load(deps.storage)?
-            .data
-            .into_iter()
-            .collect::<Vec<u8>>(),
+        None => deps
+            .storage
+            .get(PROOF_DATA_KEY)
+            .ok_or(ContractError::NoProofStored)?,
     };
 
     let proof_size = proof_data.len();
@@ -177,7 +185,7 @@ fn execute_verify_proof(
         // Phase 2: Full cryptographic verification
         // Requires the verifying key (JoltVerifierPreprocessing) stored via
         // StoreVerifyingKey, plus the public I/O (JoltDevice) for this proof.
-        let vk_data = VERIFYING_KEY.load(deps.storage).map_err(|_| {
+        let vk_data = deps.storage.get(VERIFYING_KEY_KEY).ok_or_else(|| {
             ContractError::VerificationFailed(
                 "no verifying key stored; call StoreVerifyingKey first".to_string(),
             )
@@ -310,13 +318,13 @@ fn verify_jolt_proof_full(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::ProofStatus {} => {
-            let has_proof = STORED_PROOF.load(deps.storage).is_ok();
             let stored = STORED_PROOF.load(deps.storage).ok();
+            let has_proof = stored.is_some() && deps.storage.get(PROOF_DATA_KEY).is_some();
             let last = LAST_VERIFY.load(deps.storage).ok();
 
             let resp = ProofStatusResponse {
                 has_proof,
-                proof_size_bytes: stored.as_ref().map(|s| s.data.len() as u64).unwrap_or(0),
+                proof_size_bytes: stored.as_ref().map(|s| s.size).unwrap_or(0),
                 program_hash: stored.as_ref().and_then(|s| s.program_hash.clone()),
                 proof_sha256: stored.as_ref().map(|s| s.proof_hash.clone()),
                 last_verify_verified: last.as_ref().map(|l| l.verified).unwrap_or(false),
