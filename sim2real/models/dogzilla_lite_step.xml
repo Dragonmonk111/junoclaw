@@ -1,0 +1,162 @@
+<!--
+  DOGZILLA-Lite MJCF with step obstacle for G7 step climbing training.
+  Same as dogzilla_lite.xml but adds a 1-2cm step in the walking path.
+  The step height is controlled by the env via geom size modification at reset.
+-->
+<mujoco model="dogzilla_lite_step">
+  <compiler angle="radian" autolimits="true"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="RK4"/>
+
+  <default>
+    <joint damping="0.3" armature="0.01" frictionloss="0.05"/>
+    <geom contype="1" conaffinity="1" friction="0.8 0.02 0.01" solref="0.005 1"/>
+    <position kp="8" ctrlrange="-2.2 2.2"/>
+    <default class="leg">
+      <geom type="capsule" size="0.009" rgba="0.6 0.64 0.68 1"/>
+    </default>
+  </default>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.3 0.35" rgb2="0.05 0.05 0.08" width="128" height="128"/>
+    <texture name="grid" type="2d" builtin="checker" rgb1="0.15 0.16 0.18" rgb2="0.1 0.11 0.13" width="256" height="256"/>
+    <material name="grid" texture="grid" texrepeat="8 8" reflectance="0.1"/>
+  </asset>
+
+  <worldbody>
+    <light directional="true" diffuse="0.8 0.8 0.8" pos="0 0 3" dir="0 0 -1"/>
+    <geom name="floor" type="plane" size="5 5 0.1" material="grid"/>
+    <!-- Step obstacle: a thin box the robot must step over.
+         Height and position are randomized by the env at reset.
+         Default: 1.5cm high, placed 0.3m ahead of robot start. -->
+    <geom name="step_obstacle" type="box" pos="0.3 0 0.0075" size="0.03 0.5 0.0075" rgba="0.8 0.3 0.2 0.8"/>
+
+    <body name="trunk" pos="0 0 0.12">
+      <freejoint name="root"/>
+      <inertial pos="0 0 0" mass="0.42" diaginertia="0.0018 0.0035 0.0040"/>
+      <geom name="trunk_geom" type="box" size="0.09 0.05 0.0375" rgba="0.13 0.15 0.18 1"/>
+      <geom name="head_geom" type="box" pos="0.10 0 0.03" size="0.035 0.035 0.02" rgba="0.18 0.2 0.24 1"/>
+      <site name="imu" pos="0 0 0" size="0.005"/>
+
+      <!-- Arm: base(yaw) -> shoulder(pitch) -> gripper(open/close) -->
+      <body name="arm_base_link" pos="0.10 0 0.055">
+        <joint name="arm_base" type="hinge" axis="0 0 1" range="-1.57 1.57" damping="0.2"/>
+        <inertial pos="0 0 0" mass="0.01" diaginertia="1e-5 1e-5 1e-5"/>
+        <geom type="cylinder" size="0.01 0.01" rgba="0.89 0.7 0.25 1"/>
+        <body name="arm_shoulder_link" pos="0 0 0.02">
+          <joint name="arm_shoulder" type="hinge" axis="0 1 0" range="-1.2 1.2" damping="0.2"/>
+          <inertial pos="0 0 0" mass="0.01" diaginertia="1e-5 1e-5 1e-5"/>
+          <geom type="capsule" size="0.008" fromto="0 0 0 0.05 0 0" rgba="0.89 0.7 0.25 1"/>
+          <body name="arm_gripper_link" pos="0.05 0 0">
+            <joint name="arm_gripper" type="hinge" axis="1 0 0" range="0 1.2" damping="0.1"/>
+            <inertial pos="0 0 0" mass="0.008" diaginertia="1e-6 1e-6 1e-6"/>
+            <geom type="box" size="0.011 0.007 0.009" rgba="0.89 0.7 0.25 1"/>
+          </body>
+        </body>
+      </body>
+
+      <!-- Legs: fl, fr, rl, rr -->
+      <body name="fl_hip_link" pos="0.09 0.05 0">
+        <joint name="fl_hip" type="hinge" axis="1 0 0" range="-0.6 0.6"/>
+        <inertial pos="0 0 0" mass="0.012" diaginertia="1e-5 1e-5 1e-5"/>
+        <geom class="leg" fromto="0 0 0 0 0.02 0"/>
+        <body name="fl_thigh_link" pos="0 0.02 0">
+          <joint name="fl_thigh" type="hinge" axis="0 1 0" range="-1.57 1.57"/>
+          <inertial pos="0 0 -0.03" mass="0.03" diaginertia="1e-5 1e-5 3e-6"/>
+          <geom class="leg" fromto="0 0 0 0 0 -0.06"/>
+          <body name="fl_calf_link" pos="0 0 -0.06">
+            <joint name="fl_calf" type="hinge" axis="0 1 0" range="-2.2 0.2"/>
+            <inertial pos="0 0 -0.03" mass="0.02" diaginertia="6e-6 6e-6 2e-6"/>
+            <geom class="leg" fromto="0 0 0 0 0 -0.06"/>
+            <geom name="fl_foot" type="sphere" pos="0 0 -0.06" size="0.012" friction="1.0 0.02 0.01" rgba="0.1 0.1 0.12 1"/>
+          </body>
+        </body>
+      </body>
+
+      <body name="fr_hip_link" pos="0.09 -0.05 0">
+        <joint name="fr_hip" type="hinge" axis="1 0 0" range="-0.6 0.6"/>
+        <inertial pos="0 0 0" mass="0.012" diaginertia="1e-5 1e-5 1e-5"/>
+        <geom class="leg" fromto="0 0 0 0 -0.02 0"/>
+        <body name="fr_thigh_link" pos="0 -0.02 0">
+          <joint name="fr_thigh" type="hinge" axis="0 1 0" range="-1.57 1.57"/>
+          <inertial pos="0 0 -0.03" mass="0.03" diaginertia="1e-5 1e-5 3e-6"/>
+          <geom class="leg" fromto="0 0 0 0 0 -0.06"/>
+          <body name="fr_calf_link" pos="0 0 -0.06">
+            <joint name="fr_calf" type="hinge" axis="0 1 0" range="-2.2 0.2"/>
+            <inertial pos="0 0 -0.03" mass="0.02" diaginertia="6e-6 6e-6 2e-6"/>
+            <geom class="leg" fromto="0 0 0 0 0 -0.06"/>
+            <geom name="fr_foot" type="sphere" pos="0 0 -0.06" size="0.012" friction="1.0 0.02 0.01" rgba="0.1 0.1 0.12 1"/>
+          </body>
+        </body>
+      </body>
+
+      <body name="rl_hip_link" pos="-0.09 0.05 0">
+        <joint name="rl_hip" type="hinge" axis="1 0 0" range="-0.6 0.6"/>
+        <inertial pos="0 0 0" mass="0.012" diaginertia="1e-5 1e-5 1e-5"/>
+        <geom class="leg" fromto="0 0 0 0 0.02 0"/>
+        <body name="rl_thigh_link" pos="0 0.02 0">
+          <joint name="rl_thigh" type="hinge" axis="0 1 0" range="-1.57 1.57"/>
+          <inertial pos="0 0 -0.03" mass="0.03" diaginertia="1e-5 1e-5 3e-6"/>
+          <geom class="leg" fromto="0 0 0 0 0 -0.06"/>
+          <body name="rl_calf_link" pos="0 0 -0.06">
+            <joint name="rl_calf" type="hinge" axis="0 1 0" range="-2.2 0.2"/>
+            <inertial pos="0 0 -0.03" mass="0.02" diaginertia="6e-6 6e-6 2e-6"/>
+            <geom class="leg" fromto="0 0 0 0 0 -0.06"/>
+            <geom name="rl_foot" type="sphere" pos="0 0 -0.06" size="0.012" friction="1.0 0.02 0.01" rgba="0.1 0.1 0.12 1"/>
+          </body>
+        </body>
+      </body>
+
+      <body name="rr_hip_link" pos="-0.09 -0.05 0">
+        <joint name="rr_hip" type="hinge" axis="1 0 0" range="-0.6 0.6"/>
+        <inertial pos="0 0 0" mass="0.012" diaginertia="1e-5 1e-5 1e-5"/>
+        <geom class="leg" fromto="0 0 0 0 -0.02 0"/>
+        <body name="rr_thigh_link" pos="0 -0.02 0">
+          <joint name="rr_thigh" type="hinge" axis="0 1 0" range="-1.57 1.57"/>
+          <inertial pos="0 0 -0.03" mass="0.03" diaginertia="1e-5 1e-5 3e-6"/>
+          <geom class="leg" fromto="0 0 0 0 0 -0.06"/>
+          <body name="rr_calf_link" pos="0 0 -0.06">
+            <joint name="rr_calf" type="hinge" axis="0 1 0" range="-2.2 0.2"/>
+            <inertial pos="0 0 -0.03" mass="0.02" diaginertia="6e-6 6e-6 2e-6"/>
+            <geom class="leg" fromto="0 0 0 0 0 -0.06"/>
+            <geom name="rr_foot" type="sphere" pos="0 0 -0.06" size="0.012" friction="1.0 0.02 0.01" rgba="0.1 0.1 0.12 1"/>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <sensor>
+    <framequat name="trunk_quat" objtype="site" objname="imu"/>
+    <gyro name="trunk_gyro" site="imu"/>
+    <accelerometer name="trunk_accel" site="imu"/>
+    <framepos name="trunk_pos" objtype="site" objname="imu"/>
+  </sensor>
+
+  <actuator>
+    <position name="fl_hip"    joint="fl_hip"    kp="6"/>
+    <position name="fl_thigh"  joint="fl_thigh"  kp="10"/>
+    <position name="fl_calf"   joint="fl_calf"   kp="10"/>
+    <position name="fr_hip"    joint="fr_hip"    kp="6"/>
+    <position name="fr_thigh"  joint="fr_thigh"  kp="10"/>
+    <position name="fr_calf"   joint="fr_calf"   kp="10"/>
+    <position name="rl_hip"    joint="rl_hip"    kp="6"/>
+    <position name="rl_thigh"  joint="rl_thigh"  kp="10"/>
+    <position name="rl_calf"   joint="rl_calf"   kp="10"/>
+    <position name="rr_hip"    joint="rr_hip"    kp="6"/>
+    <position name="rr_thigh"  joint="rr_thigh"  kp="10"/>
+    <position name="rr_calf"   joint="rr_calf"   kp="10"/>
+    <position name="arm_base"     joint="arm_base"     kp="3"/>
+    <position name="arm_shoulder" joint="arm_shoulder" kp="3"/>
+    <position name="arm_gripper"  joint="arm_gripper"  kp="2"/>
+  </actuator>
+
+  <keyframe>
+    <key name="stand"
+      qpos="0 0 0.12  1 0 0 0
+            0 0 0
+            0 0.5 -0.9
+            0 0.5 -0.9
+            0 0.5 -0.9
+            0 0.5 -0.9"/>
+  </keyframe>
+</mujoco>

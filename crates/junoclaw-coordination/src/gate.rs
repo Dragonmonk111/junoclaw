@@ -98,13 +98,32 @@ impl Default for MockProofVerifier {
     }
 }
 
+/// Which ZK proof system the verifier contract uses.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VerifierType {
+    /// BN254 Groth16 — queries `last_verify` on the zk-verifier contract
+    BN254,
+    /// Lattice Jolt — queries `proof_status` on the jolt-cw-verifier contract
+    Jolt,
+}
+
+impl Default for VerifierType {
+    fn default() -> Self {
+        VerifierType::BN254
+    }
+}
+
 /// Configuration for the on-chain proof verifier.
 #[derive(Clone, Debug)]
 pub struct OnChainProofVerifierConfig {
     /// Juno RPC endpoint (e.g. "http://localhost:26657")
     pub chain_rpc: String,
-    /// zk-verifier contract address
+    /// zk-verifier contract address (BN254 Groth16 path)
     pub verifier_addr: String,
+    /// jolt-cw-verifier contract address (lattice Jolt path)
+    pub jolt_verifier_addr: String,
+    /// Which verifier type is active
+    pub verifier_type: VerifierType,
     /// HTTP timeout for chain queries
     pub timeout: Duration,
 }
@@ -114,6 +133,8 @@ impl Default for OnChainProofVerifierConfig {
         Self {
             chain_rpc: "http://localhost:26657".to_string(),
             verifier_addr: String::new(),
+            jolt_verifier_addr: String::new(),
+            verifier_type: VerifierType::BN254,
             timeout: Duration::from_secs(10),
         }
     }
@@ -147,13 +168,36 @@ impl OnChainProofVerifier {
 
     /// Create from environment variables.
     /// JUNO_CHAIN_RPC — RPC endpoint (default: http://localhost:26657)
-    /// JUNO_ZK_VERIFIER_ADDR — zk-verifier contract address
+    /// JUNO_ZK_VERIFIER_ADDR — BN254 zk-verifier contract address
+    /// JUNO_JOLT_VERIFIER_ADDR — Jolt (lattice) verifier contract address
+    /// JUNO_VERIFIER_TYPE — "bn254" or "jolt" (default: bn254)
     pub fn from_env() -> Self {
+        let verifier_addr = std::env::var("JUNO_ZK_VERIFIER_ADDR")
+            .unwrap_or_default();
+        let jolt_verifier_addr = std::env::var("JUNO_JOLT_VERIFIER_ADDR")
+            .unwrap_or_default();
+        let verifier_type = match std::env::var("JUNO_VERIFIER_TYPE")
+            .unwrap_or_default()
+            .to_lowercase()
+            .as_str()
+        {
+            "jolt" => VerifierType::Jolt,
+            _ => VerifierType::BN254,
+        };
+
+        // Auto-detect: if only jolt addr is set, use Jolt
+        let verifier_type = if verifier_addr.is_empty() && !jolt_verifier_addr.is_empty() {
+            VerifierType::Jolt
+        } else {
+            verifier_type
+        };
+
         let config = OnChainProofVerifierConfig {
             chain_rpc: std::env::var("JUNO_CHAIN_RPC")
                 .unwrap_or_else(|_| "http://localhost:26657".to_string()),
-            verifier_addr: std::env::var("JUNO_ZK_VERIFIER_ADDR")
-                .unwrap_or_default(),
+            verifier_addr,
+            jolt_verifier_addr,
+            verifier_type,
             ..Default::default()
         };
         Self::new(config)
@@ -229,20 +273,36 @@ impl OnChainProofVerifier {
         }
     }
 
-    /// Query the zk-verifier contract's LastVerify as a fallback.
+    /// Query the verifier contract's last verification result.
+    /// For BN254: queries `last_verify` on zk-verifier.
+    /// For Jolt: queries `proof_status` on jolt-cw-verifier.
     async fn check_last_verify(&self) -> Option<bool> {
-        if self.config.verifier_addr.is_empty() {
-            return None;
-        }
+        let addr = match self.config.verifier_type {
+            VerifierType::BN254 => {
+                if self.config.verifier_addr.is_empty() {
+                    return None;
+                }
+                &self.config.verifier_addr
+            }
+            VerifierType::Jolt => {
+                if self.config.jolt_verifier_addr.is_empty() {
+                    return None;
+                }
+                &self.config.jolt_verifier_addr
+            }
+        };
 
-        let query_msg = serde_json::json!({ "last_verify": {} });
+        let query_msg = match self.config.verifier_type {
+            VerifierType::BN254 => serde_json::json!({ "last_verify": {} }),
+            VerifierType::Jolt => serde_json::json!({ "proof_status": {} }),
+        };
         let query_bytes = serde_json::to_vec(&query_msg).ok()?;
         let query_b64 = base64_url_encode(&query_bytes);
 
         let url = format!(
             "{}/abci_query?path=\"/cosmwasm.wasm.v1.Query/SmartContractState/{}%2F{}\"",
             self.config.chain_rpc.trim_end_matches('/'),
-            self.config.verifier_addr,
+            addr,
             query_b64,
         );
 
@@ -260,7 +320,13 @@ impl OnChainProofVerifier {
 
         let decoded = base64_std_decode(value)?;
         let result: serde_json::Value = serde_json::from_slice(&decoded).ok()?;
-        result.get("verified").and_then(|v| v.as_bool())
+
+        // BN254 zk-verifier returns {"verified": bool}
+        // Jolt cw-verifier returns {"last_verify_verified": bool}
+        match self.config.verifier_type {
+            VerifierType::BN254 => result.get("verified").and_then(|v| v.as_bool()),
+            VerifierType::Jolt => result.get("last_verify_verified").and_then(|v| v.as_bool()),
+        }
     }
 }
 

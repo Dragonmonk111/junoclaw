@@ -54,6 +54,7 @@ import {
   composeAndBroadcastMsg,
 } from "./tools/tx-builder.js";
 import { scaffoldProject, listTemplates, DAO_TEMPLATES } from "./tools/scaffold.js";
+import { simReset, simStep, simObserve, simEval, simInfo } from "./tools/sim-tools.js";
 
 const server = new McpServer({
   name: "cosmos-mcp",
@@ -652,6 +653,74 @@ server.tool(
     };
 
     return { content: [{ type: "text" as const, text: JSON.stringify(output, null, 2) }] };
+  }
+);
+
+// ════════════════════════════════════════════════════
+//  SIMULATION TOOLS — MuJoCo robotics sim (Dogzilla)
+//  Requires sim_server.py running on localhost:8765
+//  Start: python sim2real/sim_server.py
+// ════════════════════════════════════════════════════
+
+server.tool(
+  "sim_reset",
+  "Reset the Dogzilla MuJoCo simulator to a fallen pose. Optionally specify a tilt angle (degrees) or a random tilt range. Returns the initial observation (41-dim: joint positions, velocities, trunk orientation, gyro, accel, height).",
+  {
+    tilt_degrees: z.number().optional().describe("Specific tilt angle in degrees (60=leaning, 90=on side, 150=upside down). If omitted, random tilt in [tilt_min, tilt_max]."),
+    tilt_min: z.number().optional().describe("Minimum tilt angle in degrees for random sampling (default 60)"),
+    tilt_max: z.number().optional().describe("Maximum tilt angle in degrees for random sampling (default 150)"),
+    seed: z.number().optional().describe("Random seed for reproducibility"),
+  },
+  async (params) => {
+    const result = await simReset(params);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "sim_step",
+  "Apply an action vector (15-dim, [-1,1] per joint) to the Dogzilla simulator and advance physics one step. Returns next observation, reward, terminated/truncated flags, and info (upright score, height, step count). If action is omitted, uses zero (neutral pose).",
+  {
+    action: z.array(z.number()).optional().describe("15-dim action vector in [-1,1]. Order: fl_hip, fl_thigh, fl_calf, fr_hip, fr_thigh, fr_calf, rl_hip, rl_thigh, rl_calf, rr_hip, rr_thigh, rr_calf, arm_base, arm_shoulder, arm_gripper. Omit for zero action."),
+  },
+  async ({ action }) => {
+    const result = await simStep({ action });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "sim_observe",
+  "Read the current simulator state without stepping. Returns the 41-dim observation and info (upright, height, step count).",
+  {},
+  async () => {
+    const result = await simObserve();
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "sim_eval",
+  "Evaluate a trained PPO recovery policy across a tilt range. Returns success rate, per-episode best upright scores, and episode lengths. Requires sim_server.py running and the checkpoint at sim2real/checkpoints/.",
+  {
+    checkpoint: z.string().optional().describe("Path to PPO checkpoint .zip file (default: checkpoints/ppo_recovery.zip)"),
+    tilt_min: z.number().optional().describe("Minimum tilt in degrees (default 60)"),
+    tilt_max: z.number().optional().describe("Maximum tilt in degrees (default 150)"),
+    n_episodes: z.number().optional().describe("Number of evaluation episodes (default 20)"),
+  },
+  async ({ checkpoint, tilt_min, tilt_max, n_episodes }) => {
+    const result = await simEval({ checkpoint, tilt_min, tilt_max, n_episodes });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "sim_info",
+  "Check if the MuJoCo sim server is running and get model info (action dim, observation dim, stand height).",
+  {},
+  async () => {
+    const result = await simInfo();
+    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   }
 );
 

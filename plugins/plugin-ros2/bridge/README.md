@@ -75,6 +75,35 @@ Returns a batch of reflex cycle hashes for Merkle tree construction:
 }
 ```
 
+### `POST /robot/policy/load`, `/start`, `/stop`, `GET /robot/policy/status`
+
+Runs a sim2real RL policy (trained in `sim2real/`, exported to ONNX by
+`sim2real/export_onnx.py`) in closed loop against live telemetry. Requires
+the `onnx` extra: `pip install junoclaw-ros2-bridge[onnx]`.
+
+```bash
+curl -X POST localhost:8080/robot/policy/load \
+  -d '{"onnx_path": "sim2real/checkpoints/policy_walk.onnx"}'
+curl -X POST localhost:8080/robot/policy/start -d '{"hz": 30}'
+curl localhost:8080/robot/policy/status
+curl -X POST localhost:8080/robot/policy/stop
+```
+
+Every inferred joint target is checked against the same fail-closed
+`MAX_JOINT_DELTA_PER_CYCLE_RAD` clamp `POST /skills/{name}/play` uses (see
+that method's docstring in `server.py`) — the loop stops on the first step
+that would move any joint further than the clamp allows, rather than
+commanding an unvalidated jump. `GET /robot/policy/status` reports whether
+that happened (`status: "rejected"`, plus `reason`). This is **not** the
+`SkillGate`/`WorldModel` gate from `junoclaw-physics` — `plugin-ros2` does
+not yet depend on it in-process — so treat it as an interim measure, same
+as skill playback.
+
+Known observation gap: the policy's obs space includes trunk height, which
+this bridge cannot measure (no height sensor, no state estimator) — it
+feeds a constant fallback instead. See `sim2real/README.md` for the full
+list of sim2real gaps.
+
 ## Installation
 
 ```bash

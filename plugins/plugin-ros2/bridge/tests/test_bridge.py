@@ -386,6 +386,116 @@ async def test_skill_marketplace_msg(client, app):
     assert resp.status_code == 404
 
 
+def _make_tiny_policy_onnx(path, target_action):
+    """Build a minimal ONNX graph: action = tanh(W @ observation + b), with
+    W = 0 so the output is a constant `tanh(b)` regardless of observation —
+    lets tests drive an exact, known joint-target vector without needing a
+    real trained checkpoint.
+
+    `target_action` is the desired action vector in [-1, 1] (length 15,
+    QUADRUPED_JOINTS order); bias is solved via atanh so tanh(b) == target.
+    """
+    import numpy as np
+    import onnx
+    from onnx import helper, TensorProto
+
+    obs_dim, act_dim = 41, 15
+    a = np.clip(np.asarray(target_action, dtype=np.float64), -0.999, 0.999)
+    bias = np.arctanh(a).astype(np.float32)
+    weight = np.zeros((obs_dim, act_dim), dtype=np.float32)
+
+    w_init = helper.make_tensor("W", TensorProto.FLOAT, weight.shape, weight.flatten().tolist())
+    b_init = helper.make_tensor("b", TensorProto.FLOAT, bias.shape, bias.flatten().tolist())
+    obs_info = helper.make_tensor_value_info("observation", TensorProto.FLOAT, ["batch", obs_dim])
+    action_info = helper.make_tensor_value_info("action", TensorProto.FLOAT, ["batch", act_dim])
+
+    nodes = [
+        helper.make_node("MatMul", ["observation", "W"], ["matmul_out"]),
+        helper.make_node("Add", ["matmul_out", "b"], ["add_out"]),
+        helper.make_node("Tanh", ["add_out"], ["action"]),
+    ]
+    graph = helper.make_graph(nodes, "tiny_policy", [obs_info], [action_info], initializer=[w_init, b_init])
+    model = helper.make_model(graph, producer_name="junoclaw-test", opset_imports=[helper.make_opsetid("", 17)])
+    onnx.checker.check_model(model)
+    onnx.save(model, path)
+
+
+def _action_holding_position(app, position=0.0):
+    """Action vector that maps (via JOINT_RANGES_RAD) to `position` for
+    every joint — i.e. a policy that commands the robot to stay put."""
+    from junoclaw_ros2_bridge.server import Ros2Bridge
+
+    out = []
+    for joint in Ros2Bridge.QUADRUPED_JOINTS:
+        lo, hi = Ros2Bridge.JOINT_RANGES_RAD[joint]
+        mid, half = (lo + hi) / 2.0, (hi - lo) / 2.0
+        out.append((position - mid) / half)
+    return out
+
+
+async def test_policy_load_not_found(client):
+    resp = await client.post("/robot/policy/load", json={"onnx_path": "/no/such/policy.onnx"})
+    assert resp.status_code == 404
+
+
+async def test_policy_start_without_load(client):
+    resp = await client.post("/robot/policy/start")
+    assert resp.status_code == 409
+
+
+async def test_policy_status_idle_by_default(client):
+    resp = await client.get("/robot/policy/status")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "idle"
+
+
+async def test_policy_runs_and_moves_joints(client, app, tmp_path):
+    onnx_path = str(tmp_path / "hold_policy.onnx")
+    _make_tiny_policy_onnx(onnx_path, _action_holding_position(app, position=0.0))
+
+    resp = await client.post("/robot/policy/load", json={"onnx_path": onnx_path})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "loaded"
+
+    resp = await client.post("/robot/policy/start", json={"hz": 50})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "running"
+
+    await asyncio.sleep(0.2)
+
+    resp = await client.get("/robot/policy/status")
+    status = resp.json()
+    assert status["status"] == "running"
+    assert status["steps_run"] > 0
+    assert status["rejected_at_step"] is None
+
+    resp = await client.post("/robot/policy/stop")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "stopped"
+
+
+async def test_policy_rejects_over_clamp(client, app, tmp_path):
+    # An action near +1 for every joint maps close to each joint's *upper*
+    # range bound — a large jump from the all-zero default state, well
+    # past MAX_JOINT_DELTA_PER_CYCLE_RAD for most joints.
+    onnx_path = str(tmp_path / "jump_policy.onnx")
+    _make_tiny_policy_onnx(onnx_path, [0.999] * 15)
+
+    resp = await client.post("/robot/policy/load", json={"onnx_path": onnx_path})
+    assert resp.status_code == 200
+
+    resp = await client.post("/robot/policy/start", json={"hz": 50})
+    assert resp.status_code == 200
+
+    await asyncio.sleep(0.2)
+
+    resp = await client.get("/robot/policy/status")
+    status = resp.json()
+    assert status["status"] == "rejected"
+    assert status["rejected_at_step"] == 0
+    assert "safety clamp" in status["reason"]
+
+
 async def test_register_robot_with_taught_skill(client, app):
     _inject_skill(app, "sit", ["fl_hip"], [[0.1]])
     resp = await client.post("/robot/register")

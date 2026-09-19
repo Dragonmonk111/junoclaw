@@ -55,6 +55,26 @@ class HealthResponse(BaseModel):
     uptime_seconds: int
 
 
+class PolicyRuntime:
+    """Thin wrapper around an onnxruntime InferenceSession for a sim2real
+    RL policy exported by sim2real/export_onnx.py. Holds just enough state
+    (the session + input tensor name) to run one inference step per call;
+    all safety gating lives in Ros2Bridge.start_policy, not here.
+    """
+
+    def __init__(self, session: Any, input_name: str, onnx_path: str):
+        self.session = session
+        self.input_name = input_name
+        self.onnx_path = onnx_path
+
+    def infer(self, obs: list[float]) -> list[float]:
+        import numpy as np
+
+        obs_arr = np.asarray([obs], dtype=np.float32)
+        outputs = self.session.run(None, {self.input_name: obs_arr})
+        return outputs[0][0].tolist()
+
+
 class Ros2Bridge:
     """Core bridge logic — works with or without a real ROS2 installation."""
 
@@ -92,8 +112,14 @@ class Ros2Bridge:
         self._intent_store: dict[str, IntentResult] = {}
         self._batch_store: dict[str, BatchResult] = {}
         self._latest_joint_states: dict[str, float] = {}
+        self._latest_joint_velocities: dict[str, float] = {}
+        self._sim_joint_cmd_ts: dict[str, float] = {}
         self._latest_imu: dict[str, float] = {}
         self._latest_expression: str = "neutral"
+        # Phase E — ONNX policy runtime (see PolicyRuntime below).
+        self._policy: Optional["PolicyRuntime"] = None
+        self._policy_task: Optional[asyncio.Task] = None
+        self._last_policy_status: dict[str, Any] = {"status": "idle"}
         # Taught skills — JSON-schema-compatible with the Rust `Skill` type
         # in junoclaw-physics/src/skill.rs (manifest + keyframes), so a
         # skill exported here can be imported there and vice versa.
@@ -175,6 +201,7 @@ class Ros2Bridge:
         """Callback for /joint_states topic (quadruped)."""
         for name, pos, vel, eff in zip(msg.name, msg.position, msg.velocity, msg.effort):
             self._latest_joint_states[name] = pos
+            self._latest_joint_velocities[name] = vel
 
     def store_intent(self, intent: IntentResult):
         """Store an intent result from an action server callback."""
@@ -220,6 +247,18 @@ class Ros2Bridge:
                 pub.publish(msg)
             except Exception as e:
                 print(f"[JointCommand] Failed to publish: {e}")
+        else:
+            # Simulate mode has no real /joint_states publisher, so derive a
+            # finite-difference velocity estimate from the position delta —
+            # used only as an observation-space stand-in for policy inference
+            # (see PolicyRuntime._build_observation); real hardware fills
+            # _latest_joint_velocities from _on_joint_states instead.
+            now = time.monotonic()
+            prev_pos = self._latest_joint_states.get(joint, position)
+            prev_t = self._sim_joint_cmd_ts.get(joint, now)
+            dt = max(now - prev_t, 1e-3)
+            self._latest_joint_velocities[joint] = (position - prev_pos) / dt
+            self._sim_joint_cmd_ts[joint] = now
         self._latest_joint_states[joint] = position
 
     def state_snapshot(self) -> dict[str, Any]:
@@ -387,6 +426,174 @@ class Ros2Bridge:
             "retarget_report": report,
             "safety_clamp_rad": self.MAX_JOINT_DELTA_PER_CYCLE_RAD,
         }
+
+    # -----------------------------------------------------------------------
+    # Phase E — sim2real RL policy runtime. Loads an ONNX policy exported by
+    # sim2real/export_onnx.py (obs -> action, see sim2real/env.py::_get_obs
+    # and _action_to_joint_targets for the exact layout/scaling this mirrors)
+    # and runs closed-loop inference against live telemetry.
+    #
+    # Gating: every inferred joint target is checked against the *same*
+    # MAX_JOINT_DELTA_PER_CYCLE_RAD fail-closed clamp used by play_skill,
+    # for the same reason documented above it — plugin-ros2 does not yet
+    # depend on junoclaw-physics in-process, so this bridge has no live
+    # WorldModel/SkillGate to consult. A policy step that would move any
+    # joint further than the clamp allows is rejected outright (the policy
+    # loop stops rather than commanding an unvalidated jump).
+    # -----------------------------------------------------------------------
+
+    # Joint ranges (radians), mirrored from sim2real/models/dogzilla_lite.xml
+    # <joint range="..."> attributes — must match exactly, since the policy
+    # was trained with actions scaled against these bounds
+    # (env.py::_action_to_joint_targets: mid + action * half).
+    JOINT_RANGES_RAD: dict[str, tuple[float, float]] = {
+        "fl_hip": (-0.6, 0.6), "fl_thigh": (-1.57, 1.57), "fl_calf": (-2.2, 0.2),
+        "fr_hip": (-0.6, 0.6), "fr_thigh": (-1.57, 1.57), "fr_calf": (-2.2, 0.2),
+        "rl_hip": (-0.6, 0.6), "rl_thigh": (-1.57, 1.57), "rl_calf": (-2.2, 0.2),
+        "rr_hip": (-0.6, 0.6), "rr_thigh": (-1.57, 1.57), "rr_calf": (-2.2, 0.2),
+        "arm_base": (-1.57, 1.57), "arm_shoulder": (-1.57, 1.57), "arm_gripper": (0.0, 1.2),
+    }
+    # DOGZILLA-Lite has no direct height sensor and this bridge does not run
+    # a state estimator, so trunk height (one of the 41 obs dims the policy
+    # was trained on) cannot be measured from live telemetry today. We feed
+    # the sim's nominal standing height as a constant fallback instead of
+    # guessing from IMU integration — a known, documented gap versus the
+    # real observation the sim policy expects (see sim2real/README.md).
+    DEFAULT_STANDING_HEIGHT_M = 0.16
+
+    def _build_policy_observation(self) -> list[float]:
+        """Assemble the 41-dim observation vector the ONNX policy expects,
+        from whatever live telemetry this bridge actually has.
+
+        Layout must match sim2real/env.py::DogzillaStandEnv._get_obs exactly:
+        joint pos(15) + joint vel(15) + trunk quat wxyz(4) + trunk gyro(3)
+        + trunk lin accel(3) + trunk height(1) = 41.
+        """
+        joint_pos = [self._latest_joint_states.get(j, 0.0) for j in self.QUADRUPED_JOINTS]
+        joint_vel = [self._latest_joint_velocities.get(j, 0.0) for j in self.QUADRUPED_JOINTS]
+        imu = self._latest_imu
+        trunk_quat = [
+            imu.get("orient_w", 1.0), imu.get("orient_x", 0.0),
+            imu.get("orient_y", 0.0), imu.get("orient_z", 0.0),
+        ]
+        trunk_gyro = [imu.get("gyro_x", 0.0), imu.get("gyro_y", 0.0), imu.get("gyro_z", 0.0)]
+        trunk_accel = [imu.get("accel_x", 0.0), imu.get("accel_y", 0.0), imu.get("accel_z", 9.81)]
+        trunk_height = [self.DEFAULT_STANDING_HEIGHT_M]
+        return joint_pos + joint_vel + trunk_quat + trunk_gyro + trunk_accel + trunk_height
+
+    def load_policy(self, onnx_path: str) -> dict[str, Any]:
+        """Load an ONNX policy for closed-loop inference. Does not start it —
+        call start_policy() separately. Requires the `onnx` extra
+        (`pip install junoclaw-ros2-bridge[onnx]`).
+        """
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            raise HTTPException(
+                status_code=500,
+                detail="onnxruntime not installed. Run: pip install junoclaw-ros2-bridge[onnx]",
+            )
+        if self._policy_task is not None and not self._policy_task.done():
+            raise HTTPException(status_code=409, detail="a policy is already running; stop it first")
+        import os
+        if not os.path.exists(onnx_path):
+            raise HTTPException(status_code=404, detail=f"onnx policy not found at '{onnx_path}'")
+
+        session = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
+        input_meta = session.get_inputs()[0]
+        expected_obs_dim = len(self._build_policy_observation())
+        model_obs_dim = input_meta.shape[-1]
+        if isinstance(model_obs_dim, int) and model_obs_dim != expected_obs_dim:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"onnx policy expects obs dim {model_obs_dim}, "
+                    f"bridge builds {expected_obs_dim} — check joint schema"
+                ),
+            )
+        self._policy = PolicyRuntime(session=session, input_name=input_meta.name, onnx_path=onnx_path)
+        self._last_policy_status = {"status": "loaded", "onnx_path": onnx_path}
+        return self._last_policy_status
+
+    def start_policy(self, hz: float = 30.0, smoothing: float = 0.2) -> dict[str, Any]:
+        """Start the closed-loop inference loop against the currently
+        loaded policy. Non-blocking — returns immediately.
+
+        ``smoothing`` is an exponential-moving-average factor in [0, 1]:
+        each step's target is blended as
+            target = smoothing * raw_policy_target + (1 - smoothing) * prev_target
+        A value of 0.2 means 20% new / 80% old — this prevents the first
+        inference step from commanding a large jump that would trip the
+        safety clamp, and generally smooths policy output (standard sim2real
+        practice). Set to 1.0 for no smoothing (raw policy output).
+        """
+        if self._policy is None:
+            raise HTTPException(status_code=409, detail="no policy loaded; call /robot/policy/load first")
+        if self._policy_task is not None and not self._policy_task.done():
+            raise HTTPException(status_code=409, detail="policy loop already running")
+
+        self._last_policy_status = {
+            "status": "running",
+            "onnx_path": self._policy.onnx_path,
+            "hz": hz,
+            "smoothing": smoothing,
+            "steps_run": 0,
+            "rejected_at_step": None,
+            "reason": None,
+        }
+
+        async def _loop():
+            period = 1.0 / hz
+            step = 0
+            # Initialise smoothed targets from current joint positions so the
+            # first step's delta is zero (no clamp rejection on startup).
+            prev_targets: dict[str, float] = {
+                j: self._latest_joint_states.get(j, 0.0) for j in self.QUADRUPED_JOINTS
+            }
+            try:
+                while True:
+                    obs = self._build_policy_observation()
+                    action = self._policy.infer(obs)
+                    targets = {}
+                    for joint, a in zip(self.QUADRUPED_JOINTS, action):
+                        a = max(-1.0, min(1.0, float(a)))
+                        lo, hi = self.JOINT_RANGES_RAD[joint]
+                        mid, half = (lo + hi) / 2.0, (hi - lo) / 2.0
+                        raw_target = mid + a * half
+                        # EMA smoothing: blend toward raw policy output
+                        smoothed = smoothing * raw_target + (1.0 - smoothing) * prev_targets[joint]
+                        targets[joint] = smoothed
+                        prev_targets[joint] = smoothed
+
+                    for joint, target_pos in targets.items():
+                        current_pos = self._latest_joint_states.get(joint, 0.0)
+                        delta = abs(target_pos - current_pos)
+                        if delta > self.MAX_JOINT_DELTA_PER_CYCLE_RAD:
+                            self._last_policy_status["status"] = "rejected"
+                            self._last_policy_status["rejected_at_step"] = step
+                            self._last_policy_status["reason"] = (
+                                f"joint '{joint}' delta {delta:.3f} rad exceeds "
+                                f"safety clamp {self.MAX_JOINT_DELTA_PER_CYCLE_RAD} rad "
+                                f"(current={current_pos:.3f}, target={target_pos:.3f})"
+                            )
+                            return
+                    for joint, target_pos in targets.items():
+                        self.set_joint_command(joint, target_pos)
+
+                    step += 1
+                    self._last_policy_status["steps_run"] = step
+                    await asyncio.sleep(period)
+            except asyncio.CancelledError:
+                self._last_policy_status["status"] = "stopped"
+
+        self._policy_task = asyncio.create_task(_loop())
+        return self._last_policy_status
+
+    def stop_policy(self) -> dict[str, Any]:
+        if self._policy_task is not None and not self._policy_task.done():
+            self._policy_task.cancel()
+        self._last_policy_status["status"] = "stopped"
+        return self._last_policy_status
 
     def health(self) -> HealthResponse:
         return HealthResponse(
@@ -695,6 +902,56 @@ def create_app(
         bridge.set_joint_command(joint, position)
         return {"status": "ok", "joint": joint, "position": position}
 
+    @app.post("/robot/joint_commands")
+    async def joint_commands(request: Request):
+        """Batch teleop — set several joints in one call (one request per
+        gait tick / pose preset instead of 15). Used by the viewer's
+        Gaits & Actions panel.
+
+        Body: {"joints": {"fl_hip": 0.1, "fl_thigh": 0.3, ...}}
+        """
+        body = await request.json()
+        joints = body.get("joints", {})
+        for joint, position in joints.items():
+            bridge.set_joint_command(joint, float(position))
+        return {"status": "ok", "joints": joints}
+
+    @app.post("/robot/policy/load")
+    async def policy_load(request: Request):
+        """Load a trained sim2real ONNX policy (see sim2real/export_onnx.py)
+        for closed-loop inference. Does not start it.
+
+        Body: {"onnx_path": "sim2real/checkpoints/policy_walk.onnx"}
+        """
+        body = await request.json()
+        onnx_path = body.get("onnx_path", "")
+        if not onnx_path:
+            raise HTTPException(status_code=400, detail="onnx_path is required")
+        return bridge.load_policy(onnx_path)
+
+    @app.post("/robot/policy/start")
+    async def policy_start(request: Request):
+        """Start the closed-loop policy inference loop.
+
+        Body (optional): {"hz": 30}
+        """
+        body = await request.json() if request.headers.get("content-length", "0") != "0" else {}
+        return bridge.start_policy(
+            hz=float(body.get("hz", 30.0)),
+            smoothing=float(body.get("smoothing", 0.2)),
+        )
+
+    @app.post("/robot/policy/stop")
+    async def policy_stop():
+        return bridge.stop_policy()
+
+    @app.get("/robot/policy/status")
+    async def policy_status():
+        """Outcome of the most recent (or in-progress) policy inference
+        loop, including whether the kinematic safety clamp rejected a step.
+        """
+        return bridge._last_policy_status
+
     @app.websocket("/ws/state")
     async def ws_state(websocket: WebSocket):
         """Push joint/IMU/expression state to the browser viewer at ~10Hz."""
@@ -861,6 +1118,11 @@ def create_app(
                 "POST /robot/register",
                 "POST /robot/expression",
                 "POST /robot/joint_command",
+                "POST /robot/joint_commands",
+                "POST /robot/policy/load",
+                "POST /robot/policy/start",
+                "POST /robot/policy/stop",
+                "GET /robot/policy/status",
                 "WS /ws/state",
                 "GET /viewer",
                 "POST /skills/record/start",
@@ -920,6 +1182,21 @@ VIEWER_HTML = """<!doctype html>
   .skill-row .actions { display: flex; gap: 6px; }
   .skill-row .actions button { font-size: 12px; padding: 4px 10px; }
   .coverage-note { font-size: 12px; color: #d29922; margin-top: 6px; }
+  .robot-wrap { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 0; overflow: hidden; }
+  #robot3d { width: 100%; height: 320px; touch-action: none; }
+  .robot-hint { font-size: 11px; color: #8b949e; margin-top: 6px; text-align: center; }
+  .action-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .stop-btn { background: #da3633; border-color: #da3633; color: white; }
+  .stop-btn:hover { background: #f85149; }
+  .gait-btn.active { background: #1f6feb; border-color: #1f6feb; color: white; }
+  .dpad-row { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .dpad { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .dpad-mid { display: flex; gap: 44px; }
+  .dpad-btn { width: 44px; height: 44px; border-radius: 8px; background: #21262d; border: 1px solid #30363d; color: #c9d1d9; font-size: 18px; cursor: pointer; user-select: none; touch-action: none; }
+  .dpad-btn.active { background: #1f6feb; border-color: #1f6feb; color: white; }
+  .speed-ctrl { font-size: 12px; color: #8b949e; }
+  .speed-ctrl label { display: block; margin-bottom: 4px; }
+  .speed-ctrl input { width: 140px; }
 </style>
 </head>
 <body>
@@ -928,6 +1205,36 @@ VIEWER_HTML = """<!doctype html>
   <h1>DOGZILLA-Lite — __ROBOT_ID__ — JunoClaw Live Viewer</h1>
 </header>
 <main>
+  <section>
+    <h2>Robot</h2>
+    <div class="robot-wrap"><div id="robot3d"></div></div>
+    <div class="robot-hint">drag to orbit &middot; pinch/scroll to zoom</div>
+  </section>
+  <section>
+    <h2>Gaits &amp; Actions</h2>
+    <div class="action-row">
+      <button class="btn" id="act-stand">Stand</button>
+      <button class="btn" id="act-sit">Sit</button>
+      <button class="btn" id="act-stretch">Stretch</button>
+      <button class="btn" id="act-wave">Wave</button>
+      <button class="btn gait-btn" id="act-trot">Trot in place</button>
+      <button class="btn stop-btn" id="act-stop">STOP</button>
+    </div>
+    <div class="dpad-row">
+      <div class="dpad">
+        <button class="dpad-btn" id="dpad-fwd">&#8593;</button>
+        <div class="dpad-mid">
+          <button class="dpad-btn" id="dpad-left">&#8592;</button>
+          <button class="dpad-btn" id="dpad-right">&#8594;</button>
+        </div>
+        <button class="dpad-btn" id="dpad-back">&#8595;</button>
+      </div>
+      <div class="speed-ctrl">
+        <label>Speed <span id="speed-val">1.0x</span></label>
+        <input type="range" id="speed-slider" min="0.3" max="2" step="0.1" value="1">
+      </div>
+    </div>
+  </section>
   <section>
     <h2>Expression</h2>
     <div class="expr-row" id="expr-row"></div>
@@ -964,6 +1271,20 @@ const JOINTS = ["fl_hip","fl_thigh","fl_calf","fr_hip","fr_thigh","fr_calf",
                 "arm_base","arm_shoulder","arm_gripper"];
 const EXPRESSIONS = ["happy","neutral","alert","confused","sleeping","angry","scared","curious"];
 
+// --- Robot visual: driven by joint state, rendered by the Three.js module below ---
+let currentExpression = "neutral";
+
+function getJointValues() {
+  const v = {};
+  JOINTS.forEach(n => v[n] = parseFloat(sliders[n] ? sliders[n].value : 0));
+  return v;
+}
+
+function updateRobotView(joints, expression) {
+  if (expression) currentExpression = expression;
+  if (window.updateRobot3D) window.updateRobot3D(joints, currentExpression);
+}
+
 const jointsEl = document.getElementById("joints");
 const sliders = {};
 JOINTS.forEach(name => {
@@ -976,6 +1297,7 @@ JOINTS.forEach(name => {
   sliders[name] = slider;
   slider.addEventListener("input", () => {
     document.getElementById(`val-${name}`).textContent = parseFloat(slider.value).toFixed(2);
+    updateRobotView(getJointValues());
   });
   slider.addEventListener("change", () => {
     fetch("/robot/joint_command", {
@@ -992,6 +1314,7 @@ EXPRESSIONS.forEach(name => {
   btn.textContent = name;
   btn.id = `expr-${name}`;
   btn.addEventListener("click", () => {
+    updateRobotView(getJointValues(), name);
     fetch("/robot/expression", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -1032,9 +1355,148 @@ function connect() {
     EXPRESSIONS.forEach(name => {
       document.getElementById(`expr-${name}`).classList.toggle("active", state.expression === name);
     });
+    updateRobotView(state.joints, state.expression);
   };
 }
 connect();
+updateRobotView(getJointValues(), currentExpression);
+
+// --- Gaits & Actions: pose presets, canned trot gait, D-pad walk/turn ----
+const STAND_POSE = {
+  fl_hip: 0, fl_thigh: 0.35, fl_calf: -0.65,
+  fr_hip: 0, fr_thigh: 0.35, fr_calf: -0.65,
+  rl_hip: 0, rl_thigh: -0.35, rl_calf: 0.65,
+  rr_hip: 0, rr_thigh: -0.35, rr_calf: 0.65,
+  arm_base: 0, arm_shoulder: 0, arm_gripper: 0,
+};
+const SIT_POSE = {
+  fl_hip: 0, fl_thigh: 0.35, fl_calf: -0.65,
+  fr_hip: 0, fr_thigh: 0.35, fr_calf: -0.65,
+  rl_hip: 0, rl_thigh: -1.0, rl_calf: 1.3,
+  rr_hip: 0, rr_thigh: -1.0, rr_calf: 1.3,
+  arm_shoulder: 0.3,
+};
+const STRETCH_POSE = {
+  fl_hip: 0, fl_thigh: 0.7, fl_calf: -1.1,
+  fr_hip: 0, fr_thigh: 0.7, fr_calf: -1.1,
+  rl_hip: 0, rl_thigh: -0.7, rl_calf: 1.1,
+  rr_hip: 0, rr_thigh: -0.7, rr_calf: 1.1,
+};
+
+let activeLoop = null;
+function stopActiveLoop() {
+  if (activeLoop) clearInterval(activeLoop.interval);
+  activeLoop = null;
+  trotBtn.classList.remove("active");
+  document.querySelectorAll(".dpad-btn").forEach(b => b.classList.remove("active"));
+}
+
+function applyJoints(map) {
+  Object.entries(map).forEach(([name, val]) => {
+    if (sliders[name]) {
+      sliders[name].value = val;
+      const lbl = document.getElementById(`val-${name}`);
+      if (lbl) lbl.textContent = val.toFixed(2);
+    }
+  });
+  updateRobotView(getJointValues());
+  fetch("/robot/joint_commands", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({joints: map})
+  }).catch(() => {});
+}
+
+// Diagonal trot: (fl,rr) in phase, (fr,rl) opposite phase. dirBias flips
+// fore/aft swing (forward/back), turnBias biases hip abduction left/right.
+function trotFrame(t, turnBias, speed, dirBias) {
+  const w = 2 * Math.PI * 1.1 * speed;
+  const phases = { fl: 0, rr: 0, fr: Math.PI, rl: Math.PI };
+  const out = {};
+  Object.entries(phases).forEach(([name, phase]) => {
+    const s = Math.sin(w * t + phase);
+    const lift = Math.max(0, s);
+    out[name + "_thigh"] = 0.35 * s * dirBias;
+    out[name + "_calf"] = -0.55 - 0.3 * lift;
+    const sideSign = name.includes("l") ? 1 : -1;
+    out[name + "_hip"] = turnBias * 0.18 * sideSign;
+  });
+  return out;
+}
+
+function startGaitLoop(dirBias, turnBias) {
+  stopActiveLoop();
+  const startT = performance.now();
+  const interval = setInterval(() => {
+    const t = (performance.now() - startT) / 1000;
+    const speed = parseFloat(speedSlider.value);
+    applyJoints(trotFrame(t, turnBias, speed, dirBias));
+  }, 100);
+  activeLoop = {interval};
+}
+
+function animateToPose(target, duration = 1200) {
+  stopActiveLoop();
+  const start = getJointValues();
+  const steps = Math.max(10, Math.round(duration / 50));
+  let i = 0;
+  const interval = setInterval(() => {
+    i++;
+    const f = Math.min(1, i / steps);
+    const frame = {};
+    Object.keys(target).forEach(k => {
+      const a = start[k] ?? 0, b = target[k];
+      frame[k] = a + (b - a) * f;
+    });
+    applyJoints(frame);
+    if (f >= 1) { clearInterval(interval); activeLoop = null; }
+  }, 50);
+  activeLoop = {interval};
+}
+
+function waveArm() {
+  stopActiveLoop();
+  const startT = performance.now();
+  const interval = setInterval(() => {
+    const t = (performance.now() - startT) / 1000;
+    if (t > 2.4) {
+      clearInterval(interval);
+      activeLoop = null;
+      applyJoints({arm_base: 0, arm_shoulder: 0});
+      return;
+    }
+    applyJoints({arm_base: 0.3 * Math.sin(t * 8), arm_shoulder: -0.6 + 0.1 * Math.sin(t * 8)});
+  }, 60);
+  activeLoop = {interval};
+}
+
+document.getElementById("act-stand").addEventListener("click", () => animateToPose(STAND_POSE));
+document.getElementById("act-sit").addEventListener("click", () => animateToPose(SIT_POSE));
+document.getElementById("act-stretch").addEventListener("click", () => animateToPose(STRETCH_POSE, 900));
+document.getElementById("act-wave").addEventListener("click", () => waveArm());
+document.getElementById("act-stop").addEventListener("click", () => stopActiveLoop());
+
+const trotBtn = document.getElementById("act-trot");
+trotBtn.addEventListener("click", () => {
+  if (activeLoop) { stopActiveLoop(); return; }
+  startGaitLoop(1, 0);
+  trotBtn.classList.add("active");
+});
+
+const speedSlider = document.getElementById("speed-slider");
+const speedVal = document.getElementById("speed-val");
+speedSlider.addEventListener("input", () => speedVal.textContent = parseFloat(speedSlider.value).toFixed(1) + "x");
+
+function bindHold(btn, dirBias, turnBias) {
+  const start = (e) => { e.preventDefault(); stopActiveLoop(); startGaitLoop(dirBias, turnBias); btn.classList.add("active"); };
+  const stop = () => stopActiveLoop();
+  btn.addEventListener("pointerdown", start);
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => btn.addEventListener(ev, stop));
+}
+bindHold(document.getElementById("dpad-fwd"), 1, 0);
+bindHold(document.getElementById("dpad-back"), -1, 0);
+bindHold(document.getElementById("dpad-left"), 0.5, -1);
+bindHold(document.getElementById("dpad-right"), 0.5, 1);
 
 // --- Skills: teach once, run anywhere ------------------------------------
 let recording = false;
@@ -1129,6 +1591,223 @@ async function refreshSkillList() {
   });
 }
 refreshSkillList();
+</script>
+<script type="importmap">
+{"imports": {"three": "https://unpkg.com/three@0.160.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js";
+
+const container = document.getElementById("robot3d");
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+
+const camera = new THREE.PerspectiveCamera(45, container.clientWidth / (container.clientHeight || 320), 0.01, 10);
+camera.position.set(0.55, 0.45, 0.6);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(container.clientWidth, container.clientHeight || 320);
+container.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.16, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+dirLight.position.set(1, 2, 1);
+scene.add(dirLight);
+
+const grid = new THREE.GridHelper(1.0, 10, 0x30363d, 0x21262d);
+scene.add(grid);
+
+const BODY_W = 0.20, BODY_H = 0.075, BODY_D = 0.30, STAND_Y = 0.18;
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0x21262d, metalness: 0.3, roughness: 0.6 });
+const body = new THREE.Mesh(new THREE.BoxGeometry(BODY_W, BODY_H, BODY_D), bodyMat);
+body.position.y = STAND_Y;
+scene.add(body);
+
+// Real DOGZILLA-Lite face: an IPS display on the front of the body. We
+// render it as an actual canvas texture (not just a colored dot) so the
+// viewer shows the same eye/mouth shapes the real screen would.
+const EXPR_COLOR = {
+  happy: "#3fb950", neutral: "#c9d1d9", alert: "#58a6ff", confused: "#d29922",
+  sleeping: "#8b949e", angry: "#f85149", scared: "#a371f7", curious: "#e3b341",
+};
+const faceCanvas = document.createElement("canvas");
+faceCanvas.width = 200; faceCanvas.height = 120;
+const fctx = faceCanvas.getContext("2d");
+const faceTexture = new THREE.CanvasTexture(faceCanvas);
+const faceMat = new THREE.MeshBasicMaterial({ map: faceTexture });
+// Raised head/camera module at the front-top of the chassis — real
+// quadruped kits (DOGZILLA included) mount the face display + camera on a
+// stepped-up head block, not flush with the main body panel.
+const HEAD_W = BODY_W * 0.72, HEAD_H = BODY_H * 1.1, HEAD_D = BODY_D * 0.2;
+const headMat = new THREE.MeshStandardMaterial({ color: 0x2d333b, metalness: 0.35, roughness: 0.55 });
+const head = new THREE.Mesh(new THREE.BoxGeometry(HEAD_W, HEAD_H, HEAD_D), headMat);
+head.position.set(0, BODY_H / 2 + HEAD_H * 0.3, BODY_D / 2 + HEAD_D * 0.35);
+body.add(head);
+
+const lensMat = new THREE.MeshStandardMaterial({ color: 0x0d1117, metalness: 0.6, roughness: 0.2 });
+const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.01, 12), lensMat);
+lens.rotation.x = Math.PI / 2;
+lens.position.set(0, HEAD_H / 2 - 0.006, HEAD_D / 2 + 0.003);
+head.add(lens);
+
+const face = new THREE.Mesh(new THREE.PlaneGeometry(HEAD_W * 0.7, HEAD_H * 0.45), faceMat);
+face.position.set(0, -0.006, HEAD_D / 2 + 0.002);
+head.add(face);
+
+function drawFace(expression) {
+  const color = EXPR_COLOR[expression] || "#c9d1d9";
+  fctx.fillStyle = "#05070a";
+  fctx.fillRect(0, 0, 200, 120);
+  fctx.strokeStyle = color;
+  fctx.fillStyle = color;
+  fctx.lineWidth = 6;
+  fctx.lineCap = "round";
+  const cx1 = 70, cx2 = 130, cy = 52;
+  if (expression === "sleeping") {
+    [cx1, cx2].forEach(cx => { fctx.beginPath(); fctx.moveTo(cx - 16, cy); fctx.lineTo(cx + 16, cy); fctx.stroke(); });
+  } else if (expression === "happy") {
+    [cx1, cx2].forEach(cx => { fctx.beginPath(); fctx.arc(cx, cy + 10, 16, Math.PI, 0); fctx.stroke(); });
+  } else if (expression === "angry") {
+    fctx.beginPath(); fctx.moveTo(cx1 - 16, cy - 16); fctx.lineTo(cx1 + 14, cy - 2); fctx.stroke();
+    fctx.beginPath(); fctx.moveTo(cx2 + 16, cy - 16); fctx.lineTo(cx2 - 14, cy - 2); fctx.stroke();
+    [cx1, cx2].forEach(cx => { fctx.beginPath(); fctx.arc(cx, cy + 8, 11, 0, 7); fctx.fill(); });
+  } else if (expression === "scared") {
+    [cx1, cx2].forEach(cx => { fctx.beginPath(); fctx.arc(cx, cy, 19, 0, 7); fctx.stroke(); fctx.beginPath(); fctx.arc(cx, cy, 6, 0, 7); fctx.fill(); });
+  } else if (expression === "curious") {
+    fctx.beginPath(); fctx.arc(cx1, cy, 13, 0, 7); fctx.fill();
+    fctx.beginPath(); fctx.moveTo(cx2 - 16, cy - 18); fctx.lineTo(cx2 + 16, cy - 24); fctx.stroke();
+    fctx.beginPath(); fctx.arc(cx2, cy, 13, 0, 7); fctx.fill();
+  } else if (expression === "confused") {
+    fctx.beginPath(); fctx.arc(cx1, cy, 13, 0, 7); fctx.fill();
+    fctx.beginPath(); fctx.arc(cx2, cy - 8, 13, 0, 7); fctx.fill();
+  } else if (expression === "alert") {
+    [cx1, cx2].forEach(cx => { fctx.beginPath(); fctx.arc(cx, cy, 16, 0, 7); fctx.fill(); });
+  } else {
+    [cx1, cx2].forEach(cx => { fctx.beginPath(); fctx.arc(cx, cy, 12, 0, 7); fctx.fill(); });
+  }
+  fctx.beginPath();
+  if (expression === "happy") {
+    fctx.arc(100, 88, 22, 0.15 * Math.PI, 0.85 * Math.PI);
+  } else if (expression === "angry" || expression === "scared") {
+    fctx.arc(100, 100, 18, 1.15 * Math.PI, 1.85 * Math.PI);
+  } else if (expression !== "sleeping") {
+    fctx.moveTo(84, 92); fctx.lineTo(116, 92);
+  }
+  fctx.stroke();
+  faceTexture.needsUpdate = true;
+}
+drawFace("neutral");
+let lastExpression = "neutral";
+
+const LEG_LEN = 0.1;
+const legMat = new THREE.MeshStandardMaterial({ color: 0x9aa4ad, metalness: 0.6, roughness: 0.35 });
+const footMat = new THREE.MeshStandardMaterial({ color: 0x1c1f24, roughness: 0.8 });
+
+function makeSegment(length) {
+  const geo = new THREE.CylinderGeometry(0.011, 0.009, length, 10);
+  const mesh = new THREE.Mesh(geo, legMat);
+  mesh.position.y = -length / 2;
+  return mesh;
+}
+
+const LEG_ANCHORS = {
+  fl: [-BODY_W / 2, -BODY_H / 2, BODY_D / 2 - 0.02],
+  fr: [BODY_W / 2, -BODY_H / 2, BODY_D / 2 - 0.02],
+  rl: [-BODY_W / 2, -BODY_H / 2, -BODY_D / 2 + 0.02],
+  rr: [BODY_W / 2, -BODY_H / 2, -BODY_D / 2 + 0.02],
+};
+const legs = {};
+Object.entries(LEG_ANCHORS).forEach(([name, pos]) => {
+  const hipGroup = new THREE.Group();
+  hipGroup.position.set(pos[0], pos[1], pos[2]);
+  body.add(hipGroup);
+
+  const thighGroup = new THREE.Group();
+  hipGroup.add(thighGroup);
+  thighGroup.add(makeSegment(LEG_LEN));
+
+  const calfGroup = new THREE.Group();
+  calfGroup.position.y = -LEG_LEN;
+  thighGroup.add(calfGroup);
+  calfGroup.add(makeSegment(LEG_LEN));
+
+  const foot = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 10), footMat);
+  foot.position.y = -LEG_LEN;
+  calfGroup.add(foot);
+
+  legs[name] = { hipGroup, thighGroup, calfGroup };
+});
+
+// Arm mounts on top of the head, extending forward/outward (+z) so it
+// protrudes clear of the chassis instead of sitting embedded inside it.
+const armMat = new THREE.MeshStandardMaterial({ color: 0xe3b341, metalness: 0.3, roughness: 0.45 });
+const ARM_SEG = 0.09;
+const armBaseGroup = new THREE.Group();
+armBaseGroup.position.set(0, HEAD_H / 2, HEAD_D / 2);
+head.add(armBaseGroup);
+
+const armShoulderGroup = new THREE.Group();
+armBaseGroup.add(armShoulderGroup);
+const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, ARM_SEG, 8), armMat);
+upperArm.rotation.x = Math.PI / 2;
+upperArm.position.z = ARM_SEG / 2;
+armShoulderGroup.add(upperArm);
+
+const gripperGroup = new THREE.Group();
+gripperGroup.position.z = ARM_SEG;
+armShoulderGroup.add(gripperGroup);
+const palm = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.014, 0.018), armMat);
+palm.position.z = 0.01;
+gripperGroup.add(palm);
+const fingerGeo = new THREE.BoxGeometry(0.007, 0.007, 0.035);
+const fingerL = new THREE.Mesh(fingerGeo, armMat);
+const fingerR = new THREE.Mesh(fingerGeo, armMat);
+fingerL.position.set(-0.007, 0, 0.035);
+fingerR.position.set(0.007, 0, 0.035);
+gripperGroup.add(fingerL, fingerR);
+
+function resize() {
+  const w = container.clientWidth, h = container.clientHeight || 320;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+}
+window.addEventListener("resize", resize);
+resize();
+
+window.updateRobot3D = function(joints, expression) {
+  joints = joints || {};
+  ["fl", "fr", "rl", "rr"].forEach(name => {
+    const leg = legs[name];
+    leg.hipGroup.rotation.z = joints[name + "_hip"] || 0;
+    leg.thighGroup.rotation.x = joints[name + "_thigh"] || 0;
+    leg.calfGroup.rotation.x = joints[name + "_calf"] || 0;
+  });
+  armBaseGroup.rotation.y = joints.arm_base || 0;
+  armShoulderGroup.rotation.x = joints.arm_shoulder || 0;
+  const gripperOpen = 0.007 + Math.abs(joints.arm_gripper || 0) * 0.02;
+  fingerL.position.x = -gripperOpen;
+  fingerR.position.x = gripperOpen;
+  if (expression && expression !== lastExpression) {
+    lastExpression = expression;
+    drawFace(expression);
+  }
+};
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+window.updateRobot3D({}, "neutral");
 </script>
 </body>
 </html>

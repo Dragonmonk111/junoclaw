@@ -1,0 +1,959 @@
+[
+  {
+    "step": 0,
+    "joint_positions": {
+      "fl_hip": 0.20619585657119754,
+      "fl_thigh": 0.6668294686079026,
+      "fl_calf": -1.1891913928985598,
+      "fr_hip": 0.21402905559539795,
+      "fr_thigh": 0.6326240812063217,
+      "fr_calf": -1.3331712083816531,
+      "rl_hip": -0.06375562155246735,
+      "rl_thigh": 0.8117970581769944,
+      "rl_calf": -1.256377449989319,
+      "rr_hip": -0.20874848842620852,
+      "rr_thigh": 0.8773680158853533,
+      "rr_calf": -1.306983916282654,
+      "arm_base": 0.18318553349971772,
+      "arm_shoulder": -0.16634415435791017,
+      "arm_gripper": 0.09865802979469299
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 2,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 1,
+    "joint_positions": {
+      "fl_hip": 0.13679439718723302,
+      "fl_thigh": 0.4982599294483663,
+      "fl_calf": -1.1477127831399443,
+      "fr_hip": 0.26329234342575075,
+      "fr_thigh": 0.4287343817806244,
+      "fr_calf": -1.1148102678298955,
+      "rl_hip": 0.0540868766784668,
+      "rl_thigh": 0.8550772617197039,
+      "rl_calf": -1.2890476849555972,
+      "rr_hip": -0.13068800711631778,
+      "rr_thigh": 0.9616138752222063,
+      "rr_calf": -1.0206534372329714,
+      "arm_base": -0.07197838575363161,
+      "arm_shoulder": -0.41032297351360325,
+      "arm_gripper": 0.15467425589561462
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 3,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 2,
+    "joint_positions": {
+      "fl_hip": 0.06260383889007573,
+      "fl_thigh": 0.2904916893792153,
+      "fl_calf": -1.0383518731575017,
+      "fr_hip": 0.2941892015190125,
+      "fr_thigh": 0.276914925244236,
+      "fr_calf": -1.0237607016525272,
+      "rl_hip": -0.03314015891003609,
+      "rl_thigh": 0.5223053907006027,
+      "rl_calf": -1.0468325684471134,
+      "rr_hip": -0.10310795780181889,
+      "rr_thigh": 0.9974330739288333,
+      "rr_calf": -1.0343113490142826,
+      "arm_base": -0.09995852623443602,
+      "arm_shoulder": -0.23148674095249178,
+      "arm_gripper": 0.20543001893234253
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 4,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 3,
+    "joint_positions": {
+      "fl_hip": 0.11505515706481938,
+      "fl_thigh": 0.4732950664243699,
+      "fl_calf": -1.244710863111878,
+      "fr_hip": 0.27130631226310736,
+      "fr_thigh": 0.3277813071940613,
+      "fr_calf": -1.2373881542175296,
+      "rl_hip": -0.11037604829349519,
+      "rl_thigh": 0.4315635784014298,
+      "rl_calf": -1.1624548919998172,
+      "rr_hip": -0.2010756315879822,
+      "rr_thigh": 0.719926862476969,
+      "rr_calf": -1.1137073833305362,
+      "arm_base": 0.18776244875541692,
+      "arm_shoulder": 0.033359822673988376,
+      "arm_gripper": 0.1702630353218079
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 6,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 4,
+    "joint_positions": {
+      "fl_hip": 0.13981984004928594,
+      "fl_thigh": 0.10312783628158578,
+      "fl_calf": -1.0000474981295782,
+      "fr_hip": 0.2984511090756226,
+      "fr_thigh": 0.031233770921569787,
+      "fr_calf": -1.1521415979456333,
+      "rl_hip": 0.01658721668975828,
+      "rl_thigh": 0.609195654872595,
+      "rl_calf": -0.9475421005886844,
+      "rr_hip": -0.045273676084899905,
+      "rr_thigh": 0.8858001009692386,
+      "rr_calf": -0.9123053517785648,
+      "arm_base": -0.055313131239006025,
+      "arm_shoulder": 0.10661340764633181,
+      "arm_gripper": 0.3174855289654541
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 7,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 5,
+    "joint_positions": {
+      "fl_hip": 0.11547494581781964,
+      "fl_thigh": 0.2930243276314164,
+      "fl_calf": -0.9190663569631352,
+      "fr_hip": 0.35647726165777593,
+      "fr_thigh": 0.14809897917488554,
+      "fr_calf": -1.077569421592667,
+      "rl_hip": -0.10519792712960818,
+      "rl_thigh": 0.4043874108461847,
+      "rl_calf": -1.0252520413718265,
+      "rr_hip": -0.14296106065704348,
+      "rr_thigh": 0.9464991773024904,
+      "rr_calf": -1.1543176815388188,
+      "arm_base": 0.14072319028696295,
+      "arm_shoulder": 0.01964988713639071,
+      "arm_gripper": 0.26562173587454224
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 8,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 6,
+    "joint_positions": {
+      "fl_hip": 0.19242349188679966,
+      "fl_thigh": 0.1701137329245587,
+      "fl_calf": -1.0108909649421514,
+      "fr_hip": 0.3740947708092225,
+      "fr_thigh": 0.04601434584839613,
+      "fr_calf": -1.1145756109264011,
+      "rl_hip": 0.023304283799853498,
+      "rl_thigh": 0.630570724699363,
+      "rl_calf": -1.023002974437407,
+      "rr_hip": -0.020594587051025404,
+      "rr_thigh": 0.8182138966703978,
+      "rr_calf": -0.9509414279840458,
+      "arm_base": 0.05385554839508435,
+      "arm_shoulder": 0.1699942256623673,
+      "arm_gripper": 0.21863589940367434
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 9,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 7,
+    "joint_positions": {
+      "fl_hip": 0.22556060489936283,
+      "fl_thigh": 0.2750673526211564,
+      "fl_calf": -0.909553757728715,
+      "fr_hip": 0.3828904568832789,
+      "fr_thigh": 0.282062064618933,
+      "fr_calf": -1.2809392296239945,
+      "rl_hip": -0.05674994215796267,
+      "rl_thigh": 0.6441334712652087,
+      "rl_calf": -1.1382949767484118,
+      "rr_hip": -0.08917628695420533,
+      "rr_thigh": 0.9572346036978219,
+      "rr_calf": -1.0968442507093803,
+      "arm_base": -0.033752114499913055,
+      "arm_shoulder": 0.41231904734088326,
+      "arm_gripper": 0.33469516680954536
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 10,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 8,
+    "joint_positions": {
+      "fl_hip": 0.0910286850684771,
+      "fl_thigh": 0.0960677206265119,
+      "fl_calf": -0.7226144913209115,
+      "fr_hip": 0.41305861947390826,
+      "fr_thigh": 0.35555522744740475,
+      "fr_calf": -1.2421946204078367,
+      "rl_hip": 0.060642860528390616,
+      "rl_thigh": 0.5959650243042087,
+      "rl_calf": -1.0441014335929433,
+      "rr_hip": -0.01788197533172059,
+      "rr_thigh": 0.9823975611406687,
+      "rr_calf": -0.9691566354040826,
+      "arm_base": 0.22810833571330202,
+      "arm_shoulder": 0.21195774755011676,
+      "arm_gripper": 0.27312947071646565
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 11,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 9,
+    "joint_positions": {
+      "fl_hip": 0.1462358957095058,
+      "fl_thigh": -0.0799357286296537,
+      "fl_calf": -0.9899740746317415,
+      "fr_hip": 0.40670543811681586,
+      "fr_thigh": 0.3491323229164714,
+      "fr_calf": -1.2559239726362363,
+      "rl_hip": 0.12132217979157846,
+      "rl_thigh": 0.6325280418370705,
+      "rl_calf": -1.0119591338538392,
+      "rr_hip": -0.056342061169001964,
+      "rr_thigh": 1.0307665827813248,
+      "rr_calf": -1.2028314499858639,
+      "arm_base": 0.1473586258429328,
+      "arm_shoulder": 0.0633282477150812,
+      "arm_gripper": 0.2927381063068304
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 12,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 10,
+    "joint_positions": {
+      "fl_hip": 0.19103219791754972,
+      "fl_thigh": 0.20680004142107566,
+      "fl_calf": -0.8237636272667335,
+      "fr_hip": 0.44129600446989314,
+      "fr_thigh": 0.37191957141882853,
+      "fr_calf": -1.1791273918626894,
+      "rl_hip": 0.1428706391312669,
+      "rl_thigh": 0.4548888178566727,
+      "rl_calf": -1.0624348376674067,
+      "rr_hip": -0.16190500164592544,
+      "rr_thigh": 1.0625165508939824,
+      "rr_calf": -1.0063226579669016,
+      "arm_base": 0.054052815805915144,
+      "arm_shoulder": 0.3079115860851967,
+      "arm_gripper": 0.42185298399642257
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 13,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 11,
+    "joint_positions": {
+      "fl_hip": 0.1954485665520421,
+      "fl_thigh": 0.2133144738366763,
+      "fl_calf": -0.9970317844198933,
+      "fr_hip": 0.41186472472802943,
+      "fr_thigh": 0.21672316309552733,
+      "fr_calf": -1.3411310789488309,
+      "rl_hip": 0.04004511226479136,
+      "rl_thigh": 0.5573106290419605,
+      "rl_calf": -1.235991666673232,
+      "rr_hip": -0.01304499073477014,
+      "rr_thigh": 1.1530900293790503,
+      "rr_calf": -1.2411712693407453,
+      "arm_base": 0.23792605346126808,
+      "arm_shoulder": 0.10406555562753389,
+      "arm_gripper": 0.34205424464953066
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 14,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 12,
+    "joint_positions": {
+      "fl_hip": 0.11521508785949652,
+      "fl_thigh": 0.20154980918347426,
+      "fl_calf": -1.0178703911238856,
+      "fr_hip": 0.3876730494324757,
+      "fr_thigh": 0.09484301860644873,
+      "fr_calf": -1.3864466627440486,
+      "rl_hip": 0.023921317509103923,
+      "rl_thigh": 0.31459234639233474,
+      "rl_calf": -1.2010463692084052,
+      "rr_hip": -0.006207138148316846,
+      "rr_thigh": 0.9471962413917034,
+      "rr_calf": -0.9601812566747232,
+      "arm_base": 0.2342641775015733,
+      "arm_shoulder": 0.08681806604569065,
+      "arm_gripper": 0.3834767240029152
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 15,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 13,
+    "joint_positions": {
+      "fl_hip": 0.10658159359587435,
+      "fl_thigh": 0.059182495757576545,
+      "fl_calf": -1.0286055063910442,
+      "fr_hip": 0.2810015708306943,
+      "fr_thigh": 0.28873434623491334,
+      "fr_calf": -1.4085079256694821,
+      "rl_hip": 0.12914480976366133,
+      "rl_thigh": 0.4606569868264685,
+      "rl_calf": -1.0009770661461432,
+      "rr_hip": -0.03406788933068045,
+      "rr_thigh": 0.9712246658190131,
+      "rr_calf": -0.8894565745536458,
+      "arm_base": -0.0627451590535052,
+      "arm_shoulder": 0.3475840128302964,
+      "arm_gripper": 0.4968666066918036
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 17,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 14,
+    "joint_positions": {
+      "fl_hip": 0.09649339699183468,
+      "fl_thigh": 0.27580761729449965,
+      "fl_calf": -0.8140595273738828,
+      "fr_hip": 0.317791311748784,
+      "fr_thigh": 0.00035889677533756936,
+      "fr_calf": -1.4810295966467308,
+      "rl_hip": 0.009703319963639018,
+      "rl_thigh": 0.07406764077648237,
+      "rl_calf": -1.0835163712396685,
+      "rr_hip": 0.06390134153533357,
+      "rr_thigh": 0.8496773299204541,
+      "rr_calf": -0.6969589697793303,
+      "arm_base": 0.24831659346127455,
+      "arm_shoulder": -0.0012193828153298503,
+      "arm_gripper": 0.46673808735158134
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 18,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 15,
+    "joint_positions": {
+      "fl_hip": 0.1836660701706772,
+      "fl_thigh": 0.04057868598914893,
+      "fl_calf": -1.082709113483884,
+      "fr_hip": 0.32903063202537,
+      "fr_thigh": 0.28600043684108456,
+      "fr_calf": -1.52910712458301,
+      "rl_hip": 0.09937130188689633,
+      "rl_thigh": 0.36322797109687105,
+      "rl_calf": -1.1061667323028614,
+      "rr_hip": 0.02219827697887721,
+      "rr_thigh": 0.8853956283034669,
+      "rr_calf": -0.9491205014765405,
+      "arm_base": -0.09207415414409684,
+      "arm_shoulder": 0.24787047296145076,
+      "arm_gripper": 0.564212096067636
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 19,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 16,
+    "joint_positions": {
+      "fl_hip": 0.04712724357245486,
+      "fl_thigh": 0.2955594446580947,
+      "fl_calf": -0.8327972250980202,
+      "fr_hip": 0.31694405241518736,
+      "fr_thigh": -0.05461406362165294,
+      "fr_calf": -1.2616274889120136,
+      "rl_hip": 0.03520847420490587,
+      "rl_thigh": 0.002454150239656505,
+      "rl_calf": -0.9257496595315592,
+      "rr_hip": -0.06688631593215702,
+      "rr_thigh": 0.8712069073440065,
+      "rr_calf": -0.7521746760988349,
+      "arm_base": 0.16864102770839653,
+      "arm_shoulder": -0.04121484184759047,
+      "arm_gripper": 0.5280151906270734
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 20,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 17,
+    "joint_positions": {
+      "fl_hip": 0.11817822908876834,
+      "fl_thigh": 0.12531163716883187,
+      "fl_calf": -1.0908517565569928,
+      "fr_hip": 0.35857691418099025,
+      "fr_thigh": 0.2312224005690473,
+      "fr_calf": -1.428574165964816,
+      "rl_hip": 0.1079674614317958,
+      "rl_thigh": 0.25146755486331795,
+      "rl_calf": -1.0957930993980136,
+      "rr_hip": -0.07730737244310569,
+      "rr_thigh": 0.83886195910942,
+      "rr_calf": -0.9360354571647737,
+      "arm_base": 0.10256706959966438,
+      "arm_shoulder": 0.10691387765012436,
+      "arm_gripper": 0.524113432380275
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 21,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 18,
+    "joint_positions": {
+      "fl_hip": 0.046768664165484884,
+      "fl_thigh": 0.2912195660636483,
+      "fl_calf": -0.8466853544109385,
+      "fr_hip": 0.319290436116597,
+      "fr_thigh": -0.058283489900330054,
+      "fr_calf": -1.2033923175054344,
+      "rl_hip": 0.16788944823326624,
+      "rl_thigh": 0.10909360176008873,
+      "rl_calf": -0.9044947824435208,
+      "rr_hip": -0.07493932030775223,
+      "rr_thigh": 0.9069934929448084,
+      "rr_calf": -0.726829993653877,
+      "arm_base": 0.015028760250120302,
+      "arm_shoulder": 0.0627810707829575,
+      "arm_gripper": 0.6413831168911585
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 22,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 19,
+    "joint_positions": {
+      "fl_hip": 0.13182218698195455,
+      "fl_thigh": 0.16065149310951699,
+      "fl_calf": -1.07193001627869,
+      "fr_hip": 0.371593621419065,
+      "fr_thigh": 0.19634573915998194,
+      "fr_calf": -1.3140077230229024,
+      "rl_hip": 0.10764290509845383,
+      "rl_thigh": 0.2751775523875708,
+      "rl_calf": -1.100238730236433,
+      "rr_hip": -0.011522266325776374,
+      "rr_thigh": 0.8626273315777553,
+      "rr_calf": -0.906120996418463,
+      "arm_base": 0.2585771556820146,
+      "arm_shoulder": 0.18017018486199224,
+      "arm_gripper": 0.5594001908701045
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 23,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 20,
+    "joint_positions": {
+      "fl_hip": 0.07467338583892058,
+      "fl_thigh": 0.3101996447143973,
+      "fl_calf": -0.8787719354625272,
+      "fr_hip": 0.25693503860330014,
+      "fr_thigh": -0.1184840486494696,
+      "fr_calf": -1.3461395904933648,
+      "rl_hip": 0.2020372948505526,
+      "rl_thigh": 0.40732679127490956,
+      "rl_calf": -0.995611127793425,
+      "rr_hip": 0.03473761315550439,
+      "rr_thigh": 0.9180786329213917,
+      "rr_calf": -0.71118287463416,
+      "arm_base": 0.06500895540918286,
+      "arm_shoulder": 0.15531748015741464,
+      "arm_gripper": 0.6821828571638571
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 24,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 21,
+    "joint_positions": {
+      "fl_hip": 0.17490889091190004,
+      "fl_thigh": 0.15722714993345083,
+      "fl_calf": -0.8581493674895433,
+      "fr_hip": 0.3529181591268885,
+      "fr_thigh": -0.08481209308611529,
+      "fr_calf": -1.1957039609282962,
+      "rl_hip": 0.16537288945249212,
+      "rl_thigh": 0.4035898426697187,
+      "rl_calf": -0.957248554916149,
+      "rr_hip": 0.0410728061860786,
+      "rr_thigh": 0.8876914005568276,
+      "rr_calf": -0.7577199355407037,
+      "arm_base": -0.019089453150397118,
+      "arm_shoulder": 0.3989674978156723,
+      "arm_gripper": 0.5102970341161797
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 25,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 22,
+    "joint_positions": {
+      "fl_hip": 0.11901087668654367,
+      "fl_thigh": 0.12886453708027673,
+      "fl_calf": -0.6885128163640712,
+      "fr_hip": 0.23842127971621419,
+      "fr_thigh": 0.2103917314950055,
+      "fr_calf": -1.2320939957880777,
+      "rl_hip": 0.05278585609858427,
+      "rl_thigh": 0.08446614353064955,
+      "rl_calf": -1.1757150016553926,
+      "rr_hip": 0.0846454818778027,
+      "rr_thigh": 0.8522509363167008,
+      "rr_calf": -0.7038650525127632,
+      "arm_base": 0.24746517711514987,
+      "arm_shoulder": 0.5659716577688725,
+      "arm_gripper": 0.41856266572601875
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 27,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 23,
+    "joint_positions": {
+      "fl_hip": 0.08917585895154512,
+      "fl_thigh": 0.13244131953529417,
+      "fl_calf": -0.8560990304426364,
+      "fr_hip": 0.2435994295499489,
+      "fr_thigh": -0.0841884562298913,
+      "fr_calf": -1.030478734952911,
+      "rl_hip": 0.13060187146715477,
+      "rl_thigh": 0.3563941897011142,
+      "rl_calf": -1.173427237854618,
+      "rr_hip": 0.14897212662162695,
+      "rr_thigh": 0.9238320034641043,
+      "rr_calf": -0.9759708748272883,
+      "arm_base": 0.050065269598442375,
+      "arm_shoulder": 0.5684785854109027,
+      "arm_gripper": 0.5465499235354049
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 28,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 24,
+    "joint_positions": {
+      "fl_hip": 0.1690361021812251,
+      "fl_thigh": 0.3843967613062216,
+      "fl_calf": -0.6911548543513625,
+      "fr_hip": 0.31297709927731876,
+      "fr_thigh": -0.018572156482955543,
+      "fr_calf": -1.1637359056335324,
+      "rl_hip": 0.03702445543330633,
+      "rl_thigh": 0.41196852072527734,
+      "rl_calf": -1.174269286621585,
+      "rr_hip": 0.0007201431422417526,
+      "rr_thigh": 0.9838027959980978,
+      "rr_calf": -0.9295065606444539,
+      "arm_base": -0.05996965529197211,
+      "arm_shoulder": 0.679046971145304,
+      "arm_gripper": 0.5791100399225698
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 29,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 25,
+    "joint_positions": {
+      "fl_hip": 0.09937405219519066,
+      "fl_thigh": 0.0477018405978642,
+      "fl_calf": -0.785548110289638,
+      "fr_hip": 0.25610182184596164,
+      "fr_thigh": 0.1826175272035434,
+      "fr_calf": -1.294148199833364,
+      "rl_hip": 0.11162182503161211,
+      "rl_thigh": 0.31409104416827943,
+      "rl_calf": -1.3332052165897483,
+      "rr_hip": 0.119083940842071,
+      "rr_thigh": 1.0236067573959362,
+      "rr_calf": -0.9988467415022423,
+      "arm_base": 0.2157738053665658,
+      "arm_shoulder": 0.3964426139736429,
+      "arm_gripper": 0.464757095696906
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 30,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 26,
+    "joint_positions": {
+      "fl_hip": 0.03607970253368331,
+      "fl_thigh": 0.08750047572356937,
+      "fl_calf": -0.9102779321564134,
+      "fr_hip": 0.3387467029801643,
+      "fr_thigh": 0.23895055336588764,
+      "fr_calf": -1.2658189681860166,
+      "rl_hip": 0.10083353686788801,
+      "rl_thigh": 0.177006697166879,
+      "rl_calf": -1.258891698495979,
+      "rr_hip": -0.050415723652319076,
+      "rr_thigh": 0.8006226747125614,
+      "rr_calf": -1.0208022702438082,
+      "arm_base": 0.5385859412585005,
+      "arm_shoulder": 0.3915177879747077,
+      "arm_gripper": 0.4098134291473261
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 32,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 27,
+    "joint_positions": {
+      "fl_hip": 0.06120401442639123,
+      "fl_thigh": 0.021889567944625828,
+      "fl_calf": -0.7349621766958949,
+      "fr_hip": 0.1967456414788275,
+      "fr_thigh": -0.032119617717789484,
+      "fr_calf": -1.3382298491551365,
+      "rl_hip": 0.19208594217665295,
+      "rl_thigh": 0.038979792681470726,
+      "rl_calf": -1.0005817196976623,
+      "rr_hip": 0.07683610985225363,
+      "rr_thigh": 0.9376381832671348,
+      "rr_calf": -0.8270789471230862,
+      "arm_base": 0.559237878432616,
+      "arm_shoulder": 0.15870289679498073,
+      "arm_gripper": 0.5450260243656819
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 33,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 28,
+    "joint_positions": {
+      "fl_hip": 0.12295521593564424,
+      "fl_thigh": 0.015953398591976215,
+      "fl_calf": -0.9924758763435935,
+      "fr_hip": 0.27655588742012255,
+      "fr_thigh": 0.24402934113556,
+      "fr_calf": -1.3360519450627875,
+      "rl_hip": 0.06026023828798377,
+      "rl_thigh": 0.12616179061900396,
+      "rl_calf": -1.14052387890907,
+      "rr_hip": -0.040786046429110184,
+      "rr_thigh": 0.8975172373900561,
+      "rr_calf": -1.0986828873127268,
+      "arm_base": 0.2930308764264936,
+      "arm_shoulder": -0.11162308541035179,
+      "arm_gripper": 0.5307682150079874
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 34,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 29,
+    "joint_positions": {
+      "fl_hip": 0.244610237258108,
+      "fl_thigh": -0.07918553515485072,
+      "fl_calf": -1.0223539963609987,
+      "fr_hip": 0.28735771119381254,
+      "fr_thigh": 0.3070984675529089,
+      "fr_calf": -1.502677920133153,
+      "rl_hip": 0.03365258680225275,
+      "rl_thigh": 0.1695735943434271,
+      "rl_calf": -1.2104784248205305,
+      "rr_hip": 0.000811324187194401,
+      "rr_thigh": 0.9210841482559682,
+      "rr_calf": -0.908453816187831,
+      "arm_base": 0.36061223831325884,
+      "arm_shoulder": 0.019859911674845826,
+      "arm_gripper": 0.571540031018198
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 35,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 50,
+    "joint_positions": {
+      "fl_hip": 0.08918572005126707,
+      "fl_thigh": 0.31435028752974076,
+      "fl_calf": -1.0837395970071277,
+      "fr_hip": 0.40292120031797857,
+      "fr_thigh": 0.2351105774853896,
+      "fr_calf": -1.106472014026803,
+      "rl_hip": 0.013196654987188493,
+      "rl_thigh": 0.005503137762942589,
+      "rl_calf": -1.1496772364815158,
+      "rr_hip": -0.10674990417620352,
+      "rr_thigh": 0.7565084037669347,
+      "rr_calf": -1.1012687559736332,
+      "arm_base": 0.12512612201951467,
+      "arm_shoulder": -0.12495322710970694,
+      "arm_gripper": 0.4285707044945129
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 60,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 100,
+    "joint_positions": {
+      "fl_hip": 0.1461808211400602,
+      "fl_thigh": 0.1952223376600102,
+      "fl_calf": -1.1877099644567188,
+      "fr_hip": 0.3838564700987907,
+      "fr_thigh": 0.2638411733200092,
+      "fr_calf": -1.4706806692660117,
+      "rl_hip": 0.01176446692486438,
+      "rl_thigh": 0.1845979840803939,
+      "rl_calf": -1.332578672341853,
+      "rr_hip": -0.018877197741688806,
+      "rr_thigh": 1.0285713080010812,
+      "rr_calf": -1.171679731435129,
+      "arm_base": 0.3333886156507936,
+      "arm_shoulder": -0.02423922433244652,
+      "arm_gripper": 0.5407371786512594
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 120,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  },
+  {
+    "step": 150,
+    "joint_positions": {
+      "fl_hip": 0.17765886961126903,
+      "fl_thigh": 0.034814492752657814,
+      "fl_calf": -0.8553494173576868,
+      "fr_hip": 0.40384805427853593,
+      "fr_thigh": 0.08573549977354347,
+      "fr_calf": -1.1150498253968997,
+      "rl_hip": 0.16307088084630297,
+      "rl_thigh": 0.4111417651543176,
+      "rl_calf": -0.9087648820290947,
+      "rr_hip": -0.09368877201837823,
+      "rr_thigh": 0.7263696353830934,
+      "rr_calf": -1.063474673790269,
+      "arm_base": 0.2792923869537184,
+      "arm_shoulder": 0.302661314026757,
+      "arm_gripper": 0.4242083840513661
+    },
+    "policy_status": {
+      "status": "running",
+      "onnx_path": "C:\\cosmos-node\\node-data\\config\\CascadeProjects\\windsurf-project\\junoclaw\\sim2real\\checkpoints\\policy_walk.onnx",
+      "hz": 30.0,
+      "smoothing": 0.2,
+      "steps_run": 178,
+      "rejected_at_step": null,
+      "reason": null
+    }
+  }
+]
