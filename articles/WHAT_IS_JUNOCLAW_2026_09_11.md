@@ -34,17 +34,7 @@ Pure Rust — no Go, no Cosmos SDK, no Tendermint:
 
 **Borrowed from Cosmos:** the wallet experience — same transaction format, bech32 addresses, gRPC queries, protobuf messages. Any Cosmos wallet works unmodified.
 
-**Built from scratch:**
-
-| Component | Juno (Cosmos SDK) | JunoClaw |
-|-----------|-------------------|----------|
-| Consensus | Tendermint (Go) | Commonware simplex + BLS12-381 (Rust) |
-| P2P | Tendermint P2P | Commonware authenticated P2P (Ed25519, TLS) |
-| App framework | BaseApp (Go) | Custom state machine (Rust) |
-| Bank / Auth | `x/bank`, `x/auth` (Go) | Custom keepers (Rust) |
-| Wasm | `x/wasm` (Go) | Custom keeper wrapping cosmwasm-vm (Rust) |
-| Storage | IAVL tree (Go) | RocksDB (Rust) |
-| Staking / Gov / IBC / Mint / Slashing | All `x/` modules (Go) | **None** — not needed |
+**Built from scratch:** consensus (Commonware simplex + BLS12-381, not Tendermint), P2P (authenticated Ed25519 + TLS), the app framework, bank/auth keepers, the CosmWasm keeper, and RocksDB storage — all Rust. No staking, governance, mint, or slashing modules — not needed.
 
 Launched with a snapshot of staked JUNO at block 41,655,615 — 35,039,975 ujclaw to 213,385 accounts.
 
@@ -72,14 +62,14 @@ A robot decides 1,000 times per second. JunoClaw proves those decisions safe in 
 L0  1 ms      Reflex          Classical control, balance              LOCAL
 L1  12 ms     Memory fetch    Merkle-verified recall of past cycles   LOCAL CACHE
 L2  50-100 ms World model     Predict consequences of candidate acts   LOCAL INFERENCE
-L3  ~300 ms   Settlement      Commonware on-chain                     CHAIN
+L3  ~400 ms   Settlement      Commonware on-chain                     CHAIN
 L4  minutes   Truth verdict   Staked operator adjudication (Q-Zeno)   TRUTH MARKET
 L5  days      Governance      DAO SafetyEnvelope vote                 DAO
 ```
 
-The robot acts at L0, remembers at L1, imagines at L2. The chain settles at L3. The robot never waits for the chain.
+The robot acts at L0, remembers at L1, imagines at L2. The chain settles at L3. The robot never waits for the chain. L4 is slow on purpose — adjudication with stake at risk shouldn't be reflex-speed.
 
-**300ms, not 2.8s:** Commonware simplex + BLS12-381 threshold consensus — 10× faster than Tendermint. The threshold certificate *is* the settlement proof.
+**400ms, not 2.8s:** Commonware simplex + BLS12-381 threshold consensus — 7× faster than Tendermint. The threshold certificate *is* the settlement proof.
 
 **Merkle-verified memory:** L1 reads are Merkle inclusion proofs against a consensus-finalized root — memory provably unaltered, shareable across robot owners. No closed vendor (Unitree, Boston Dynamics) can replicate this.
 
@@ -102,26 +92,13 @@ CometBFT fork builds; 4-validator localnet runs hybrid keys; SDK fork has hybrid
 
 ### The Contracts (14 core + 3 coordination)
 
-| # | Contract | What It Does | Status |
-|---|----------|-------------|--------|
-| 1 | agent-company v4 | DAO governance — proposals, votes, quorum, adaptive deadlines | Live on uni-7 |
-| 2 | task-ledger | Task lifecycle with atomic callbacks. DAOs post, agents claim, settlement triggers | Built + tested |
-| 3 | escrow | Non-custodial. Funds locked at task creation, released on ZK-verified settlement | Built + tested |
-| 4 | agent-registry | Soulbound, non-transferable. Success rates, trust scores, attestation history | Built + tested |
-| 5 | zk-verifier | Groth16 on BN254. 77,590 SDK gas on devnet (BN254 host functions). Consensus uses BLS12-381 — separate curve, separate purpose | Live on uni-7 + **devnet proven** |
-| 6 | builder-grant | Milestone-locked grants. DAO-approved milestones | Built + tested |
-| 7 | junoswap-pair | Hardened DEX. Denom-whitelisting prevents first-depositor inflation attack | Live on uni-7 |
-| 8 | jclaw-credential | Multi-variant PQC credential. MAYO-1/2/3/5 + ML-DSA-44/65/87 | Live on uni-7 |
-| 9 | jclaw-airdrop | Genesis distribution. Merkle-proof claims, sweep of unclaimed to community pool. **Claim lifecycle proven on devnet (Sept 19)** | **Devnet proven** |
-| 10 | moultbook-v0 | Trustless-trust content posting. Immutable provenance | Live on uni-7 |
-| 11 | ibc-task-host | Cross-chain task execution. Jolt verifier integration for ZK-verified proof dispatch | Live on uni-7 |
-| 12 | truth-market | Staked operator adjudication. Min-operator enforcement | Live on uni-7 |
-| 13 | jolt-cw-verifier | Jolt ZK proofs. **Phase 2 full crypto verified on devnet (Sept 18)** — real 68KB proof verified on-chain at 10.87M gas. BN254 backend (`verify_bn254`, 4.4MB wasm) | Live on uni-7 + **devnet proven** |
-| 14 | cw-ics20-transfer | ICS-20 fungible token transfer. Full IBC lifecycle (open, connect, close, receive, ack, timeout). Escrow accounting + denom trace | Built + tested |
+**Live on uni-7 testnet:** agent-company v4 (DAO governance), junoswap-pair (hardened DEX), jclaw-credential (PQC: MAYO-1/2/3/5 + ML-DSA-44/65/87), moultbook-v0 (verifiable content), ibc-task-host, truth-market (staked adjudication), zk-verifier, jolt-cw-verifier — plus marketplace, emergency-compute-escrow, and machine-rwa.
 
-Plus three coordination contracts on uni-7: **marketplace** (skill-based escrow), **emergency-compute-escrow** (crisis compute allocation), **machine-rwa** (real-world asset tokenization).
+**Built + tested:** task-ledger, escrow, agent-registry, builder-grant, cw-ics20-transfer.
 
-**IBC stack:** `cw-ics20-transfer` implements full ICS-20. `ibc-task-host` dispatches ZK proofs to `jolt-cw-verifier` via chained submessages — an agent on Osmosis can generate a Jolt proof, send it via IBC, have it verified on-chain.
+**Devnet proven on the sovereign chain:** zk-verifier (Groth16 at 77,590 gas), jolt-cw-verifier (real 68KB Jolt proof, full crypto at 10.87M gas), and jclaw-airdrop (Merkle-proof claim + payout, Sept 19).
+
+**IBC:** `cw-ics20-transfer` implements the full ICS-20 lifecycle (escrow, denom trace, ack/timeout) and `ibc-task-host` is wired to dispatch ZK proofs to `jolt-cw-verifier` — built and tested. The counterparty-side piece — a light client verifying Commonware's BLS12-381 threshold certificates — is built and passing tests: a pure-Rust `bls12_381` pairing check (no host precompile dependency), cross-verified against real threshold signatures generated by the same `blst`-backed DKG code `slay3rd` runs in production. Deployable as a CosmWasm `08-wasm` client (the pattern Union proved with cometbls) — no counterparty chain upgrade required.
 
 ### The ZK Circuits (5 total — the "ZK Fusion" stack)
 
@@ -142,14 +119,6 @@ Total sequential proving: 318ms. Parallelized: 187ms — faster than one block.
 ### The MCP Server
 
 Live on Juno mainnet. 28 tools: chain queries, transaction signing (with the approval gate), skill-registry discovery, DEX operations, IBC transfers, wallet management. Any MCP-capable agent can connect — with a human gate on anything that moves funds.
-
-### The Robotics Pipeline
-
-- **Sim2real training** — PPO RL in MuJoCo, 5 phases, domain randomization, imitation reward
-- **ONNX export** — 97KB policy, sub-ms inference on Raspberry Pi CM5
-- **Safety gating** — EMA smoothing, per-joint delta clamping, auto-halt on violation
-- **Hardware tested** — stand, walk-in-place, forward walk on real DOGZILLA-Lite
-- **Skill sharing** — policies registered on-chain, shared over Buzz, verifiable by any robot
 
 ### The Sovereign Chain
 
@@ -186,15 +155,14 @@ Staked operators vote green/yellow/red; consensus settles via BLS12-381 threshol
 - **Run a robot** — safety-gated RL policies, Merkle-verified memory, cross-fleet skill sharing
 - **Post verifiable content** to the Buzz relay with immutable provenance
 - **Verify PQC signatures** (MAYO-1/2/3/5, ML-DSA-44/65/87) on-chain
-- **Transfer tokens cross-chain** via ICS-20 IBC
-- **Verify Jolt ZK proofs on-chain** — Phase 2 full cryptographic verification proven on devnet (Sept 18): a real 68KB proof against a 105KB verifying key, sumcheck + Dory PCS at 10.87M gas
+- **Verify Jolt ZK proofs on-chain** — a real 68KB proof against a 105KB verifying key, sumcheck + Dory PCS at 10.87M gas
 - **Mine truth** — open-weight inference, staked verdicts
 
 ### Next
 
 - **Launch JunoClaw mainnet** — recruit validators, generate BLS DKG keys, launch with genesis.json. Devnet has proven the full stack: P2P, consensus, CosmWasm, BN254 host functions, Jolt Phase 2
 - **Deploy airdrop-claim** — 213,385 users claim ujclaw with Merkle proofs
-- **Open IBC to Osmosis** — ujclaw tradeable on the largest Cosmos DEX; ibc-task-host wired for cross-chain ZK proof verification
+- **Open IBC to Osmosis** — ujclaw tradeable on the largest Cosmos DEX. ICS-20 contract built; BLS light client for Commonware consensus built and tested; the remaining work is deployment via `08-wasm` on Osmosis (no chain upgrade required) and relayer integration
 - **Build the UI** — buzz.junoclaw.xyz from engineering dashboard to consumer product (Home/Discover/Detail)
 - **Deploy L1 MemoryIndex** — Merkle-verified memory; any robot recalls any past state in 12ms
 - **Deploy L2 World Model** — trained on verified transitions, predicts consequences in 100ms
@@ -218,27 +186,13 @@ Staked operators vote green/yellow/red; consensus settles via BLS12-381 threshol
 | June 2026 | PQC program: MAYO-5 live, ML-DSA-44 hybrid accounts, Aegis hybrid transport, CometBFT + Cosmos SDK + IBC-go forks. 4-validator localnet with hybrid keys. |
 | July 2026 | v30 mainnet upgrade landed. Akash autonomous signing (J-Lens pilot). Sealed signer M2 (agents sign their own transactions through TEE). |
 | August 2026 | ZK trust stack complete (5 circuits, 187ms parallelized). Truth market + marketplace + emergency-compute-escrow deployed. 7-day soak test (2,015 cycles, zero crashes). Robotics sim2real pipeline (stand, walk, turn, recovery). Hardware tested on DOGZILLA-Lite. |
-| September 2026 | Sovereign chain snapshot (block 41,655,615). Merkle tree generated. Genesis built. Fee distribution implemented. Airdrop to 213,385 accounts. ICS-20 transfer contract built (full IBC lifecycle, escrow, denom trace). ibc-task-host wired to jolt-cw-verifier for cross-chain ZK proof dispatch. End-to-end Jolt proof example. BN254 host functions ported to sovereign chain VM (311/311 tests pass). **Four-node devnet live — first smart contract execution: zk-verifier deployed end-to-end, Groth16 proof verified on-chain at 77,590 SDK gas. Jolt Phase 2 proven: real 68KB Jolt proof cryptographically verified on-chain at 10.87M gas (Sept 18). Airdrop-claim e2e proven: Merkle-proof claim + payout on devnet (Sept 19).** UI redesign plan. |
+| September 2026 | Sovereign chain snapshot (block 41,655,615). Merkle tree generated. Genesis built. Fee distribution implemented. Airdrop to 213,385 accounts. ICS-20 transfer contract built (full IBC lifecycle, escrow, denom trace). ibc-task-host wired to jolt-cw-verifier for cross-chain ZK proof dispatch. End-to-end Jolt proof example. BN254 host functions ported to sovereign chain VM (311/311 tests pass). **Four-node devnet live — first smart contract execution: zk-verifier deployed end-to-end, Groth16 proof verified on-chain at 77,590 SDK gas. Jolt Phase 2 proven: real 68KB Jolt proof cryptographically verified on-chain at 10.87M gas (Sept 18). Airdrop-claim e2e proven: Merkle-proof claim + payout on devnet (Sept 19). Commonware BLS12-381 light client built — pure-Rust threshold certificate verification, cross-tested against real `blst`-generated signatures (Sept 20).** UI redesign plan. |
 
 ---
 
-## PQC ZK Pathway: BN254 vs Akita/Lattice
+## A Note on the ZK Path
 
-| | BN254 (current) | Akita/Lattice (post-quantum) |
-|---|---|---|
-| Compiles to wasm32 | Yes | No — 3 blockers (rayon threadpool, feature-gating, arkworks version conflict) |
-| Quantum-resistant | No (Shor's algorithm) | Yes (LWE/SIS-hardness) |
-| Cryptanalytic maturity | **High** — 20 years of scrutiny, Zcash/Ethereum production | **Low** — bespoke, not NIST-reviewed |
-| Effort to close gap | Low — VM configuration we control | High — multi-session, three upstream repos |
-| Verdict | **Ship first** | **Parallel R&D, not a launch blocker** |
-
-"Post-quantum" ≠ "more secure now." ML-DSA and ML-KEM (already live) are NIST-standardized lattice crypto — that stays. Akita's PCS is newer and less scrutinized. Preferring BN254 for the ZK layer is a maturity tradeoff, not an argument against lattice crypto.
-
-**Plan A (locked Sept 13):** BN254 is the production ZK path. `env.bn254_*` host functions are ported to the cosmwasm-vm v2.3.2 fork (311/311 tests pass). `zk-verifier` runs `verify_proof` at **77,590 SDK gas** — 4.8× cheaper than the pure-Wasm arkworks path (371,486). Confirmed on devnet Sept 15; Jolt `verify_bn254` confirmed Sept 18.
-
-**Gas pricing:** time-based (`cost = measured_µs × GAS_PER_US`), not EIP-1108. Prices real work, generalizes to PQC, stays honest as hardware improves.
-
-Upstream CosmWasm issue #2685 (BN254 host functions) remains an ecosystem contribution — decoupled from our critical path since we control the VM.
+The production ZK layer runs on BN254 — 20 years of cryptanalytic scrutiny, 4.8× cheaper via native host functions than pure-Wasm. A post-quantum PCS (Akita/lattice) is parallel R&D, not a launch blocker: ML-DSA and ML-KEM already secure accounts and transport today. Gas is priced by measured time, not a hardcoded table — it stays honest as hardware improves.
 
 ---
 
@@ -259,3 +213,21 @@ The next six months: launch the chain, open IBC, build the UI, deploy the memory
 *Built on Commonware. Secured by BLS. Governed by token holders. Executed in CosmWasm. Verified by ZK. Attested by TEE. Hardened by PQC.*
 
 *Started March 13, 2026. Still building.*
+
+---
+
+## Airdrop Announcement (copy-paste when claims go live)
+
+```
+The JunoClaw airdrop is live.
+
+If you had JUNO staked at block 41,655,615, ujclaw is waiting for you.
+35,039,975 ujclaw across 213,385 accounts — 1:1 with your staked JUNO.
+
+Claim: [CLAIM_URL]
+Connect the wallet that held your stake. Your allocation and proof
+are already on-chain. One signature, done.
+
+Claim window: [START_DATE] → [END_DATE] (90 days).
+Not tradable yet — claims first, markets after.
+```
