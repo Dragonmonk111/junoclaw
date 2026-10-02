@@ -464,3 +464,125 @@ impl TruthEvaluator for OpenWeightEvaluator {
         &self.fingerprint.model_id
     }
 }
+
+// ──────────────────────────────────────────────
+// Tests
+// ──────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base_batch() -> BatchData {
+        BatchData {
+            batch_height: 1,
+            messages_hash: "abc123".to_string(),
+            proof_hex: Some("deadbeef".to_string()),
+            proof_context: Some(ProofContext {
+                circuit_type: "batch_safety".to_string(),
+                public_inputs: vec![],
+                verified: true,
+            }),
+            robot_id: Some("robot-1".to_string()),
+            intent_summary: Some("walk forward".to_string()),
+            safety_envelope: None,
+            gate_verdict: Some("green".to_string()),
+            gate_separation_score: Some(0.05),
+            finalized_at: Some(1000),
+        }
+    }
+
+    #[tokio::test]
+    async fn rule_no_proof_is_red() {
+        let eval = RuleBasedEvaluator::new();
+        let mut batch = base_batch();
+        batch.proof_hex = None;
+        assert_eq!(eval.evaluate(&batch).await.unwrap(), Verdict::Red);
+    }
+
+    #[tokio::test]
+    async fn rule_empty_proof_is_red() {
+        let eval = RuleBasedEvaluator::new();
+        let mut batch = base_batch();
+        batch.proof_hex = Some(String::new());
+        assert_eq!(eval.evaluate(&batch).await.unwrap(), Verdict::Red);
+    }
+
+    #[tokio::test]
+    async fn rule_unverified_proof_is_red() {
+        let eval = RuleBasedEvaluator::new();
+        let mut batch = base_batch();
+        batch.proof_context = Some(ProofContext {
+            circuit_type: "batch_safety".to_string(),
+            public_inputs: vec![],
+            verified: false,
+        });
+        assert_eq!(eval.evaluate(&batch).await.unwrap(), Verdict::Red);
+    }
+
+    #[tokio::test]
+    async fn rule_gate_red_is_red() {
+        let eval = RuleBasedEvaluator::new();
+        let mut batch = base_batch();
+        batch.gate_verdict = Some("red".to_string());
+        assert_eq!(eval.evaluate(&batch).await.unwrap(), Verdict::Red);
+    }
+
+    #[tokio::test]
+    async fn rule_gate_yellow_is_yellow() {
+        let eval = RuleBasedEvaluator::new();
+        let mut batch = base_batch();
+        batch.gate_verdict = Some("yellow".to_string());
+        assert_eq!(eval.evaluate(&batch).await.unwrap(), Verdict::Yellow);
+    }
+
+    #[tokio::test]
+    async fn rule_high_separation_is_red() {
+        let eval = RuleBasedEvaluator::new();
+        let mut batch = base_batch();
+        batch.gate_separation_score = Some(0.40);
+        assert_eq!(eval.evaluate(&batch).await.unwrap(), Verdict::Red);
+    }
+
+    #[tokio::test]
+    async fn rule_medium_separation_is_yellow() {
+        let eval = RuleBasedEvaluator::new();
+        let mut batch = base_batch();
+        batch.gate_separation_score = Some(0.20);
+        assert_eq!(eval.evaluate(&batch).await.unwrap(), Verdict::Yellow);
+    }
+
+    #[tokio::test]
+    async fn rule_all_clear_is_green() {
+        let eval = RuleBasedEvaluator::new();
+        let batch = base_batch();
+        assert_eq!(eval.evaluate(&batch).await.unwrap(), Verdict::Green);
+    }
+
+    #[tokio::test]
+    async fn rule_missing_proof_context_still_evaluates() {
+        let eval = RuleBasedEvaluator::new();
+        let mut batch = base_batch();
+        batch.proof_context = None;
+        // proof present, no context → falls through to gate checks → Green
+        assert_eq!(eval.evaluate(&batch).await.unwrap(), Verdict::Green);
+    }
+
+    #[test]
+    fn verdict_roundtrip() {
+        assert_eq!("green".parse::<Verdict>().unwrap(), Verdict::Green);
+        assert_eq!("YELLOW".parse::<Verdict>().unwrap(), Verdict::Yellow);
+        assert_eq!("Red".parse::<Verdict>().unwrap(), Verdict::Red);
+        assert!("blue".parse::<Verdict>().is_err());
+    }
+
+    #[test]
+    fn fingerprint_is_deterministic() {
+        let a = EvaluatorFingerprint::robot("qwen-3b", "jetson-orin");
+        let b = EvaluatorFingerprint::robot("qwen-3b", "jetson-orin");
+        assert_eq!(a.to_hash(), b.to_hash());
+
+        let c = EvaluatorFingerprint::robot("llama-70b", "jetson-orin");
+        assert_ne!(a.to_hash(), c.to_hash());
+    }
+}

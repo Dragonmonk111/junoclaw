@@ -352,32 +352,68 @@ fn parse_finalized_batches(body: &serde_json::Value, after_height: u64) -> Vec<B
 }
 
 fn parse_batch_item(item: &serde_json::Value) -> Option<BatchData> {
-    let batch_height = item.get("batch_height")?.as_u64()?;
+    // The coordination API (StoredBlock) emits `height`; accept `batch_height`
+    // as a fallback for older/mock formats.
+    let batch_height = item
+        .get("height")
+        .or_else(|| item.get("batch_height"))?
+        .as_u64()?;
     let messages_hash = item.get("messages_hash")
         .and_then(|h| h.as_str())
         .unwrap_or("")
         .to_string();
 
+    // The consensus `certificate` is the finality proof for the batch.
     let proof_hex = item.get("proof_hex")
+        .or_else(|| item.get("certificate"))
         .and_then(|p| p.as_str())
         .map(|s| s.to_string());
 
+    // Batch-level gate_verdict if present; otherwise derive the worst verdict
+    // across messages[] (red > yellow > green).
     let gate_verdict = item.get("gate_verdict")
         .and_then(|g| g.as_str())
-        .map(|s| s.to_string());
+        .map(|s| s.to_string())
+        .or_else(|| {
+            let messages = item.get("messages")?.as_array()?;
+            let mut worst: Option<&str> = None;
+            for m in messages {
+                if let Some(g) = m.get("gate_verdict").and_then(|g| g.as_str()) {
+                    let rank = |v: &str| match v.to_lowercase().as_str() {
+                        "red" => 2,
+                        "yellow" => 1,
+                        _ => 0,
+                    };
+                    if worst.map_or(true, |w| rank(g) > rank(w)) {
+                        worst = Some(g);
+                    }
+                }
+            }
+            worst.map(|s| s.to_string())
+        });
 
     let gate_separation_score = item.get("gate_separation_score")
         .and_then(|s| s.as_f64());
 
+    // robot_id if present; otherwise the first message sender.
     let robot_id = item.get("robot_id")
         .and_then(|r| r.as_str())
-        .map(|s| s.to_string());
+        .map(|s| s.to_string())
+        .or_else(|| {
+            item.get("messages")?
+                .as_array()?
+                .first()?
+                .get("from")?
+                .as_str()
+                .map(|s| s.to_string())
+        });
 
     let intent_summary = item.get("intent_summary")
         .and_then(|i| i.as_str())
         .map(|s| s.to_string());
 
     let finalized_at = item.get("finalized_at")
+        .or_else(|| item.get("timestamp"))
         .and_then(|t| t.as_u64());
 
     Some(BatchData {
@@ -392,4 +428,99 @@ fn parse_batch_item(item: &serde_json::Value) -> Option<BatchData> {
         gate_separation_score,
         finalized_at,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_array_format() {
+        let body = serde_json::json!([
+            { "batch_height": 1, "messages_hash": "aa", "gate_verdict": "green" },
+            { "batch_height": 2, "messages_hash": "bb", "gate_verdict": "red" },
+        ]);
+        let batches = parse_finalized_batches(&body, 0);
+        assert_eq!(batches.len(), 2);
+        assert_eq!(batches[0].batch_height, 1);
+        assert_eq!(batches[1].batch_height, 2);
+        assert_eq!(batches[1].gate_verdict.as_deref(), Some("red"));
+    }
+
+    #[test]
+    fn parses_object_format() {
+        let body = serde_json::json!({
+            "batches": [
+                { "batch_height": 5, "messages_hash": "cc" },
+            ]
+        });
+        let batches = parse_finalized_batches(&body, 0);
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].batch_height, 5);
+    }
+
+    #[test]
+    fn filters_already_seen_heights() {
+        let body = serde_json::json!([
+            { "batch_height": 1, "messages_hash": "aa" },
+            { "batch_height": 2, "messages_hash": "bb" },
+            { "batch_height": 3, "messages_hash": "cc" },
+        ]);
+        let batches = parse_finalized_batches(&body, 2);
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].batch_height, 3);
+    }
+
+    #[test]
+    fn sorts_by_height() {
+        let body = serde_json::json!([
+            { "batch_height": 9, "messages_hash": "ii" },
+            { "batch_height": 3, "messages_hash": "cc" },
+            { "batch_height": 6, "messages_hash": "ff" },
+        ]);
+        let batches = parse_finalized_batches(&body, 0);
+        assert_eq!(batches[0].batch_height, 3);
+        assert_eq!(batches[1].batch_height, 6);
+        assert_eq!(batches[2].batch_height, 9);
+    }
+
+    #[test]
+    fn skips_malformed_items() {
+        let body = serde_json::json!([
+            { "batch_height": 1, "messages_hash": "aa" },
+            { "no_height": true },
+            "garbage",
+            { "batch_height": 2, "messages_hash": "bb" },
+        ]);
+        let batches = parse_finalized_batches(&body, 0);
+        assert_eq!(batches.len(), 2);
+    }
+
+    #[test]
+    fn empty_response_yields_empty() {
+        let body = serde_json::json!({});
+        assert!(parse_finalized_batches(&body, 0).is_empty());
+        let body = serde_json::json!([]);
+        assert!(parse_finalized_batches(&body, 0).is_empty());
+    }
+
+    #[test]
+    fn parses_optional_fields() {
+        let item = serde_json::json!({
+            "batch_height": 7,
+            "messages_hash": "dd",
+            "proof_hex": "beef",
+            "gate_verdict": "yellow",
+            "gate_separation_score": 0.15,
+            "robot_id": "ponyou",
+            "intent_summary": "patrol perimeter",
+            "finalized_at": 12345,
+        });
+        let batch = parse_batch_item(&item).unwrap();
+        assert_eq!(batch.batch_height, 7);
+        assert_eq!(batch.proof_hex.as_deref(), Some("beef"));
+        assert_eq!(batch.gate_separation_score, Some(0.15));
+        assert_eq!(batch.robot_id.as_deref(), Some("ponyou"));
+        assert_eq!(batch.finalized_at, Some(12345));
+    }
 }
