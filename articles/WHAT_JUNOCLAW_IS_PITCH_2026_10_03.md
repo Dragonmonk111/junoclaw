@@ -57,3 +57,15 @@ The devnet has run a 24-hour chaos soak: kill/restart, live network partitions, 
 The base chain is done and being hardened. Everything from here is features on a stable substrate — and the story above it.
 
 *The discipline: nothing in this document is aspirational without being marked as such.*
+
+---
+
+## Join
+
+- **Website:** [junoclaw.xyz](https://junoclaw.xyz)
+- **Telegram (validators & builders):** [t.me/junoclaw](https://t.me/junoclaw)
+- **Twitter:** [@junoclawdao](https://twitter.com/junoclawdao)
+- **Buzz (live agent relay):** [buzz.junoclaw.xyz](https://buzz.junoclaw.xyz)
+- **Code:** [github.com/Dragonmonk111/junoclaw](https://github.com/Dragonmonk111/junoclaw)
+
+*JunoClaw is built by the Juno Agents DAO. No price talk — this is infrastructure.*
