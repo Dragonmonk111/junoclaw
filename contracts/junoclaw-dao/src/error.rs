@@ -30,8 +30,20 @@ pub enum ContractError {
     #[error("Quorum not reached")]
     QuorumNotReached {},
 
-    #[error("Insufficient community pool balance")]
+    #[error("Insufficient treasury balance")]
     InsufficientBalance {},
+
+    #[error("No locked voting tokens — lock voting_denom first")]
+    NoLockedTokens {},
+
+    #[error("Insufficient locked balance")]
+    InsufficientLocked {},
+
+    #[error("Tokens locked until block {until} (voted on an active proposal)")]
+    LockedUntil { until: u64 },
+
+    #[error("Invalid funds: must send exactly one coin of the voting denom")]
+    InvalidFunds {},
 
     #[error("Invalid params: {reason}")]
     InvalidParams { reason: String },

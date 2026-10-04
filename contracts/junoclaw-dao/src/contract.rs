@@ -5,14 +5,14 @@ use cosmwasm_std::{
 
 use crate::error::ContractError;
 use crate::msg::{
-    ConfigResponse, ExecuteMsg, InstantiateMsg, ProposalResponse, ProposalTypeInput,
-    ProposalTypeOutput, ProposalsResponse, QueryMsg, TallyResponse, VoteChoiceInput,
-    VoteResponse,
+    ConfigResponse, ExecuteMsg, InstantiateMsg, LockResponse, LockStatsResponse,
+    ProposalResponse, ProposalTypeInput, ProposalTypeOutput, ProposalsResponse, QueryMsg,
+    TallyResponse, VoteChoiceInput, VoteResponse,
 };
 use crate::state::{
     Proposal, ProposalStatus, ProposalType, VoteChoice, VoteRecord, ADMIN, COMMUNITY_POOL,
-    NEXT_PROPOSAL_ID, PROPOSALS, QUORUM, THRESHOLD, TOTAL_SUPPLY, VOTES, VOTING_DENOM,
-    VOTING_PERIOD,
+    LOCKED, NEXT_PROPOSAL_ID, PROPOSALS, QUORUM, THRESHOLD, TOTAL_LOCKED, TOTAL_SUPPLY,
+    VOTES, VOTE_LOCK, VOTING_DENOM, VOTING_PERIOD,
 };
 
 #[entry_point]
@@ -51,6 +51,7 @@ pub fn instantiate(
     QUORUM.save(deps.storage, &msg.quorum)?;
     THRESHOLD.save(deps.storage, &msg.threshold)?;
     NEXT_PROPOSAL_ID.save(deps.storage, &1u64)?;
+    TOTAL_LOCKED.save(deps.storage, &0u128)?;
 
     Ok(Response::new()
         .add_attribute("action", "instantiate")
@@ -73,6 +74,8 @@ pub fn execute(
             description,
             proposal_type,
         } => execute_submit(deps, env, info, title, description, proposal_type),
+        ExecuteMsg::Lock {} => execute_lock(deps, env, info),
+        ExecuteMsg::Unlock { amount } => execute_unlock(deps, env, info, amount),
         ExecuteMsg::Vote { proposal_id, vote } => {
             execute_vote(deps, env, info, proposal_id, vote)
         }
@@ -184,18 +187,15 @@ fn execute_vote(
         return Err(ContractError::AlreadyVoted {});
     }
 
-    // Get voting weight from ujclaw balance
-    let voting_denom = VOTING_DENOM.load(deps.storage)?;
-    let weight = deps
-        .querier
-        .query_balance(voter.clone(), &voting_denom)?
-        .amount
-        .u128();
+    // Voting weight = tokens locked in THIS contract. Using the live bank
+    // balance instead would let an attacker vote, move tokens to a fresh wallet,
+    // and vote again with the same funds.
+    let weight = LOCKED
+        .may_load(deps.storage, voter_str)?
+        .unwrap_or_default();
 
     if weight == 0 {
-        return Err(ContractError::InvalidParams {
-            reason: "voter has no voting tokens".to_string(),
-        });
+        return Err(ContractError::NoLockedTokens {});
     }
 
     let vote_choice = match vote {
@@ -218,6 +218,13 @@ fn execute_vote(
     };
 
     VOTES.save(deps.storage, (proposal_id, voter_str), &vote_record)?;
+
+    // Hold the voter's lock until this proposal's voting period ends.
+    let lock = VOTE_LOCK.may_load(deps.storage, voter_str)?.unwrap_or_default();
+    if proposal.voting_end_height > lock {
+        VOTE_LOCK.save(deps.storage, voter_str, &proposal.voting_end_height)?;
+    }
+
     PROPOSALS.save(deps.storage, proposal_id, &proposal)?;
 
     Ok(Response::new()
@@ -271,14 +278,22 @@ fn execute_execute(
             amount,
             denom,
         } => {
-            let community_pool = COMMUNITY_POOL.load(deps.storage)?;
+            // Spendable = contract balance minus locked voting tokens (locked
+            // tokens belong to voters, not to the treasury).
+            let voting_denom = VOTING_DENOM.load(deps.storage)?;
             let balance = deps
                 .querier
-                .query_balance(community_pool.clone(), denom)?
+                .query_balance(env.contract.address.clone(), denom)?
                 .amount
                 .u128();
+            let reserved = if *denom == voting_denom {
+                TOTAL_LOCKED.load(deps.storage)?
+            } else {
+                0
+            };
+            let spendable = balance.saturating_sub(reserved);
 
-            if balance < *amount {
+            if spendable < *amount {
                 return Err(ContractError::InsufficientBalance {});
             }
 
@@ -326,6 +341,77 @@ fn finalize_proposal(deps: Deps, proposal: &mut Proposal) -> Result<(), Contract
     }
 
     Ok(())
+}
+
+/// Lock voting tokens. Requires exactly one coin of the voting denom attached.
+/// (Contract-internal lock for vote weight — the chain has no consensus staking.)
+fn execute_lock(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    let voting_denom = VOTING_DENOM.load(deps.storage)?;
+    if info.funds.len() != 1 || info.funds[0].denom != voting_denom || info.funds[0].amount.is_zero()
+    {
+        return Err(ContractError::InvalidFunds {});
+    }
+    let amount = info.funds[0].amount.u128();
+    let locker = info.sender.as_str();
+
+    let locked = LOCKED.may_load(deps.storage, locker)?.unwrap_or_default();
+    LOCKED.save(deps.storage, locker, &(locked + amount))?;
+    TOTAL_LOCKED.update(deps.storage, |t: u128| -> StdResult<u128> {
+        Ok(t + amount)
+    })?;
+
+    Ok(Response::new()
+        .add_attribute("action", "lock")
+        .add_attribute("locker", info.sender)
+        .add_attribute("amount", amount.to_string())
+        .add_attribute("total_locked", (locked + amount).to_string())
+        .add_attribute("height", env.block.height.to_string()))
+}
+
+/// Unlock (withdraw) voting tokens. Rejects while the sender has a vote on a
+/// proposal whose voting period has not yet ended (that lock is what backs the vote).
+fn execute_unlock(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    amount: u128,
+) -> Result<Response, ContractError> {
+    if amount == 0 {
+        return Err(ContractError::InvalidParams {
+            reason: "unlock amount must be positive".to_string(),
+        });
+    }
+
+    let locker = info.sender.as_str();
+
+    let lock_until = VOTE_LOCK.may_load(deps.storage, locker)?.unwrap_or_default();
+    if env.block.height < lock_until {
+        return Err(ContractError::LockedUntil { until: lock_until });
+    }
+
+    let locked = LOCKED.may_load(deps.storage, locker)?.unwrap_or_default();
+    if amount > locked {
+        return Err(ContractError::InsufficientLocked {});
+    }
+
+    LOCKED.save(deps.storage, locker, &(locked - amount))?;
+    TOTAL_LOCKED.update(deps.storage, |t: u128| -> StdResult<u128> {
+        Ok(t - amount)
+    })?;
+
+    let voting_denom = VOTING_DENOM.load(deps.storage)?;
+    Ok(Response::new()
+        .add_message(BankMsg::Send {
+            to_address: info.sender.to_string(),
+            amount: coins(amount, voting_denom),
+        })
+        .add_attribute("action", "unlock")
+        .add_attribute("locker", info.sender)
+        .add_attribute("amount", amount.to_string()))
 }
 
 fn execute_update_params(
@@ -530,6 +616,32 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
                 height: vote.height,
             };
             to_json_binary(&resp)
+        }
+        QueryMsg::GetLock { address } => {
+            let addr = deps.api.addr_validate(&address)?;
+            let locked = LOCKED.may_load(deps.storage, addr.as_str())?.unwrap_or_default();
+            let locked_until = VOTE_LOCK
+                .may_load(deps.storage, addr.as_str())?
+                .unwrap_or_default();
+            to_json_binary(&LockResponse {
+                address: addr.to_string(),
+                locked,
+                locked_until,
+            })
+        }
+        QueryMsg::GetLockStats {} => {
+            let voting_denom = VOTING_DENOM.load(deps.storage)?;
+            let total_locked = TOTAL_LOCKED.load(deps.storage)?;
+            let balance = deps
+                .querier
+                .query_balance(env.contract.address, &voting_denom)?
+                .amount
+                .u128();
+            to_json_binary(&LockStatsResponse {
+                total_locked,
+                contract_balance: balance,
+                spendable: balance.saturating_sub(total_locked),
+            })
         }
         QueryMsg::GetTally { proposal_id } => {
             let proposal = PROPOSALS

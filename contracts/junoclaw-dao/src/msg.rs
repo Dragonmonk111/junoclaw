@@ -6,7 +6,9 @@ pub struct InstantiateMsg {
     pub admin: String,
     /// Token denom for voting weight (ujclaw)
     pub voting_denom: String,
-    /// Community pool address
+    /// Community pool label/address (informational — the DAO contract itself is
+    /// the treasury; Spend proposals pay out of this contract's balance minus
+    /// locked voting tokens)
     pub community_pool: String,
     /// Total token supply (for quorum calculation)
     pub total_supply: u128,
@@ -26,7 +28,15 @@ pub enum ExecuteMsg {
         description: String,
         proposal_type: ProposalTypeInput,
     },
-    /// Vote on a proposal
+    /// Lock voting tokens (attach voting_denom funds). Locked tokens are the
+    /// voting weight. They cannot be moved or double-voted while locked.
+    /// NB: contract-internal token lock — the chain itself has no staking.
+    Lock {},
+    /// Unlock (withdraw) voting tokens. Fails while any proposal the sender
+    /// voted on is still inside its voting period (the lock securing that
+    /// vote cannot be released early).
+    Unlock { amount: u128 },
+    /// Vote on a proposal (weight = sender's locked balance)
     Vote {
         proposal_id: u64,
         vote: VoteChoiceInput,
@@ -90,6 +100,12 @@ pub enum QueryMsg {
     /// Get proposal tally
     #[returns(TallyResponse)]
     GetTally { proposal_id: u64 },
+    /// Get an address' locked voting power and lock-until height
+    #[returns(LockResponse)]
+    GetLock { address: String },
+    /// Total locked, contract balance, and spendable treasury
+    #[returns(LockStatsResponse)]
+    GetLockStats {},
 }
 
 #[cw_serde]
@@ -155,4 +171,20 @@ pub struct TallyResponse {
     pub abstain_votes: u128,
     pub total_votes: u128,
     pub status: String,
+}
+
+#[cw_serde]
+pub struct LockResponse {
+    pub address: String,
+    pub locked: u128,
+    /// Block height until which the lock is held (0 = not held)
+    pub locked_until: u64,
+}
+
+#[cw_serde]
+pub struct LockStatsResponse {
+    pub total_locked: u128,
+    pub contract_balance: u128,
+    /// contract_balance minus locked tokens (what Spend proposals can draw on)
+    pub spendable: u128,
 }

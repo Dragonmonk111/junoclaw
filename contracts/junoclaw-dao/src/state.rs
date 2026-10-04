@@ -32,6 +32,20 @@ pub const PROPOSALS: Map<u64, Proposal> = Map::new("proposals");
 /// Votes: (proposal_id, voter) -> Vote
 pub const VOTES: Map<(u64, &str), VoteRecord> = Map::new("votes");
 
+/// Locked voting power: voter -> amount of voting_denom locked in this contract.
+/// Vote weight comes from this map, NOT from the live bank balance — this is what
+/// prevents the vote-transfer-revote attack. (Not consensus staking — the chain
+/// has none; this is purely a contract-internal token lock.)
+pub const LOCKED: Map<&str, u128> = Map::new("locked");
+
+/// Total voting_denom currently locked (held by this contract; subtracted from the
+/// contract balance when computing spendable treasury funds).
+pub const TOTAL_LOCKED: Item<u128> = Item::new("total_locked");
+
+/// voter -> highest voting_end_height among proposals they voted on.
+/// Locked tokens cannot be withdrawn before this height (one-vote-per-lock guarantee).
+pub const VOTE_LOCK: Map<&str, u64> = Map::new("vote_lock");
+
 #[cw_serde]
 pub struct Proposal {
     pub id: u64,
