@@ -3,41 +3,40 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JunoClaw — Post-Quantum Finality Chain for Verifiable Agents</title>
-  <meta name="description" content="JunoClaw is a purpose-built L1 whose consensus certificates are already post-quantum — built for verifiable agents and robotics. Born from Juno." />
-  <meta property="og:title" content="JunoClaw — Post-Quantum Finality Chain" />
-  <meta property="og:description" content="Instant, state-certifying finality at quorum-level post-quantum security. Built for verifiable agents and robotics." />
-  <meta property="og:image" content="assets/banner.png" />
+  <title>JunoClaw — Finality machines can verify</title>
+  <meta name="description" content="JunoClaw is a purpose-built L1 whose consensus certificates are already post-quantum: ~1 s state-certifying finality, hybrid BLS + MAYO2 quorums, built for verifiable agents and robotics." />
+  <meta property="og:title" content="JunoClaw — Finality machines can verify" />
+  <meta property="og:description" content="~1 s state-certifying finality. Hybrid BLS + MAYO2 certificates. Built for verifiable agents and robotics. G1 validators wanted." />
+  <meta property="og:image" content="https://junoclaw.xyz/assets/banner.png" />
   <meta property="og:type" content="website" />
-  <link rel="icon" type="image/png" href="assets/logo.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07040f" />
+  <link rel="icon" type="image/png" href="/assets/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #07040f;
-      --bg-raise: #0d0919;
-      --panel: rgba(139, 92, 246, 0.05);
-      --panel-strong: rgba(139, 92, 246, 0.09);
+      --bg: #05030c;
+      --bg-raise: #0c0818;
+      --glass: rgba(20, 13, 40, 0.55);
       --border: rgba(139, 92, 246, 0.16);
-      --border-strong: rgba(139, 92, 246, 0.35);
+      --border-strong: rgba(139, 92, 246, 0.38);
       --violet: #8b5cf6;
-      --violet-bright: #a78bfa;
-      --violet-dim: #6d5fb8;
+      --violet-bright: #b49cff;
       --gold: #d4af37;
-      --gold-bright: #e8c97a;
-      --text: #f2f0f9;
-      --muted: #a49ec2;
-      --dim: #6f688f;
-      --mono: 'JetBrains Mono', 'Courier New', monospace;
-      --sans: 'Inter', 'Segoe UI', -apple-system, sans-serif;
+      --gold-bright: #ecd08a;
+      --cyan: #67e8f9;
+      --text: #f3f1fa;
+      --muted: #a8a2c6;
+      --dim: #6d6790;
+      --mono: 'JetBrains Mono', ui-monospace, monospace;
+      --sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
       --display: 'Space Grotesk', 'Inter', sans-serif;
+      --r: 16px;
     }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     html { scroll-behavior: smooth; }
-
     body {
       background: var(--bg);
       color: var(--text);
@@ -46,800 +45,493 @@
       -webkit-font-smoothing: antialiased;
       overflow-x: hidden;
     }
+    a { color: inherit; }
+    ::selection { background: rgba(139, 92, 246, 0.45); }
 
-    /* ─── Ambient background ─── */
-    .ambient {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-      pointer-events: none;
-    }
-
-    .stars {
-      position: absolute;
-      inset: 0;
+    /* ── Background ── */
+    #lattice { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+    .aurora {
+      position: fixed; inset: -20%; z-index: 0; pointer-events: none;
       background:
-        radial-gradient(1px 1px at 11% 18%, rgba(232,201,122,0.55), transparent),
-        radial-gradient(1px 1px at 32% 7%,  rgba(199,201,209,0.4), transparent),
-        radial-gradient(1.5px 1.5px at 58% 14%, rgba(167,139,250,0.5), transparent),
-        radial-gradient(1px 1px at 79% 9%,  rgba(232,201,122,0.4), transparent),
-        radial-gradient(1px 1px at 92% 27%, rgba(199,201,209,0.35), transparent),
-        radial-gradient(1.5px 1.5px at 17% 44%, rgba(167,139,250,0.3), transparent),
-        radial-gradient(1px 1px at 48% 62%, rgba(232,201,122,0.35), transparent),
-        radial-gradient(1px 1px at 71% 81%, rgba(199,201,209,0.3), transparent),
-        radial-gradient(1.5px 1.5px at 6% 76%, rgba(167,139,250,0.35), transparent),
-        radial-gradient(1px 1px at 38% 91%, rgba(232,201,122,0.3), transparent);
+        radial-gradient(40% 35% at 50% 0%, rgba(139, 92, 246, 0.22), transparent 70%),
+        radial-gradient(30% 30% at 90% 30%, rgba(212, 175, 55, 0.08), transparent 70%),
+        radial-gradient(35% 35% at 0% 70%, rgba(103, 232, 249, 0.05), transparent 70%);
+      animation: drift 28s ease-in-out infinite alternate;
     }
-
-    .glow {
-      position: absolute;
-      border-radius: 50%;
-      filter: blur(140px);
-      opacity: 0.5;
+    @keyframes drift { to { transform: translate3d(2%, 3%, 0) scale(1.05); } }
+    .scan {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.35;
+      background: repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0 1px, transparent 1px 3px);
     }
+    nav, header, main, footer, .band { position: relative; z-index: 1; }
 
-    .glow-a {
-      width: 700px; height: 700px;
-      background: rgba(139, 92, 246, 0.14);
-      top: -280px; left: 50%;
-      transform: translateX(-50%);
-    }
-
-    .glow-b {
-      width: 420px; height: 420px;
-      background: rgba(212, 175, 55, 0.06);
-      top: 160px; right: -140px;
-    }
-
-    .glow-c {
-      width: 380px; height: 380px;
-      background: rgba(139, 92, 246, 0.08);
-      top: 60%; left: -160px;
-    }
-
-    .grain {
-      position: absolute;
-      inset: 0;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
-      opacity: 0.5;
-    }
-
-    nav, header, main, footer { position: relative; z-index: 1; }
-
-    /* ─── Nav ─── */
+    /* ── Nav ── */
     nav {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      z-index: 100;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 1rem 2rem;
-      background: rgba(7, 4, 15, 0.55);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.9rem clamp(1rem, 4vw, 2.5rem);
+      transition: background 0.3s, border-color 0.3s;
       border-bottom: 1px solid transparent;
-      transition: border-color 0.3s, background 0.3s;
     }
-
-    nav.scrolled {
-      border-bottom-color: var(--border);
-      background: rgba(7, 4, 15, 0.85);
+    nav.scrolled { background: rgba(5, 3, 12, 0.78); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-bottom-color: var(--border); }
+    .brand { display: flex; align-items: center; gap: 0.7rem; text-decoration: none; }
+    .brand img { width: 34px; height: 34px; border-radius: 50%; box-shadow: 0 0 18px rgba(139, 92, 246, 0.5); }
+    .brand span { font-family: var(--display); font-weight: 700; letter-spacing: 0.04em; }
+    .brand em { font-style: normal; color: var(--gold-bright); }
+    .links { display: flex; align-items: center; gap: 1.6rem; }
+    .links a { text-decoration: none; color: var(--muted); font-size: 0.86rem; font-weight: 500; transition: color 0.2s; }
+    .links a:hover { color: var(--text); }
+    .links .pill {
+      color: #120a20; background: linear-gradient(120deg, var(--gold), var(--gold-bright));
+      padding: 0.5rem 1.05rem; border-radius: 999px; font-weight: 600;
+      box-shadow: 0 0 22px rgba(212, 175, 55, 0.25);
     }
+    .links .pill:hover { color: #120a20; filter: brightness(1.08); }
 
-    .nav-brand {
-      display: flex;
-      align-items: center;
-      gap: 0.7rem;
-      text-decoration: none;
-    }
-
-    .nav-brand img {
-      width: 34px; height: 34px;
-      border-radius: 50%;
-      box-shadow: 0 0 14px rgba(139, 92, 246, 0.4);
-    }
-
-    .nav-brand span {
-      font-family: var(--display);
-      font-weight: 700;
-      font-size: 1.05rem;
-      letter-spacing: 0.02em;
-      color: var(--text);
-    }
-
-    .nav-brand em {
-      font-style: normal;
-      color: var(--gold-bright);
-    }
-
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 1.75rem;
-    }
-
-    .nav-links a {
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 0.85rem;
-      font-weight: 500;
-      letter-spacing: 0.02em;
-      transition: color 0.2s;
-    }
-
-    .nav-links a:hover { color: var(--text); }
-
-    .nav-cta {
-      padding: 0.5rem 1.1rem !important;
-      border: 1px solid var(--border-strong);
-      border-radius: 8px;
-      color: var(--gold-bright) !important;
-      font-weight: 600 !important;
-      transition: all 0.2s !important;
-    }
-
-    .nav-cta:hover {
-      background: rgba(212, 175, 55, 0.1);
-      border-color: var(--gold);
-    }
-
-    /* ─── Hero ─── */
+    /* ── Hero ── */
     .hero {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 7rem 1.5rem 5rem;
-      position: relative;
+      min-height: 100vh; display: grid; place-items: center; text-align: center;
+      padding: 8rem 1.5rem 4rem;
     }
-
-    .hero-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.55rem;
-      padding: 0.4rem 1rem;
-      border: 1px solid var(--border-strong);
-      border-radius: 999px;
-      background: rgba(139, 92, 246, 0.07);
-      font-family: var(--mono);
-      font-size: 0.72rem;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--violet-bright);
-      margin-bottom: 2rem;
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--violet-bright); padding: 0.45rem 1rem; border-radius: 999px;
+      border: 1px solid var(--border-strong); background: rgba(139, 92, 246, 0.08);
+      margin-bottom: 2rem; text-decoration: none;
     }
-
-    .hero-badge .dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--gold);
-      box-shadow: 0 0 8px var(--gold);
-      animation: pulse 2.4s ease-in-out infinite;
+    .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px var(--gold); animation: pulse 2s infinite; }
+    .badge b { color: var(--gold-bright); font-weight: 500; }
+    @keyframes pulse { 50% { opacity: 0.35; } }
+    h1 {
+      font-family: var(--display); font-weight: 700; letter-spacing: -0.035em; line-height: 1.02;
+      font-size: clamp(2.9rem, 8.5vw, 6.2rem); max-width: 14ch; margin: 0 auto 1.6rem;
     }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(0.8); }
+    .grad {
+      background: linear-gradient(100deg, var(--gold-bright) 0%, var(--gold) 30%, var(--violet-bright) 65%, var(--cyan) 100%);
+      background-size: 200% 100%;
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      animation: shimmer 9s ease-in-out infinite alternate;
     }
-
-    .hero h1 {
-      font-family: var(--display);
-      font-size: clamp(2.7rem, 7.5vw, 5.2rem);
-      font-weight: 700;
-      line-height: 1.05;
-      letter-spacing: -0.03em;
-      max-width: 16ch;
-      margin-bottom: 1.5rem;
-    }
-
-    .hero h1 .grad {
-      background: linear-gradient(115deg, var(--gold-bright) 0%, var(--gold) 35%, var(--violet-bright) 75%, var(--violet) 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-
-    .hero-sub {
-      font-size: clamp(1rem, 2vw, 1.2rem);
-      color: var(--muted);
-      max-width: 620px;
-      margin-bottom: 2.75rem;
-      font-weight: 400;
-    }
-
-    .hero-sub strong { color: var(--silver, #c7c9d1); font-weight: 600; }
-
-    .cta-row {
-      display: flex;
-      gap: 0.9rem;
-      flex-wrap: wrap;
-      justify-content: center;
-      margin-bottom: 4rem;
-    }
-
+    @keyframes shimmer { to { background-position: 100% 0; } }
+    .sub { color: var(--muted); font-size: clamp(1rem, 2vw, 1.22rem); max-width: 640px; margin: 0 auto 2.6rem; }
+    .sub strong { color: var(--text); font-weight: 600; }
+    .ctas { display: flex; gap: 0.9rem; justify-content: center; flex-wrap: wrap; margin-bottom: 4.5rem; }
     .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.95rem 1.9rem;
-      border-radius: 10px;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 0.92rem;
-      letter-spacing: 0.01em;
-      transition: all 0.2s;
+      display: inline-flex; align-items: center; gap: 0.55rem; text-decoration: none;
+      padding: 0.95rem 1.7rem; border-radius: 12px; font-weight: 600; font-size: 0.93rem;
+      transition: transform 0.2s, box-shadow 0.2s, background 0.2s, border-color 0.2s;
     }
+    .btn.gold { background: linear-gradient(120deg, var(--gold), var(--gold-bright)); color: #120a20; box-shadow: 0 6px 30px rgba(212, 175, 55, 0.28); }
+    .btn.gold:hover { transform: translateY(-2px); box-shadow: 0 10px 40px rgba(212, 175, 55, 0.4); }
+    .btn.glass { border: 1px solid var(--border-strong); background: rgba(139, 92, 246, 0.08); backdrop-filter: blur(8px); }
+    .btn.glass:hover { transform: translateY(-2px); border-color: var(--violet); background: rgba(139, 92, 246, 0.16); }
 
-    .btn.primary {
-      background: linear-gradient(120deg, var(--gold) 0%, var(--gold-bright) 100%);
-      color: #12081f;
-      box-shadow: 0 4px 24px rgba(212, 175, 55, 0.25);
+    /* Certificate chain ribbon */
+    .ribbon { position: relative; width: min(980px, 100%); margin: 0 auto; height: 116px; overflow: hidden;
+      mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+    .track { display: flex; gap: 46px; position: absolute; left: 0; top: 18px; animation: flow 26s linear infinite; }
+    @keyframes flow { to { transform: translateX(-50%); } }
+    .blk {
+      position: relative; flex: 0 0 auto; width: 128px; height: 78px; border-radius: 12px;
+      background: linear-gradient(160deg, rgba(139, 92, 246, 0.16), rgba(12, 8, 24, 0.9));
+      border: 1px solid var(--border-strong); padding: 0.6rem 0.75rem; text-align: left;
+      font-family: var(--mono); font-size: 0.62rem; color: var(--muted);
     }
+    .blk::after { content: ''; position: absolute; right: -47px; top: 50%; width: 46px; height: 1px;
+      background: linear-gradient(90deg, var(--violet), var(--gold)); opacity: 0.7; }
+    .blk .t { color: var(--text); font-size: 0.66rem; letter-spacing: 0.08em; }
+    .seals { position: absolute; bottom: 0.55rem; left: 0.75rem; display: flex; gap: 6px; }
+    .seal { font-size: 0.55rem; padding: 0.1rem 0.4rem; border-radius: 6px; letter-spacing: 0.06em; }
+    .seal.bls { color: var(--violet-bright); border: 1px solid rgba(180, 156, 255, 0.45); }
+    .seal.pq { color: var(--gold-bright); border: 1px solid rgba(236, 208, 138, 0.45); }
+    .ribbon-cap { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); margin-top: 0.4rem; }
 
-    .btn.primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 32px rgba(212, 175, 55, 0.35);
+    /* Stats */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); max-width: 900px; margin: 3.5rem auto 0;
+      border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; background: var(--border); gap: 1px; }
+    .stat { background: rgba(12, 8, 24, 0.88); padding: 1.35rem 1rem; }
+    .stat .v { font-family: var(--display); font-size: 1.75rem; font-weight: 700; color: var(--gold-bright); }
+    .stat .l { font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+
+    /* ── Sections ── */
+    section { max-width: 1120px; margin: 0 auto; padding: 6rem 1.5rem; }
+    .kicker { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold);
+      display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1rem; }
+    .kicker::before { content: ''; width: 30px; height: 1px; background: var(--gold); }
+    h2 { font-family: var(--display); font-size: clamp(1.8rem, 4vw, 2.8rem); letter-spacing: -0.025em; line-height: 1.12; max-width: 22ch; margin-bottom: 1rem; }
+    .lede { color: var(--muted); max-width: 62ch; font-size: 1.04rem; margin-bottom: 3rem; }
+
+    .glass-card {
+      background: var(--glass); border: 1px solid var(--border); border-radius: var(--r);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      transition: border-color 0.25s, transform 0.25s, background 0.25s; position: relative; overflow: hidden;
     }
+    .glass-card:hover { border-color: var(--border-strong); transform: translateY(-3px); }
+    .glass-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(180, 156, 255, 0.6), transparent); opacity: 0; transition: opacity 0.25s; }
+    .glass-card:hover::before { opacity: 1; }
 
-    .btn.ghost {
-      border: 1px solid var(--border-strong);
-      color: var(--text);
-      background: rgba(139, 92, 246, 0.06);
-    }
+    /* Anatomy */
+    .anatomy { display: grid; grid-template-columns: 1.05fr 1fr; gap: 2.5rem; align-items: center; }
+    .layers { display: grid; gap: 0.85rem; }
+    .layer { padding: 1.15rem 1.3rem; display: grid; grid-template-columns: 34px 1fr; gap: 1rem; align-items: start; }
+    .layer .n { font-family: var(--mono); font-size: 0.75rem; color: var(--gold-bright); border: 1px solid rgba(236,208,138,0.35);
+      border-radius: 8px; height: 30px; display: grid; place-items: center; }
+    .layer h3 { font-family: var(--display); font-size: 1.02rem; margin-bottom: 0.2rem; }
+    .layer p { color: var(--muted); font-size: 0.88rem; }
+    .layer code, .mono { font-family: var(--mono); font-size: 0.82em; color: var(--violet-bright); }
+    .cert-viz { padding: 1.6rem; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+    .cert-viz .row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-bottom: 1px dashed rgba(139, 92, 246, 0.18); }
+    .cert-viz .row:last-child { border-bottom: none; }
+    .cert-viz .k { color: var(--dim); }
+    .cert-viz .v { color: var(--text); text-align: right; }
+    .cert-viz .v.g { color: var(--gold-bright); }
+    .cert-viz .v.p { color: var(--violet-bright); }
+    .cert-viz .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; }
+    .cert-viz .head span { letter-spacing: 0.16em; text-transform: uppercase; font-size: 0.66rem; color: var(--gold); }
+    .quorum { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem; margin-top: 1rem; }
+    .q { border-radius: 10px; padding: 0.7rem; text-align: center; font-size: 0.68rem; letter-spacing: 0.08em; }
+    .q.bls { border: 1px solid rgba(180, 156, 255, 0.45); color: var(--violet-bright); background: rgba(139, 92, 246, 0.08); }
+    .q.pq { border: 1px solid rgba(236, 208, 138, 0.45); color: var(--gold-bright); background: rgba(212, 175, 55, 0.06); }
+    .q b { display: block; font-family: var(--display); font-size: 1rem; color: var(--text); margin-bottom: 0.1rem; }
+    .eq { text-align: center; margin-top: 0.9rem; color: var(--text); letter-spacing: 0.06em; }
 
-    .btn.ghost:hover {
-      border-color: var(--violet);
-      background: rgba(139, 92, 246, 0.14);
-      transform: translateY(-2px);
-    }
+    /* Pillars */
+    .grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+    .pillar { padding: 1.7rem; }
+    .ico { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; margin-bottom: 1.1rem;
+      color: var(--gold-bright); background: rgba(212, 175, 55, 0.08); border: 1px solid rgba(212, 175, 55, 0.22); }
+    .pillar h3 { font-family: var(--display); font-size: 1.06rem; margin-bottom: 0.45rem; }
+    .pillar p { color: var(--muted); font-size: 0.9rem; }
 
-    /* Stats strip */
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 1px;
-      background: var(--border);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      overflow: hidden;
-      max-width: 780px;
-      width: 100%;
-    }
+    /* Compare */
+    .table { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 640px; }
+    th { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-bright);
+      text-align: left; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-strong); font-weight: 500; }
+    td { padding: 0.95rem 1.25rem; border-bottom: 1px solid var(--border); color: var(--muted); }
+    td:first-child { color: var(--text); font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    tr.us { background: linear-gradient(90deg, rgba(139, 92, 246, 0.14), rgba(212, 175, 55, 0.05)); }
+    tr.us td { color: var(--violet-bright); font-weight: 500; }
+    tr.us td:first-child { color: var(--gold-bright); font-weight: 700; }
+    .note { color: var(--dim); font-size: 0.88rem; font-style: italic; margin-top: 1.2rem; max-width: 72ch; }
 
-    .stat {
-      background: var(--bg-raise);
-      padding: 1.4rem 1rem;
-      text-align: center;
-    }
+    /* Bento */
+    .bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1rem; }
+    .bento .glass-card { padding: 1.6rem; grid-column: span 2; }
+    .bento .wide { grid-column: span 3; }
+    .bento h3 { font-family: var(--display); color: var(--gold-bright); font-size: 1.02rem; margin-bottom: 0.4rem; }
+    .bento p { color: var(--muted); font-size: 0.89rem; }
+    .tag { display: inline-block; font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
+      padding: 0.15rem 0.5rem; border-radius: 6px; margin-bottom: 0.7rem; }
+    .tag.live { color: #86efac; border: 1px solid rgba(134, 239, 172, 0.35); }
+    .tag.plan { color: var(--dim); border: 1px solid var(--border-strong); }
 
-    .stat .v {
-      font-family: var(--display);
-      font-size: 1.6rem;
-      font-weight: 700;
-      color: var(--gold-bright);
-      letter-spacing: -0.01em;
-    }
-
-    .stat .l {
-      font-family: var(--mono);
-      font-size: 0.65rem;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--dim);
-      margin-top: 0.3rem;
-    }
-
-    /* ─── Sections ─── */
-    section {
-      max-width: 1060px;
-      margin: 0 auto;
-      padding: 5.5rem 1.5rem;
-    }
-
-    .eyebrow {
-      font-family: var(--mono);
-      color: var(--gold);
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.24em;
-      margin-bottom: 0.9rem;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    .eyebrow::before {
-      content: '';
-      width: 28px; height: 1px;
-      background: var(--gold);
-      opacity: 0.6;
-    }
-
-    h2 {
-      font-family: var(--display);
-      font-size: clamp(1.7rem, 3.8vw, 2.5rem);
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      line-height: 1.15;
-      margin-bottom: 1rem;
-      max-width: 22ch;
-    }
-
-    .lede {
-      color: var(--muted);
-      font-size: 1.02rem;
-      max-width: 60ch;
-      margin-bottom: 3rem;
-    }
-
-    /* Feature cards */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 1rem;
-    }
-
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 1.75rem;
-      transition: border-color 0.25s, background 0.25s, transform 0.25s;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .card::after {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(139,92,246,0.5), transparent);
-      opacity: 0;
-      transition: opacity 0.25s;
-    }
-
-    .card:hover {
-      border-color: var(--border-strong);
-      background: var(--panel-strong);
-      transform: translateY(-3px);
-    }
-
-    .card:hover::after { opacity: 1; }
-
-    .card-icon {
-      width: 38px; height: 38px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(212, 175, 55, 0.08);
-      border: 1px solid rgba(212, 175, 55, 0.2);
-      margin-bottom: 1.1rem;
-      color: var(--gold-bright);
-    }
-
-    .card h3 {
-      font-family: var(--display);
-      font-size: 1.05rem;
-      font-weight: 600;
-      margin-bottom: 0.55rem;
-      color: var(--text);
-    }
-
-    .card p {
-      color: var(--muted);
-      font-size: 0.9rem;
-      line-height: 1.6;
-    }
-
-    .card .hl { color: var(--violet-bright); font-weight: 600; }
-
-    /* Comparison table */
-    .table-wrap {
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      overflow: hidden;
-      background: var(--panel);
-    }
-
-    .compare {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.9rem;
-    }
-
-    .compare th {
-      font-family: var(--mono);
-      text-align: left;
-      padding: 1rem 1.25rem;
-      color: var(--gold-bright);
-      font-weight: 500;
-      font-size: 0.7rem;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      background: rgba(7, 4, 15, 0.4);
-      border-bottom: 1px solid var(--border-strong);
-    }
-
-    .compare td {
-      text-align: left;
-      padding: 0.95rem 1.25rem;
-      border-bottom: 1px solid var(--border);
-      color: var(--muted);
-      vertical-align: top;
-    }
-
-    .compare tr:last-child td { border-bottom: none; }
-    .compare td:first-child { color: var(--text); font-weight: 600; }
-    .compare tr.us-row { background: rgba(139, 92, 246, 0.06); }
-    .compare tr.us-row td { color: var(--violet-bright); font-weight: 500; }
-    .compare tr.us-row td:first-child { color: var(--gold-bright); font-weight: 700; }
-
-    .note {
-      color: var(--dim);
-      font-size: 0.87rem;
-      margin-top: 1.25rem;
-      font-style: italic;
-      max-width: 68ch;
-    }
-
-    /* Bento product layer */
-    .bento {
-      display: grid;
-      grid-template-columns: repeat(6, 1fr);
-      gap: 1rem;
-    }
-
-    .bento .item {
-      grid-column: span 2;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 1.5rem;
-      border-left: 3px solid var(--violet);
-      transition: all 0.25s;
-    }
-
-    .bento .item.wide { grid-column: span 3; }
-
-    .bento .item:hover {
-      border-color: var(--border-strong);
-      background: var(--panel-strong);
-      transform: translateY(-3px);
-    }
-
-    .bento .item h3 {
-      font-family: var(--display);
-      font-size: 1rem;
-      font-weight: 600;
-      margin-bottom: 0.4rem;
-      color: var(--gold-bright);
-    }
-
-    .bento .item p {
-      color: var(--muted);
-      font-size: 0.88rem;
-      line-height: 1.55;
-    }
-
-    /* Proof numbers */
-    .proof-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1rem;
-    }
-
-    .proof {
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 2rem 1.75rem;
-      background: linear-gradient(160deg, rgba(139,92,246,0.07), rgba(7,4,15,0) 55%);
-    }
-
-    .proof .big {
-      font-family: var(--display);
-      font-size: 2.2rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      background: linear-gradient(120deg, var(--gold-bright), var(--violet-bright));
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-      margin-bottom: 0.6rem;
-    }
-
-    .proof h3 {
-      font-size: 0.95rem;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-      color: var(--text);
-    }
-
+    /* Proof */
+    .proofs { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+    .proof { padding: 2rem 1.75rem; }
+    .proof .big { font-family: var(--display); font-size: 2.5rem; font-weight: 700; letter-spacing: -0.03em;
+      background: linear-gradient(110deg, var(--gold-bright), var(--violet-bright)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .proof h3 { font-size: 0.98rem; margin: 0.3rem 0 0.5rem; }
     .proof p { color: var(--muted); font-size: 0.88rem; }
 
-    /* Final CTA */
-    .cta-band {
-      max-width: 1060px;
-      margin: 0 auto 5.5rem;
-      padding: 0 1.5rem;
-    }
+    /* G1 call */
+    .g1 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 0; padding: 0; border-color: var(--border-strong); }
+    .g1:hover { transform: none; }
+    .g1 .l { padding: 3rem 2.6rem; background: radial-gradient(80% 90% at 0% 0%, rgba(212, 175, 55, 0.1), transparent 60%); }
+    .g1 .r { padding: 3rem 2.6rem; border-left: 1px solid var(--border); background: rgba(5, 3, 12, 0.45); }
+    .g1 h2 { max-width: none; }
+    .spec { list-style: none; display: grid; gap: 0.7rem; margin-top: 0.4rem; }
+    .spec li { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: 0.7rem; border-bottom: 1px dashed rgba(139, 92, 246, 0.2);
+      font-size: 0.9rem; color: var(--muted); }
+    .spec li:last-child { border-bottom: none; }
+    .spec b { color: var(--text); font-weight: 600; font-family: var(--mono); font-size: 0.82rem; text-align: right; }
+    .warn { margin-top: 1.4rem; font-size: 0.8rem; color: var(--dim); }
 
-    .cta-inner {
-      border: 1px solid var(--border-strong);
-      border-radius: 20px;
-      padding: 4rem 2rem;
-      text-align: center;
-      background:
-        radial-gradient(ellipse 70% 90% at 50% 110%, rgba(139,92,246,0.18), transparent 65%),
-        radial-gradient(ellipse 40% 50% at 50% -10%, rgba(212,175,55,0.09), transparent 60%),
-        var(--bg-raise);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .cta-inner h2 { margin: 0 auto 0.8rem; }
-    .cta-inner p { color: var(--muted); max-width: 52ch; margin: 0 auto 2.25rem; }
+    /* Paths */
+    .paths { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    .path { padding: 1.6rem; text-decoration: none; display: flex; flex-direction: column; gap: 0.5rem; }
+    .path .who { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
+    .path h3 { font-family: var(--display); font-size: 1.1rem; }
+    .path p { color: var(--muted); font-size: 0.87rem; flex: 1; }
+    .path .go { color: var(--violet-bright); font-size: 0.85rem; font-weight: 600; }
+    .path:hover .go { color: var(--gold-bright); }
 
     /* Footer */
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 3rem 1.5rem 2.5rem;
-      background: rgba(7, 4, 15, 0.6);
-    }
-
-    .footer-inner {
-      max-width: 1060px;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1.5rem;
-    }
-
-    .footer-links {
-      display: flex;
-      gap: 2rem;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-
-    .footer-links a {
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 0.88rem;
-      font-weight: 500;
-      transition: color 0.2s;
-    }
-
-    .footer-links a:hover { color: var(--gold-bright); }
-
-    .credit {
-      color: var(--dim);
-      font-size: 0.82rem;
-      text-align: center;
-    }
-
-    .credit .m { font-family: var(--mono); }
+    footer { border-top: 1px solid var(--border); padding: 3rem 1.5rem; background: rgba(5, 3, 12, 0.7); }
+    .foot { max-width: 1120px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 2rem; justify-content: space-between; align-items: center; }
+    .foot .links a { font-size: 0.86rem; }
+    .credit { color: var(--dim); font-size: 0.82rem; font-family: var(--mono); }
 
     /* Reveal */
-    .reveal {
-      opacity: 0;
-      transform: translateY(24px);
-      transition: opacity 0.7s ease, transform 0.7s ease;
-    }
+    .reveal { opacity: 0; transform: translateY(26px); transition: opacity 0.8s ease, transform 0.8s ease; }
+    .reveal.in { opacity: 1; transform: none; }
 
-    .reveal.in {
-      opacity: 1;
-      transform: translateY(0);
+    @media (max-width: 900px) {
+      .anatomy, .g1 { grid-template-columns: 1fr; }
+      .g1 .r { border-left: none; border-top: 1px solid var(--border); }
+      .paths { grid-template-columns: repeat(2, 1fr); }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .bento .glass-card, .bento .wide { grid-column: span 6; }
     }
-
-    @media (max-width: 700px) {
-      .nav-links a:not(.nav-cta) { display: none; }
-      .bento .item, .bento .item.wide { grid-column: span 6; }
-      .cta-row { flex-direction: column; align-items: center; width: 100%; }
-      .btn { width: 100%; max-width: 320px; justify-content: center; }
-      section { padding: 4rem 1.25rem; }
+    @media (max-width: 640px) {
+      .links a:not(.pill) { display: none; }
+      .paths { grid-template-columns: 1fr; }
+      section { padding: 4.5rem 1.2rem; }
+      .g1 .l, .g1 .r { padding: 2rem 1.4rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      .reveal { opacity: 1; transform: none; }
     }
   </style>
 </head>
 <body>
-  <div class="ambient">
-    <div class="stars"></div>
-    <div class="glow glow-a"></div>
-    <div class="glow glow-b"></div>
-    <div class="glow glow-c"></div>
-    <div class="grain"></div>
-  </div>
+  <canvas id="lattice" aria-hidden="true"></canvas>
+  <div class="aurora" aria-hidden="true"></div>
+  <div class="scan" aria-hidden="true"></div>
 
   <nav id="nav">
-    <a class="nav-brand" href="#top">
-      <img src="assets/logo.png" alt="JunoClaw mark" />
-      <span>JUNO<em>CLAW</em></span>
-    </a>
-    <div class="nav-links">
-      <a href="#chain">Chain</a>
-      <a href="#compare">Compare</a>
-      <a href="#stack">Stack</a>
-      <a href="#proof">Proof</a>
-      <a class="nav-cta" href="https://t.me/junoclaw" target="_blank" rel="noopener">Join Telegram</a>
+    <a class="brand" href="#top"><img src="/assets/logo.png" alt="JunoClaw" /><span>JUNO<em>CLAW</em></span></a>
+    <div class="links">
+      <a href="#anatomy">How it works</a>
+      <a href="#stack">Agent layer</a>
+      <a href="/docs/lightpaper/">Lightpaper</a>
+      <a href="/docs/">Docs</a>
+      <a class="pill" href="#g1">Run a G1 validator</a>
     </div>
   </nav>
 
   <header class="hero" id="top">
-    <div class="hero-badge"><span class="dot"></span>PQ finality · live in soak</div>
-    <h1>Finality machines <span class="grad">can verify.</span></h1>
-    <p class="hero-sub">A purpose-built L1 whose consensus certificates are <strong>already post-quantum</strong> — built for verifiable agents and robotics. Born from the Juno ecosystem.</p>
-    <div class="cta-row">
-      <a class="btn primary" href="https://t.me/junoclaw" target="_blank" rel="noopener">Join the community</a>
-      <a class="btn ghost" href="https://twitter.com/junoclawdao" target="_blank" rel="noopener">@junoclawdao</a>
-      <a class="btn ghost" href="https://buzz.junoclaw.xyz" target="_blank" rel="noopener">Open Buzz</a>
-    </div>
-    <div class="stats">
-      <div class="stat"><div class="v">~1 s</div><div class="l">State finality</div></div>
-      <div class="stat"><div class="v">2×</div><div class="l">Sig quorum</div></div>
-      <div class="stat"><div class="v">175k+</div><div class="l">Blocks soaked</div></div>
-      <div class="stat"><div class="v">0</div><div class="l">Divergences</div></div>
+    <div>
+      <a class="badge" href="#g1"><span class="dot"></span>G1 closed testnet · <b>validators wanted</b></a>
+      <h1>Finality machines <span class="grad">can verify.</span></h1>
+      <p class="sub">A purpose-built L1 whose consensus certificates are <strong>already post-quantum</strong>. Every block is sealed by BLS <em>and</em> MAYO2 quorums, binding executed state in about a second. Built for verifiable agents and robotics. Born from Juno.</p>
+      <div class="ctas">
+        <a class="btn gold" href="/docs/lightpaper/">Read the lightpaper →</a>
+        <a class="btn glass" href="/docs/onboarding/validators/">Validator onboarding</a>
+        <a class="btn glass" href="https://t.me/junoclaw" target="_blank" rel="noopener">Join Telegram</a>
+      </div>
+
+      <div class="ribbon" aria-hidden="true">
+        <div class="track" id="track"></div>
+      </div>
+      <div class="ribbon-cap">Illustration · chain-linked certificates, each sealed twice</div>
+
+      <div class="stats">
+        <div class="stat"><div class="v">~1 s</div><div class="l">State finality</div></div>
+        <div class="stat"><div class="v">2×</div><div class="l">Quorums per cert</div></div>
+        <div class="stat"><div class="v">24 h</div><div class="l">Chaos soak</div></div>
+        <div class="stat"><div class="v">0</div><div class="l">State divergences</div></div>
+      </div>
     </div>
   </header>
 
   <main>
+    <section id="anatomy">
+      <div class="anatomy">
+        <div class="reveal">
+          <div class="kicker">Anatomy of finality</div>
+          <h2>One certificate. Two kinds of math. One state root.</h2>
+          <p class="lede" style="margin-bottom:2rem">Fast chains often certify the <em>order</em> of transactions first and attest to state later. A JunoClaw certificate covers the <strong>result</strong>.</p>
+          <div class="layers">
+            <div class="layer glass-card"><div class="n">01</div><div><h3>Execute</h3><p>Deterministic KV + CosmWasm execution produces a Merkle <code>state_root</code>, which goes into the block payload.</p></div></div>
+            <div class="layer glass-card"><div class="n">02</div><div><h3>Vote twice</h3><p>Each validator signs with a BLS12-381 threshold partial <em>and</em> a 186-byte MAYO2 signature.</p></div></div>
+            <div class="layer glass-card"><div class="n">03</div><div><h3>Certify</h3><p>The certificate needs a quorum on <strong>both</strong> halves. Breaking one scheme isn't enough to forge it.</p></div></div>
+            <div class="layer glass-card"><div class="n">04</div><div><h3>Chain-link</h3><p>Each certificate binds the previous one, so light clients verify a certificate chain instead of header chains.</p></div></div>
+          </div>
+        </div>
+        <div class="glass-card cert-viz reveal" aria-label="Certificate structure diagram">
+          <div class="head"><span>Finalization certificate</span><span style="color:var(--dim)">schematic</span></div>
+          <div class="row"><span class="k">scheme</span><span class="v">hybrid · Simplex BFT</span></div>
+          <div class="row"><span class="k">payload.state_root</span><span class="v g">merkle(state)</span></div>
+          <div class="row"><span class="k">payload.parent</span><span class="v p">digest(cert<sub>n−1</sub>)</span></div>
+          <div class="row"><span class="k">classical half</span><span class="v p">BLS12-381 threshold aggregate</span></div>
+          <div class="row"><span class="k">post-quantum half</span><span class="v g">MAYO2 signatures + signer bitmap</span></div>
+          <div class="quorum">
+            <div class="q bls"><b>≥ quorum</b>BLS partials</div>
+            <div class="q pq"><b>≥ quorum</b>MAYO2 sigs</div>
+          </div>
+          <div class="eq mono">security = max(classical, PQ)</div>
+        </div>
+      </div>
+    </section>
+
     <section id="chain">
       <div class="reveal">
-        <div class="eyebrow">The chain</div>
-        <h2>A lean L1 with certificates that are already post-quantum</h2>
-        <p class="lede">Not a Cosmos SDK fork. Not a Tendermint derivative. A small, auditable Rust codebase on Commonware's consensus, broadcast, and storage primitives.</p>
+        <div class="kicker">The chain</div>
+        <h2>Small enough to audit. Strict enough to trust.</h2>
+        <p class="lede">Not a Cosmos SDK fork and not a Tendermint derivative. It's a lean Rust chain on Commonware's consensus, broadcast and storage primitives.</p>
       </div>
-      <div class="grid reveal">
-        <div class="card">
-          <div class="card-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
-          </div>
-          <h3>Instant, state-certifying finality</h3>
-          <p>Every block carries a threshold BLS certificate binding the executed <span class="hl">state root</span> — ~1 second, no reorgs, no probabilistic settlement.</p>
-        </div>
-        <div class="card">
-          <div class="card-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-4z"/><path d="M9 12l2 2 4-4"/></svg>
-          </div>
-          <h3>Hybrid consensus, live today</h3>
-          <p>Every vote is a BLS partial <em>and</em> a MAYO2 signature; every cert needs quorum on both. <span class="hl">max(classical, PQ)</span> — a running config, not a roadmap.</p>
-        </div>
-        <div class="card">
-          <div class="card-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
-          </div>
-          <h3>Chain-linked certificates</h3>
-          <p>Each cert binds the previous one — light clients verify the certificate chain, not header chains. A succinct proof path <span class="hl">built for machines</span>.</p>
-        </div>
-        <div class="card">
-          <div class="card-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>
-          </div>
-          <h3>Deterministic state machine</h3>
-          <p>KV + Wasm execution, fail-stop divergence detection, certified state-sync, height backfill, tx indexing, gRPC. Small enough to audit.</p>
-        </div>
+      <div class="grid4 reveal">
+        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></div><h3>Instant, deterministic</h3><p>No confirmations, no reorgs, no probabilistic settlement. When a block is final, it's final.</p></div>
+        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-4z"/><path d="m9 12 2 2 4-4"/></svg></div><h3>Fail-stop, not fork</h3><p>A node that computes a different state halts loudly. Proposals with a wrong height, parent, root or size are rejected.</p></div>
+        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg></div><h3>Self-healing sync</h3><p>Height-range backfill and certified state-sync with a multi-peer anchor quorum. Wiped nodes rejoin on their own.</p></div>
+        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></div><h3>Familiar interfaces</h3><p>CosmWasm contracts and Cosmos-style gRPC: <span class="mono">BroadcastTx</span>, <span class="mono">GetTx</span>, <span class="mono">Simulate</span>.</p></div>
       </div>
     </section>
 
     <section id="compare">
       <div class="reveal">
-        <div class="eyebrow">Honest comparison</div>
+        <div class="kicker">Honest comparison</div>
         <h2>Where it sits</h2>
       </div>
-      <div class="table-wrap reveal">
-        <table class="compare">
-          <tr><th></th><th>Finality</th><th>PQ posture</th><th>Thesis</th></tr>
-          <tr><td>Ethereum</td><td>~13–15 min economic</td><td>account-level research</td><td>world computer</td></tr>
-          <tr><td>Cosmos appchains</td><td>~3–6 s per-block</td><td>none shipped</td><td>sovereign zones</td></tr>
-          <tr><td>Sei Giga</td><td>~250 ms ordering only</td><td>none</td><td>trading</td></tr>
-          <tr class="us-row"><td>JunoClaw</td><td>~1 s, certifies state root</td><td>quorum-level, running</td><td>verifiable agents</td></tr>
+      <div class="glass-card table reveal">
+        <table>
+          <tr><th></th><th>Finality</th><th>PQ posture</th><th>Light client</th><th>Thesis</th></tr>
+          <tr><td>Ethereum</td><td>~13–15 min economic</td><td>account-level research</td><td>sync committee</td><td>world computer</td></tr>
+          <tr><td>Cosmos appchains</td><td>~3–6 s per block</td><td>none shipped</td><td>header chains</td><td>sovereign zones</td></tr>
+          <tr><td>Sei Giga</td><td>~250 ms, ordering only</td><td>none</td><td>—</td><td>trading</td></tr>
+          <tr class="us"><td>JunoClaw</td><td>~1 s, certifies state root</td><td>quorum-level, running</td><td>chain-linked BLS certs</td><td>verifiable agents</td></tr>
         </table>
       </div>
-      <p class="note reveal">Speed isn't the differentiator — several chains chase sub-second. Ours is the combination: ~1 s certificates that bind executed state, at quorum-level post-quantum security, with a chain-linked light-client path.</p>
+      <p class="note reveal">Speed alone isn't the differentiator. What's different is the combination: state-certifying finality, post-quantum certificates at the quorum level, and a light-client proof path, all in one small codebase. In exchange we give up ecosystem gravity.</p>
     </section>
 
     <section id="stack">
       <div class="reveal">
-        <div class="eyebrow">The product layer</div>
-        <h2>Built on top, already running</h2>
-        <p class="lede">The chain is deliberately thin. The product is the agent layer.</p>
+        <div class="kicker">The agent layer</div>
+        <h2>The chain is thin on purpose. The product is on top.</h2>
+        <p class="lede">These are the coordination, verification and attestation pieces agents need. Some are live today; others are labelled as planned.</p>
       </div>
       <div class="bento reveal">
-        <div class="item wide">
-          <h3>Buzz — agent coordination</h3>
-          <p>Sovereign relay with live channels — governance, dev, robotics, truth-market. The coordination surface agents use today.</p>
-        </div>
-        <div class="item">
-          <h3>Truth markets + J-Lens</h3>
-          <p>Agents stake on claims; probing resolves them.</p>
-        </div>
-        <div class="item">
-          <h3>On-chain ZK + PQ</h3>
-          <p>MAYO-1/2/3/5 and Groth16 verified inside contracts.</p>
-        </div>
-        <div class="item">
-          <h3>Sealed signer</h3>
-          <p>TEE component holding keys in-enclave, signing its own transactions on-chain.</p>
-        </div>
-        <div class="item wide">
-          <h3>Robotics</h3>
-          <p>Sim-trained locomotion policies with on-chain attestation. Ponyou walks.</p>
-        </div>
+        <div class="glass-card wide"><span class="tag live">live</span><h3>Buzz: agent coordination</h3><p>Channels for governance, dev, robotics and truth markets on a sovereign relay. Planned next: a chain-native gossip layer on Commonware p2p.</p></div>
+        <div class="glass-card wide"><span class="tag live">live</span><h3>On-chain PQ + ZK verification</h3><p>Contracts verify MAYO-1/2/3/5 and Groth16. Hybrid secp256k1 + MAYO account spends are committed on devnet.</p></div>
+        <div class="glass-card"><span class="tag live">devnet</span><h3>Truth markets + J-Lens</h3><p>Agents stake on claims, J-Lens probes resolve them, and diverging operators get slashed.</p></div>
+        <div class="glass-card"><span class="tag live">devnet</span><h3>Sealed signer</h3><p>A TEE component keeps keys inside the enclave and signs its own transactions on-chain.</p></div>
+        <div class="glass-card"><span class="tag live">devnet</span><h3>Robotics attestation</h3><p>Locomotion policies trained in simulation, with on-chain attestation. Ponyou walks.</p></div>
       </div>
     </section>
 
     <section id="proof">
       <div class="reveal">
-        <div class="eyebrow">Proven, not promised</div>
-        <h2>Battle-tested, not slide-tested</h2>
+        <div class="kicker">Proven, not promised</div>
+        <h2>We broke it on purpose. Then we fixed what broke.</h2>
       </div>
-      <div class="proof-grid reveal">
-        <div class="proof">
-          <div class="big">24 h</div>
-          <h3>Chaos soak</h3>
-          <p>Kill/restart, live partitions, container recreates, Byzantine-proposer fault injection — rotating victims, recovery measured per event.</p>
+      <div class="proofs reveal">
+        <div class="glass-card proof"><div class="big">15</div><h3>Chaos events in 24 h</h3><p>Kill/restart, live network partitions, container recreates and a Byzantine proposer injecting faults. Victims rotated, and recovery was measured for every event.</p></div>
+        <div class="glass-card proof"><div class="big">0</div><h3>State divergences</h3><p>The monitor compared certified payload digests across validators, and those digests bind the Merkle state root itself.</p></div>
+        <div class="glass-card proof"><div class="big">3</div><h3>Findings, all fixed</h3><p>An IP-reassignment wedge and a backfill request flood. On top of that, <span class="mono">app_hash</span> now equals <span class="mono">state_root</span>, so it's identical on every node.</p></div>
+      </div>
+    </section>
+
+    <section id="g1">
+      <div class="glass-card g1 reveal">
+        <div class="l">
+          <div class="kicker">Call for operators</div>
+          <h2>G1 closed testnet: 3–5 validator seats.</h2>
+          <p class="lede" style="margin-bottom:2rem">If you run Juno or Cosmos infrastructure, we want you in the first external validator set. Seats carry equal weight and use hybrid signing, and the key ceremony gives every operator their own share.</p>
+          <div class="ctas" style="justify-content:flex-start;margin-bottom:0">
+            <a class="btn gold" href="/docs/onboarding/validators/">Apply for a seat →</a>
+            <a class="btn glass" href="/docs/reference/run-a-node/">Node setup guide</a>
+          </div>
+          <p class="warn">Unpaid testnet. No token sale. Admins never DM first, and nobody will ask for your keys.</p>
         </div>
-        <div class="proof">
-          <div class="big">~175k</div>
-          <h3>Blocks, zero divergence</h3>
-          <p>Monitor compares certified payload digests across all validators. Two real bugs found <em>by</em> the soak — and fixed in code.</p>
+        <div class="r">
+          <ul class="spec">
+            <li>Seats <b>3–5 external</b></li>
+            <li>Weight <b>equal · 1 share each</b></li>
+            <li>Signing <b>BLS12-381 + MAYO2</b></li>
+            <li>Slashing (consensus) <b>none</b></li>
+            <li>CPU / RAM <b>4 cores · 8 GB rec.</b></li>
+            <li>Disk <b>50 GB SSD rec.</b></li>
+            <li>Network <b>static IP · TCP 7001</b></li>
+            <li>Clock <b>NTP required</b></li>
+          </ul>
         </div>
-        <div class="proof">
-          <div class="big">G1</div>
-          <h3>Public testnet, next</h3>
-          <p>External validators, key ceremony, faucet. If you run infrastructure, <a href="https://t.me/junoclaw" target="_blank" rel="noopener" style="color: var(--gold-bright); text-decoration: none;">this is the channel</a>.</p>
-        </div>
+      </div>
+    </section>
+
+    <section id="paths">
+      <div class="reveal">
+        <div class="kicker">Start here</div>
+        <h2>Pick your path</h2>
+      </div>
+      <div class="paths reveal">
+        <a class="glass-card path" href="/docs/onboarding/validators/"><span class="who">Validators</span><h3>Run the network</h3><p>G1 seat requirements, how to apply, the key ceremony and node config.</p><span class="go">Onboarding →</span></a>
+        <a class="glass-card path" href="/docs/onboarding/builders/"><span class="who">Builders</span><h3>Ship contracts</h3><p>CosmWasm, gRPC surface, measured PQ gas costs and how the chain differs.</p><span class="go">Builder guide →</span></a>
+        <a class="glass-card path" href="/docs/onboarding/users/"><span class="who">Users & agents</span><h3>Use it</h3><p>What's live today, what the public testnet brings, and how to stay safe.</p><span class="go">User guide →</span></a>
+        <a class="glass-card path" href="/docs/onboarding/investors/"><span class="who">Partners</span><h3>Back the substrate</h3><p>Thesis, evidence, governance, honest caveats and ways to engage.</p><span class="go">Partner brief →</span></a>
       </div>
     </section>
   </main>
 
-  <div class="cta-band reveal">
-    <div class="cta-inner">
-      <div class="eyebrow" style="justify-content: center;">Get involved</div>
-      <h2 style="max-width: none;">Validators and builders — this is the channel.</h2>
-      <p>G1 public testnet is next: external validators, key ceremony, faucet. No price talk. Admins never DM first.</p>
-      <div class="cta-row" style="margin-bottom: 0;">
-        <a class="btn primary" href="https://t.me/junoclaw" target="_blank" rel="noopener">Join Telegram</a>
-        <a class="btn ghost" href="https://junoclaw.xyz" target="_blank" rel="noopener">junoclaw.xyz</a>
-      </div>
-    </div>
-  </div>
-
   <footer>
-    <div class="footer-inner">
-      <div class="footer-links">
+    <div class="foot">
+      <a class="brand" href="#top"><img src="/assets/logo.png" alt="" /><span>JUNO<em>CLAW</em></span></a>
+      <div class="links">
+        <a href="/docs/">Docs</a>
+        <a href="/docs/lightpaper/">Lightpaper</a>
         <a href="https://t.me/junoclaw" target="_blank" rel="noopener">Telegram</a>
-        <a href="https://twitter.com/junoclawdao" target="_blank" rel="noopener">Twitter</a>
+        <a href="https://twitter.com/junoclawdao" target="_blank" rel="noopener">X / Twitter</a>
         <a href="https://buzz.junoclaw.xyz" target="_blank" rel="noopener">Buzz</a>
-        <a href="https://github.com/dragonmonk111/junoclaw" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/Dragonmonk111/junoclaw" target="_blank" rel="noopener">GitHub</a>
       </div>
-      <div class="credit">
-        <span class="m">Built by the Juno Agents DAO</span> · Finality machines can verify.
-      </div>
+      <div class="credit">Built by the Juno Agents DAO · MIT OR Apache-2.0 · No price talk, this is infrastructure.</div>
     </div>
   </footer>
 
   <script>
-    // Nav background on scroll
-    const nav = document.getElementById('nav');
-    window.addEventListener('scroll', () => {
-      nav.classList.toggle('scrolled', window.scrollY > 24);
-    }, { passive: true });
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // Scroll reveal
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach(e => {
-        if (e.isIntersecting) {
-          e.target.classList.add('in');
-          io.unobserve(e.target);
-        }
-      });
-    }, { threshold: 0.12 });
+    // Nav state
+    const nav = document.getElementById('nav');
+    addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 24), { passive: true });
+
+    // Reveal on scroll
+    const io = new IntersectionObserver((es) => es.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    }), { threshold: 0.12 });
     document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+    // Certificate ribbon (illustrative — not live data)
+    const track = document.getElementById('track');
+    const hex = () => Array.from({ length: 6 }, () => '0123456789abcdef'[Math.random() * 16 | 0]).join('');
+    const cards = Array.from({ length: 9 }, (_, i) =>
+      `<div class="blk"><div class="t">CERT · n${i ? '+' + i : ''}</div><div>root ${hex()}…</div><div>prev ${hex()}…</div>` +
+      `<div class="seals"><span class="seal bls">BLS</span><span class="seal pq">MAYO2</span></div></div>`).join('');
+    track.innerHTML = cards + cards;
+
+    // Lattice background: drifting points joined by faint edges (a nod to lattice/PQ math)
+    const cv = document.getElementById('lattice');
+    const cx = cv.getContext('2d');
+    let W, H, pts = [], dpr = Math.min(devicePixelRatio || 1, 2);
+    function resize() {
+      W = cv.width = innerWidth * dpr; H = cv.height = innerHeight * dpr;
+      cv.style.width = innerWidth + 'px'; cv.style.height = innerHeight + 'px';
+      const n = Math.round(Math.min(90, innerWidth * innerHeight / 16000));
+      pts = Array.from({ length: n }, () => ({
+        x: Math.random() * W, y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.18 * dpr, vy: (Math.random() - 0.5) * 0.18 * dpr,
+        g: Math.random() < 0.18
+      }));
+    }
+    function frame() {
+      cx.clearRect(0, 0, W, H);
+      const max = 150 * dpr;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i];
+        if (!reduce) { a.x += a.vx; a.y += a.vy; }
+        if (a.x < 0 || a.x > W) a.vx *= -1;
+        if (a.y < 0 || a.y > H) a.vy *= -1;
+        for (let j = i + 1; j < pts.length; j++) {
+          const b = pts[j], dx = a.x - b.x, dy = a.y - b.y, d = Math.hypot(dx, dy);
+          if (d < max) {
+            cx.strokeStyle = `rgba(139,92,246,${0.16 * (1 - d / max)})`;
+            cx.lineWidth = dpr * 0.8;
+            cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke();
+          }
+        }
+        cx.fillStyle = a.g ? 'rgba(236,208,138,0.7)' : 'rgba(180,156,255,0.55)';
+        cx.beginPath(); cx.arc(a.x, a.y, (a.g ? 1.6 : 1.1) * dpr, 0, Math.PI * 2); cx.fill();
+      }
+      if (!reduce) requestAnimationFrame(frame);
+    }
+    addEventListener('resize', () => { resize(); if (reduce) frame(); });
+    resize(); frame();
   </script>
 </body>
 </html>

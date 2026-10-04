@@ -1,0 +1,66 @@
+/* JunoClaw brand on top of Starlight — violet / gold on deep space */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --sl-font: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --sl-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #1e1538;
+  --sl-color-accent: #8b5cf6;
+  --sl-color-accent-high: #d9ccff;
+  --sl-color-white: #f2f0f9;
+  --sl-color-gray-1: #e6e2f5;
+  --sl-color-gray-2: #c4bfdc;
+  --sl-color-gray-3: #a49ec2;
+  --sl-color-gray-4: #6f688f;
+  --sl-color-gray-5: #3a3358;
+  --sl-color-gray-6: #160f2b;
+  --sl-color-black: #07040f;
+  --sl-color-bg-nav: rgba(7, 4, 15, 0.85);
+  --sl-color-bg-sidebar: #0a0616;
+  --jc-gold: #e8c97a;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #ede7ff;
+  --sl-color-accent: #6d3fe0;
+  --sl-color-accent-high: #2c1670;
+  --jc-gold: #9a7a14;
+}
+
+h1, h2, h3, h4, .site-title {
+  font-family: 'Space Grotesk', var(--sl-font);
+  letter-spacing: -0.015em;
+}
+
+.site-title { font-weight: 700; }
+
+:root[data-theme='dark'] body {
+  background:
+    radial-gradient(900px 500px at 70% -10%, rgba(139, 92, 246, 0.13), transparent 60%),
+    radial-gradient(600px 400px at -10% 40%, rgba(212, 175, 55, 0.05), transparent 60%),
+    var(--sl-color-black);
+  background-attachment: fixed;
+}
+
+.sl-markdown-content strong { color: var(--sl-color-white); }
+
+.sl-markdown-content table th {
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--jc-gold);
+}
+
+.hero .tagline { max-width: 52ch; }
+
+.jc-kicker {
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--jc-gold);
+}

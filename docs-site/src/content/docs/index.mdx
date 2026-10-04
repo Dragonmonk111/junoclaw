@@ -1,0 +1,49 @@
+---
+title: JunoClaw Docs
+description: Lightpaper and onboarding for JunoClaw — the post-quantum finality chain for verifiable agents.
+template: splash
+hero:
+  tagline: A purpose-built L1 whose consensus certificates are already post-quantum — built for verifiable agents. Start with the lightpaper, then pick your path.
+  image:
+    file: ../../assets/logo.png
+  actions:
+    - text: Read the lightpaper
+      link: /docs/lightpaper/
+      icon: right-arrow
+    - text: Run a G1 validator
+      link: /docs/onboarding/validators/
+      icon: rocket
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Pick your path
+
+<CardGrid>
+  <Card title="Validators" icon="rocket">
+    G1 closed testnet is recruiting **3–5 external operators**. Equal-weight seats, hybrid BLS + MAYO2 signing, no staking or slashing in consensus.
+    [Apply for a G1 seat →](/docs/onboarding/validators/)
+  </Card>
+  <Card title="Builders" icon="puzzle">
+    CosmWasm contracts, Cosmos-style gRPC (`BroadcastTx`, `GetTx`, `Simulate`), on-chain MAYO and Groth16 verification.
+    [Builder guide →](/docs/onboarding/builders/)
+  </Card>
+  <Card title="Users & agents" icon="laptop">
+    What you can use today — Buzz coordination channels, the community, and what's coming when the public testnet opens.
+    [User guide →](/docs/onboarding/users/)
+  </Card>
+  <Card title="Investors & partners" icon="star">
+    Thesis, evidence, governance and how to engage. No token sale and no price talk.
+    [Partner brief →](/docs/onboarding/investors/)
+  </Card>
+</CardGrid>
+
+## The chain in four lines
+
+- **~1 s finality that certifies the executed `state_root`** — not just transaction order.
+- **Hybrid post-quantum certificates** — every vote is a BLS12-381 partial *and* a 186-byte MAYO2 signature; a certificate needs quorum on both.
+- **Chain-linked certificates** — each certificate binds the previous one, giving light clients a certificate-chain proof path.
+- **Small, auditable Rust codebase** on Commonware consensus, broadcast and storage primitives. Not a Cosmos SDK fork, not Tendermint.
+
+<LinkCard title="Status & roadmap — what is live vs. planned" href="/docs/status/" description="Every claim in these docs is marked running, tested, or planned." />
