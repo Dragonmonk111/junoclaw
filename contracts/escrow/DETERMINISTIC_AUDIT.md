@@ -164,7 +164,9 @@ fn expire_pending_fails_for_non_pending() { ... }
 
 ---
 
-### 🟢 F10 — `Authorize` is open to anyone; task_id squatting possible
+### ✅ F10 — `Authorize` is open to anyone; task_id squatting possible — FIXED 2026-10-05, re-rated LOW → HIGH
+
+> **Update 2026-10-05.** The severity assessed below was wrong: on the sovereign devnet, squatting turned out to be a payment-gate bypass, not ledger annoyance. Fixed in `b4800e1` and verified on the devnet; see §8.1. The original analysis is kept as written on 2026-05-13.
 
 **Location:** `execute_authorize` lines 124-172. No sender authorization check.
 
@@ -352,7 +354,7 @@ Escrow's `OBLIGATIONS_BY_TASK: Map<u64, u64>` is fine as-is. ✅
 | F1 | LOW-MEDIUM | Persist `tx_hash` in obligation; document the trust-only Confirm OR couple to attestation | ~25 LoC + 2 tests |
 | F5 | LOW-MEDIUM | Don't change status on AttachAttestation OR allow Confirm from Verified state | 1-line + 1 test |
 | F8 | **MEDIUM** | Rename `timeout_blocks` → `timeout_seconds` + add `ExpirePending` handler | ~35 LoC + 3 tests |
-| F10 | LOW | Restrict `Authorize` to admin / task-ledger / registry | ~10 LoC + 1 test |
+| F10 | ~~LOW~~ **HIGH** — **FIXED** (`b4800e1`) | Resolve the task in task-ledger; admit only the hook-pinned payer (the submitter when unpinned); pin payee and minimum amount — see §8.1 | done, 6 tests |
 | F2 | LOW | Add `tx_hash` field to `PaymentObligation`, persist on Confirm | ~5 LoC |
 | F11 | LOW | Rename `total_*` to `current_*` / `lifetime_*` OR add docstrings | ~5 LoC |
 | F12 | LOW | Add `ResolveDispute` handler | ~25 LoC + 2 tests |
@@ -362,7 +364,7 @@ Escrow's `OBLIGATIONS_BY_TASK: Map<u64, u64>` is fine as-is. ✅
 **Recommendation.**
 
 - **Sprint 1 (escrow-v0.2):** F8 (the most consequential — dead feature with type bug) + F5 (latent state-machine bug) + F2 (tx_hash persistence). All three are small and unblock the WAVS attestation flow.
-- **Sprint 2 (escrow-v0.3):** F1 (proof-of-payment couplings — design conversation needed) + F10 (Authorize restriction) + F12 (dispute resolution path).
+- **Sprint 2 (escrow-v0.3):** F1 (proof-of-payment couplings — design conversation needed) + F10 (Authorize restriction — shipped early on 2026-10-05, §8.1) + F12 (dispute resolution path).
 - **Sprint 3 (cosmetics):** F11, F13, F14.
 
 ---
@@ -374,7 +376,8 @@ Escrow's `OBLIGATIONS_BY_TASK: Map<u64, u64>` is fine as-is. ✅
 | `agent-company` | DONE (`a22e496`) | Vote weights not snapshotted at proposal creation | **HIGH** |
 | `agent-registry` | DONE (`a22e496`) | Registration fees trapped (no withdraw path) | **MEDIUM** |
 | `task-ledger` | DONE (`a22e496`) | CancelTask leaves orphaned escrow obligations | **LOW-MEDIUM** |
-| `escrow` | DONE (`26a43f7`, this doc) | `timeout_blocks` field is dead + unit mismatch with `created_at` | **MEDIUM** |
+| `escrow` | DONE (`26a43f7`, this doc) | `timeout_blocks` field is dead + unit mismatch with `created_at` | **MEDIUM** (F10 re-rated **HIGH**, fixed — §8.1) |
+| `marketplace` | e2e finding only, no full audit yet (§8.2) | `ReleaseOnVerdict` accepted any finalized epoch: verdict not bound to the hire's task output | **HIGH**, fixed 2026-10-05 (`b4800e1`) |
 | `zk-verifier` | pending (production on uni-7) | TBD | TBD |
 | `moultbook-v0` | written deterministically from day 0 | None | None |
 | `junoswap-pair` / `junoswap-factory` | pending | TBD | TBD |
@@ -386,6 +389,46 @@ Escrow's `OBLIGATIONS_BY_TASK: Map<u64, u64>` is fine as-is. ✅
 2. **State-machine completeness** is the recurring theme: every contract has at least one "no path out of state X" finding (agent-registry F4 deactivation, task-ledger F1 cancel-with-orphan, escrow F12 dispute-resolution).
 3. **Dead config fields** appear in escrow (F8 `timeout_blocks`). Worth a sweep across the other contracts to check for similar dead fields.
 4. **The non-custodial choice in escrow is the most surprising and consequential design decision in the stack**, and arguably correct under the WAVS-attests-truth model — but the contract's API doesn't yet substantiate the trust claim it implies.
+5. **Per-contract reading under-rated the cross-contract edges** (2026-10-05). F10 was scored LOW in isolation; the devnet e2e chained it through task-ledger's `EscrowObligationConfirmed` hook into a bypassed payment gate, and the marketplace/Truth Market edge had the same shape (§8.2). Audit trust edges (hook → escrow status, verdict → hire) with adversarial end-to-end flows, not only contract by contract.
+
+---
+
+## 8. Addendum — findings from the sovereign-devnet e2e (2026-10-05)
+
+Source: the probe phase of `junoclaw-chain/scripts/agent-e2e.ps1`, run against the 8-contract agent stack on the junoclaw-1 devnet (`junoclaw-chain/docs/AGENT_STACK_NOTES.md` §5.1). Each finding was reproduced first, fixed in `b4800e1`, then re-run against the fixed code.
+
+### 8.1 Escrow F10 — `Authorize` squatting bypasses the payment gate (re-rated LOW → HIGH, FIXED)
+
+**Reproduction.** The attacker called `Authorize { task_id, payee: attacker, amount: 1 }` for a real task that carried an `EscrowObligationConfirmed` hook. The genuine payer was then rejected with `AlreadyAuthorized`, the attacker confirmed its own obligation, and `CompleteTask` passed although the owner was never paid (`total_confirmed` ended at 250,001 = 250,000 genuine + 1). The hook only checked obligation *status*, so any confirmed obligation satisfied it.
+
+**Why the allowlist suggested above was not used.** Restricting `Authorize` to admin / task-ledger / registry would also lock out the legitimate requester, who is the payer in the operator-submitted flow.
+
+**Fix.**
+- `Authorize` resolves the task in task-ledger (`GetTaskByProposal`, then `GetTask` for non-governance tasks) and rejects unknown keys with `TaskNotFound`.
+- `Constraint::EscrowObligationConfirmed` gains optional `payer`, `payee` and `min_amount` pins (`#[serde(default)]`: tasks stored before the fix still load, with the pins read as `null`).
+- With a pinned `payer`, only that address may authorize; the obligation must also match the pinned `payee` and `min_amount` (`Unauthorized` for a stranger, `PinMismatch` for the pinned payer with wrong terms). Without a pinned `payer` (including tasks that carry no escrow hook for the key) only the task submitter may authorize. Pins scoped to another escrow or task grant nothing.
+- `Constraint::evaluate` re-checks payer, payee and minimum amount against the stored obligation when the task completes.
+
+**Tests.** escrow: `test_authorize_rejects_stranger_and_leaves_slot_free`, `test_authorize_unknown_task_rejected`, `test_authorize_pinned_payer_must_match_pins`, `test_pin_scoped_to_other_escrow_or_task_grants_nothing`, `test_authorize_resolves_proposal_keyed_tasks`. task-ledger: `test_v7_escrow_obligation_confirmed_pins_payer_payee_and_amount`.
+
+**Devnet.** Escrow migrated in place (code 7 → 14) together with task-ledger (6 → 13); addresses unchanged and stored tasks still load. The probe now asserts: squat → `Unauthorized`; unknown task → `TaskNotFound`; wrong payee or underpayment from the pinned payer → `PinMismatch`; the pinned obligation then settles, and the task completes only after the real payment is confirmed (29 probe assertions, 0 failures).
+
+**Residual.** A hook without pins still trusts the submitter as payer. Task authors who need to protect the payee should pin `payer`, `payee` and `min_amount`.
+
+### 8.2 Marketplace — `ReleaseOnVerdict` not bound to the hire (HIGH, FIXED)
+
+**Reproduction.** `ReleaseOnVerdict { hire_id, batch_height }` accepted any finalized Truth Market epoch the caller named. An unrelated all-red epoch (`messages_hash = sha256:UNRELATED`) moved the hire of an already-completed task to `slashed` and refunded the requester 500,000. By the same lack of binding, a green epoch could release a hire for unverified work (inferred, not tested).
+
+**Fix.** The epoch's `messages_hash` must equal the task's `output_hash`, else `EpochNotForTask`.
+
+**Tests.** `test_release_rejects_red_epoch_for_other_output`, `test_release_rejects_green_epoch_for_other_output`, `test_release_only_accepts_epoch_matching_task_output`.
+
+**Devnet.** Marketplace migrated in place (code 12 → 15). On the re-run the unrelated red epoch is rejected (`did not verify the output of task`), the hire stays escrowed, and the matching green epoch releases 500,000 to the agent owner.
+
+**Residual (inferred, not tested).**
+- Hash equality binds the epoch to *an* output, not to *this* hire's verification request. An agent could complete a task with an `output_hash` copied from another finalized green epoch and then release (replay). Closing it needs the epoch to commit to the hire, for example a verification request that carries `hire_id`, or a `messages_hash` derived from `(task_id, output_hash)`.
+- Release is still permissionless, but the recipient is fixed by the verdict (green → agent, red → requester), so who triggers it does not move value.
+- Finalization is admin-only today, so a verdict is only as trustworthy as the finalizer (see the relayer question in `AGENT_STACK_NOTES.md` §6).
 
 ---
 
