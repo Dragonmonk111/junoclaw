@@ -51,6 +51,9 @@ where
             match msg {
                 StubTaskLedgerExecuteMsg::SetTaskStatus { task_id, status } => {
                     let mut task = STUB_TASKS.load(deps.storage, task_id)?;
+                    if status == TaskStatus::Completed {
+                        task.output_hash = Some(format!("output-{}", task_id));
+                    }
                     task.status = status;
                     STUB_TASKS.save(deps.storage, task_id, &task)?;
                 }
@@ -122,9 +125,10 @@ fn instantiate_stub_task_ledger(app: &mut App, admin: &Addr) -> Addr {
 struct StubEpochView {
     consensus_verdict: String,
     finalized: bool,
+    messages_hash: String,
 }
 
-const STUB_EPOCHS: Map<u64, (String, bool)> = Map::new("stub_epochs");
+const STUB_EPOCHS: Map<u64, (String, bool, String)> = Map::new("stub_epochs");
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -132,6 +136,7 @@ enum StubTruthMarketExecuteMsg {
     SetEpoch {
         batch_height: u64,
         consensus_verdict: String,
+        messages_hash: String,
     },
 }
 
@@ -155,10 +160,17 @@ where
         _info: MessageInfo,
         msg: Vec<u8>,
     ) -> anyhow::Result<Response<ExecC>> {
-        if let Ok(StubTruthMarketExecuteMsg::SetEpoch { batch_height, consensus_verdict }) =
-            cosmwasm_std::from_json::<StubTruthMarketExecuteMsg>(&msg)
+        if let Ok(StubTruthMarketExecuteMsg::SetEpoch {
+            batch_height,
+            consensus_verdict,
+            messages_hash,
+        }) = cosmwasm_std::from_json::<StubTruthMarketExecuteMsg>(&msg)
         {
-            STUB_EPOCHS.save(deps.storage, batch_height, &(consensus_verdict, true))?;
+            STUB_EPOCHS.save(
+                deps.storage,
+                batch_height,
+                &(consensus_verdict, true, messages_hash),
+            )?;
         }
         Ok(Response::new())
     }
@@ -175,10 +187,12 @@ where
         if let Ok(StubTruthMarketQueryMsg::GetEpoch { batch_height }) =
             cosmwasm_std::from_json::<StubTruthMarketQueryMsg>(&msg)
         {
-            let (verdict, finalized) = STUB_EPOCHS.load(deps.storage, batch_height)?;
+            let (verdict, finalized, messages_hash) =
+                STUB_EPOCHS.load(deps.storage, batch_height)?;
             return Ok(to_json_binary(&StubEpochView {
                 consensus_verdict: verdict,
                 finalized,
+                messages_hash,
             })?);
         }
         Ok(to_json_binary(&()).unwrap())
@@ -291,12 +305,24 @@ fn seed_skill(app: &mut App, skill_registry: &Addr, admin: &Addr, dapp_name: &st
 }
 
 fn set_epoch(app: &mut App, truth_market: &Addr, admin: &Addr, batch_height: u64, verdict: &str) {
+    set_epoch_for(app, truth_market, admin, batch_height, verdict, "output-1");
+}
+
+fn set_epoch_for(
+    app: &mut App,
+    truth_market: &Addr,
+    admin: &Addr,
+    batch_height: u64,
+    verdict: &str,
+    messages_hash: &str,
+) {
     app.execute_contract(
         admin.clone(),
         truth_market.clone(),
         &StubTruthMarketExecuteMsg::SetEpoch {
             batch_height,
             consensus_verdict: verdict.to_string(),
+            messages_hash: messages_hash.to_string(),
         },
         &[],
     )
@@ -757,6 +783,116 @@ fn test_release_before_epoch_finalized_fails() {
         .unwrap_err();
     let contract_err = err.downcast::<ContractError>().unwrap();
     assert!(matches!(contract_err, ContractError::EpochNotFinalized { .. }));
+}
+
+fn hire_status(f: &Fixture, hire_id: u64) -> HireStatus {
+    let hire: Hire = f
+        .app
+        .wrap()
+        .query_wasm_smart(&f.marketplace, &QueryMsg::GetHire { hire_id })
+        .unwrap();
+    hire.status
+}
+
+#[test]
+fn test_release_rejects_red_epoch_for_other_output() {
+    let mut f = fixture();
+    let listing_id = list_service(&mut f, 1_000_000);
+    hire_service(&mut f, listing_id, 1, 1_000_000);
+    set_task_status(&mut f.app, &f.task_ledger, &f.admin, 1, TaskStatus::Completed);
+    set_epoch_for(&mut f.app, &f.truth_market, &f.admin, 42, "red", "unrelated-output");
+
+    let client_before = f.app.wrap().query_balance(&f.client, UJUNO).unwrap().amount;
+    let err = f
+        .app
+        .execute_contract(
+            f.client.clone(),
+            f.marketplace.clone(),
+            &ExecuteMsg::ReleaseOnVerdict { hire_id: 1, batch_height: 42 },
+            &[],
+        )
+        .unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(
+        contract_err,
+        ContractError::EpochNotForTask { task_id: 1, batch_height: 42 }
+    ));
+
+    assert!(matches!(hire_status(&f, 1), HireStatus::Escrowed));
+    assert_eq!(
+        f.app.wrap().query_balance(&f.client, UJUNO).unwrap().amount,
+        client_before
+    );
+    assert_eq!(
+        f.app.wrap().query_balance(&f.marketplace, UJUNO).unwrap().amount,
+        Uint128::new(1_000_000)
+    );
+}
+
+#[test]
+fn test_release_rejects_green_epoch_for_other_output() {
+    let mut f = fixture();
+    let listing_id = list_service(&mut f, 1_000_000);
+    hire_service(&mut f, listing_id, 1, 1_000_000);
+    set_task_status(&mut f.app, &f.task_ledger, &f.admin, 1, TaskStatus::Completed);
+    set_epoch_for(&mut f.app, &f.truth_market, &f.admin, 42, "green", "unrelated-output");
+
+    let err = f
+        .app
+        .execute_contract(
+            f.agent.clone(),
+            f.marketplace.clone(),
+            &ExecuteMsg::ReleaseOnVerdict { hire_id: 1, batch_height: 42 },
+            &[],
+        )
+        .unwrap_err();
+    let contract_err = err.downcast::<ContractError>().unwrap();
+    assert!(matches!(contract_err, ContractError::EpochNotForTask { .. }));
+
+    assert!(matches!(hire_status(&f, 1), HireStatus::Escrowed));
+    assert_eq!(
+        f.app.wrap().query_balance(&f.agent, UJUNO).unwrap().amount,
+        Uint128::zero()
+    );
+}
+
+#[test]
+fn test_release_only_accepts_epoch_matching_task_output() {
+    let mut f = fixture();
+    let listing_id = list_service(&mut f, 1_000_000);
+    hire_service(&mut f, listing_id, 1, 1_000_000);
+    set_task_status(&mut f.app, &f.task_ledger, &f.admin, 1, TaskStatus::Completed);
+    set_epoch_for(&mut f.app, &f.truth_market, &f.admin, 41, "red", "unrelated-output");
+    set_epoch_for(&mut f.app, &f.truth_market, &f.admin, 42, "green", "output-1");
+
+    let err = f
+        .app
+        .execute_contract(
+            f.client.clone(),
+            f.marketplace.clone(),
+            &ExecuteMsg::ReleaseOnVerdict { hire_id: 1, batch_height: 41 },
+            &[],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::EpochNotForTask { .. }
+    ));
+    assert!(matches!(hire_status(&f, 1), HireStatus::Escrowed));
+
+    f.app
+        .execute_contract(
+            f.client.clone(),
+            f.marketplace.clone(),
+            &ExecuteMsg::ReleaseOnVerdict { hire_id: 1, batch_height: 42 },
+            &[],
+        )
+        .unwrap();
+    assert!(matches!(hire_status(&f, 1), HireStatus::Released));
+    assert_eq!(
+        f.app.wrap().query_balance(&f.agent, UJUNO).unwrap().amount,
+        Uint128::new(1_000_000)
+    );
 }
 
 #[test]

@@ -242,7 +242,16 @@ pub enum Constraint {
     /// already Confirmed". Returns an explicit failure if the
     /// obligation does not exist, so callers cannot accidentally
     /// pass this constraint on an unfunded task.
-    EscrowObligationConfirmed { escrow: Addr, task_id: u64 },
+    EscrowObligationConfirmed {
+        escrow: Addr,
+        task_id: u64,
+        #[serde(default)]
+        payer: Option<Addr>,
+        #[serde(default)]
+        payee: Option<Addr>,
+        #[serde(default)]
+        min_amount: Option<Uint128>,
+    },
 }
 
 impl Constraint {
@@ -388,7 +397,13 @@ impl Constraint {
                 }
                 Ok(())
             }
-            Constraint::EscrowObligationConfirmed { escrow, task_id } => {
+            Constraint::EscrowObligationConfirmed {
+                escrow,
+                task_id,
+                payer,
+                payee,
+                min_amount,
+            } => {
                 #[derive(serde::Serialize)]
                 #[serde(rename_all = "snake_case")]
                 enum EscrowQuery {
@@ -412,7 +427,33 @@ impl Constraint {
                         "EscrowObligationConfirmed: task {} obligation is {:?}, expected Confirmed",
                         task_id, o.status
                     )),
-                    Some(_) => Ok(()),
+                    Some(o) => {
+                        if let Some(expected) = payer {
+                            if o.payer != *expected {
+                                return Err(format!(
+                                    "EscrowObligationConfirmed: task {} payer is {}, expected {}",
+                                    task_id, o.payer, expected
+                                ));
+                            }
+                        }
+                        if let Some(expected) = payee {
+                            if o.payee != *expected {
+                                return Err(format!(
+                                    "EscrowObligationConfirmed: task {} payee is {}, expected {}",
+                                    task_id, o.payee, expected
+                                ));
+                            }
+                        }
+                        if let Some(min) = min_amount {
+                            if o.amount < *min {
+                                return Err(format!(
+                                    "EscrowObligationConfirmed: task {} amount {} < pinned minimum {}",
+                                    task_id, o.amount, min
+                                ));
+                            }
+                        }
+                        Ok(())
+                    }
                 }
             }
         }

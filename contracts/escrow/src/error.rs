@@ -26,4 +26,10 @@ pub enum ContractError {
 
     #[error("Amount must be greater than zero")]
     ZeroAmount {},
+
+    #[error("No task in task-ledger carries escrow key {task_id}")]
+    TaskNotFound { task_id: u64 },
+
+    #[error("Obligation does not satisfy the escrow pin on task {task_id}")]
+    PinMismatch { task_id: u64 },
 }

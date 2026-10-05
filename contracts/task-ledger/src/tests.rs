@@ -1665,6 +1665,9 @@ fn test_v7_escrow_obligation_confirmed_constraint() {
         vec![Constraint::EscrowObligationConfirmed {
             escrow: escrow.clone(),
             task_id: 42,
+            payer: None,
+            payee: None,
+            min_amount: None,
         }],
         vec![],
     );
@@ -1697,6 +1700,9 @@ fn test_v7_escrow_obligation_confirmed_constraint() {
         vec![Constraint::EscrowObligationConfirmed {
             escrow: escrow.clone(),
             task_id: 42,
+            payer: None,
+            payee: None,
+            min_amount: None,
         }],
         vec![],
     );
@@ -1729,6 +1735,9 @@ fn test_v7_escrow_obligation_confirmed_constraint() {
         vec![Constraint::EscrowObligationConfirmed {
             escrow: escrow.clone(),
             task_id: 42,
+            payer: None,
+            payee: None,
+            min_amount: None,
         }],
         vec![],
     );
@@ -1749,6 +1758,114 @@ fn test_v7_escrow_obligation_confirmed_constraint() {
         .query_wasm_smart(&contract, &QueryMsg::GetTask { task_id: t3 })
         .unwrap();
     assert_eq!(task.status, TaskStatus::Completed);
+}
+
+fn complete_with_escrow_pin(
+    app: &mut App,
+    admin: &Addr,
+    user: &Addr,
+    contract: &Addr,
+    escrow: &Addr,
+    pins: (Option<&str>, Option<&str>, Option<u128>),
+) -> Result<(), String> {
+    let (payer, payee, min_amount) = pins;
+    let task_id = submit_task_with_hooks(
+        app,
+        contract,
+        user,
+        1,
+        vec![Constraint::EscrowObligationConfirmed {
+            escrow: escrow.clone(),
+            task_id: 42,
+            payer: payer.map(Addr::unchecked),
+            payee: payee.map(Addr::unchecked),
+            min_amount: min_amount.map(Uint128::new),
+        }],
+        vec![],
+    );
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::CompleteTask {
+            task_id,
+            output_hash: "ok".to_string(),
+            cost_ujuno: None,
+        },
+        &[],
+    )
+    .map(|_| ())
+    .map_err(|e| e.root_cause().to_string())
+}
+
+#[test]
+fn test_v7_escrow_obligation_confirmed_pins_payer_payee_and_amount() {
+    // A Confirmed obligation only satisfies the hook when its payer,
+    // payee and amount agree with the pins carried on the hook. This is
+    // what stops a squatted obligation (wrong payer / payee / amount)
+    // from spoofing the payment invariant.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let escrow = instantiate_stub_escrow(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 1);
+    set_stub_obligation(&mut app, &escrow, &admin, 42, ObligationStatus::Confirmed);
+
+    let msg = complete_with_escrow_pin(
+        &mut app,
+        &admin,
+        &user,
+        &contract,
+        &escrow,
+        (Some("attacker"), None, None),
+    )
+    .unwrap_err();
+    assert!(
+        msg.contains("payer is stub-payer, expected attacker"),
+        "expected payer-pin diagnostic, got: {}",
+        msg
+    );
+
+    let msg = complete_with_escrow_pin(
+        &mut app,
+        &admin,
+        &user,
+        &contract,
+        &escrow,
+        (None, Some("attacker"), None),
+    )
+    .unwrap_err();
+    assert!(
+        msg.contains("payee is stub-payee, expected attacker"),
+        "expected payee-pin diagnostic, got: {}",
+        msg
+    );
+
+    let msg = complete_with_escrow_pin(
+        &mut app,
+        &admin,
+        &user,
+        &contract,
+        &escrow,
+        (None, None, Some(2)),
+    )
+    .unwrap_err();
+    assert!(
+        msg.contains("amount 1 < pinned minimum 2"),
+        "expected amount-pin diagnostic, got: {}",
+        msg
+    );
+
+    complete_with_escrow_pin(
+        &mut app,
+        &admin,
+        &user,
+        &contract,
+        &escrow,
+        (Some("stub-payer"), Some("stub-payee"), Some(1)),
+    )
+    .unwrap();
 }
 
 // ─────────────────────────────────────────────────────────────────

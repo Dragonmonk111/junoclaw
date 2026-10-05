@@ -43,6 +43,9 @@ pub enum ContractError {
     #[error("Truth Market epoch for batch {batch_height} is not finalized yet")]
     EpochNotFinalized { batch_height: u64 },
 
+    #[error("Truth Market epoch {batch_height} did not verify the output of task {task_id}")]
+    EpochNotForTask { task_id: u64, batch_height: u64 },
+
     #[error("Unknown Truth Market verdict: {verdict}")]
     UnknownVerdict { verdict: String },
 

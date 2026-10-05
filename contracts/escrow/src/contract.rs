@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    entry_point, to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Order,
+    entry_point, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order,
     Response, StdResult, Uint128,
 };
 use cw2::{get_contract_version, set_contract_version};
@@ -10,7 +10,9 @@ use crate::state::{
     Config, LedgerStats, CONFIG, LEDGER_STATS, NEXT_OBLIGATION_ID, OBLIGATIONS,
     OBLIGATIONS_BY_TASK,
 };
-use junoclaw_common::{ContractRegistry, ObligationStatus, PaymentObligation};
+use junoclaw_common::{
+    Constraint, ContractRegistry, ObligationStatus, PaymentObligation, TaskRecord,
+};
 
 const CONTRACT_NAME: &str = "crates.io:junoclaw-payment-ledger";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -139,6 +141,15 @@ fn execute_authorize(
 
     let config = CONFIG.load(deps.storage)?;
     let payee_addr = deps.api.addr_validate(&payee).map_err(|_| ContractError::InvalidPayee {})?;
+    let task = resolve_task(deps.as_ref(), &config.task_ledger, task_id)?;
+    check_entitlement(
+        &task,
+        &env.contract.address,
+        &info.sender,
+        task_id,
+        &payee_addr,
+        amount,
+    )?;
     let obligation_id = NEXT_OBLIGATION_ID.load(deps.storage)?;
 
     let obligation = PaymentObligation {
@@ -169,6 +180,92 @@ fn execute_authorize(
         .add_attribute("obligation_id", obligation_id.to_string())
         .add_attribute("task_id", task_id.to_string())
         .add_attribute("amount", amount.to_string()))
+}
+
+fn resolve_task(deps: Deps, task_ledger: &Addr, key: u64) -> Result<TaskRecord, ContractError> {
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "snake_case")]
+    enum TaskLedgerQuery {
+        GetTaskByProposal { proposal_id: u64 },
+        GetTask { task_id: u64 },
+    }
+
+    let by_proposal: Option<TaskRecord> = deps
+        .querier
+        .query_wasm_smart(
+            task_ledger.to_string(),
+            &TaskLedgerQuery::GetTaskByProposal { proposal_id: key },
+        )
+        .map_err(|_| ContractError::TaskNotFound { task_id: key })?;
+    if let Some(task) = by_proposal {
+        return Ok(task);
+    }
+
+    let task: TaskRecord = deps
+        .querier
+        .query_wasm_smart(
+            task_ledger.to_string(),
+            &TaskLedgerQuery::GetTask { task_id: key },
+        )
+        .map_err(|_| ContractError::TaskNotFound { task_id: key })?;
+    if task.proposal_id.is_some() {
+        return Err(ContractError::TaskNotFound { task_id: key });
+    }
+    Ok(task)
+}
+
+fn check_entitlement(
+    task: &TaskRecord,
+    escrow: &Addr,
+    sender: &Addr,
+    task_id: u64,
+    payee: &Addr,
+    amount: Uint128,
+) -> Result<(), ContractError> {
+    let is_submitter = *sender == task.submitter;
+    let mut pinned = false;
+    let mut entitled = false;
+
+    for hook in task.pre_hooks.iter().chain(task.post_hooks.iter()) {
+        let Constraint::EscrowObligationConfirmed {
+            escrow: pin_escrow,
+            task_id: pin_task_id,
+            payer: pin_payer,
+            payee: pin_payee,
+            min_amount: pin_min,
+        } = hook
+        else {
+            continue;
+        };
+        if pin_escrow != escrow || *pin_task_id != task_id {
+            continue;
+        }
+        pinned = true;
+
+        let payer_ok = match pin_payer {
+            Some(p) => p == sender,
+            None => is_submitter,
+        };
+        entitled |= payer_ok;
+        let payee_ok = pin_payee.as_ref().map_or(true, |p| p == payee);
+        let amount_ok = pin_min.map_or(true, |m| amount >= m);
+        if payer_ok && payee_ok && amount_ok {
+            return Ok(());
+        }
+    }
+
+    if !pinned {
+        return if is_submitter {
+            Ok(())
+        } else {
+            Err(ContractError::Unauthorized {})
+        };
+    }
+    if entitled {
+        Err(ContractError::PinMismatch { task_id })
+    } else {
+        Err(ContractError::Unauthorized {})
+    }
 }
 
 /// Payer confirms they sent funds directly to payee (off-contract).

@@ -342,6 +342,7 @@ fn execute_hire_service(
 struct EpochView {
     consensus_verdict: String,
     finalized: bool,
+    messages_hash: String,
 }
 
 fn execute_release_on_verdict(
@@ -393,6 +394,12 @@ fn execute_release_on_verdict(
                 .map_err(|_| ContractError::EpochNotFinalized { batch_height })?;
             if !epoch.finalized {
                 return Err(ContractError::EpochNotFinalized { batch_height });
+            }
+            if task.output_hash.as_deref() != Some(epoch.messages_hash.as_str()) {
+                return Err(ContractError::EpochNotForTask {
+                    task_id: hire.task_id,
+                    batch_height,
+                });
             }
             match epoch.consensus_verdict.as_str() {
                 "green" => (&hire.agent, HireStatus::Released, "released"),
