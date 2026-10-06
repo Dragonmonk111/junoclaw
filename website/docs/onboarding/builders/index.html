@@ -124,7 +124,7 @@
 <ul>
 <li><strong>Strict sequence admission.</strong> The mempool rejects both stale and future nonces, so bursts from one sender have to arrive in order.</li>
 <li><strong>Finality is instant.</strong> A tx included in a finalized block is final. You don’t need confirmation counts.</li>
-<li><strong>Block time is deterministic.</strong> It comes from genesis time and the consensus view, at about 1 s per block.</li>
+<li><strong>Block time is the proposer’s wall clock.</strong> Validators bound it: after the parent, at most 2 s ahead. Blocks land about every 0.16 s on the devnet, so use <code dir="auto">env.block.time</code> rather than block counts for anything time-based.</li>
 <li><strong>Wallet integrations are not ready yet.</strong> Keplr/cosmjs compatibility through a CometBFT-RPC gateway is planned for G1→G2. Use gRPC for now.</li>
 </ul>
 <div class="sl-heading-wrapper level-h2"><h2 id="measured-gas-reference">Measured gas reference</h2><a class="sl-anchor-link" href="#measured-gas-reference"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>Section titled “Measured gas reference”</span></a></div>

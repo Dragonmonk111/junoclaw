@@ -92,7 +92,7 @@
 </tr>
 <tr>
 <td>Finality</td>
-<td>~1–2 s, certificate binds executed <code dir="auto">state_root</code>. A finality record (certificate, proposal, timestamp) is stored per height</td>
+<td>0.16 s per block on the 4-validator devnet (single host; G1 will measure real networks). The certificate binds the executed <code dir="auto">state_root</code>. A finality record (certificate, proposal, timestamp) is stored per height</td>
 </tr>
 <tr>
 <td>Validation</td>
@@ -108,7 +108,7 @@
 </tr>
 <tr>
 <td>Storage</td>
-<td>Durable payload store, tx index, role-tier pruning (validator / RPC / archive)</td>
+<td>Durable payload store, tx index, role-tier pruning: validators keep ~24 h (540,000 heights) of payloads and finality records, RPC nodes ~30 days, archives everything. Peers backfill across the whole window</td>
 </tr>
 <tr>
 <td>gRPC</td>
@@ -124,7 +124,7 @@
 </tr>
 <tr>
 <td>Agent layer</td>
-<td>Buzz relay channels live at <code dir="auto">buzz.junoclaw.xyz</code></td>
+<td>Buzz relay channels live at <code dir="auto">buzz.junoclaw.xyz</code>. The 8-contract agent stack runs on the devnet</td>
 </tr>
 </tbody>
 </table>
@@ -141,6 +141,9 @@
 <li>Nodes refuse publicly derivable devnet keys and genesis unless <code dir="auto">insecure_devnet</code> is set.</li>
 </ul>
 </li>
+<li><strong>October 6, evening.</strong> The state-root scan now skips node-local sidecar data, and block time fell from 1–2 s to 0.16 s. Finality records are pruned by tier, and backfill reaches across the whole pruning window.</li>
+<li><strong>Agent economy end to end.</strong> The 8-contract stack (agent-company, agent-registry, task-ledger, escrow, truth-market, marketplace, moultbook, skill-registry) runs on the devnet: onboarding, hires, escrow, verdicts, slashing, refunds and provenance. Latest run: <strong>122 checks, 0 failures.</strong></li>
+<li><strong>Two exploits found and fixed on the devnet.</strong> The e2e probe reproduced a spoofed escrow payment hook and a marketplace verdict not bound to its hire. Both were fixed and migrated in place, and the probe now asserts the attacks fail. Escrow expiry, dispute resolution, the registry fee sweep and hook caps are live too.</li>
 </ul>
 <div class="sl-heading-wrapper level-h2"><h2 id="gates">Gates</h2><a class="sl-anchor-link" href="#gates"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>Section titled “Gates”</span></a></div>
 <table>

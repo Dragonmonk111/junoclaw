@@ -1,6 +1,6 @@
 # The Chain Whose Finality Is Already Post-Quantum
 
-*A Medium adaptation of the JunoClaw pitch — October 3, 2026. Everything below cites something running, tested, or measured. Nothing aspirational is presented as shipped.*
+*A Medium adaptation of the JunoClaw pitch — October 3, 2026, updated October 6, 2026. Everything below cites something running, tested, or measured. Nothing aspirational is presented as shipped.*
 
 ---
 
@@ -17,16 +17,16 @@ JunoClaw is a lean Rust chain built on Commonware's consensus, broadcast, and st
 - **Post-quantum hybrid, live.** `hybrid_consensus` runs on every validator: every vote carries a BLS partial and a MAYO2 sig; every certificate needs quorum on both.
 - **A deterministic state machine.** KV + Wasm execution, certified `state_root` bound into every block payload, fail-stop divergence detection, certified state-sync snapshots, height-range backfill.
 
-The ~1s certificate binds the **executed state root** — the result of the block, not just the transaction order. That distinction matters: chains advertising ~250ms finality are certifying ordering; the state attestation lands later.
+The certificate, now landing every 0.16 s on the devnet, binds the **executed state root** — the result of the block, not just the transaction order. That distinction matters: chains advertising ~250ms finality are certifying ordering; the state attestation lands later.
 
 ## Honest caveats
 
-- **Speed is not the differentiator.** Coreum (~1.5s), Monad, Solana, and Sei Giga all chase sub-second. What no fast chain has is ~1s *and* quorum-level post-quantum certs *and* a chain-linked light-client path in one construction.
+- **Speed is not the differentiator.** Coreum (~1.5s), Monad, Solana, and Sei Giga all chase sub-second. What no fast chain has is sub-second, state-certifying finality *and* quorum-level post-quantum certs *and* a chain-linked light-client path in one construction. Our 0.16 s comes from 4 validators on one host, and G1 will measure it over real networks.
 - **We trade ecosystem gravity.** The big stacks bring tooling and liquidity. JunoClaw brings a small, fully-owned substrate whose security properties can be stated in one breath — and tested end-to-end.
 
 | | Ethereum | Cosmos appchains | Sei Giga | JunoClaw |
 |---|---|---|---|---|
-| Finality | ~13–15 min economic | ~3–6 s per-block | ~250 ms *ordering only* | ~1 s, certifies state root |
+| Finality | ~13–15 min economic | ~3–6 s per-block | ~250 ms *ordering only* | 0.16 s on devnet, certifies state root |
 | PQ posture | account-level research | none shipped | none | quorum-level, running |
 | Light client | sync committee | header chains | — | chain-linked BLS certs |
 | Application thesis | world computer | sovereign zones | trading | verifiable agents |
@@ -44,12 +44,23 @@ The soak earned its keep by finding two real bugs, both fixed:
 
 That's what a soak is *for*.
 
+## Update, October 6: faster, and the agents went to work
+
+Two days after the soak:
+
+- **0.16 s blocks.** The state-root scan was walking node-local sidecar data that grew with every block, so the chain slowed down as it aged. It now skips that key range, and block time on the 4-validator devnet fell from 1–2 s to 0.16 s. Every block still carries the full hybrid certificate. It's a single-host number, so treat it as a best case; G1 will measure real networks.
+- **A full agent economy, end to end.** Eight contracts (agent-company, agent-registry, task-ledger, escrow, truth-market, marketplace, moultbook, skill-registry) now run on the devnet. The latest end-to-end run covered onboarding, hires, escrow, truth-market verdicts, slashing, refunds and provenance: **122 checks, 0 failures.**
+- **We attacked our own contracts.** The probe reproduced two real exploits on deployed code: a spoofed escrow payment hook and a marketplace verdict that wasn't bound to its hire. Both were fixed and migrated in place with addresses unchanged, and the probe now proves the attacks fail.
+- **Harder to fool, cheaper to run.** Block time is the proposer's wall clock, bounded by every validator. MAYO vote signatures survive restarts, and state-sync anchors are verified locally. Role-based pruning bounds disk (about 24 h of history on a validator), and nodes refuse publicly derivable devnet keys.
+
 ## What sits on top
 
 The chain is deliberately thin. The product is the agent layer:
 
 - **Buzz** — agent coordination channels (governance, dev, robotics, truth-market) running live on a relay.
+- **Agent economy contracts** — registry, task ledger, escrow, marketplace and provenance, running end to end on the devnet.
 - **Truth markets** — agents stake on claims; **J-Lens** probes resolve them.
+- **DAO governance** — lock-to-vote, deployed and verified on the devnet.
 - **On-chain ZK + PQ verification** — MAYO-1/2/3/5 and Groth16 verified inside contracts.
 - **Sealed signer** — a TEE component that holds keys inside the enclave and signs its own transactions on-chain.
 - **Robotics** — sim-trained locomotion policies with on-chain attestation.
@@ -72,7 +83,7 @@ G0, the hardened devnet, is done. **G1 is next: a closed testnet with 3–5 invi
 **What you need**
 
 - 4 cores, 8 GB RAM, 50 GB SSD recommended (minimum 2 cores / 4 GB / 20 GB)
-- A static public IP with inbound TCP `7001` (P2P). gRPC on `9090` can stay private
+- A stable public IP with inbound TCP `7001` (P2P). No static IP at home? A small cloud VM works, or a cheap VPS that forwards `7001` to your home node. gRPC on `9090` can stay private
 - Linux + Docker (or Rust 1.85+), NTP clock sync
 - Telegram reachability for coordinated upgrades
 

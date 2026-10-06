@@ -41,7 +41,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 ## The chain in four lines
 
-- **~1 s finality that certifies the executed `state_root`** — not just transaction order.
+- **0.16 s finality on the devnet that certifies the executed `state_root`** — not just transaction order.
 - **Hybrid post-quantum certificates** — every vote is a BLS12-381 partial *and* a 186-byte MAYO2 signature; a certificate needs quorum on both.
 - **Chain-linked certificates** — each certificate binds the previous one, giving light clients a certificate-chain proof path.
 - **Small, auditable Rust codebase** on Commonware consensus, broadcast and storage primitives. Not a Cosmos SDK fork, not Tendermint.

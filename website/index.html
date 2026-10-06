@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>JunoClaw — Finality machines can verify</title>
-  <meta name="description" content="JunoClaw is a purpose-built L1 whose consensus certificates are already post-quantum: ~1 s state-certifying finality, hybrid BLS + MAYO2 quorums, built for verifiable agents and robotics." />
+  <meta name="description" content="JunoClaw is a purpose-built L1 whose consensus certificates are already post-quantum: hybrid BLS + MAYO2 quorums seal executed state every 0.16 s on the devnet, under an agent economy that runs end to end." />
   <meta property="og:title" content="JunoClaw — Finality machines can verify" />
-  <meta property="og:description" content="~1 s state-certifying finality. Hybrid BLS + MAYO2 certificates. Built for verifiable agents and robotics. G1 validators wanted." />
+  <meta property="og:description" content="A post-quantum certificate every 0.16 s on the devnet. Hybrid BLS + MAYO2 quorums. An agent economy passing 122/122 end-to-end checks. G1 validators wanted." />
   <meta property="og:image" content="https://junoclaw.xyz/assets/banner.png" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -98,8 +98,11 @@
       font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase;
       color: var(--violet-bright); padding: 0.45rem 1rem; border-radius: 999px;
       border: 1px solid var(--border-strong); background: rgba(139, 92, 246, 0.08);
-      margin-bottom: 2rem; text-decoration: none;
+      text-decoration: none; transition: border-color 0.2s, background 0.2s;
     }
+    .badge:hover { border-color: var(--violet); background: rgba(139, 92, 246, 0.16); }
+    .badges { display: flex; gap: 0.7rem; justify-content: center; flex-wrap: wrap; margin-bottom: 2rem; }
+    .badge .dot.new { background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
     .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px var(--gold); animation: pulse 2s infinite; }
     .badge b { color: var(--gold-bright); font-weight: 500; }
     @keyframes pulse { 50% { opacity: 0.35; } }
@@ -238,6 +241,41 @@
     .proof h3 { font-size: 0.98rem; margin: 0.3rem 0 0.5rem; }
     .proof p { color: var(--muted); font-size: 0.88rem; }
 
+    /* Ship log */
+    .pace { padding: 2.2rem 2.4rem; margin-bottom: 1rem; border-color: var(--border-strong);
+      background: radial-gradient(70% 120% at 100% 0%, rgba(212, 175, 55, 0.09), transparent 60%), var(--glass); }
+    .pace:hover { transform: none; }
+    .pace-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.8rem; }
+    .pace-num { font-family: var(--display); font-size: clamp(3.2rem, 9vw, 5.4rem); font-weight: 700; letter-spacing: -0.045em; line-height: 0.95; }
+    .pace-l { color: var(--muted); font-size: 0.95rem; margin-top: 0.7rem; max-width: 50ch; }
+    .pace-vs { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); text-align: right; }
+    .pace-vs b { display: block; font-family: var(--display); font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; text-transform: none; color: var(--muted);
+      text-decoration: line-through; text-decoration-color: rgba(236, 208, 138, 0.7); text-decoration-thickness: 2px; }
+    .lane { display: grid; grid-template-columns: 130px 1fr 100px; gap: 1rem; align-items: center; margin: 0.6rem 0; }
+    .lane-l { font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+    .lane-n { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); text-align: right; white-space: nowrap; }
+    .lane.fast .lane-l, .lane.fast .lane-n { color: var(--gold-bright); }
+    .cells { display: grid; gap: 4px; }
+    .cell { display: block; height: 16px; border-radius: 4px; background: rgba(139, 92, 246, 0.07); border: 1px solid rgba(139, 92, 246, 0.16);
+      transition: background 0.35s, box-shadow 0.35s, border-color 0.35s; }
+    .cell.on { background: rgba(180, 156, 255, 0.5); border-color: rgba(180, 156, 255, 0.7); box-shadow: 0 0 10px rgba(139, 92, 246, 0.45); }
+    .lane.fast .cell.on { background: linear-gradient(180deg, var(--gold-bright), var(--gold)); border-color: rgba(236, 208, 138, 0.8); box-shadow: 0 0 12px rgba(212, 175, 55, 0.5); }
+    .pace-cap { color: var(--dim); font-size: 0.8rem; font-style: italic; margin-top: 1.3rem; }
+    .ships { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+    .ship { padding: 1.5rem 1.6rem; display: flex; flex-direction: column; gap: 0.45rem; }
+    .ship-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.2rem; }
+    .ship .date { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); }
+    .area { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 0.15rem 0.5rem; border-radius: 6px;
+      color: var(--violet-bright); border: 1px solid rgba(180, 156, 255, 0.4); }
+    .area.agents { color: #86efac; border-color: rgba(134, 239, 172, 0.35); }
+    .area.sec { color: #fda4af; border-color: rgba(253, 164, 175, 0.35); }
+    .area.ops { color: var(--cyan); border-color: rgba(103, 232, 249, 0.35); }
+    .area.gov { color: var(--gold-bright); border-color: rgba(236, 208, 138, 0.4); }
+    .ship h3 { font-family: var(--display); font-size: 1.08rem; }
+    .ship p { color: var(--muted); font-size: 0.88rem; flex: 1; }
+    .ship .ref { font-family: var(--mono); font-size: 0.7rem; color: var(--violet-bright); text-decoration: none; margin-top: 0.3rem; align-self: flex-start; }
+    .ship .ref:hover { color: var(--gold-bright); }
+
     /* G1 call */
     .g1 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 0; padding: 0; border-color: var(--border-strong); }
     .g1:hover { transform: none; }
@@ -282,6 +320,10 @@
       .paths { grid-template-columns: 1fr; }
       section { padding: 4.5rem 1.2rem; }
       .g1 .l, .g1 .r { padding: 2rem 1.4rem; }
+      .pace { padding: 1.6rem 1.3rem; }
+      .pace-vs { text-align: left; }
+      .lane { grid-template-columns: 1fr; gap: 0.35rem; margin: 0.9rem 0; }
+      .lane-n { text-align: left; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -297,6 +339,7 @@
   <nav id="nav">
     <a class="brand" href="#top"><img src="/assets/logo.png" alt="JunoClaw" /><span>JUNO<em>CLAW</em></span></a>
     <div class="links">
+      <a href="#shipped">Shipped</a>
       <a href="#anatomy">How it works</a>
       <a href="#stack">Agent layer</a>
       <a href="/docs/lightpaper/">Lightpaper</a>
@@ -307,9 +350,12 @@
 
   <header class="hero" id="top">
     <div>
-      <a class="badge" href="#g1"><span class="dot"></span>G1 closed testnet · <b>validators wanted</b></a>
+      <div class="badges">
+        <a class="badge" href="#shipped"><span class="dot new"></span>Just shipped · <b>0.16 s blocks</b></a>
+        <a class="badge" href="#g1"><span class="dot"></span>G1 closed testnet · <b>validators wanted</b></a>
+      </div>
       <h1>Finality machines <span class="grad">can verify.</span></h1>
-      <p class="sub">A purpose-built L1 whose consensus certificates are <strong>already post-quantum</strong>. Every block is sealed by BLS <em>and</em> MAYO2 quorums, binding executed state in about a second. Built for verifiable agents and robotics. Born from Juno.</p>
+      <p class="sub">A purpose-built L1 whose consensus certificates are <strong>already post-quantum</strong>. Every block is sealed by BLS <em>and</em> MAYO2 quorums, binding executed state every 0.16 s on the devnet. Built for verifiable agents and robotics. Born from Juno.</p>
       <div class="ctas">
         <a class="btn gold" href="/docs/lightpaper/">Read the lightpaper →</a>
         <a class="btn glass" href="/docs/onboarding/validators/">Validator onboarding</a>
@@ -322,15 +368,46 @@
       <div class="ribbon-cap">Illustration · chain-linked certificates, each sealed twice</div>
 
       <div class="stats">
-        <div class="stat"><div class="v">~1 s</div><div class="l">State finality</div></div>
+        <div class="stat"><div class="v">0.16 s</div><div class="l">Finality · devnet</div></div>
         <div class="stat"><div class="v">2×</div><div class="l">Quorums per cert</div></div>
-        <div class="stat"><div class="v">24 h</div><div class="l">Chaos soak</div></div>
+        <div class="stat"><div class="v">122/122</div><div class="l">Agent e2e checks</div></div>
         <div class="stat"><div class="v">0</div><div class="l">State divergences</div></div>
       </div>
     </div>
   </header>
 
   <main>
+    <section id="shipped">
+      <div class="reveal">
+        <div class="kicker">Ship log · Oct 5–6, 2026</div>
+        <h2>From 1–2 s blocks to 0.16 s, with a full agent economy on top.</h2>
+        <p class="lede">Two days of work on the devnet. Everything below is running or committed, and each card links to the commit behind it.</p>
+      </div>
+      <div class="glass-card pace reveal" aria-label="Block time before and after the October 6 fix">
+        <div class="pace-head">
+          <div>
+            <div class="pace-num"><span class="grad">0.16 s</span></div>
+            <div class="pace-l">per block on the 4-validator devnet. Every block still carries a hybrid BLS + MAYO2 certificate over the executed state root.</div>
+          </div>
+          <div class="pace-vs">October 5<b>1–2 s</b></div>
+        </div>
+        <div class="lane" data-ms="1500" aria-hidden="true"><span class="lane-l">Before · 1–2 s</span><div class="cells"></div><span class="lane-n">0 blocks</span></div>
+        <div class="lane fast" data-ms="160" aria-hidden="true"><span class="lane-l">Now · 0.16 s</span><div class="cells"></div><span class="lane-n">0 blocks</span></div>
+        <p class="pace-cap">Each lit cell is one finalized block, animated at the measured pace (not live data). Measured with 4 validators on one host; G1 will publish numbers over real networks.</p>
+      </div>
+      <div class="ships reveal">
+        <article class="glass-card ship"><div class="ship-top"><span class="date">Oct 6</span><span class="area">chain</span></div><h3>0.16 s blocks</h3><p>The state-root scan was walking node-local sidecar data that grew with every block, so the chain slowed down as it aged. It now skips that key range, and block time fell from 1–2 s to 0.16 s.</p><a class="ref" href="https://github.com/Dragonmonk111/layer-sdk/commit/59ba9f3" target="_blank" rel="noopener">layer-sdk@59ba9f3 ↗</a></article>
+        <article class="glass-card ship"><div class="ship-top"><span class="date">Oct 6</span><span class="area agents">agents</span></div><h3>122 of 122 end-to-end checks</h3><p>Eight contracts ran a full task economy on the devnet: onboarding, hires, escrow, truth-market verdicts, slashing, refunds and provenance. Zero failures.</p><a class="ref" href="https://github.com/Dragonmonk111/layer-sdk/commit/9deebcb" target="_blank" rel="noopener">layer-sdk@9deebcb ↗</a></article>
+        <article class="glass-card ship"><div class="ship-top"><span class="date">Oct 5</span><span class="area sec">security</span></div><h3>We attacked our own contracts</h3><p>The probe reproduced two real exploits on deployed code: a spoofed escrow payment hook and a marketplace verdict that wasn't bound to its hire. Both are fixed and migrated in place, and the probe now proves they fail.</p><a class="ref" href="https://github.com/Dragonmonk111/junoclaw/commit/b4800e1" target="_blank" rel="noopener">junoclaw@b4800e1 ↗</a></article>
+        <article class="glass-card ship"><div class="ship-top"><span class="date">Oct 6</span><span class="area agents">agents</span></div><h3>Escrow that can't get stuck</h3><p>Pending obligations expire, disputes have a resolution path, and the registry can sweep its fees, all exercised live on the devnet. Tasks are also capped at 16 hooks before and after.</p><a class="ref" href="https://github.com/Dragonmonk111/junoclaw/commit/841d69d" target="_blank" rel="noopener">junoclaw@841d69d ↗</a></article>
+        <article class="glass-card ship"><div class="ship-top"><span class="date">Oct 6</span><span class="area">chain</span></div><h3>Harder to fool</h3><p>Block time comes from the proposer's wall clock, and every validator bounds it. MAYO vote signatures survive restarts, certificates with a bad MAYO signature are rejected, and state-sync anchors are verified locally.</p><a class="ref" href="https://github.com/Dragonmonk111/layer-sdk/commit/a625f3a" target="_blank" rel="noopener">layer-sdk@a625f3a ↗</a></article>
+        <article class="glass-card ship"><div class="ship-top"><span class="date">Oct 6</span><span class="area ops">ops</span></div><h3>Bounded disk, deep backfill</h3><p>Pruning by role: validators keep about 24 h of payloads and finality records, RPC nodes about 30 days, and archive nodes everything. Peers can backfill a node across the whole window.</p><a class="ref" href="https://github.com/Dragonmonk111/layer-sdk/commit/59ba9f3" target="_blank" rel="noopener">layer-sdk@59ba9f3 ↗</a></article>
+        <article class="glass-card ship"><div class="ship-top"><span class="date">Oct 6</span><span class="area sec">security</span></div><h3>No devnet keys in production</h3><p>Nodes and the genesis builder refuse publicly derivable bootstrap keys and addresses unless <span class="mono">insecure_devnet</span> is set explicitly.</p><a class="ref" href="https://github.com/Dragonmonk111/layer-sdk/commit/93095ff" target="_blank" rel="noopener">layer-sdk@93095ff ↗</a></article>
+        <article class="glass-card ship"><div class="ship-top"><span class="date">Oct 5</span><span class="area gov">governance</span></div><h3>A DAO on the devnet</h3><p>Lock-to-vote governance is deployed on the devnet and verified end to end. The lock is contract-internal, not chain staking.</p><a class="ref" href="https://github.com/Dragonmonk111/layer-sdk/commit/cdd6364" target="_blank" rel="noopener">layer-sdk@cdd6364 ↗</a></article>
+        <article class="glass-card ship"><div class="ship-top"><span class="date">Oct 6</span><span class="area gov">G1</span></div><h3>The validator door is open</h3><p>Seat terms, the key ceremony, a full node guide and pruning tiers are published, and the first external operators have applied.</p><a class="ref" href="/docs/onboarding/validators/">Validator call →</a></article>
+      </div>
+    </section>
+
     <section id="anatomy">
       <div class="anatomy">
         <div class="reveal">
@@ -385,10 +462,10 @@
           <tr><td>Ethereum</td><td>~13–15 min economic</td><td>account-level research</td><td>sync committee</td><td>world computer</td></tr>
           <tr><td>Cosmos appchains</td><td>~3–6 s per block</td><td>none shipped</td><td>header chains</td><td>sovereign zones</td></tr>
           <tr><td>Sei Giga</td><td>~250 ms, ordering only</td><td>none</td><td>—</td><td>trading</td></tr>
-          <tr class="us"><td>JunoClaw</td><td>~1 s, certifies state root</td><td>quorum-level, running</td><td>chain-linked BLS certs</td><td>verifiable agents</td></tr>
+          <tr class="us"><td>JunoClaw</td><td>0.16 s on devnet, certifies state root</td><td>quorum-level, running</td><td>chain-linked BLS certs</td><td>verifiable agents</td></tr>
         </table>
       </div>
-      <p class="note reveal">Speed alone isn't the differentiator. What's different is the combination: state-certifying finality, post-quantum certificates at the quorum level, and a light-client proof path, all in one small codebase. In exchange we give up ecosystem gravity.</p>
+      <p class="note reveal">Speed alone isn't the differentiator. What's different is the combination: state-certifying finality, post-quantum certificates at the quorum level, and a light-client proof path, all in one small codebase. In exchange we give up ecosystem gravity. Our 0.16 s comes from 4 validators on one host, and G1 will publish numbers over real networks.</p>
     </section>
 
     <section id="stack">
@@ -403,6 +480,8 @@
         <div class="glass-card"><span class="tag live">devnet</span><h3>Truth markets + J-Lens</h3><p>Agents stake on claims, J-Lens probes resolve them, and diverging operators get slashed.</p></div>
         <div class="glass-card"><span class="tag live">devnet</span><h3>Sealed signer</h3><p>A TEE component keeps keys inside the enclave and signs its own transactions on-chain.</p></div>
         <div class="glass-card"><span class="tag live">devnet</span><h3>Robotics attestation</h3><p>Locomotion policies trained in simulation, with on-chain attestation. Ponyou walks.</p></div>
+        <div class="glass-card wide"><span class="tag live">devnet</span><h3>Agent economy, end to end</h3><p>agent-company, agent-registry, task-ledger, escrow, truth-market, marketplace, moultbook and skill-registry run together on the devnet. The latest full run passed 122 of 122 checks.</p></div>
+        <div class="glass-card wide"><span class="tag live">devnet</span><h3>DAO governance</h3><p>A lock-to-vote DAO, deployed on the devnet and verified end to end. Voting power comes from a contract-internal lock, not chain staking.</p></div>
       </div>
     </section>
 
@@ -415,6 +494,7 @@
         <div class="glass-card proof"><div class="big">15</div><h3>Chaos events in 24 h</h3><p>Kill/restart, live network partitions, container recreates and a Byzantine proposer injecting faults. Victims rotated, and recovery was measured for every event.</p></div>
         <div class="glass-card proof"><div class="big">0</div><h3>State divergences</h3><p>The monitor compared certified payload digests across validators, and those digests bind the Merkle state root itself.</p></div>
         <div class="glass-card proof"><div class="big">3</div><h3>Findings, all fixed</h3><p>An IP-reassignment wedge and a backfill request flood. On top of that, <span class="mono">app_hash</span> now equals <span class="mono">state_root</span>, so it's identical on every node.</p></div>
+        <div class="glass-card proof"><div class="big">2</div><h3>Exploits caught on our own devnet</h3><p>Our end-to-end probe reproduced a spoofed payment hook and an unbound marketplace verdict on deployed contracts. Both are fixed and migrated in place, and the probe now proves they fail.</p></div>
       </div>
     </section>
 
@@ -423,7 +503,7 @@
         <div class="l">
           <div class="kicker">Call for operators</div>
           <h2>G1 closed testnet: 3–5 validator seats.</h2>
-          <p class="lede" style="margin-bottom:2rem">If you run Juno or Cosmos infrastructure, we want you in the first external validator set. Seats carry equal weight and use hybrid signing, and the key ceremony gives every operator their own share.</p>
+          <p class="lede" style="margin-bottom:2rem">If you run Juno or Cosmos infrastructure, we want you in the first external validator set. Seats carry equal weight and use hybrid signing, and the key ceremony gives every operator their own share. No static IP at home? A small cloud VM works, or a cheap VPS in front of your home node.</p>
           <div class="ctas" style="justify-content:flex-start;margin-bottom:0">
             <a class="btn gold" href="/docs/onboarding/validators/">Apply for a seat →</a>
             <a class="btn glass" href="/docs/reference/run-a-node/">Node setup guide</a>
@@ -438,7 +518,8 @@
             <li>Slashing (consensus) <b>none</b></li>
             <li>CPU / RAM <b>4 cores · 8 GB rec.</b></li>
             <li>Disk <b>50 GB SSD rec.</b></li>
-            <li>Network <b>static IP · TCP 7001</b></li>
+            <li>Pruning <b>~24 h window</b></li>
+            <li>Network <b>stable public IP · TCP 7001</b></li>
             <li>Clock <b>NTP required</b></li>
           </ul>
         </div>
@@ -494,6 +575,28 @@
       `<div class="blk"><div class="t">CERT · n${i ? '+' + i : ''}</div><div>root ${hex()}…</div><div>prev ${hex()}…</div>` +
       `<div class="seals"><span class="seal bls">BLS</span><span class="seal pq">MAYO2</span></div></div>`).join('');
     track.innerHTML = cards + cards;
+
+    // Pace lanes: one lit cell per finalized block at the measured pace (illustrative, not live data)
+    document.querySelectorAll('.lane').forEach(lane => {
+      const cells = lane.querySelector('.cells'), count = lane.querySelector('.lane-n');
+      const n = innerWidth < 640 ? 20 : 36, ms = +lane.dataset.ms;
+      cells.style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+      cells.innerHTML = '<i class="cell"></i>'.repeat(n);
+      const list = cells.children;
+      if (reduce) {
+        const lit = lane.classList.contains('fast') ? n : Math.round(n * 0.16 / 1.5);
+        for (let k = 0; k < lit; k++) list[k].classList.add('on');
+        count.textContent = (1000 / ms).toFixed(1) + ' blocks/s';
+        return;
+      }
+      let k = 0, total = 0;
+      setInterval(() => {
+        if (k === 0) for (const c of list) c.classList.remove('on');
+        list[k].classList.add('on');
+        k = (k + 1) % n;
+        count.textContent = (++total).toLocaleString('en-US') + ' blocks';
+      }, ms);
+    });
 
     // Lattice background: drifting points joined by faint edges (a nod to lattice/PQ math)
     const cv = document.getElementById('lattice');

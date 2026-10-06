@@ -16,10 +16,13 @@ The chain's denom is `ujclaw` and is used for gas. No token sale exists, and non
 Certificates need a quorum of BLS **and** MAYO2 signatures. A future quantum attacker who breaks BLS would still have to forge MAYO2.
 
 **How fast is it?**
-About 1 s to finality, and the certificate covers the executed state. Speed is not our pitch, though. The combination of fast finality, PQ certificates and a light-client path is.
+On the 4-validator devnet a block finalizes every 0.16 s, and the certificate covers the executed state. Expect slower numbers over real networks; G1 will measure them. Speed is not our pitch, though. The combination of fast finality, PQ certificates and a light-client path is.
 
 **Can I run a validator?**
 G1 is recruiting 3–5 external operators. See the [validator call](/docs/onboarding/validators/).
+
+**I don't have a static IP. Can I still join?**
+Yes. Peers dial each other at a fixed `IP:7001`, so you need a stable public address, but it doesn't have to be at home. A small cloud VM works, or a cheap VPS that forwards TCP `7001` to your home node over WireGuard. Cloudflare Tunnel is not a good fit for P2P traffic.
 
 **Is there slashing?**
 Not at the consensus layer. Stake and slashing live in the truth-market contracts.

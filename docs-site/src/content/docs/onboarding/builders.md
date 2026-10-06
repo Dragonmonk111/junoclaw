@@ -23,7 +23,7 @@ JunoClaw runs **CosmWasm** contracts behind a **Cosmos-style gRPC** interface. I
 
 - **Strict sequence admission.** The mempool rejects both stale and future nonces, so bursts from one sender have to arrive in order.
 - **Finality is instant.** A tx included in a finalized block is final. You don't need confirmation counts.
-- **Block time is deterministic.** It comes from genesis time and the consensus view, at about 1 s per block.
+- **Block time is the proposer's wall clock.** Validators bound it: after the parent, at most 2 s ahead. Blocks land about every 0.16 s on the devnet, so use `env.block.time` rather than block counts for anything time-based.
 - **Wallet integrations are not ready yet.** Keplr/cosmjs compatibility through a CometBFT-RPC gateway is planned for G1→G2. Use gRPC for now.
 
 ## Measured gas reference

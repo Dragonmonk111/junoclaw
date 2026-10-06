@@ -21,7 +21,7 @@ JunoClaw is a lean Layer-1 written in Rust on [Commonware](https://commonware.xy
 
 | Property | How it works |
 |---|---|
-| **Finality** | Each finalized block has a threshold BLS12-381 certificate. Finality takes about 1 s and is deterministic. |
+| **Finality** | Each finalized block has a threshold BLS12-381 certificate. Finality is deterministic and takes about 0.16 s on the single-host devnet. A geographically distributed set will be slower. |
 | **What gets certified** | The block payload binds the executed `state_root`, so the certificate covers the result of the block, not only its order. |
 | **Post-quantum hybrid** | When `hybrid_consensus` is on, every vote carries a BLS partial and a MAYO2 signature (186 bytes). A certificate needs a quorum of both. Security is `max(classical, PQ)`. |
 | **Light-client path** | Each certificate is chain-linked to the previous one, so you can verify history from certificates. |
@@ -55,16 +55,18 @@ The devnet ran a **24-hour chaos soak**: rotating kill/restart, live 90–180 s 
 
 The post-soak image is deployed, and the devnet keeps running chaos.
 
+**October 6.** Block time on the devnet fell from 1–2 s to 0.16 s once the state-root scan stopped walking node-local sidecar data. The 8-contract agent stack now runs a full task economy on the devnet. Its latest end-to-end run passed 122 of 122 checks, including probes for two exploits we found and fixed there.
+
 ## 5. Honest comparisons
 
 | | Ethereum | Cosmos appchains | Sei Giga | JunoClaw |
 |---|---|---|---|---|
-| Finality | ~13–15 min economic | ~3–6 s per block | ~250 ms, ordering only | ~1 s, certifies state root |
+| Finality | ~13–15 min economic | ~3–6 s per block | ~250 ms, ordering only | 0.16 s on devnet, certifies state root |
 | PQ posture | account-level research | none shipped | none | quorum-level, running |
 | Light client | sync committee | header chains | — | chain-linked BLS certs |
 | Thesis | world computer | sovereign zones | trading | verifiable agents |
 
-Speed alone is not the differentiator. What sets JunoClaw apart is the combination: ~1 s state-certifying finality, post-quantum certificates at the quorum level, and a certificate-chain light-client path, all in one small codebase. In exchange, we give up the ecosystem gravity of the big stacks.
+Speed alone is not the differentiator. What sets JunoClaw apart is the combination: state-certifying finality (0.16 s on the devnet, single host), post-quantum certificates at the quorum level, and a certificate-chain light-client path, all in one small codebase. In exchange, we give up the ecosystem gravity of the big stacks.
 
 ## 6. Roadmap
 

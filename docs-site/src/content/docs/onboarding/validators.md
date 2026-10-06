@@ -5,7 +5,7 @@ description: JunoClaw is recruiting 3–5 external validators for the G1 closed 
 
 <p class="jc-kicker">Call for operators · G1 closed testnet</p>
 
-JunoClaw has finished its devnet gate (G0), including a 24-hour chaos soak with zero state divergence. **G1 is next: a closed testnet with 3–5 invited external validators.** If you run Juno or Cosmos infrastructure, these seats are for you.
+JunoClaw has finished its devnet gate (G0), including a 24-hour chaos soak with zero state divergence, and the devnet now finalizes a block every 0.16 s. **G1 is next: a closed testnet with 3–5 invited external validators.** If you run Juno or Cosmos infrastructure, these seats are for you.
 
 ## What a G1 seat is
 
@@ -27,7 +27,7 @@ JunoClaw has finished its devnet gate (G0), including a 24-hour chaos soak with 
 | CPU | 2 cores | 4 cores |
 | RAM | 4 GB | 8 GB |
 | Disk | 20 GB SSD | 50 GB SSD |
-| Network | 10 Mbps, stable | 100 Mbps, **static public IP** |
+| Network | 10 Mbps, stable | 100 Mbps, **stable public IP** |
 
 The devnet runs all 4 hybrid validators on a single desktop machine, so these figures leave plenty of headroom. Pruning tiers keep disk use bounded: a validator keeps the last 540,000 heights of sidecar data and finality records (about 24 hours at devnet speed).
 
@@ -35,6 +35,7 @@ The devnet runs all 4 hybrid validators on a single desktop machine, so these fi
 
 - Linux (Ubuntu 22.04+ recommended) with Docker, or Rust 1.85+ to build from source
 - **Inbound TCP `7001`** (P2P) reachable by the other validators
+- **No static IP at home?** Peers dial each other at a fixed `IP:7001` (IP addresses, not DNS names), so the address must not change. A small cloud VM works, or a cheap VPS that forwards TCP `7001` to your home node over WireGuard. Cloudflare Tunnel is not a good fit for P2P
 - `9090` (gRPC), which can stay private. Exposing it is optional
 - **NTP clock sync.** Simplex timeouts depend on wall-clock time
 - Monitoring/alerting you already trust. We'll ask you to alert on finalized-height stalls

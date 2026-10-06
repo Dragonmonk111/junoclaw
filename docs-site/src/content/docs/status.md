@@ -11,15 +11,15 @@ description: What is running, what is tested, and what is planned — kept hones
 |---|---|
 | Consensus | Commonware Simplex BFT, 4 validators, threshold BLS12-381 certificates |
 | PQ hybrid | `hybrid_consensus`: BLS partial + MAYO2 signature per vote, quorum on both |
-| Finality | ~1–2 s, certificate binds executed `state_root`. A finality record (certificate, proposal, timestamp) is stored per height |
+| Finality | 0.16 s per block on the 4-validator devnet (single host; G1 will measure real networks). The certificate binds the executed `state_root`. A finality record (certificate, proposal, timestamp) is stored per height |
 | Validation | Proposals checked for height, parent, `state_root`, size and wall-clock timestamp (after the parent, at most 2 s ahead). Byzantine proposer tested |
 | Mempool | Dedupe, recheck after commit, strict sequence admission |
 | Sync | Height-range backfill, certified state-sync with a multi-peer anchor quorum, locally verified anchor certificate and a capped download size |
-| Storage | Durable payload store, tx index, role-tier pruning (validator / RPC / archive) |
+| Storage | Durable payload store, tx index, role-tier pruning: validators keep ~24 h (540,000 heights) of payloads and finality records, RPC nodes ~30 days, archives everything. Peers backfill across the whole window |
 | gRPC | `BroadcastTx`, `GetTx`, `Simulate`, bank/wasm queries |
 | Contracts | CosmWasm, in-contract MAYO-1/2/3/5 + Groth16 verification |
 | Accounts | secp256k1 and hybrid secp256k1 + MAYO |
-| Agent layer | Buzz relay channels live at `buzz.junoclaw.xyz` |
+| Agent layer | Buzz relay channels live at `buzz.junoclaw.xyz`. The 8-contract agent stack runs on the devnet |
 
 ## Tested
 
@@ -31,6 +31,9 @@ description: What is running, what is tested, and what is planned — kept hones
   - Block time is the proposer's wall clock, bounded by validators.
   - State-sync anchors are verified locally, and snapshot downloads are capped.
   - Nodes refuse publicly derivable devnet keys and genesis unless `insecure_devnet` is set.
+- **October 6, evening.** The state-root scan now skips node-local sidecar data, and block time fell from 1–2 s to 0.16 s. Finality records are pruned by tier, and backfill reaches across the whole pruning window.
+- **Agent economy end to end.** The 8-contract stack (agent-company, agent-registry, task-ledger, escrow, truth-market, marketplace, moultbook, skill-registry) runs on the devnet: onboarding, hires, escrow, verdicts, slashing, refunds and provenance. Latest run: **122 checks, 0 failures.**
+- **Two exploits found and fixed on the devnet.** The e2e probe reproduced a spoofed escrow payment hook and a marketplace verdict not bound to its hire. Both were fixed and migrated in place, and the probe now asserts the attacks fail. Escrow expiry, dispute resolution, the registry fee sweep and hook caps are live too.
 
 ## Gates
 
