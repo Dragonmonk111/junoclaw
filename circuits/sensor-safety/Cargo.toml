@@ -9,7 +9,7 @@ description = "Groth16 circuit for private sensor safety proof — proves sensor
 ark-bn254 = "0.5"
 ark-groth16 = "0.5"
 ark-ec = "0.5"
-ark-ff = "0.5"
+ark-ff = { version = "0.5", default-features = false }
 ark-serialize = { version = "0.5", features = ["derive"] }
 ark-std = "0.5"
 ark-relations = "0.5"
