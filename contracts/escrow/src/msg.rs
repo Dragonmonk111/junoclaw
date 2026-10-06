@@ -9,7 +9,10 @@ use junoclaw_common::{ContractRegistry, PaymentObligation};
 pub struct InstantiateMsg {
     pub admin: Option<String>,
     pub task_ledger: String,
-    pub timeout_blocks: u64,
+    /// Seconds before a `Pending` obligation can be expired by anyone.
+    /// 0 disables expiry. (`timeout_blocks` is accepted as a legacy alias.)
+    #[serde(alias = "timeout_blocks")]
+    pub timeout_seconds: u64,
     /// Native token denom. Defaults to "ujunox".
     pub denom: Option<String>,
     /// Optional cross-contract registry snapshot. When `None`, `registry`
@@ -48,10 +51,22 @@ pub enum ExecuteMsg {
         task_id: u64,
         attestation_hash: String,
     },
+    /// Permissionless: cancel a `Pending` obligation once
+    /// `created_at + timeout_seconds` has passed.
+    ExpirePending {
+        task_id: u64,
+    },
+    /// Admin-only: close a `Disputed` obligation, either as paid
+    /// (`ConfirmObligation`) or void (`CancelObligation`).
+    ResolveDispute {
+        task_id: u64,
+        resolution: DisputeResolution,
+    },
     UpdateConfig {
         admin: Option<String>,
         task_ledger: Option<String>,
-        timeout_blocks: Option<u64>,
+        #[serde(alias = "timeout_blocks")]
+        timeout_seconds: Option<u64>,
     },
     /// Admin-only: rewire the cross-contract registry. Any field left as
     /// `None` is untouched.
@@ -60,6 +75,14 @@ pub enum ExecuteMsg {
         task_ledger: Option<String>,
         escrow: Option<String>,
     },
+}
+
+#[cw_serde]
+pub enum DisputeResolution {
+    /// The payee was paid after all: `Disputed` -> `Confirmed`.
+    ConfirmObligation,
+    /// The payer was right, or the deal is off: `Disputed` -> `Cancelled`.
+    CancelObligation,
 }
 
 #[cw_serde]
@@ -74,6 +97,9 @@ pub enum QueryMsg {
     GetObligation { obligation_id: u64 },
     #[returns(Option<PaymentObligation>)]
     GetObligationByTask { task_id: u64 },
+    /// The `tx_hash` the payer attached when confirming, if any.
+    #[returns(Option<String>)]
+    GetTxHash { task_id: u64 },
     #[returns(LedgerStats)]
     GetStats {},
     #[returns(Vec<PaymentObligation>)]

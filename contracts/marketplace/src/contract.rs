@@ -338,6 +338,13 @@ fn execute_hire_service(
         .add_attribute("amount", listing.price.to_string()))
 }
 
+/// The `messages_hash` a truth-market epoch must carry to settle the hire of
+/// `task_id`. Naming the task as well as its output means a verdict on one
+/// task's output cannot settle another task that reports the same hash.
+pub fn epoch_subject(task_id: u64, output_hash: &str) -> String {
+    format!("task:{}:{}", task_id, output_hash)
+}
+
 #[derive(serde::Deserialize)]
 struct EpochView {
     consensus_verdict: String,
@@ -395,7 +402,11 @@ fn execute_release_on_verdict(
             if !epoch.finalized {
                 return Err(ContractError::EpochNotFinalized { batch_height });
             }
-            if task.output_hash.as_deref() != Some(epoch.messages_hash.as_str()) {
+            let subject = task
+                .output_hash
+                .as_deref()
+                .map(|output_hash| epoch_subject(hire.task_id, output_hash));
+            if subject.as_deref() != Some(epoch.messages_hash.as_str()) {
                 return Err(ContractError::EpochNotForTask {
                     task_id: hire.task_id,
                     batch_height,

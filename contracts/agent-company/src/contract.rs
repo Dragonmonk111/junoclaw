@@ -12,7 +12,7 @@ use crate::msg::{
 use crate::state::{
     Attestation, CodeUpgradeAction, Config, Member, NoisCallback, PaymentRecord,
     PendingSortition, Proposal, ProposalKind, ProposalStatus, SignRequest, SignRequestStatus,
-    SortitionRound, Vote, VoteOption,
+    SortitionRound, Vote, VoteOption, VotingSnapshot,
     ATTESTATIONS, CONFIG, MEMBER_EARNINGS,
     PAYMENT_HISTORY, PENDING_SIGN_REQUEST, PENDING_SORTITION,
     PROPOSAL, PROPOSALS, PROPOSAL_SEQ, SIGN_REQUESTS, SIGN_REQUEST_SEQ, SORTITION_ROUNDS,
@@ -302,6 +302,13 @@ fn execute_distribute(
         return Err(ContractError::AlreadyDistributed { task_id });
     }
 
+    if let Some(coin) = info.funds.iter().find(|c| c.denom != cfg.denom) {
+        return Err(ContractError::InvalidFundsDenom {
+            expected: cfg.denom.clone(),
+            got: coin.denom.clone(),
+        });
+    }
+
     let total_amount: Uint128 = info.funds.iter()
         .filter(|c| c.denom == cfg.denom)
         .map(|c| c.amount)
@@ -377,11 +384,12 @@ fn execute_create_proposal(
             let parsed = parse_members(&deps, members)?;
             ProposalKind::WeightChange { members: parsed }
         }
-        ProposalKindMsg::WavsPush { task_description, execution_tier, escrow_amount } => {
+        ProposalKindMsg::WavsPush { task_description, execution_tier, escrow_amount, payee } => {
             if cfg.task_ledger.is_none() {
                 return Err(ContractError::NoTaskLedger {});
             }
-            ProposalKind::WavsPush { task_description, execution_tier, escrow_amount }
+            let payee = payee.map(|p| deps.api.addr_validate(&p)).transpose()?;
+            ProposalKind::WavsPush { task_description, execution_tier, escrow_amount, payee }
         }
         ProposalKindMsg::ConfigChange { new_admin, new_governance, new_wavs_operator } => {
             // Validate addresses eagerly so invalid strings fail at proposal
@@ -470,6 +478,11 @@ fn execute_create_proposal(
         voting_deadline_block: deadline,
         min_deadline_block: min_deadline,
         executed: false,
+        snapshot: Some(VotingSnapshot {
+            members: cfg.members.clone(),
+            quorum_percent: cfg.quorum_percent,
+            supermajority_quorum_percent: cfg.supermajority_quorum_percent,
+        }),
     };
 
     PROPOSALS.save(deps.storage, seq, &proposal)?;
@@ -489,12 +502,20 @@ fn execute_cast_vote(
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // Only members can vote
-    let member = cfg.members.iter().find(|m| m.addr == info.sender)
-        .ok_or(ContractError::NotMember { addr: info.sender.to_string() })?;
-
     let mut proposal = PROPOSALS.load(deps.storage, proposal_id)
         .map_err(|_| ContractError::ProposalNotFound { id: proposal_id })?;
+
+    // Only members can vote, with the weight they held when the proposal was
+    // created: a WeightChange executed meanwhile must not reach back into it.
+    let (members, quorum_percent, supermajority_quorum_percent) = match &proposal.snapshot {
+        Some(s) => (&s.members, s.quorum_percent, s.supermajority_quorum_percent),
+        None => (&cfg.members, cfg.quorum_percent, cfg.supermajority_quorum_percent),
+    };
+    let weight = members
+        .iter()
+        .find(|m| m.addr == info.sender)
+        .ok_or(ContractError::NotMember { addr: info.sender.to_string() })?
+        .weight;
 
     if proposal.status != ProposalStatus::Open {
         return Err(ContractError::ProposalNotOpen { id: proposal_id });
@@ -514,7 +535,6 @@ fn execute_cast_vote(
     }
 
     // Record the vote
-    let weight = member.weight;
     proposal.votes.push(Vote {
         voter: info.sender.clone(),
         option: vote_option.clone(),
@@ -562,7 +582,7 @@ fn execute_cast_vote(
     let all_voted = proposal.total_voted_weight == cfg.total_weight;
     let new_status = match &proposal.kind {
         ProposalKind::CodeUpgrade { .. } | ProposalKind::WeightChange { .. } => {
-            let yes_threshold = cfg.total_weight * cfg.supermajority_quorum_percent / 100;
+            let yes_threshold = cfg.total_weight * supermajority_quorum_percent / 100;
             let max_no_tolerable = cfg.total_weight - yes_threshold;
             if proposal.yes_weight >= yes_threshold {
                 Some(ProposalStatus::Passed)
@@ -573,7 +593,7 @@ fn execute_cast_vote(
             }
         }
         _ => {
-            let participation_threshold = cfg.total_weight * cfg.quorum_percent / 100;
+            let participation_threshold = cfg.total_weight * quorum_percent / 100;
             if proposal.total_voted_weight >= participation_threshold
                 && proposal.yes_weight > proposal.no_weight
             {
@@ -655,7 +675,7 @@ fn execute_execute_proposal(
             CONFIG.save(deps.storage, &cfg)?;
             response = response.add_attribute("kind", "weight_change");
         }
-        ProposalKind::WavsPush { task_description, execution_tier, escrow_amount } => {
+        ProposalKind::WavsPush { task_description, execution_tier, escrow_amount, payee } => {
             let task_ledger = cfg.task_ledger.as_ref()
                 .ok_or(ContractError::NoTaskLedger {})?;
 
@@ -714,7 +734,7 @@ fn execute_execute_proposal(
                     contract_addr: cfg.escrow_contract.to_string(),
                     msg: to_json_binary(&PaymentLedgerMsg::Authorize {
                         task_id: proposal_id,
-                        payee: cfg.admin.to_string(),
+                        payee: payee.as_ref().unwrap_or(&cfg.admin).to_string(),
                         amount: *escrow_amount,
                     })?,
                     funds: vec![],

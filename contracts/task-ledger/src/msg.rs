@@ -56,6 +56,11 @@ pub enum ExecuteMsg {
     CancelTask {
         task_id: u64,
     },
+    /// Operator / admin / agent-company: cancel a `Running` task and, when
+    /// escrow is wired, the task's `Pending` obligation.
+    AdminCancelTask {
+        task_id: u64,
+    },
     /// Admin-only: grant operator rights to a wallet.
     AddOperator { operator: String },
     /// Admin-only: revoke operator rights.

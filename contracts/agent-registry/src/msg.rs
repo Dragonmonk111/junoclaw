@@ -58,6 +58,13 @@ pub enum ExecuteMsg {
         task_ledger: Option<String>,
         escrow: Option<String>,
     },
+    /// Admin-only: sweep collected registration fees (and any excess funds
+    /// attached to `RegisterAgent`) out of the contract. `amount: None`
+    /// withdraws the whole `cfg.denom` balance.
+    WithdrawFees {
+        recipient: String,
+        amount: Option<Uint128>,
+    },
 }
 
 #[cw_serde]

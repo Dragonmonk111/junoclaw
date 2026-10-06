@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    coins, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    coin, coins, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
     StdResult, Uint128,
 };
 use cw_multi_test::{App, ContractWrapper, Executor};
@@ -2607,4 +2607,332 @@ fn test_rotate_moultbook_admin_only() {
         .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
         .unwrap();
     assert_eq!(cfg.moultbook, None);
+}
+
+#[test]
+fn weight_change_does_not_retroactively_affect_open_proposals() {
+    // Audit F1 reproducer. A, B, C pass a WeightChange that zeroes B and C
+    // and leaves D with 1 bp while D's FreeText proposal is still open.
+    // Votes on the open proposal must use the weights frozen at its creation.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let a = mk(&app, "member-a");
+    let b = mk(&app, "member-b");
+    let c = mk(&app, "member-c");
+    let d = mk(&app, "member-d");
+    let members = vec![
+        MemberInput { addr: a.to_string(), weight: 3000, role: MemberRole::Human },
+        MemberInput { addr: b.to_string(), weight: 3000, role: MemberRole::Human },
+        MemberInput { addr: c.to_string(), weight: 2500, role: MemberRole::Human },
+        MemberInput { addr: d.to_string(), weight: 1500, role: MemberRole::Human },
+    ];
+    let contract = store_and_instantiate(&mut app, &admin, members, None);
+
+    // P1: the weight grab.
+    app.execute_contract(
+        a.clone(),
+        contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::WeightChange {
+                members: vec![
+                    MemberInput { addr: a.to_string(), weight: 9999, role: MemberRole::Human },
+                    MemberInput { addr: b.to_string(), weight: 0, role: MemberRole::Human },
+                    MemberInput { addr: c.to_string(), weight: 0, role: MemberRole::Human },
+                    MemberInput { addr: d.to_string(), weight: 1, role: MemberRole::Human },
+                ],
+            },
+        },
+        &[],
+    )
+    .unwrap();
+    for voter in [&a, &b, &c] {
+        app.execute_contract(
+            voter.clone(),
+            contract.clone(),
+            &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+            &[],
+        )
+        .unwrap();
+    }
+
+    // P2: D's proposal, opened while the weight change is pending.
+    app.update_block(|blk| blk.height += 50);
+    app.execute_contract(
+        d.clone(),
+        contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::FreeText {
+                title: "D's motion".to_string(),
+                description: "opened before the weight change executed".to_string(),
+            },
+        },
+        &[],
+    )
+    .unwrap();
+
+    // P1 executes; live weights are now A 9999, B 0, C 0, D 1.
+    app.update_block(|blk| blk.height += 51);
+    app.execute_contract(
+        a.clone(),
+        contract.clone(),
+        &ExecuteMsg::ExecuteProposal { proposal_id: 1 },
+        &[],
+    )
+    .unwrap();
+
+    // D and A vote on P2 with their creation-time weights.
+    app.execute_contract(
+        d.clone(),
+        contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 2, vote: VoteOption::Yes },
+        &[],
+    )
+    .unwrap();
+    app.execute_contract(
+        a.clone(),
+        contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 2, vote: VoteOption::No },
+        &[],
+    )
+    .unwrap();
+    let p2: Proposal = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetProposal { proposal_id: 2 })
+        .unwrap();
+    assert_eq!(p2.yes_weight, 1500, "D votes with 1500, not the post-change 1");
+    assert_eq!(p2.no_weight, 3000, "A votes with 3000, not the post-change 9999");
+    assert_eq!(p2.status, ProposalStatus::Open);
+
+    // B was zeroed after P2 opened but still holds 3000 on it, which carries it.
+    app.execute_contract(
+        b.clone(),
+        contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 2, vote: VoteOption::Yes },
+        &[],
+    )
+    .unwrap();
+    let p2: Proposal = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetProposal { proposal_id: 2 })
+        .unwrap();
+    assert_eq!(p2.yes_weight, 4500);
+    assert_eq!(p2.status, ProposalStatus::Passed);
+
+    // A proposal opened after the change snapshots the new weights.
+    app.execute_contract(
+        a.clone(),
+        contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::FreeText {
+                title: "after".to_string(),
+                description: "new weights apply".to_string(),
+            },
+        },
+        &[],
+    )
+    .unwrap();
+    let p3: Proposal = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetProposal { proposal_id: 3 })
+        .unwrap();
+    let snapshot = p3.snapshot.expect("new proposals carry a snapshot");
+    assert_eq!(snapshot.quorum_percent, 51);
+    assert_eq!(snapshot.supermajority_quorum_percent, 67);
+    let a_weight = snapshot.members.iter().find(|m| m.addr == a).unwrap().weight;
+    assert_eq!(a_weight, 9999);
+}
+
+#[test]
+fn member_added_after_creation_cannot_vote_on_open_proposal() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let carol = mk(&app, "carol");
+    let contract = store_and_instantiate(&mut app, &admin, two_member_msg(&alice, &bob), None);
+
+    app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::FreeText {
+                title: "t".to_string(),
+                description: "d".to_string(),
+            },
+        },
+        &[],
+    )
+    .unwrap();
+
+    // Admin rewrites membership directly (no governance contract set).
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::UpdateMembers {
+            members: vec![
+                MemberInput { addr: alice.to_string(), weight: 2000, role: MemberRole::Human },
+                MemberInput { addr: bob.to_string(), weight: 2000, role: MemberRole::Agent },
+                MemberInput { addr: carol.to_string(), weight: 6000, role: MemberRole::Human },
+            ],
+        },
+        &[],
+    )
+    .unwrap();
+
+    let err = app
+        .execute_contract(
+            carol.clone(),
+            contract.clone(),
+            &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+            &[],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::NotMember { .. }
+    ));
+
+    // Alice still votes with her creation-time 6000, which clears quorum.
+    app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CastVote { proposal_id: 1, vote: VoteOption::Yes },
+        &[],
+    )
+    .unwrap();
+    let p: Proposal = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetProposal { proposal_id: 1 })
+        .unwrap();
+    assert_eq!(p.yes_weight, 6000);
+    assert_eq!(p.status, ProposalStatus::Passed);
+}
+
+#[test]
+fn stored_proposals_without_snapshot_or_payee_still_decode() {
+    // Proposals written before the snapshot / payee fields existed must load
+    // after migration, with both fields defaulting to None.
+    let legacy = r#"{
+        "id": 7,
+        "proposer": "alice",
+        "kind": {"wavs_push": {"task_description": "x", "execution_tier": "local", "escrow_amount": "5"}},
+        "votes": [],
+        "yes_weight": 0,
+        "no_weight": 0,
+        "abstain_weight": 0,
+        "total_voted_weight": 0,
+        "status": "open",
+        "created_at_block": 1,
+        "voting_deadline_block": 101,
+        "min_deadline_block": 14,
+        "executed": false
+    }"#;
+    let p: Proposal = cosmwasm_std::from_json(legacy.as_bytes()).unwrap();
+    assert!(p.snapshot.is_none());
+    match p.kind {
+        crate::state::ProposalKind::WavsPush { payee, .. } => assert!(payee.is_none()),
+        other => panic!("unexpected kind: {:?}", other),
+    }
+}
+
+#[test]
+fn wavs_push_rejects_invalid_payee_at_creation() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    let task_ledger = mk(&app, "task-ledger");
+    let contract = store_and_instantiate_with_overrides(
+        &mut app,
+        &admin,
+        two_member_msg(&alice, &bob),
+        None,
+        None,
+        Some(task_ledger.to_string()),
+    );
+
+    let res = app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::WavsPush {
+                task_description: "pay someone".to_string(),
+                execution_tier: junoclaw_common::ExecutionTier::Local,
+                escrow_amount: Uint128::new(100),
+                payee: Some("not-a-valid-address".to_string()),
+            },
+        },
+        &[],
+    );
+    assert!(res.is_err());
+
+    app.execute_contract(
+        alice.clone(),
+        contract.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::WavsPush {
+                task_description: "pay bob".to_string(),
+                execution_tier: junoclaw_common::ExecutionTier::Local,
+                escrow_amount: Uint128::new(100),
+                payee: Some(bob.to_string()),
+            },
+        },
+        &[],
+    )
+    .unwrap();
+    let p: Proposal = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetProposal { proposal_id: 1 })
+        .unwrap();
+    match p.kind {
+        crate::state::ProposalKind::WavsPush { payee, .. } => assert_eq!(payee, Some(bob)),
+        other => panic!("unexpected kind: {:?}", other),
+    }
+}
+
+#[test]
+fn test_distribute_payment_rejects_foreign_denom() {
+    // Audit F3: coins in any other denom used to be kept by the contract
+    // with no way out.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let alice = mk(&app, "alice");
+    let bob = mk(&app, "bob");
+    app.init_modules(|router, _, storage| {
+        router
+            .bank
+            .init_balance(storage, &admin, vec![coin(1_000_000, UJUNO), coin(500, "uosmo")])
+            .unwrap();
+    });
+    let contract = store_and_instantiate(&mut app, &admin, two_member_msg(&alice, &bob), None);
+
+    let err = app
+        .execute_contract(
+            admin.clone(),
+            contract.clone(),
+            &ExecuteMsg::DistributePayment { task_id: 1 },
+            &[coin(1_000_000, UJUNO), coin(500, "uosmo")],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::InvalidFundsDenom { .. }
+    ));
+    assert_eq!(
+        app.wrap().query_balance(admin.to_string(), "uosmo").unwrap().amount,
+        Uint128::new(500)
+    );
+    assert_eq!(
+        app.wrap().query_balance(contract.to_string(), "uosmo").unwrap().amount,
+        Uint128::zero()
+    );
+
+    // The task id was not consumed; a clean payment still goes through.
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::DistributePayment { task_id: 1 },
+        &coins(1_000_000, UJUNO),
+    )
+    .unwrap();
 }

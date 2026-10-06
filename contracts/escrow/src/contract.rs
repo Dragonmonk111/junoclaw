@@ -5,10 +5,10 @@ use cosmwasm_std::{
 use cw2::{get_contract_version, set_contract_version};
 
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use crate::msg::{DisputeResolution, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 use crate::state::{
     Config, LedgerStats, CONFIG, LEDGER_STATS, NEXT_OBLIGATION_ID, OBLIGATIONS,
-    OBLIGATIONS_BY_TASK,
+    OBLIGATIONS_BY_TASK, TX_HASHES,
 };
 use junoclaw_common::{
     Constraint, ContractRegistry, ObligationStatus, PaymentObligation, TaskRecord,
@@ -16,6 +16,7 @@ use junoclaw_common::{
 
 const CONTRACT_NAME: &str = "crates.io:junoclaw-payment-ledger";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+const MAX_TX_HASH_LEN: usize = 128;
 
 #[entry_point]
 pub fn instantiate(
@@ -64,7 +65,7 @@ pub fn instantiate(
     let config = Config {
         admin,
         task_ledger: task_ledger_addr,
-        timeout_blocks: msg.timeout_blocks,
+        timeout_seconds: msg.timeout_seconds,
         denom: msg.denom.unwrap_or_else(|| "ujunox".to_string()),
         registry,
     };
@@ -110,11 +111,15 @@ pub fn execute(
             task_id,
             attestation_hash,
         } => execute_attach_attestation(deps, info, task_id, attestation_hash),
+        ExecuteMsg::ExpirePending { task_id } => execute_expire_pending(deps, env, task_id),
+        ExecuteMsg::ResolveDispute { task_id, resolution } => {
+            execute_resolve_dispute(deps, env, info, task_id, resolution)
+        }
         ExecuteMsg::UpdateConfig {
             admin,
             task_ledger,
-            timeout_blocks,
-        } => execute_update_config(deps, info, admin, task_ledger, timeout_blocks),
+            timeout_seconds,
+        } => execute_update_config(deps, info, admin, task_ledger, timeout_seconds),
         ExecuteMsg::UpdateRegistry {
             agent_registry,
             task_ledger,
@@ -274,7 +279,7 @@ fn execute_confirm(
     env: Env,
     info: MessageInfo,
     task_id: u64,
-    _tx_hash: Option<String>,
+    tx_hash: Option<String>,
 ) -> Result<Response, ContractError> {
     let obligation_id = OBLIGATIONS_BY_TASK
         .may_load(deps.storage, task_id)?
@@ -290,13 +295,27 @@ fn execute_confirm(
     {
         return Err(ContractError::Unauthorized {});
     }
-    if obligation.status != ObligationStatus::Pending {
+    // An attested (`Verified`) obligation must still be confirmable:
+    // `AttachAttestation` moves Pending -> Verified without touching the
+    // pending total, so the stats below stay consistent for both origins.
+    if !matches!(
+        obligation.status,
+        ObligationStatus::Pending | ObligationStatus::Verified
+    ) {
         return Err(ContractError::NotPending { obligation_id });
+    }
+    if let Some(h) = &tx_hash {
+        if h.is_empty() || h.len() > MAX_TX_HASH_LEN {
+            return Err(ContractError::InvalidTxHash {});
+        }
     }
 
     obligation.status = ObligationStatus::Confirmed;
     obligation.settled_at = Some(env.block.time.seconds());
     OBLIGATIONS.save(deps.storage, obligation_id, &obligation)?;
+    if let Some(h) = tx_hash {
+        TX_HASHES.save(deps.storage, obligation_id, &h)?;
+    }
 
     LEDGER_STATS.update(deps.storage, |mut s| -> StdResult<_> {
         s.total_confirmed = s.total_confirmed.checked_add(obligation.amount)?;
@@ -363,7 +382,13 @@ fn execute_cancel(
 
     let mut obligation = OBLIGATIONS.load(deps.storage, obligation_id)?;
 
-    if info.sender != obligation.payer && info.sender != config.admin {
+    // The task-ledger fires `Cancel` when an operator fails or admin-cancels
+    // a task (a third-party verdict, never a submitter self-declaration), the
+    // same trust it already has for `Confirm`.
+    if info.sender != obligation.payer
+        && info.sender != config.admin
+        && info.sender != config.task_ledger
+    {
         return Err(ContractError::Unauthorized {});
     }
     if obligation.status != ObligationStatus::Pending {
@@ -384,6 +409,100 @@ fn execute_cancel(
         .add_attribute("action", "cancel")
         .add_attribute("obligation_id", obligation_id.to_string())
         .add_attribute("task_id", task_id.to_string()))
+}
+
+/// Cancel a `Pending` obligation whose payer never settled it. Anyone may
+/// call this once `created_at + timeout_seconds` has passed.
+fn execute_expire_pending(
+    deps: DepsMut,
+    env: Env,
+    task_id: u64,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if config.timeout_seconds == 0 {
+        return Err(ContractError::TimeoutDisabled {});
+    }
+    let obligation_id = OBLIGATIONS_BY_TASK
+        .may_load(deps.storage, task_id)?
+        .ok_or(ContractError::NoObligationForTask { task_id })?;
+    let mut obligation = OBLIGATIONS.load(deps.storage, obligation_id)?;
+    if obligation.status != ObligationStatus::Pending {
+        return Err(ContractError::NotPending { obligation_id });
+    }
+
+    let expires_at = obligation.created_at.saturating_add(config.timeout_seconds);
+    if env.block.time.seconds() <= expires_at {
+        return Err(ContractError::NotExpired { task_id, expires_at });
+    }
+
+    obligation.status = ObligationStatus::Cancelled;
+    obligation.settled_at = Some(env.block.time.seconds());
+    OBLIGATIONS.save(deps.storage, obligation_id, &obligation)?;
+
+    LEDGER_STATS.update(deps.storage, |mut s| -> StdResult<_> {
+        s.total_cancelled = s.total_cancelled.checked_add(obligation.amount)?;
+        s.total_pending = s.total_pending.saturating_sub(obligation.amount);
+        Ok(s)
+    })?;
+
+    Ok(Response::new()
+        .add_attribute("action", "expire_pending")
+        .add_attribute("obligation_id", obligation_id.to_string())
+        .add_attribute("task_id", task_id.to_string()))
+}
+
+/// Admin closes a `Disputed` obligation. Without this a dispute is a
+/// permanent ledger entry.
+fn execute_resolve_dispute(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    task_id: u64,
+    resolution: DisputeResolution,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if info.sender != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let obligation_id = OBLIGATIONS_BY_TASK
+        .may_load(deps.storage, task_id)?
+        .ok_or(ContractError::NoObligationForTask { task_id })?;
+    let mut obligation = OBLIGATIONS.load(deps.storage, obligation_id)?;
+    if obligation.status != ObligationStatus::Disputed {
+        return Err(ContractError::NotDisputed { obligation_id });
+    }
+
+    let outcome = match resolution {
+        DisputeResolution::ConfirmObligation => {
+            obligation.status = ObligationStatus::Confirmed;
+            "confirmed"
+        }
+        DisputeResolution::CancelObligation => {
+            obligation.status = ObligationStatus::Cancelled;
+            "cancelled"
+        }
+    };
+    obligation.settled_at = Some(env.block.time.seconds());
+    OBLIGATIONS.save(deps.storage, obligation_id, &obligation)?;
+
+    LEDGER_STATS.update(deps.storage, |mut s| -> StdResult<_> {
+        s.total_disputed = s.total_disputed.saturating_sub(obligation.amount);
+        match resolution {
+            DisputeResolution::ConfirmObligation => {
+                s.total_confirmed = s.total_confirmed.checked_add(obligation.amount)?;
+            }
+            DisputeResolution::CancelObligation => {
+                s.total_cancelled = s.total_cancelled.checked_add(obligation.amount)?;
+            }
+        }
+        Ok(s)
+    })?;
+
+    Ok(Response::new()
+        .add_attribute("action", "resolve_dispute")
+        .add_attribute("obligation_id", obligation_id.to_string())
+        .add_attribute("task_id", task_id.to_string())
+        .add_attribute("outcome", outcome))
 }
 
 /// Attach a WAVS attestation hash to a pending obligation.
@@ -422,7 +541,7 @@ fn execute_update_config(
     info: MessageInfo,
     admin: Option<String>,
     task_ledger: Option<String>,
-    timeout_blocks: Option<u64>,
+    timeout_seconds: Option<u64>,
 ) -> Result<Response, ContractError> {
     let mut config = CONFIG.load(deps.storage)?;
     if info.sender != config.admin {
@@ -439,8 +558,8 @@ fn execute_update_config(
         // auth checks and the cross-contract pointer stay in lockstep.
         config.registry.task_ledger = Some(validated);
     }
-    if let Some(tb) = timeout_blocks {
-        config.timeout_blocks = tb;
+    if let Some(ts) = timeout_seconds {
+        config.timeout_seconds = ts;
     }
 
     CONFIG.save(deps.storage, &config)?;
@@ -502,6 +621,13 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
                 Some(id) => to_json_binary(&Some(OBLIGATIONS.load(deps.storage, id)?)),
                 None => to_json_binary(&None::<PaymentObligation>),
             }
+        }
+        QueryMsg::GetTxHash { task_id } => {
+            let hash = match OBLIGATIONS_BY_TASK.may_load(deps.storage, task_id)? {
+                Some(id) => TX_HASHES.may_load(deps.storage, id)?,
+                None => None,
+            };
+            to_json_binary(&hash)
         }
         QueryMsg::GetStats {} => to_json_binary(&LEDGER_STATS.load(deps.storage)?),
         QueryMsg::ListObligations { start_after, limit } => {

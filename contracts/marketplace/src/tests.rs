@@ -5,7 +5,7 @@ use cosmwasm_std::{
 use cw_multi_test::{App, Contract, ContractWrapper, Executor};
 use cw_storage_plus::Map;
 
-use crate::contract::{execute, instantiate, migrate, query};
+use crate::contract::{epoch_subject, execute, instantiate, migrate, query};
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{Hire, HireStatus, Listing, MarketplaceStats};
@@ -25,6 +25,7 @@ const STUB_TASKS: Map<u64, TaskRecord> = Map::new("stub_tasks");
 enum StubTaskLedgerExecuteMsg {
     SetTaskStatus { task_id: u64, status: TaskStatus },
     SeedTask { task_id: u64, submitter: String },
+    SetOutputHash { task_id: u64, output_hash: String },
 }
 
 #[derive(serde::Deserialize)]
@@ -55,6 +56,11 @@ where
                         task.output_hash = Some(format!("output-{}", task_id));
                     }
                     task.status = status;
+                    STUB_TASKS.save(deps.storage, task_id, &task)?;
+                }
+                StubTaskLedgerExecuteMsg::SetOutputHash { task_id, output_hash } => {
+                    let mut task = STUB_TASKS.load(deps.storage, task_id)?;
+                    task.output_hash = Some(output_hash);
                     STUB_TASKS.save(deps.storage, task_id, &task)?;
                 }
                 StubTaskLedgerExecuteMsg::SeedTask { task_id, submitter } => {
@@ -305,7 +311,7 @@ fn seed_skill(app: &mut App, skill_registry: &Addr, admin: &Addr, dapp_name: &st
 }
 
 fn set_epoch(app: &mut App, truth_market: &Addr, admin: &Addr, batch_height: u64, verdict: &str) {
-    set_epoch_for(app, truth_market, admin, batch_height, verdict, "output-1");
+    set_epoch_for(app, truth_market, admin, batch_height, verdict, &epoch_subject(1, "output-1"));
 }
 
 fn set_epoch_for(
@@ -863,7 +869,7 @@ fn test_release_only_accepts_epoch_matching_task_output() {
     hire_service(&mut f, listing_id, 1, 1_000_000);
     set_task_status(&mut f.app, &f.task_ledger, &f.admin, 1, TaskStatus::Completed);
     set_epoch_for(&mut f.app, &f.truth_market, &f.admin, 41, "red", "unrelated-output");
-    set_epoch_for(&mut f.app, &f.truth_market, &f.admin, 42, "green", "output-1");
+    set_epoch(&mut f.app, &f.truth_market, &f.admin, 42, "green");
 
     let err = f
         .app
@@ -883,6 +889,59 @@ fn test_release_only_accepts_epoch_matching_task_output() {
     f.app
         .execute_contract(
             f.client.clone(),
+            f.marketplace.clone(),
+            &ExecuteMsg::ReleaseOnVerdict { hire_id: 1, batch_height: 42 },
+            &[],
+        )
+        .unwrap();
+    assert!(matches!(hire_status(&f, 1), HireStatus::Released));
+    assert_eq!(
+        f.app.wrap().query_balance(&f.agent, UJUNO).unwrap().amount,
+        Uint128::new(1_000_000)
+    );
+}
+
+#[test]
+fn test_release_rejects_epoch_for_copied_output() {
+    // Replay: task 2 reports task 1's output hash to ride on task 1's green
+    // verdict. Neither that verdict nor a bare output-hash epoch settles it.
+    let mut f = fixture();
+    let listing_id = list_service(&mut f, 1_000_000);
+    hire_service(&mut f, listing_id, 1, 1_000_000);
+    hire_service(&mut f, listing_id, 2, 1_000_000);
+    set_task_status(&mut f.app, &f.task_ledger, &f.admin, 1, TaskStatus::Completed);
+    set_task_status(&mut f.app, &f.task_ledger, &f.admin, 2, TaskStatus::Completed);
+    f.app
+        .execute_contract(
+            f.admin.clone(),
+            f.task_ledger.clone(),
+            &StubTaskLedgerExecuteMsg::SetOutputHash { task_id: 2, output_hash: "output-1".to_string() },
+            &[],
+        )
+        .unwrap();
+    set_epoch(&mut f.app, &f.truth_market, &f.admin, 42, "green");
+    set_epoch_for(&mut f.app, &f.truth_market, &f.admin, 43, "green", "output-1");
+
+    for batch_height in [42, 43] {
+        let err = f
+            .app
+            .execute_contract(
+                f.agent.clone(),
+                f.marketplace.clone(),
+                &ExecuteMsg::ReleaseOnVerdict { hire_id: 2, batch_height },
+                &[],
+            )
+            .unwrap_err();
+        assert!(matches!(
+            err.downcast::<ContractError>().unwrap(),
+            ContractError::EpochNotForTask { task_id: 2, .. }
+        ));
+    }
+    assert!(matches!(hire_status(&f, 2), HireStatus::Escrowed));
+
+    f.app
+        .execute_contract(
+            f.agent.clone(),
             f.marketplace.clone(),
             &ExecuteMsg::ReleaseOnVerdict { hire_id: 1, batch_height: 42 },
             &[],

@@ -129,7 +129,7 @@ fn deploy_full_stack(app: &mut App) -> Deployment {
             &escrow::msg::InstantiateMsg {
                 admin: Some(admin.to_string()),
                 task_ledger: task_ledger_addr.to_string(),
-                timeout_blocks: 1_000,
+                timeout_seconds: 1_000,
                 denom: Some(UJUNO.to_string()),
                 registry: None, // mirroring will fill registry.task_ledger
             },
@@ -258,6 +258,7 @@ fn wavs_push_full_lifecycle_settles_via_proposal_id() {
                 task_description: "Deploy weekly summary to Akash".to_string(),
                 execution_tier: ExecutionTier::Akash,
                 escrow_amount,
+                payee: None,
             },
         },
         &[],
@@ -463,6 +464,7 @@ fn attestation_rejects_while_task_still_running() {
                 task_description: "Unfinished work".to_string(),
                 execution_tier: ExecutionTier::Local,
                 escrow_amount: Uint128::zero(),
+                payee: None,
             },
         },
         &[],
@@ -608,7 +610,7 @@ fn instantiate_time_registry_snapshot_is_honoured() {
             &escrow::msg::InstantiateMsg {
                 admin: Some(admin.to_string()),
                 task_ledger: fake_tl.to_string(),
-                timeout_blocks: 10,
+                timeout_seconds: 10,
                 denom: Some(UJUNO.to_string()),
                 registry: Some(ContractRegistry {
                     agent_registry: Some(fake_ar.clone()),
@@ -629,6 +631,208 @@ fn instantiate_time_registry_snapshot_is_honoured() {
     assert_eq!(cfg.registry.agent_registry, Some(fake_ar));
     assert_eq!(cfg.registry.task_ledger, Some(fake_tl));
     assert_eq!(cfg.registry.escrow, Some(fake_es));
+}
+
+/// Create a WavsPush, carry it with the admin's 60% Yes and execute it.
+/// Returns the proposal id, which is also the escrow obligation key.
+fn pass_and_execute_wavs_push(
+    app: &mut App,
+    d: &Deployment,
+    escrow_amount: Uint128,
+    payee: Option<String>,
+) -> u64 {
+    app.execute_contract(
+        d.admin.clone(),
+        d.agent_company.clone(),
+        &ExecuteMsg::CreateProposal {
+            kind: ProposalKindMsg::WavsPush {
+                task_description: "Governance job".to_string(),
+                execution_tier: ExecutionTier::Local,
+                escrow_amount,
+                payee,
+            },
+        },
+        &[],
+    )
+    .unwrap();
+    let newest: Vec<Proposal> = app
+        .wrap()
+        .query_wasm_smart(
+            &d.agent_company,
+            &QueryMsg::ListProposals { start_after: None, limit: Some(1) },
+        )
+        .unwrap();
+    let proposal_id = newest[0].id;
+    app.execute_contract(
+        d.admin.clone(),
+        d.agent_company.clone(),
+        &ExecuteMsg::CastVote { proposal_id, vote: VoteOption::Yes },
+        &[],
+    )
+    .unwrap();
+    app.update_block(|b| b.height += 60);
+    app.execute_contract(
+        d.admin.clone(),
+        d.agent_company.clone(),
+        &ExecuteMsg::ExecuteProposal { proposal_id },
+        &[],
+    )
+    .unwrap();
+    proposal_id
+}
+
+fn governance_task(app: &App, d: &Deployment, proposal_id: u64) -> TaskRecord {
+    let task: Option<TaskRecord> = app
+        .wrap()
+        .query_wasm_smart(
+            &d.task_ledger,
+            &task_ledger::msg::QueryMsg::GetTaskByProposal { proposal_id },
+        )
+        .unwrap();
+    task.expect("WavsPush must have submitted a task")
+}
+
+fn obligation_by_key(app: &App, d: &Deployment, key: u64) -> Option<PaymentObligation> {
+    app.wrap()
+        .query_wasm_smart(
+            &d.escrow,
+            &escrow::msg::QueryMsg::GetObligationByTask { task_id: key },
+        )
+        .unwrap()
+}
+
+fn complete_task(app: &mut App, d: &Deployment, task_id: u64) -> anyhow::Result<()> {
+    app.execute_contract(
+        d.admin.clone(),
+        d.task_ledger.clone(),
+        &task_ledger::msg::ExecuteMsg::CompleteTask {
+            task_id,
+            output_hash: "governance_output".to_string(),
+            cost_ujuno: None,
+        },
+        &[],
+    )
+    .map(|_| ())
+}
+
+// Audit F2: a WavsPush can name the payee of its escrow obligation.
+#[test]
+fn wavs_push_custom_payee_routes_obligation() {
+    let mut app = App::default();
+    let d = deploy_full_stack(&mut app);
+    let worker = mk(&app, "worker");
+
+    let proposal_id =
+        pass_and_execute_wavs_push(&mut app, &d, Uint128::new(250_000), Some(worker.to_string()));
+
+    let obligation = obligation_by_key(&app, &d, proposal_id).expect("obligation at proposal_id");
+    assert_eq!(obligation.payee, worker);
+    assert_eq!(obligation.payer, d.agent_company);
+    assert_eq!(obligation.amount, Uint128::new(250_000));
+    assert_eq!(obligation.status, ObligationStatus::Pending);
+}
+
+// Task-ledger F1 against the real escrow: AdminCancelTask closes the
+// governance task and voids its proposal-keyed obligation in one tx.
+#[test]
+fn admin_cancel_task_voids_governance_obligation() {
+    let mut app = App::default();
+    let d = deploy_full_stack(&mut app);
+
+    // Take task id 1 so the governance task id differs from its proposal id.
+    app.execute_contract(
+        d.admin.clone(),
+        d.task_ledger.clone(),
+        &task_ledger::msg::ExecuteMsg::SubmitTask {
+            agent_id: 42,
+            input_hash: "daemon_noise".to_string(),
+            execution_tier: ExecutionTier::Local,
+            pre_hooks: vec![],
+            post_hooks: vec![],
+            proposal_id: None,
+        },
+        &[],
+    )
+    .unwrap();
+
+    let proposal_id = pass_and_execute_wavs_push(&mut app, &d, Uint128::new(250_000), None);
+    let task = governance_task(&app, &d, proposal_id);
+    assert_ne!(task.id, proposal_id);
+    let obligation = obligation_by_key(&app, &d, proposal_id).unwrap();
+    assert_eq!(obligation.payee, d.admin, "no payee falls back to the DAO admin");
+    assert_eq!(obligation.status, ObligationStatus::Pending);
+
+    let err = app
+        .execute_contract(
+            d.alice.clone(),
+            d.task_ledger.clone(),
+            &task_ledger::msg::ExecuteMsg::AdminCancelTask { task_id: task.id },
+            &[],
+        )
+        .unwrap_err();
+    assert!(format!("{:?}", err.root_cause()).to_lowercase().contains("unauthorized"));
+
+    app.execute_contract(
+        d.admin.clone(),
+        d.task_ledger.clone(),
+        &task_ledger::msg::ExecuteMsg::AdminCancelTask { task_id: task.id },
+        &[],
+    )
+    .unwrap();
+
+    assert_eq!(governance_task(&app, &d, proposal_id).status, TaskStatus::Cancelled);
+    assert_eq!(
+        obligation_by_key(&app, &d, proposal_id).unwrap().status,
+        ObligationStatus::Cancelled
+    );
+}
+
+// With escrow wired into task-ledger, recording a task's outcome must not
+// depend on there being an open obligation to settle: a zero-escrow WavsPush
+// has none at all.
+#[test]
+fn complete_and_fail_succeed_without_an_obligation() {
+    let mut app = App::default();
+    let d = deploy_full_stack(&mut app);
+
+    let p1 = pass_and_execute_wavs_push(&mut app, &d, Uint128::zero(), None);
+    assert!(obligation_by_key(&app, &d, p1).is_none());
+    let t1 = governance_task(&app, &d, p1);
+    complete_task(&mut app, &d, t1.id).expect("completion must not need an obligation");
+    assert_eq!(governance_task(&app, &d, p1).status, TaskStatus::Completed);
+
+    let p2 = pass_and_execute_wavs_push(&mut app, &d, Uint128::zero(), None);
+    let t2 = governance_task(&app, &d, p2);
+    app.execute_contract(
+        d.admin.clone(),
+        d.task_ledger.clone(),
+        &task_ledger::msg::ExecuteMsg::FailTask { task_id: t2.id },
+        &[],
+    )
+    .expect("failure must not need an obligation");
+    assert_eq!(governance_task(&app, &d, p2).status, TaskStatus::Failed);
+}
+
+// A payer who already settled in escrow must not block the operator from
+// recording completion; the settled obligation is left as it is.
+#[test]
+fn complete_succeeds_after_obligation_already_confirmed() {
+    let mut app = App::default();
+    let d = deploy_full_stack(&mut app);
+
+    let p = pass_and_execute_wavs_push(&mut app, &d, Uint128::new(100), None);
+    let t = governance_task(&app, &d, p);
+    app.execute_contract(
+        d.admin.clone(),
+        d.escrow.clone(),
+        &escrow::msg::ExecuteMsg::Confirm { task_id: p, tx_hash: Some("paid".to_string()) },
+        &[],
+    )
+    .unwrap();
+
+    complete_task(&mut app, &d, t.id).expect("completion must not re-confirm a settled obligation");
+    assert_eq!(governance_task(&app, &d, p).status, TaskStatus::Completed);
+    assert_eq!(obligation_by_key(&app, &d, p).unwrap().status, ObligationStatus::Confirmed);
 }
 
 /// Mirrors the SHA-256 attestation hash computed on-chain by

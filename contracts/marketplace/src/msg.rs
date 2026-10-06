@@ -46,6 +46,7 @@ pub enum ExecuteMsg {
     /// - Task Completed + verdict "red"   → funds returned to client (slash).
     /// - Task Failed/Cancelled            → funds returned to client, no
     ///   verdict lookup required.
+    /// The epoch's `messages_hash` must be `task:<task_id>:<output_hash>`.
     ReleaseOnVerdict { hire_id: u64, batch_height: u64 },
     /// Client (or admin) reclaims escrow after `cancel_window_secs` has
     /// elapsed on an unresolved hire.

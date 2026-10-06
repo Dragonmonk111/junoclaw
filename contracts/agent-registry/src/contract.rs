@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    entry_point, to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response,
-    StdResult, Uint128,
+    entry_point, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Order,
+    Response, StdResult, Uint128,
 };
 use cw2::{get_contract_version, set_contract_version};
 
@@ -111,7 +111,53 @@ pub fn execute(
             task_ledger,
             escrow,
         } => execute_update_registry(deps, info, agent_registry, task_ledger, escrow),
+        ExecuteMsg::WithdrawFees { recipient, amount } => {
+            execute_withdraw_fees(deps, env, info, recipient, amount)
+        }
     }
+}
+
+/// Admin-only sweep of the contract's `cfg.denom` balance. Registration fees
+/// (and any excess attached to `RegisterAgent`) accumulate here and have no
+/// other exit.
+fn execute_withdraw_fees(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    recipient: String,
+    amount: Option<Uint128>,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if info.sender != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let recipient = deps.api.addr_validate(&recipient)?;
+    let available = deps
+        .querier
+        .query_balance(&env.contract.address, &config.denom)?
+        .amount;
+    let amount = amount.unwrap_or(available);
+    if amount.is_zero() {
+        return Err(ContractError::NothingToWithdraw {});
+    }
+    if amount > available {
+        return Err(ContractError::InsufficientBalance {
+            requested: amount,
+            available,
+        });
+    }
+
+    Ok(Response::new()
+        .add_message(BankMsg::Send {
+            to_address: recipient.to_string(),
+            amount: vec![Coin {
+                denom: config.denom,
+                amount,
+            }],
+        })
+        .add_attribute("action", "withdraw_fees")
+        .add_attribute("recipient", recipient.to_string())
+        .add_attribute("amount", amount.to_string()))
 }
 
 fn execute_register(

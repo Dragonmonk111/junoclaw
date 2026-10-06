@@ -32,4 +32,7 @@ pub enum ContractError {
 
     #[error("Constraint violated: {reason}")]
     ConstraintViolated { reason: String },
+
+    #[error("At most {max} pre_hooks and {max} post_hooks are allowed per task")]
+    TooManyHooks { max: usize },
 }

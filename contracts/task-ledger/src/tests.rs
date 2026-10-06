@@ -329,9 +329,11 @@ const STUB_OBLIGATIONS: Map<u64, PaymentObligation> = Map::new("stub_obligations
 enum StubEscrowExecuteMsg {
     SetObligation { task_id: u64, status: ObligationStatus },
     ClearObligation { task_id: u64 },
+    Cancel { task_id: u64 },
+    Confirm { task_id: u64 },
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum StubEscrowQueryMsg {
     GetObligationByTask { task_id: u64 },
@@ -373,6 +375,29 @@ where
                 }
                 StubEscrowExecuteMsg::ClearObligation { task_id } => {
                     STUB_OBLIGATIONS.remove(deps.storage, task_id);
+                }
+                StubEscrowExecuteMsg::Cancel { task_id } => {
+                    let mut obligation = STUB_OBLIGATIONS
+                        .may_load(deps.storage, task_id)?
+                        .ok_or_else(|| anyhow::anyhow!("no obligation for task {}", task_id))?;
+                    if obligation.status != ObligationStatus::Pending {
+                        anyhow::bail!("obligation for task {} is not pending", task_id);
+                    }
+                    obligation.status = ObligationStatus::Cancelled;
+                    STUB_OBLIGATIONS.save(deps.storage, task_id, &obligation)?;
+                }
+                StubEscrowExecuteMsg::Confirm { task_id } => {
+                    let mut obligation = STUB_OBLIGATIONS
+                        .may_load(deps.storage, task_id)?
+                        .ok_or_else(|| anyhow::anyhow!("no obligation for task {}", task_id))?;
+                    if !matches!(
+                        obligation.status,
+                        ObligationStatus::Pending | ObligationStatus::Verified
+                    ) {
+                        anyhow::bail!("obligation for task {} is not pending", task_id);
+                    }
+                    obligation.status = ObligationStatus::Confirmed;
+                    STUB_OBLIGATIONS.save(deps.storage, task_id, &obligation)?;
                 }
             }
         }
@@ -877,6 +902,509 @@ fn test_cancel_task() {
         .query_wasm_smart(&contract, &QueryMsg::GetTask { task_id: 1 })
         .unwrap();
     assert_eq!(task.status, TaskStatus::Cancelled);
+}
+
+fn wire_escrow(app: &mut App, contract: &Addr, admin: &Addr, escrow: &Addr) {
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::UpdateRegistry {
+            agent_registry: None,
+            task_ledger: None,
+            escrow: Some(escrow.to_string()),
+        },
+        &[],
+    )
+    .unwrap();
+}
+
+fn stub_obligation_status(app: &App, escrow: &Addr, key: u64) -> ObligationStatus {
+    let obligation: Option<PaymentObligation> = app
+        .wrap()
+        .query_wasm_smart(escrow, &StubEscrowQueryMsg::GetObligationByTask { task_id: key })
+        .unwrap();
+    obligation.unwrap().status
+}
+
+fn task_status(app: &App, contract: &Addr, task_id: u64) -> TaskStatus {
+    let task: TaskRecord = app
+        .wrap()
+        .query_wasm_smart(contract, &QueryMsg::GetTask { task_id })
+        .unwrap();
+    task.status
+}
+
+#[test]
+fn test_cancel_rejects_failed_and_already_cancelled_tasks() {
+    // F2: CancelTask used to overwrite any non-Completed status, so a
+    // submitter could rewrite a Failed verdict as Cancelled.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 1);
+
+    submit_task(&mut app, &contract, &user, 1);
+    submit_task(&mut app, &contract, &user, 1);
+
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::FailTask { task_id: 1 },
+        &[],
+    )
+    .unwrap();
+    let err = app
+        .execute_contract(
+            user.clone(),
+            contract.clone(),
+            &ExecuteMsg::CancelTask { task_id: 1 },
+            &[],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::TaskNotRunning { task_id: 1 }
+    ));
+    assert_eq!(task_status(&app, &contract, 1), TaskStatus::Failed);
+
+    app.execute_contract(
+        user.clone(),
+        contract.clone(),
+        &ExecuteMsg::CancelTask { task_id: 2 },
+        &[],
+    )
+    .unwrap();
+    let err = app
+        .execute_contract(
+            user.clone(),
+            contract.clone(),
+            &ExecuteMsg::CancelTask { task_id: 2 },
+            &[],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::TaskNotRunning { task_id: 2 }
+    ));
+}
+
+#[test]
+fn test_cancel_completed_task_still_reports_already_completed() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 1);
+
+    submit_task(&mut app, &contract, &user, 1);
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::CompleteTask { task_id: 1, output_hash: "h".to_string(), cost_ujuno: None },
+        &[],
+    )
+    .unwrap();
+
+    let err = app
+        .execute_contract(
+            user.clone(),
+            contract.clone(),
+            &ExecuteMsg::CancelTask { task_id: 1 },
+            &[],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::TaskAlreadyCompleted { task_id: 1 }
+    ));
+    assert_eq!(task_status(&app, &contract, 1), TaskStatus::Completed);
+}
+
+#[test]
+fn test_submit_task_caps_hook_count() {
+    // F9: every hook costs the completer a cross-contract query, so the
+    // submitter must not be able to attach an unbounded number of them.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 1);
+
+    let hooks = |n: usize| vec![Constraint::BlockHeightAtLeast { height: 0 }; n];
+    let submit = |app: &mut App, pre: Vec<Constraint>, post: Vec<Constraint>| {
+        app.execute_contract(
+            user.clone(),
+            contract.clone(),
+            &ExecuteMsg::SubmitTask {
+                agent_id: 1,
+                input_hash: "hash-1".to_string(),
+                execution_tier: ExecutionTier::Local,
+                proposal_id: None,
+                pre_hooks: pre,
+                post_hooks: post,
+            },
+            &[],
+        )
+    };
+
+    submit(&mut app, hooks(16), hooks(16)).unwrap();
+
+    for (pre, post) in [(17, 0), (0, 17)] {
+        let err = submit(&mut app, hooks(pre), hooks(post)).unwrap_err();
+        assert!(matches!(
+            err.downcast::<ContractError>().unwrap(),
+            ContractError::TooManyHooks { max: 16 }
+        ));
+    }
+
+    let stats: LedgerStats = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetStats {})
+        .unwrap();
+    assert_eq!(stats.total_tasks, 1);
+}
+
+#[test]
+fn test_admin_cancel_task_cancels_pending_obligation() {
+    // F1: the reproducer. A Running task with a Pending obligation used to be
+    // cancellable only by routes that stranded the obligation forever.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    let escrow = instantiate_stub_escrow(&mut app, &admin);
+    wire_escrow(&mut app, &contract, &admin, &escrow);
+    register_stub_agent(&mut app, &reg, &user, 1);
+
+    let task_id = submit_task(&mut app, &contract, &user, 1);
+    set_stub_obligation(&mut app, &escrow, &admin, task_id, ObligationStatus::Pending);
+
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::AdminCancelTask { task_id },
+        &[],
+    )
+    .unwrap();
+
+    assert_eq!(task_status(&app, &contract, task_id), TaskStatus::Cancelled);
+    assert_eq!(
+        stub_obligation_status(&app, &escrow, task_id),
+        ObligationStatus::Cancelled
+    );
+}
+
+#[test]
+fn test_submitter_cancel_leaves_escrow_obligation_untouched() {
+    // The asymmetry is deliberate: a payer who submitted the task must not
+    // be able to void their own debt through CancelTask.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    let escrow = instantiate_stub_escrow(&mut app, &admin);
+    wire_escrow(&mut app, &contract, &admin, &escrow);
+    register_stub_agent(&mut app, &reg, &user, 1);
+
+    let task_id = submit_task(&mut app, &contract, &user, 1);
+    set_stub_obligation(&mut app, &escrow, &admin, task_id, ObligationStatus::Pending);
+
+    app.execute_contract(
+        user.clone(),
+        contract.clone(),
+        &ExecuteMsg::CancelTask { task_id },
+        &[],
+    )
+    .unwrap();
+
+    assert_eq!(task_status(&app, &contract, task_id), TaskStatus::Cancelled);
+    assert_eq!(
+        stub_obligation_status(&app, &escrow, task_id),
+        ObligationStatus::Pending
+    );
+}
+
+#[test]
+fn test_admin_cancel_task_leaves_settled_obligation_alone() {
+    // The stub escrow reverts a Cancel on a non-Pending obligation, as the
+    // real one does, so a wrongly fired callback would fail this test.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    let escrow = instantiate_stub_escrow(&mut app, &admin);
+    wire_escrow(&mut app, &contract, &admin, &escrow);
+    register_stub_agent(&mut app, &reg, &user, 1);
+
+    for (status, expected_task_id) in [
+        (ObligationStatus::Confirmed, 1),
+        (ObligationStatus::Verified, 2),
+        (ObligationStatus::Disputed, 3),
+    ] {
+        let task_id = submit_task(&mut app, &contract, &user, 1);
+        assert_eq!(task_id, expected_task_id);
+        set_stub_obligation(&mut app, &escrow, &admin, task_id, status.clone());
+
+        app.execute_contract(
+            admin.clone(),
+            contract.clone(),
+            &ExecuteMsg::AdminCancelTask { task_id },
+            &[],
+        )
+        .unwrap();
+
+        assert_eq!(task_status(&app, &contract, task_id), TaskStatus::Cancelled);
+        assert_eq!(stub_obligation_status(&app, &escrow, task_id), status);
+    }
+}
+
+#[test]
+fn test_complete_and_fail_settle_only_open_obligations() {
+    // F11: with escrow wired, CompleteTask / FailTask fired Confirm / Cancel
+    // unconditionally and reverted for tasks without an open obligation.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    let escrow = instantiate_stub_escrow(&mut app, &admin);
+    wire_escrow(&mut app, &contract, &admin, &escrow);
+    register_stub_agent(&mut app, &reg, &user, 1);
+
+    let complete = |app: &mut App, task_id: u64| {
+        app.execute_contract(
+            admin.clone(),
+            contract.clone(),
+            &ExecuteMsg::CompleteTask { task_id, output_hash: "h".to_string(), cost_ujuno: None },
+            &[],
+        )
+        .unwrap();
+    };
+    let fail = |app: &mut App, task_id: u64| {
+        app.execute_contract(admin.clone(), contract.clone(), &ExecuteMsg::FailTask { task_id }, &[])
+            .unwrap();
+    };
+
+    let t = submit_task(&mut app, &contract, &user, 1);
+    complete(&mut app, t);
+    assert_eq!(task_status(&app, &contract, t), TaskStatus::Completed);
+    let t = submit_task(&mut app, &contract, &user, 1);
+    fail(&mut app, t);
+    assert_eq!(task_status(&app, &contract, t), TaskStatus::Failed);
+
+    for status in [
+        ObligationStatus::Confirmed,
+        ObligationStatus::Cancelled,
+        ObligationStatus::Disputed,
+    ] {
+        let t = submit_task(&mut app, &contract, &user, 1);
+        set_stub_obligation(&mut app, &escrow, &admin, t, status.clone());
+        complete(&mut app, t);
+        assert_eq!(stub_obligation_status(&app, &escrow, t), status);
+        let t = submit_task(&mut app, &contract, &user, 1);
+        set_stub_obligation(&mut app, &escrow, &admin, t, status.clone());
+        fail(&mut app, t);
+        assert_eq!(stub_obligation_status(&app, &escrow, t), status);
+    }
+
+    for status in [ObligationStatus::Pending, ObligationStatus::Verified] {
+        let t = submit_task(&mut app, &contract, &user, 1);
+        set_stub_obligation(&mut app, &escrow, &admin, t, status);
+        complete(&mut app, t);
+        assert_eq!(stub_obligation_status(&app, &escrow, t), ObligationStatus::Confirmed);
+    }
+    let t = submit_task(&mut app, &contract, &user, 1);
+    set_stub_obligation(&mut app, &escrow, &admin, t, ObligationStatus::Pending);
+    fail(&mut app, t);
+    assert_eq!(stub_obligation_status(&app, &escrow, t), ObligationStatus::Cancelled);
+    let t = submit_task(&mut app, &contract, &user, 1);
+    set_stub_obligation(&mut app, &escrow, &admin, t, ObligationStatus::Verified);
+    fail(&mut app, t);
+    assert_eq!(stub_obligation_status(&app, &escrow, t), ObligationStatus::Verified);
+}
+
+#[test]
+fn test_admin_cancel_task_without_obligation_or_escrow() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &reg, None);
+    register_stub_agent(&mut app, &reg, &user, 1);
+
+    // Escrow not wired at all.
+    let t1 = submit_task(&mut app, &contract, &user, 1);
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::AdminCancelTask { task_id: t1 },
+        &[],
+    )
+    .unwrap();
+    assert_eq!(task_status(&app, &contract, t1), TaskStatus::Cancelled);
+
+    // Escrow wired, but this task never had an obligation.
+    let escrow = instantiate_stub_escrow(&mut app, &admin);
+    wire_escrow(&mut app, &contract, &admin, &escrow);
+    let t2 = submit_task(&mut app, &contract, &user, 1);
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::AdminCancelTask { task_id: t2 },
+        &[],
+    )
+    .unwrap();
+    assert_eq!(task_status(&app, &contract, t2), TaskStatus::Cancelled);
+}
+
+#[test]
+fn test_admin_cancel_task_routes_proposal_keyed_obligation() {
+    // Governance tasks key their obligation by proposal id, not task id.
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let agent_company = mk(&app, "agent-company");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate_with_agent_company(
+        &mut app,
+        &admin,
+        &reg,
+        None,
+        Some(agent_company.to_string()),
+    );
+    let escrow = instantiate_stub_escrow(&mut app, &admin);
+    wire_escrow(&mut app, &contract, &admin, &escrow);
+
+    app.execute_contract(
+        agent_company.clone(),
+        contract.clone(),
+        &ExecuteMsg::SubmitTask {
+            agent_id: 0,
+            input_hash: "hash-prop".to_string(),
+            execution_tier: ExecutionTier::Local,
+            proposal_id: Some(7),
+            pre_hooks: vec![],
+            post_hooks: vec![],
+        },
+        &[],
+    )
+    .unwrap();
+
+    // Obligation under the proposal id, and an unrelated one under the
+    // local task id that must not be touched.
+    set_stub_obligation(&mut app, &escrow, &admin, 7, ObligationStatus::Pending);
+    set_stub_obligation(&mut app, &escrow, &admin, 1, ObligationStatus::Pending);
+
+    app.execute_contract(
+        agent_company.clone(),
+        contract.clone(),
+        &ExecuteMsg::AdminCancelTask { task_id: 1 },
+        &[],
+    )
+    .unwrap();
+
+    assert_eq!(task_status(&app, &contract, 1), TaskStatus::Cancelled);
+    assert_eq!(stub_obligation_status(&app, &escrow, 7), ObligationStatus::Cancelled);
+    assert_eq!(stub_obligation_status(&app, &escrow, 1), ObligationStatus::Pending);
+}
+
+#[test]
+fn test_admin_cancel_task_authorization_and_state_checks() {
+    let mut app = App::default();
+    let admin = mk(&app, "admin");
+    let user = mk(&app, "user1");
+    let stranger = mk(&app, "stranger");
+    let daemon = mk(&app, "daemon");
+    let agent_company = mk(&app, "agent-company");
+    let reg = instantiate_stub_registry(&mut app, &admin);
+    let contract = store_and_instantiate_with_agent_company(
+        &mut app,
+        &admin,
+        &reg,
+        Some(vec![daemon.to_string()]),
+        Some(agent_company.to_string()),
+    );
+    register_stub_agent(&mut app, &reg, &user, 1);
+
+    let t1 = submit_task(&mut app, &contract, &user, 1);
+    let t2 = submit_task(&mut app, &contract, &user, 1);
+    let t3 = submit_task(&mut app, &contract, &user, 1);
+
+    // The submitter and strangers cannot use the admin path.
+    for sender in [&user, &stranger] {
+        let err = app
+            .execute_contract(
+                sender.clone(),
+                contract.clone(),
+                &ExecuteMsg::AdminCancelTask { task_id: t1 },
+                &[],
+            )
+            .unwrap_err();
+        assert!(matches!(
+            err.downcast::<ContractError>().unwrap(),
+            ContractError::Unauthorized {}
+        ));
+    }
+    assert_eq!(task_status(&app, &contract, t1), TaskStatus::Running);
+
+    // Operators and agent-company can.
+    app.execute_contract(
+        daemon.clone(),
+        contract.clone(),
+        &ExecuteMsg::AdminCancelTask { task_id: t1 },
+        &[],
+    )
+    .unwrap();
+    app.execute_contract(
+        agent_company.clone(),
+        contract.clone(),
+        &ExecuteMsg::AdminCancelTask { task_id: t2 },
+        &[],
+    )
+    .unwrap();
+    assert_eq!(task_status(&app, &contract, t1), TaskStatus::Cancelled);
+    assert_eq!(task_status(&app, &contract, t2), TaskStatus::Cancelled);
+
+    // Only Running tasks can be cancelled, and the task must exist.
+    app.execute_contract(
+        admin.clone(),
+        contract.clone(),
+        &ExecuteMsg::CompleteTask { task_id: t3, output_hash: "h".to_string(), cost_ujuno: None },
+        &[],
+    )
+    .unwrap();
+    for task_id in [t1, t3] {
+        let err = app
+            .execute_contract(
+                admin.clone(),
+                contract.clone(),
+                &ExecuteMsg::AdminCancelTask { task_id },
+                &[],
+            )
+            .unwrap_err();
+        assert!(matches!(
+            err.downcast::<ContractError>().unwrap(),
+            ContractError::TaskNotRunning { .. }
+        ));
+    }
+    let err = app
+        .execute_contract(
+            admin.clone(),
+            contract.clone(),
+            &ExecuteMsg::AdminCancelTask { task_id: 99 },
+            &[],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::TaskNotFound { task_id: 99 }
+    ));
 }
 
 #[test]

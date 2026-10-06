@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    entry_point, to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response,
+    entry_point, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response,
     StdResult, Uint128, WasmMsg,
 };
 use cw2::{get_contract_version, set_contract_version};
@@ -10,10 +10,13 @@ use crate::state::{
     Config, LedgerStats, CONFIG, LEDGER_STATS, NEXT_TASK_ID, TASKS, TASKS_BY_AGENT,
     TASKS_BY_PROPOSAL, TASKS_BY_SUBMITTER,
 };
-use junoclaw_common::{ContractRegistry, TaskRecord, TaskStatus};
+use junoclaw_common::{
+    ContractRegistry, ObligationStatus, PaymentObligation, TaskRecord, TaskStatus,
+};
 
 const CONTRACT_NAME: &str = "crates.io:junoclaw-task-ledger";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+const MAX_HOOKS: usize = 16;
 
 #[entry_point]
 pub fn instantiate(
@@ -129,6 +132,7 @@ pub fn execute(
         } => execute_complete(deps, env, info, task_id, output_hash, cost_ujuno),
         ExecuteMsg::FailTask { task_id } => execute_fail(deps, env, info, task_id),
         ExecuteMsg::CancelTask { task_id } => execute_cancel(deps, info, task_id),
+        ExecuteMsg::AdminCancelTask { task_id } => execute_admin_cancel(deps, info, task_id),
         ExecuteMsg::AddOperator { operator } => execute_add_operator(deps, info, operator),
         ExecuteMsg::RemoveOperator { operator } => execute_remove_operator(deps, info, operator),
         ExecuteMsg::UpdateConfig {
@@ -156,6 +160,9 @@ fn execute_submit(
     pre_hooks: Vec<junoclaw_common::Constraint>,
     post_hooks: Vec<junoclaw_common::Constraint>,
 ) -> Result<Response, ContractError> {
+    if pre_hooks.len() > MAX_HOOKS || post_hooks.len() > MAX_HOOKS {
+        return Err(ContractError::TooManyHooks { max: MAX_HOOKS });
+    }
     let config = CONFIG.load(deps.storage)?;
     let is_operator = is_authorized(&config, &info.sender);
     let is_agent_company = config
@@ -357,15 +364,18 @@ fn execute_complete(
 
     // Callback 1: Confirm the escrow obligation (if escrow is wired)
     if let Some(escrow_addr) = &config.registry.escrow {
-        #[derive(serde::Serialize)]
-        #[serde(rename_all = "snake_case")]
-        enum EscrowMsg { Confirm { task_id: u64, tx_hash: Option<String> } }
-        let confirm_msg = WasmMsg::Execute {
-            contract_addr: escrow_addr.to_string(),
-            msg: to_json_binary(&EscrowMsg::Confirm { task_id: escrow_key, tx_hash: None })?,
-            funds: vec![],
-        };
-        response = response.add_message(confirm_msg);
+        let status = obligation_status(deps.as_ref(), escrow_addr, escrow_key)?;
+        if matches!(status, Some(ObligationStatus::Pending | ObligationStatus::Verified)) {
+            #[derive(serde::Serialize)]
+            #[serde(rename_all = "snake_case")]
+            enum EscrowMsg { Confirm { task_id: u64, tx_hash: Option<String> } }
+            let confirm_msg = WasmMsg::Execute {
+                contract_addr: escrow_addr.to_string(),
+                msg: to_json_binary(&EscrowMsg::Confirm { task_id: escrow_key, tx_hash: None })?,
+                funds: vec![],
+            };
+            response = response.add_message(confirm_msg);
+        }
     }
 
     // Callback 2: Increment agent tasks in registry (if wired via ContractRegistry).
@@ -466,21 +476,28 @@ fn execute_fail(
     // Route via proposal_id when set so governance-originated obligations
     // (keyed by proposal_id in escrow) can be found.
     if let Some(escrow_addr) = &config.registry.escrow {
-        #[derive(serde::Serialize)]
-        #[serde(rename_all = "snake_case")]
-        enum EscrowMsg { Cancel { task_id: u64 } }
         let escrow_key = task.proposal_id.unwrap_or(task_id);
-        let cancel_msg = WasmMsg::Execute {
-            contract_addr: escrow_addr.to_string(),
-            msg: to_json_binary(&EscrowMsg::Cancel { task_id: escrow_key })?,
-            funds: vec![],
-        };
-        response = response.add_message(cancel_msg);
+        if obligation_status(deps.as_ref(), escrow_addr, escrow_key)?
+            == Some(ObligationStatus::Pending)
+        {
+            #[derive(serde::Serialize)]
+            #[serde(rename_all = "snake_case")]
+            enum EscrowMsg { Cancel { task_id: u64 } }
+            let cancel_msg = WasmMsg::Execute {
+                contract_addr: escrow_addr.to_string(),
+                msg: to_json_binary(&EscrowMsg::Cancel { task_id: escrow_key })?,
+                funds: vec![],
+            };
+            response = response.add_message(cancel_msg);
+        }
     }
 
     Ok(response)
 }
 
+/// Fires no escrow callback on purpose: a submitter's self-cancel is not a
+/// third-party verdict, so it must not settle the obligation through the
+/// ledger's escrow authority. `AdminCancelTask` closes both together.
 fn execute_cancel(
     deps: DepsMut,
     info: MessageInfo,
@@ -493,8 +510,12 @@ fn execute_cancel(
             if record.submitter != info.sender && !is_authorized(&config, &info.sender) {
                 return Err(ContractError::NotSubmitter {});
             }
-            if record.status == TaskStatus::Completed {
-                return Err(ContractError::TaskAlreadyCompleted { task_id });
+            match record.status {
+                TaskStatus::Running => {}
+                TaskStatus::Completed => {
+                    return Err(ContractError::TaskAlreadyCompleted { task_id });
+                }
+                _ => return Err(ContractError::TaskNotRunning { task_id }),
             }
             record.status = TaskStatus::Cancelled;
             Ok(record)
@@ -505,6 +526,70 @@ fn execute_cancel(
     Ok(Response::new()
         .add_attribute("action", "cancel_task")
         .add_attribute("task_id", task_id.to_string()))
+}
+
+fn execute_admin_cancel(
+    deps: DepsMut,
+    info: MessageInfo,
+    task_id: u64,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if !is_authorized(&config, &info.sender)
+        && config.agent_company.as_ref() != Some(&info.sender)
+    {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    let mut record = TASKS
+        .may_load(deps.storage, task_id)?
+        .ok_or(ContractError::TaskNotFound { task_id })?;
+    if record.status != TaskStatus::Running {
+        return Err(ContractError::TaskNotRunning { task_id });
+    }
+    record.status = TaskStatus::Cancelled;
+    TASKS.save(deps.storage, task_id, &record)?;
+
+    let mut response = Response::new()
+        .add_attribute("action", "admin_cancel_task")
+        .add_attribute("task_id", task_id.to_string());
+
+    // Only a `Pending` obligation can be cancelled; querying first keeps this
+    // call from reverting when there is none, or when it already moved on.
+    if let Some(escrow_addr) = &config.registry.escrow {
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "snake_case")]
+        enum EscrowMsg { Cancel { task_id: u64 } }
+
+        let escrow_key = record.proposal_id.unwrap_or(task_id);
+        if obligation_status(deps.as_ref(), escrow_addr, escrow_key)?
+            == Some(ObligationStatus::Pending)
+        {
+            response = response
+                .add_message(WasmMsg::Execute {
+                    contract_addr: escrow_addr.to_string(),
+                    msg: to_json_binary(&EscrowMsg::Cancel { task_id: escrow_key })?,
+                    funds: vec![],
+                })
+                .add_attribute("escrow_obligation", "cancelled");
+        }
+    }
+
+    Ok(response)
+}
+
+fn obligation_status(
+    deps: Deps,
+    escrow: &Addr,
+    escrow_key: u64,
+) -> StdResult<Option<ObligationStatus>> {
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "snake_case")]
+    enum EscrowQuery { GetObligationByTask { task_id: u64 } }
+    let obligation: Option<PaymentObligation> = deps.querier.query_wasm_smart(
+        escrow.to_string(),
+        &EscrowQuery::GetObligationByTask { task_id: escrow_key },
+    )?;
+    Ok(obligation.map(|o| o.status))
 }
 
 fn execute_add_operator(

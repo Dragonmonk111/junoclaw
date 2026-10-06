@@ -22,6 +22,9 @@ pub enum ProposalKindMsg {
         task_description: String,
         execution_tier: ExecutionTier,
         escrow_amount: Uint128,
+        /// Escrow payee; defaults to the DAO admin.
+        #[serde(default)]
+        payee: Option<String>,
     },
     ConfigChange {
         new_admin: Option<String>,

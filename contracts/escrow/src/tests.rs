@@ -1,14 +1,15 @@
+use cosmwasm_std::testing::mock_dependencies;
 use cosmwasm_std::{
-    to_json_binary, Addr, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response, StdResult,
-    Uint128,
+    from_json, to_json_binary, Addr, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response,
+    StdResult, Storage, Uint128,
 };
 use cw_multi_test::{App, ContractWrapper, Executor};
 use cw_storage_plus::Map;
 
 use crate::contract::{execute, instantiate, migrate, query};
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Config, LedgerStats};
+use crate::msg::{DisputeResolution, ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::state::{Config, LedgerStats, CONFIG};
 use junoclaw_common::{
     Constraint, ExecutionTier, ObligationStatus, PaymentObligation, TaskRecord, TaskStatus,
 };
@@ -185,7 +186,7 @@ fn store_and_instantiate(app: &mut App, admin: &Addr, task_ledger: &Addr) -> Add
         &InstantiateMsg {
             admin: None,
             task_ledger: task_ledger.to_string(),
-            timeout_blocks: 100,
+            timeout_seconds: 100,
             denom: Some(UJUNO.to_string()),
             registry: None,
         },
@@ -723,4 +724,536 @@ fn test_authorize_resolves_proposal_keyed_tasks() {
     try_authorize(&mut app, &company, &contract, 9, &payee, 1).unwrap();
     assert!(obligation_for(&app, &contract, 9).is_some());
     assert!(obligation_for(&app, &contract, 3).is_none());
+}
+
+fn exec(
+    app: &mut App,
+    sender: &Addr,
+    contract: &Addr,
+    msg: &ExecuteMsg,
+) -> Result<(), ContractError> {
+    app.execute_contract(sender.clone(), contract.clone(), msg, &[])
+        .map(|_| ())
+        .map_err(|e| e.downcast::<ContractError>().unwrap())
+}
+
+fn advance(app: &mut App, seconds: u64) {
+    app.update_block(|b| b.time = b.time.plus_seconds(seconds));
+}
+
+fn stats_of(app: &App, contract: &Addr) -> LedgerStats {
+    app.wrap()
+        .query_wasm_smart(contract, &QueryMsg::GetStats {})
+        .unwrap()
+}
+
+fn status_of(app: &App, contract: &Addr, task_id: u64) -> ObligationStatus {
+    obligation_for(app, contract, task_id).unwrap().status
+}
+
+fn tx_hash_for(app: &App, contract: &Addr, task_id: u64) -> Option<String> {
+    app.wrap()
+        .query_wasm_smart(contract, &QueryMsg::GetTxHash { task_id })
+        .unwrap()
+}
+
+fn authorize_and_dispute(
+    app: &mut App,
+    payer: &Addr,
+    payee: &Addr,
+    contract: &Addr,
+    task_id: u64,
+    amount: u128,
+) {
+    authorize(app, payer, contract, task_id, payee, amount);
+    exec(
+        app,
+        payer,
+        contract,
+        &ExecuteMsg::Dispute { task_id, reason: "not delivered".to_string() },
+    )
+    .unwrap();
+}
+
+#[test]
+fn test_confirm_persists_tx_hash() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize(&mut app, &payer, &contract, 1, &payee, 1_000_000);
+    authorize(&mut app, &payer, &contract, 2, &payee, 2_000_000);
+    assert_eq!(tx_hash_for(&app, &contract, 1), None);
+
+    let hash = "ABCDEF123".to_string();
+    exec(
+        &mut app,
+        &payer,
+        &contract,
+        &ExecuteMsg::Confirm { task_id: 1, tx_hash: Some(hash.clone()) },
+    )
+    .unwrap();
+    exec(&mut app, &payer, &contract, &ExecuteMsg::Confirm { task_id: 2, tx_hash: None }).unwrap();
+
+    assert_eq!(tx_hash_for(&app, &contract, 1), Some(hash));
+    assert_eq!(tx_hash_for(&app, &contract, 2), None);
+    assert_eq!(tx_hash_for(&app, &contract, 99), None);
+}
+
+#[test]
+fn test_confirm_rejects_invalid_tx_hash_and_leaves_obligation_pending() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize(&mut app, &payer, &contract, 1, &payee, 1_000_000);
+
+    for bad in [String::new(), "a".repeat(129)] {
+        let err = exec(
+            &mut app,
+            &payer,
+            &contract,
+            &ExecuteMsg::Confirm { task_id: 1, tx_hash: Some(bad) },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::InvalidTxHash {}));
+    }
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Pending);
+    assert_eq!(tx_hash_for(&app, &contract, 1), None);
+    assert_eq!(stats_of(&app, &contract).total_pending, Uint128::new(1_000_000));
+
+    let longest = "a".repeat(128);
+    exec(
+        &mut app,
+        &payer,
+        &contract,
+        &ExecuteMsg::Confirm { task_id: 1, tx_hash: Some(longest.clone()) },
+    )
+    .unwrap();
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Confirmed);
+    assert_eq!(tx_hash_for(&app, &contract, 1), Some(longest));
+}
+
+#[test]
+fn test_confirm_by_stranger_fails() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let stranger = make_addr(&app, "stranger");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize(&mut app, &payer, &contract, 1, &payee, 1_000_000);
+
+    let err = exec(
+        &mut app,
+        &stranger,
+        &contract,
+        &ExecuteMsg::Confirm { task_id: 1, tx_hash: None },
+    )
+    .unwrap_err();
+    assert!(matches!(err, ContractError::Unauthorized {}));
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Pending);
+}
+
+#[test]
+fn test_confirm_after_attestation_settles_verified_obligation() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize(&mut app, &payer, &contract, 1, &payee, 1_000_000);
+    exec(
+        &mut app,
+        &admin,
+        &contract,
+        &ExecuteMsg::AttachAttestation {
+            task_id: 1,
+            attestation_hash: "wavs_hash_abc123".to_string(),
+        },
+    )
+    .unwrap();
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Verified);
+
+    exec(&mut app, &payer, &contract, &ExecuteMsg::Confirm { task_id: 1, tx_hash: None }).unwrap();
+
+    let obligation = obligation_for(&app, &contract, 1).unwrap();
+    assert_eq!(obligation.status, ObligationStatus::Confirmed);
+    assert_eq!(obligation.attestation_hash, Some("wavs_hash_abc123".to_string()));
+    assert!(obligation.settled_at.is_some());
+    let stats = stats_of(&app, &contract);
+    assert_eq!(stats.total_confirmed, Uint128::new(1_000_000));
+    assert!(stats.total_pending.is_zero());
+
+    let err = exec(&mut app, &payer, &contract, &ExecuteMsg::Confirm { task_id: 1, tx_hash: None })
+        .unwrap_err();
+    assert!(matches!(err, ContractError::NotPending { .. }));
+}
+
+#[test]
+fn test_cancel_by_task_ledger() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize(&mut app, &payer, &contract, 1, &payee, 1_000_000);
+
+    exec(&mut app, &tl, &contract, &ExecuteMsg::Cancel { task_id: 1 }).unwrap();
+
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Cancelled);
+    let stats = stats_of(&app, &contract);
+    assert_eq!(stats.total_cancelled, Uint128::new(1_000_000));
+    assert!(stats.total_pending.is_zero());
+}
+
+#[test]
+fn test_cancel_by_stranger_fails() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let stranger = make_addr(&app, "stranger");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize(&mut app, &payer, &contract, 1, &payee, 1_000_000);
+
+    for sender in [&stranger, &payee] {
+        let err = exec(&mut app, sender, &contract, &ExecuteMsg::Cancel { task_id: 1 }).unwrap_err();
+        assert!(matches!(err, ContractError::Unauthorized {}));
+    }
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Pending);
+}
+
+#[test]
+fn test_cancel_settled_obligation_fails() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize(&mut app, &payer, &contract, 1, &payee, 1_000_000);
+    exec(&mut app, &payer, &contract, &ExecuteMsg::Confirm { task_id: 1, tx_hash: None }).unwrap();
+
+    let err = exec(&mut app, &tl, &contract, &ExecuteMsg::Cancel { task_id: 1 }).unwrap_err();
+    assert!(matches!(err, ContractError::NotPending { .. }));
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Confirmed);
+}
+
+#[test]
+fn test_expire_pending_after_timeout_cancels_obligation() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let stranger = make_addr(&app, "stranger");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize(&mut app, &payer, &contract, 1, &payee, 1_000_000);
+    authorize(&mut app, &payer, &contract, 2, &payee, 250_000);
+    advance(&mut app, 101);
+
+    exec(&mut app, &stranger, &contract, &ExecuteMsg::ExpirePending { task_id: 1 }).unwrap();
+
+    let obligation = obligation_for(&app, &contract, 1).unwrap();
+    assert_eq!(obligation.status, ObligationStatus::Cancelled);
+    assert_eq!(obligation.settled_at, Some(app.block_info().time.seconds()));
+    assert_eq!(status_of(&app, &contract, 2), ObligationStatus::Pending);
+
+    let stats = stats_of(&app, &contract);
+    assert_eq!(stats.total_cancelled, Uint128::new(1_000_000));
+    assert_eq!(stats.total_pending, Uint128::new(250_000));
+
+    let err = exec(&mut app, &stranger, &contract, &ExecuteMsg::ExpirePending { task_id: 1 })
+        .unwrap_err();
+    assert!(matches!(err, ContractError::NotPending { .. }));
+}
+
+#[test]
+fn test_expire_pending_rejected_until_deadline_passes() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let stranger = make_addr(&app, "stranger");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize(&mut app, &payer, &contract, 1, &payee, 1_000_000);
+    let created_at = obligation_for(&app, &contract, 1).unwrap().created_at;
+    let expire = ExecuteMsg::ExpirePending { task_id: 1 };
+
+    advance(&mut app, 99);
+    match exec(&mut app, &stranger, &contract, &expire).unwrap_err() {
+        ContractError::NotExpired { task_id, expires_at } => {
+            assert_eq!(task_id, 1);
+            assert_eq!(expires_at, created_at + 100);
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+
+    advance(&mut app, 1);
+    assert_eq!(app.block_info().time.seconds(), created_at + 100);
+    let err = exec(&mut app, &stranger, &contract, &expire).unwrap_err();
+    assert!(matches!(err, ContractError::NotExpired { .. }));
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Pending);
+
+    advance(&mut app, 1);
+    exec(&mut app, &stranger, &contract, &expire).unwrap();
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Cancelled);
+}
+
+#[test]
+fn test_expire_pending_disabled_when_timeout_is_zero() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let stranger = make_addr(&app, "stranger");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize(&mut app, &payer, &contract, 1, &payee, 1_000_000);
+
+    let disable = ExecuteMsg::UpdateConfig {
+        admin: None,
+        task_ledger: None,
+        timeout_seconds: Some(0),
+    };
+    let err = exec(&mut app, &stranger, &contract, &disable).unwrap_err();
+    assert!(matches!(err, ContractError::Unauthorized {}));
+    exec(&mut app, &admin, &contract, &disable).unwrap();
+    let config: Config = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::GetConfig {})
+        .unwrap();
+    assert_eq!(config.timeout_seconds, 0);
+
+    advance(&mut app, 1_000_000);
+    let err = exec(&mut app, &stranger, &contract, &ExecuteMsg::ExpirePending { task_id: 1 })
+        .unwrap_err();
+    assert!(matches!(err, ContractError::TimeoutDisabled {}));
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Pending);
+}
+
+#[test]
+fn test_expire_pending_only_applies_to_pending_obligations() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let stranger = make_addr(&app, "stranger");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize(&mut app, &payer, &contract, 1, &payee, 1_000_000);
+    exec(&mut app, &payer, &contract, &ExecuteMsg::Confirm { task_id: 1, tx_hash: None }).unwrap();
+    authorize_and_dispute(&mut app, &payer, &payee, &contract, 2, 1_000_000);
+    authorize(&mut app, &payer, &contract, 3, &payee, 1_000_000);
+    exec(
+        &mut app,
+        &admin,
+        &contract,
+        &ExecuteMsg::AttachAttestation { task_id: 3, attestation_hash: "wavs".to_string() },
+    )
+    .unwrap();
+    advance(&mut app, 1_000);
+
+    for task_id in [1, 2, 3] {
+        let err = exec(&mut app, &stranger, &contract, &ExecuteMsg::ExpirePending { task_id })
+            .unwrap_err();
+        assert!(matches!(err, ContractError::NotPending { .. }));
+    }
+    let err = exec(&mut app, &stranger, &contract, &ExecuteMsg::ExpirePending { task_id: 9 })
+        .unwrap_err();
+    assert!(matches!(err, ContractError::NoObligationForTask { task_id: 9 }));
+
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Confirmed);
+    assert_eq!(status_of(&app, &contract, 2), ObligationStatus::Disputed);
+    assert_eq!(status_of(&app, &contract, 3), ObligationStatus::Verified);
+}
+
+#[test]
+fn test_resolve_dispute_confirm_closes_as_paid() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize_and_dispute(&mut app, &payer, &payee, &contract, 1, 1_000_000);
+    authorize_and_dispute(&mut app, &payer, &payee, &contract, 2, 500_000);
+    assert_eq!(stats_of(&app, &contract).total_disputed, Uint128::new(1_500_000));
+
+    advance(&mut app, 10);
+    exec(
+        &mut app,
+        &admin,
+        &contract,
+        &ExecuteMsg::ResolveDispute {
+            task_id: 1,
+            resolution: DisputeResolution::ConfirmObligation,
+        },
+    )
+    .unwrap();
+
+    let obligation = obligation_for(&app, &contract, 1).unwrap();
+    assert_eq!(obligation.status, ObligationStatus::Confirmed);
+    assert_eq!(obligation.settled_at, Some(app.block_info().time.seconds()));
+    assert_eq!(status_of(&app, &contract, 2), ObligationStatus::Disputed);
+
+    let stats = stats_of(&app, &contract);
+    assert_eq!(stats.total_disputed, Uint128::new(500_000));
+    assert_eq!(stats.total_confirmed, Uint128::new(1_000_000));
+    assert!(stats.total_cancelled.is_zero());
+    assert!(stats.total_pending.is_zero());
+}
+
+#[test]
+fn test_resolve_dispute_cancel_voids_obligation() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize_and_dispute(&mut app, &payer, &payee, &contract, 1, 1_000_000);
+    authorize_and_dispute(&mut app, &payer, &payee, &contract, 2, 500_000);
+
+    exec(
+        &mut app,
+        &admin,
+        &contract,
+        &ExecuteMsg::ResolveDispute {
+            task_id: 2,
+            resolution: DisputeResolution::CancelObligation,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(status_of(&app, &contract, 2), ObligationStatus::Cancelled);
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Disputed);
+
+    let stats = stats_of(&app, &contract);
+    assert_eq!(stats.total_disputed, Uint128::new(1_000_000));
+    assert_eq!(stats.total_cancelled, Uint128::new(500_000));
+    assert!(stats.total_confirmed.is_zero());
+    assert!(stats.total_pending.is_zero());
+}
+
+#[test]
+fn test_resolve_dispute_is_admin_only() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let stranger = make_addr(&app, "stranger");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize_and_dispute(&mut app, &payer, &payee, &contract, 1, 1_000_000);
+
+    for sender in [&payer, &payee, &stranger, &tl] {
+        let err = exec(
+            &mut app,
+            sender,
+            &contract,
+            &ExecuteMsg::ResolveDispute {
+                task_id: 1,
+                resolution: DisputeResolution::CancelObligation,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::Unauthorized {}));
+    }
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Disputed);
+    assert_eq!(stats_of(&app, &contract).total_disputed, Uint128::new(1_000_000));
+}
+
+#[test]
+fn test_resolve_dispute_requires_disputed_obligation() {
+    let mut app = App::default();
+    let admin = make_addr(&app, "admin");
+    let payer = make_addr(&app, "payer");
+    let payee = make_addr(&app, "payee");
+    let tl = stub_task_ledger(&mut app, &admin);
+    let contract = store_and_instantiate(&mut app, &admin, &tl);
+
+    authorize(&mut app, &payer, &contract, 1, &payee, 1_000_000);
+    let resolve = |task_id| ExecuteMsg::ResolveDispute {
+        task_id,
+        resolution: DisputeResolution::ConfirmObligation,
+    };
+
+    let err = exec(&mut app, &admin, &contract, &resolve(1)).unwrap_err();
+    assert!(matches!(err, ContractError::NotDisputed { .. }));
+    let err = exec(&mut app, &admin, &contract, &resolve(9)).unwrap_err();
+    assert!(matches!(err, ContractError::NoObligationForTask { task_id: 9 }));
+
+    exec(
+        &mut app,
+        &payer,
+        &contract,
+        &ExecuteMsg::Dispute { task_id: 1, reason: "late".to_string() },
+    )
+    .unwrap();
+    exec(&mut app, &admin, &contract, &resolve(1)).unwrap();
+
+    let err = exec(&mut app, &admin, &contract, &resolve(1)).unwrap_err();
+    assert!(matches!(err, ContractError::NotDisputed { .. }));
+    assert_eq!(status_of(&app, &contract, 1), ObligationStatus::Confirmed);
+    assert_eq!(stats_of(&app, &contract).total_confirmed, Uint128::new(1_000_000));
+}
+
+#[test]
+fn test_legacy_timeout_blocks_name_is_still_accepted() {
+    let msg: InstantiateMsg = from_json(br#"{"task_ledger":"tl","timeout_blocks":42}"#).unwrap();
+    assert_eq!(msg.timeout_seconds, 42);
+    let msg: InstantiateMsg = from_json(br#"{"task_ledger":"tl","timeout_seconds":7}"#).unwrap();
+    assert_eq!(msg.timeout_seconds, 7);
+
+    let msg: ExecuteMsg = from_json(br#"{"update_config":{"timeout_blocks":9}}"#).unwrap();
+    assert_eq!(
+        msg,
+        ExecuteMsg::UpdateConfig {
+            admin: None,
+            task_ledger: None,
+            timeout_seconds: Some(9),
+        }
+    );
+}
+
+#[test]
+fn test_config_saved_under_legacy_key_still_loads() {
+    let mut deps = mock_dependencies();
+    deps.storage.set(
+        b"config",
+        br#"{"admin":"admin","task_ledger":"tl","timeout_blocks":100,"denom":"ujunox","registry":{"agent_registry":null,"task_ledger":null,"escrow":null}}"#,
+    );
+
+    let config = CONFIG.load(&deps.storage).unwrap();
+    assert_eq!(config.timeout_seconds, 100);
+
+    CONFIG.save(&mut deps.storage, &config).unwrap();
+    let raw = String::from_utf8(deps.storage.get(b"config").unwrap()).unwrap();
+    assert!(raw.contains("\"timeout_seconds\":100"));
+    assert!(!raw.contains("timeout_blocks"));
 }

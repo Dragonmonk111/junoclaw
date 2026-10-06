@@ -374,3 +374,100 @@ fn test_list_agents() {
         .unwrap();
     assert_eq!(agents.len(), 2);
 }
+
+fn funded_app(users: &[&str]) -> App {
+    App::new(|router, _, storage| {
+        for u in users {
+            router
+                .bank
+                .init_balance(storage, &Addr::unchecked(*u), coins(5_000_000, "ujuno"))
+                .unwrap();
+        }
+    })
+}
+
+fn withdraw(
+    app: &mut App,
+    contract: &Addr,
+    sender: &Addr,
+    recipient: &Addr,
+    amount: Option<u128>,
+) -> Result<cw_multi_test::AppResponse, anyhow::Error> {
+    app.execute_contract(
+        sender.clone(),
+        contract.clone(),
+        &ExecuteMsg::WithdrawFees {
+            recipient: recipient.to_string(),
+            amount: amount.map(Uint128::new),
+        },
+        &[],
+    )
+}
+
+fn balance(app: &App, who: &Addr) -> Uint128 {
+    app.wrap().query_balance(who, "ujuno").unwrap().amount
+}
+
+#[test]
+fn test_registration_fees_are_withdrawable_by_admin() {
+    let mut app = funded_app(&["u1", "u2"]);
+    let admin = Addr::unchecked("admin");
+    let treasury = cosmwasm_std::testing::MockApi::default().addr_make("treasury");
+    let contract = store_and_instantiate(&mut app, &admin, 1_000_000);
+
+    register_agent(&mut app, &contract, &Addr::unchecked("u1"), &coins(1_000_000, "ujuno")).unwrap();
+    register_agent(&mut app, &contract, &Addr::unchecked("u2"), &coins(1_500_000, "ujuno")).unwrap();
+    assert_eq!(balance(&app, &contract), Uint128::new(2_500_000));
+
+    withdraw(&mut app, &contract, &admin, &treasury, Some(500_000)).unwrap();
+    assert_eq!(balance(&app, &treasury), Uint128::new(500_000));
+    assert_eq!(balance(&app, &contract), Uint128::new(2_000_000));
+
+    withdraw(&mut app, &contract, &admin, &treasury, None).unwrap();
+    assert_eq!(balance(&app, &treasury), Uint128::new(2_500_000));
+    assert!(balance(&app, &contract).is_zero());
+}
+
+#[test]
+fn test_withdraw_fees_rejects_non_admin() {
+    let mut app = funded_app(&["u1"]);
+    let admin = Addr::unchecked("admin");
+    let thief = cosmwasm_std::testing::MockApi::default().addr_make("thief");
+    let contract = store_and_instantiate(&mut app, &admin, 1_000_000);
+    register_agent(&mut app, &contract, &Addr::unchecked("u1"), &coins(1_000_000, "ujuno")).unwrap();
+
+    for sender in [Addr::unchecked("u1"), thief.clone()] {
+        let err = withdraw(&mut app, &contract, &sender, &thief, Some(1)).unwrap_err();
+        let contract_err = err.downcast::<ContractError>().unwrap();
+        assert!(matches!(contract_err, ContractError::Unauthorized {}));
+    }
+    assert_eq!(balance(&app, &contract), Uint128::new(1_000_000));
+    assert!(balance(&app, &thief).is_zero());
+}
+
+#[test]
+fn test_withdraw_fees_rejects_empty_and_overdraw() {
+    let mut app = funded_app(&["u1"]);
+    let admin = Addr::unchecked("admin");
+    let treasury = cosmwasm_std::testing::MockApi::default().addr_make("treasury");
+    let contract = store_and_instantiate(&mut app, &admin, 1_000_000);
+
+    let err = withdraw(&mut app, &contract, &admin, &treasury, None).unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::NothingToWithdraw {}
+    ));
+
+    register_agent(&mut app, &contract, &Addr::unchecked("u1"), &coins(1_000_000, "ujuno")).unwrap();
+    let err = withdraw(&mut app, &contract, &admin, &treasury, Some(1_000_001)).unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::InsufficientBalance { .. }
+    ));
+    let err = withdraw(&mut app, &contract, &admin, &treasury, Some(0)).unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::NothingToWithdraw {}
+    ));
+    assert_eq!(balance(&app, &contract), Uint128::new(1_000_000));
+}

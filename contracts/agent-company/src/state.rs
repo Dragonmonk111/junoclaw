@@ -146,6 +146,9 @@ pub enum ProposalKind {
         task_description: String,
         execution_tier: ExecutionTier,
         escrow_amount: Uint128,
+        /// Escrow payee; `None` routes the obligation to the DAO admin.
+        #[serde(default)]
+        payee: Option<Addr>,
     },
     /// Change DAO config (admin, governance, etc.)
     ConfigChange {
@@ -247,6 +250,14 @@ pub enum ProposalStatus {
     Expired,
 }
 
+/// Voting power and thresholds frozen when a proposal is created.
+#[cw_serde]
+pub struct VotingSnapshot {
+    pub members: Vec<Member>,
+    pub quorum_percent: u64,
+    pub supermajority_quorum_percent: u64,
+}
+
 #[cw_serde]
 pub struct Proposal {
     pub id: u64,
@@ -264,6 +275,10 @@ pub struct Proposal {
     /// Floor after adaptive reduction
     pub min_deadline_block: u64,
     pub executed: bool,
+    /// `None` only on proposals stored before snapshots existed; those are
+    /// tallied against the live config.
+    #[serde(default)]
+    pub snapshot: Option<VotingSnapshot>,
 }
 
 // ──────────────────────────────────────────────

@@ -23,4 +23,10 @@ pub enum ContractError {
 
     #[error("Agent already deactivated")]
     AlreadyDeactivated {},
+
+    #[error("Nothing to withdraw")]
+    NothingToWithdraw {},
+
+    #[error("Insufficient contract balance: requested {requested}, available {available}")]
+    InsufficientBalance { requested: Uint128, available: Uint128 },
 }

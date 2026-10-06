@@ -33,6 +33,9 @@ pub enum ContractError {
     #[error("Task {task_id} already has a payment record")]
     AlreadyDistributed { task_id: u64 },
 
+    #[error("DistributePayment accepts only {expected}, got {got}")]
+    InvalidFundsDenom { expected: String, got: String },
+
     // ── General governance errors ──
 
     #[error("Proposal {id} not found")]
