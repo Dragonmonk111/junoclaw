@@ -111,7 +111,7 @@ Block finalized — certificate stored … app_hash=… digest=…
 Finality record stored (certificate, proposal, timestamp) height=…
 ```
 
-- Heights should rise by about one block every 1–2 seconds.
+- Heights should rise steadily. The single-host devnet finalizes about six blocks per second (0.16 s per block). A geographically distributed set will be slower.
 - `app_hash` should be **identical across all validators** at the same height. It equals the certified `state_root`.
 
 **Node up but not signing?** Check that:
@@ -124,7 +124,7 @@ Finality record stored (certificate, proposal, timestamp) height=…
 
 ## 6. Operations
 
-- **Pruning.** The validator tier keeps 64k heights of sidecar data, so disk use stays bounded.
+- **Pruning.** `pruning = "validator"` (default) keeps the last 540,000 heights of sidecar data and finality records, about 24 hours at devnet speed. `"rpc"` keeps 16,200,000 heights (about 30 days) and `"archive"` keeps everything. Peers can backfill your node across that whole window. Beyond it, use state sync.
 - **MAYO signature log.** `data_dir/mayo_sigs.log` records the MAYO signature for every vote you cast. After a restart the node re-sends those exact signatures. A freshly signed vote would differ byte-for-byte, and peers treat that as a conflicting message. Keep the log with the data dir and never delete it while you are in the set.
 - **Restarts.** Nodes resume from persisted state. A node that falls far behind catches up with height-range backfill, or with certified state-sync if its data dir is empty.
 - **Upgrades.** Coordinated: everyone switches binary/config at an agreed height.

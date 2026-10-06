@@ -29,7 +29,7 @@ JunoClaw has finished its devnet gate (G0), including a 24-hour chaos soak with 
 | Disk | 20 GB SSD | 50 GB SSD |
 | Network | 10 Mbps, stable | 100 Mbps, **static public IP** |
 
-The devnet runs all 4 hybrid validators on a single desktop machine, so these figures leave plenty of headroom. Pruning tiers keep disk use bounded: a validator keeps 64k heights of sidecar data.
+The devnet runs all 4 hybrid validators on a single desktop machine, so these figures leave plenty of headroom. Pruning tiers keep disk use bounded: a validator keeps the last 540,000 heights of sidecar data and finality records (about 24 hours at devnet speed).
 
 ### Software and network
 
