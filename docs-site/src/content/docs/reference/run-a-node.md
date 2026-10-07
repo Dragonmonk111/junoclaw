@@ -39,7 +39,7 @@ Your `keys.json` holds:
 - **MAYO2 key** (hybrid mode). The post-quantum half of every vote
 - **Ed25519 identity.** Authenticates your P2P connections
 
-On devnet the coordinator generates keys centrally. Those shares come from a public seed, so the node only accepts them with `insecure_devnet = true` (see below). For G1, keys come out of the key ceremony, and each operator generates their own share locally. Back up `keys.json` offline once. If you lose it, you lose your seat until the set is changed.
+On devnet the coordinator generates keys centrally. Those shares come from a public seed, so the node only accepts them with `insecure_devnet = true` (see below). For G1, keys come out of the key ceremony: you generate your Ed25519 and MAYO2 keys locally, and the coordinator deals your BLS share from OS randomness and sends it to you encrypted (see [Validators](/docs/onboarding/validators/)). Back up `keys.json` offline once. If you lose it, you lose your seat until the set is changed.
 
 ## 3. `node.toml`
 

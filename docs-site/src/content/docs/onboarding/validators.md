@@ -33,7 +33,7 @@ The devnet runs all 4 hybrid validators on a single desktop machine, so these fi
 
 ### Software and network
 
-- Linux (Ubuntu 22.04+ recommended) with Docker, or Rust 1.85+ to build from source
+- Linux (Ubuntu 22.04+ recommended) with Docker, or Rust 1.97+ to build from source. Key generation and MAYO2 signing need a Unix host, so Windows cannot hold a hybrid seat
 - **Inbound TCP `7001`** (P2P) reachable by the other validators
 - **No static IP at home?** Peers dial each other at a fixed `IP:7001` (IP addresses, not DNS names), so the address must not change. A small cloud VM works, or a cheap VPS that forwards TCP `7001` to your home node over WireGuard. Cloudflare Tunnel is not a good fit for P2P
 - `9090` (gRPC), which can stay private. Exposing it is optional
@@ -63,7 +63,7 @@ Admins never DM first. Nobody from JunoClaw will ever ask for your keys, mnemoni
 ## What happens after you apply
 
 1. **Selection.** We pick 3–5 operators, aiming for diversity across hosting providers and regions.
-2. **Key ceremony.** Each operator generates key material locally, with per-operator shares from OS randomness. Secret shares never leave your machine. Accepted operators get the procedure in advance.
+2. **Key ceremony.** Each operator generates their Ed25519 identity and MAYO2 key locally, and those never leave your machine. The coordinator then deals the BLS threshold shares from OS randomness and sends each operator theirs, encrypted, and deletes its copies. The coordinator briefly sees every BLS share, but a hybrid certificate also needs a quorum of MAYO2 signatures, so the coordinator alone cannot forge one. A dealer-free DKG is planned before mainnet. Accepted operators get the procedure in advance.
 3. **Genesis.** You receive the genesis parameters, the threshold public key and the peer list (Ed25519 public keys + addresses), and you fill in your `node.toml`.
 4. **Connectivity check.** Every operator confirms they can reach every peer on `7001` before genesis time.
 5. **Launch.** Everyone starts their nodes, and we confirm the first certificate finalizes with every operator's share present.

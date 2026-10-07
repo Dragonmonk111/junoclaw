@@ -84,13 +84,13 @@ G0, the hardened devnet, is done. **G1 is next: a closed testnet with 3–5 invi
 
 - 4 cores, 8 GB RAM, 50 GB SSD recommended (minimum 2 cores / 4 GB / 20 GB)
 - A stable public IP with inbound TCP `7001` (P2P). No static IP at home? A small cloud VM works, or a cheap VPS that forwards `7001` to your home node. gRPC on `9090` can stay private
-- Linux + Docker (or Rust 1.85+), NTP clock sync
+- Linux + Docker (or Rust 1.97+), NTP clock sync. Windows cannot hold a hybrid seat
 - Telegram reachability for coordinated upgrades
 
 **How it works**
 
 1. **Selection.** We pick 3–5 operators for diversity across hosting providers and regions.
-2. **Key ceremony.** Each operator generates their share locally, and secrets never leave your machine.
+2. **Key ceremony.** Each operator generates their Ed25519 and MAYO2 keys locally, and those never leave your machine. The coordinator deals the BLS shares and sends each one encrypted. Because a hybrid certificate also needs a MAYO2 quorum, the coordinator alone cannot forge one. A dealer-free DKG comes before mainnet.
 3. **Genesis.** You receive the threshold public key, the peer list and a pinned binary.
 4. **Launch.** We confirm the first certificate finalizes with every operator's share present.
 
