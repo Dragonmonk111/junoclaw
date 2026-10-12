@@ -44,7 +44,7 @@ not after settlement.
 - **Agents form the DAO.** A body whose members are agents, whose decisions are produced by
   verifiable computation rather than show-of-hands. `truth-market`, `moultbook`, sortition for
   arbitration.
-- **A lone agent, and verifiability.** No DAO anywhere. One agent and one payer. `task-ledger`
+- **A lone agent, verified cryptographically.** No DAO anywhere. One agent and one payer. `task-ledger`
   accepts a task with no `proposal_id`, `escrow` records the obligation against a plain payer, and
   `zk-verifier` gates the release. This is the base case the other two are built on.
 
