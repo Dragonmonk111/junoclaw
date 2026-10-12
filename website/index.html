@@ -447,7 +447,7 @@
       <div class="reveal">
         <div class="kicker">The substrate</div>
         <h2>JunoClaw is standing on the shoulders of giants.</h2>
-        <p class="lede">Not a Cosmos SDK fork and not a Tendermint derivative. The agent layer was proven on Juno, the chain is built on Lay3r Labs’ <code>layer-sdk</code> and its <code>slay3rd</code> node, consensus runs on Commonware’s primitives, and execution is CosmWasm.</p>
+        <p class="lede">Not a Cosmos SDK fork and not a Tendermint derivative. The agent layer was proven on Juno; the chain is built on Lay3r Labs’ <code>layer-sdk</code> and its <code>slay3rd</code> node; consensus runs on Commonware’s primitives; and execution is CosmWasm.</p>
       </div>
       <div class="grid4 reveal">
         <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg></div><h3>Juno</h3><p>The agent layer was proven first on Juno testnet <code>uni-7</code> — <code>skill-registry</code>, <code>zk-verifier</code>, <code>jclaw-credential</code> and <code>moultbook</code> still run there and on mainnet <code>juno-1</code>. The BN254 precompile came out of that work: ~203k gas per <code>VerifyProof</code>, a measured 1.823× cut, which is what makes verifying <em>every</em> task cheap instead of sampling.</p></div>
@@ -463,7 +463,7 @@
         <h2>Agents are about to do more work on chains than humans ever will.</h2>
       </div>
       <div class="glass-card problem reveal">
-        <p>They triage claims, verify credentials, settle disputes, route payments — and almost none of it runs on-chain, because chains are too slow and too expensive. Off-chain is where trust breaks: an agent in a laptop or a cloud VM can show you its answer, and you still have to take its word. <strong>“The AI decided” is the modern “the dog ate it.”</strong></p>
+        <p>They triage claims, verify credentials, settle disputes, route payments — and almost none of that runs on-chain, because chains are too slow and too expensive. Off-chain is where trust breaks: an agent in a laptop or a cloud VM can show you its answer, and you still have to take its word. <strong>“The AI decided” is the modern “the dog ate it.”</strong></p>
         <p>When the agent has a body, it gets worse. A dropped crate, a wrong dose, a blade at the wrong moment — that consequence doesn’t revert. So the proof has to bind <strong>before the machine acts</strong>, not after settlement.</p>
       </div>
     </section>
@@ -480,7 +480,7 @@
         <div class="glass-card step"><div class="n">03</div><h3>An on-chain light client</h3><p>An <strong>08-wasm light-client contract</strong> is deployed on <code>junoclaw-g1</code>, with both verification paths — positive <em>and</em> negative — passing at height <strong>508,995</strong>.</p></div>
         <div class="glass-card step"><div class="n">04</div><h3>Airdrop and governance, end to end</h3><p>The <strong>airdrop-claim</strong> flow and the <strong>governance</strong> flow are both exercised end-to-end on-chain — not mocked, not proposed.</p></div>
       </div>
-      <p class="note reveal">No other agent stack can point at that: a light client verifying post-quantum certificates on-chain, an airdrop you can claim, and governance you can run — while the chain finalises in under two seconds. <!-- TODO(ravixo1): refresh with final numbers once the 48 h soak closes (~2026-10-13 20:00 UTC) --></p>
+      <p class="note reveal">No other agent stack can point at that: a light client verifying post-quantum certificates on-chain, an airdrop you can claim, and governance you can run — while the chain finalizes in under two seconds. <!-- TODO(ravixo1): refresh with final numbers once the 48 h soak closes (~2026-10-13 20:00 UTC) --></p>
     </section>
 
     <section id="loop">
@@ -579,7 +579,7 @@
       </div>
       <div class="glass-card robotics reveal">
         <p>Every digital agent can fail backward: a bad swap reverts, a wrong verdict gets disputed, a payment is withheld. <strong>A robot cannot.</strong> So JunoClaw publishes what the machine was <em>permitted</em> to do, and proves it stayed inside that — before the actuator moves.</p>
-        <p>Locomotion and manipulation policies are trained in simulation, and the <strong>policy artifact is hashed and anchored on-chain</strong> — so the attestation binds the exact policy that shipped to the robot to the actions the robot then took. Fleet operators keep compile-time hardening (dangerous code is not in the binary, so it cannot be reached) and runtime kill-switches (halt a capability in seconds, no redeploy, single-<code>curl</code> mean-time-to-halt). A planned read-only policy RPC lets anyone inspect which capabilities a fleet has armed <strong>before</strong> sending it work.</p>
+        <p>Locomotion and manipulation policies are trained in simulation, and the <strong>policy artifact is hashed and anchored on-chain</strong> — so the attestation ties the exact policy the robot shipped with to the actions it then took. Fleet operators keep compile-time hardening (dangerous code is not in the binary, so it cannot be reached) and runtime kill-switches (halt a capability in seconds, no redeploy, single-<code>curl</code> mean-time-to-halt). A planned read-only policy RPC lets anyone inspect which capabilities a fleet has armed <strong>before</strong> sending it work.</p>
         <p>And an anchor outlives the payload: even when the telemetry stream is gone, the chain still holds <em>“the robot reported X at time T, audited green.”</em> For robotics liability, that is often the sentence that matters.</p>
         <div class="strip" aria-label="Robotics status">
           <span class="tag live">live · TEE quote, constraints, kill-switches</span>
@@ -679,7 +679,7 @@
           <tr class="us"><td>JunoClaw</td><td>0.16 s on devnet, certifies state root</td><td>quorum-level, running</td><td>chain-linked BLS certs</td><td>verifiable agents &amp; robotics</td></tr>
         </table>
       </div>
-      <p class="note reveal">Speed alone isn’t the differentiator. What’s different is the combination: state-certifying finality, post-quantum certificates at the quorum level, a light-client proof path, and a readable safety vocabulary — all in one small codebase. In exchange we give up ecosystem gravity. Our 0.16 s comes from 4 validators on one host, and G1 will publish numbers over real networks.</p>
+      <p class="note reveal">Speed alone isn’t the differentiator. What’s different is the combination: state-certifying finality, post-quantum certificates at the quorum level, a light-client proof path, and a readable safety vocabulary — all in one small codebase. In exchange we give up ecosystem gravity. Our 0.16 s comes from 4 validators on one host; G1 is where the real-network numbers come from.</p>
     </section>
 
     <section id="proof">
@@ -750,7 +750,7 @@
         <a href="https://buzz.junoclaw.xyz" target="_blank" rel="noopener">Buzz</a>
         <a href="https://github.com/Dragonmonk111/junoclaw" target="_blank" rel="noopener">GitHub</a>
       </div>
-      <div class="credit">Built by the Juno Agents DAO · MIT OR Apache-2.0 · No price talk, this is infrastructure.</div>
+      <div class="credit">Built by the Juno Agents DAO · MIT OR Apache-2.0 · No price talk — this is infrastructure.</div>
     </div>
   </footer>
 

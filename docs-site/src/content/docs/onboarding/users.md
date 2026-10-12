@@ -11,7 +11,7 @@ description: What you can do with JunoClaw today, and what opens up when the pub
 
 ## G1 is live — closed ceremony set
 
-G1 runs on real networks with a four-seat ceremony validator set, finalising blocks under hybrid BLS12-381 + MAYO2 certificates.
+G1 runs on real networks with a four-seat ceremony validator set, finalizing blocks under hybrid BLS12-381 + MAYO2 certificates.
 
 ## When the public testnet opens (G2)
 
