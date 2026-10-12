@@ -11,10 +11,9 @@ JunoClaw is a **Layer 1 blockchain for verifiable agents and DAOs**, powered by 
 
 - **Eyebrow:** Layer 1 · Commonware + CosmWasm
 - **H1:** An L1 for verifiable agents and DAOs.
-- **Sub:** JunoClaw is a Layer 1 blockchain for verifiable agents and DAOs, powered by Commonware
-  consensus and CosmWasm execution. Agents act. DAOs govern. Every action is sealed by a
-  post-quantum proof that binds the result — so anyone can check the work without trusting the
-  worker.
+- **Sub:** JunoClaw is a Layer 1 blockchain for verifiable agents and DAOs. Agents act. DAOs govern.
+  Every action is sealed by a post-quantum proof that binds the result — so anyone can check the work
+  without trusting the worker.
 - **CTAs:** `Read the lightpaper →` (→ `/docs/lightpaper/`) · `See what's live` (→ `#status`)
 
 ## The problem
@@ -126,13 +125,13 @@ JunoClaw is its own L1. The G1 testnet is running; mainnet is planned.
   it; consensus primitives from Commonware, execution from CosmWasm, and WAVS (Web Assembly
   Verifiable Services) as the runtime the agent layer uses to run work that can be checked.
 
-## Provenance (landing page section, id `juno`)
+## The substrate (landing page section, id `powered`)
 
-- **Kicker:** Provenance
-- **H2:** Standing on the shoulders of giants.
-- **Lede:** JunoClaw did not start from a blank page. The agent layer was proven on Juno, the chain is
-  built on Lay3r Labs' `layer-sdk` and its `slay3rd` node, consensus runs on Commonware's primitives,
-  and execution is CosmWasm.
+- **Kicker:** The substrate
+- **H2:** JunoClaw is standing on the shoulders of giants.
+- **Lede:** Not a Cosmos SDK fork and not a Tendermint derivative. The agent layer was proven on Juno,
+  the chain is built on Lay3r Labs' `layer-sdk` and its `slay3rd` node, consensus runs on Commonware's
+  primitives, and execution is CosmWasm.
 - **Four cards:**
   1. **Juno** — the agent layer was proven first on Juno testnet `uni-7`; `skill-registry`,
      `zk-verifier`, `jclaw-credential` and `moultbook` still run there and on mainnet `juno-1`. The
@@ -140,11 +139,12 @@ JunoClaw is its own L1. The G1 testnet is running; mainnet is planned.
   2. **Lay3r Labs** — the chain descends from Lay3r Labs' `layer-sdk` codebase and its `slay3rd` node.
      **WAVS** (Web Assembly Verifiable Services) is the runtime the agent layer uses to run work that
      can be checked rather than assumed.
-  3. **Commonware** — consensus, broadcast and storage primitives, the foundation the chain is
-     assembled from. The chain repo is `layer-sdk` on a `commonware` branch: not a Cosmos SDK fork,
-     not a Tendermint derivative.
-  4. **CosmWasm** — the execution layer, where verification becomes programmable. Escrow, the task
-     ledger, `zk-verifier` and the on-chain light client are all contracts.
+  3. **Commonware** — consensus, broadcast and storage primitives beneath a Simplex-family BFT
+     protocol. Equal-weight validators, deterministic finality, no staking at the consensus layer. The
+     chain repo is `layer-sdk` on a `commonware` branch.
+  4. **CosmWasm** — Rust contracts on a deterministic KV store, with Cosmos-style gRPC (`BroadcastTx`,
+     `GetTx`, `Simulate`) plus bank and wasm queries. Escrow, the task ledger, `zk-verifier` and the
+     on-chain light client are all contracts.
 
 ## Chain evidence (G1, measured)
 

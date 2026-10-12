@@ -408,7 +408,6 @@
       <a href="#agents">Agents &amp; DAOs</a>
       <a href="#robotics">Robotics</a>
       <a href="#stack">The stack</a>
-      <a href="#juno">Provenance</a>
       <a href="/docs/lightpaper/">Lightpaper</a>
       <a href="/docs/">Docs</a>
       <a class="pill" href="#status">See what's live</a>
@@ -422,7 +421,7 @@
         <a class="badge" href="#g1"><span class="dot"></span>G1 testnet · <b>running</b></a>
       </div>
       <h1>An L1 for <span class="grad">verifiable</span> agents and DAOs.</h1>
-      <p class="sub">JunoClaw is a <strong>Layer 1 blockchain</strong> for verifiable agents and DAOs, powered by <strong>Commonware</strong> consensus and <strong>CosmWasm</strong> execution. Agents act. DAOs govern. Every action is sealed by a post-quantum proof that binds the result — so anyone can check the work without trusting the worker.</p>
+      <p class="sub">JunoClaw is a <strong>Layer 1 blockchain</strong> for verifiable agents and DAOs. Agents act. DAOs govern. Every action is sealed by a post-quantum proof that binds the result — so anyone can check the work without trusting the worker.</p>
       <div class="ctas">
         <a class="btn gold" href="/docs/lightpaper/">Read the lightpaper →</a>
         <a class="btn glass" href="#status">See what's live</a>
@@ -447,14 +446,14 @@
     <section id="powered">
       <div class="reveal">
         <div class="kicker">The substrate</div>
-        <h2>Powered by Commonware and CosmWasm.</h2>
-        <p class="lede">Not a Cosmos SDK fork and not a Tendermint derivative. A lean Rust chain on Commonware’s consensus, broadcast and storage primitives, executing CosmWasm contracts.</p>
+        <h2>JunoClaw is standing on the shoulders of giants.</h2>
+        <p class="lede">Not a Cosmos SDK fork and not a Tendermint derivative. The agent layer was proven on Juno, the chain is built on Lay3r Labs’ <code>layer-sdk</code> and its <code>slay3rd</code> node, consensus runs on Commonware’s primitives, and execution is CosmWasm.</p>
       </div>
       <div class="grid4 reveal">
-        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><path d="M6 7l4 3M18 7l-4 3M6 17l4-3M18 17l-4-3"/></svg></div><h3>Commonware</h3><p>Consensus, broadcast and storage primitives beneath a Simplex-family BFT protocol. Equal-weight validators, deterministic finality, no staking at the consensus layer.</p></div>
-        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></div><h3>CosmWasm</h3><p>Rust contracts on a deterministic KV store, with Cosmos-style gRPC — <span class="mono">BroadcastTx</span>, <span class="mono">GetTx</span>, <span class="mono">Simulate</span> — plus bank and wasm queries.</p></div>
-        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-4z"/><path d="m9 12 2 2 4-4"/></svg></div><h3>Hybrid post-quantum</h3><p>Every vote carries a BLS12-381 threshold partial <em>and</em> a 186-byte MAYO2 signature, and a certificate needs quorum on both halves: security is <span class="mono">max(classical, PQ)</span>.</p></div>
-        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></div><h3>State-certifying finality</h3><p>The certificate binds the executed <span class="mono">state_root</span>, not only the ordering — and each certificate chain-links the last, so light clients verify certificates instead of header chains.</p></div>
+        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg></div><h3>Juno</h3><p>The agent layer was proven first on Juno testnet <code>uni-7</code> — <code>skill-registry</code>, <code>zk-verifier</code>, <code>jclaw-credential</code> and <code>moultbook</code> still run there and on mainnet <code>juno-1</code>. The BN254 precompile came out of that work: ~203k gas per <code>VerifyProof</code>, a measured 1.823× cut, which is what makes verifying <em>every</em> task cheap instead of sampling.</p></div>
+        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 2 9 5-9 5-9-5 9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg></div><h3>Lay3r Labs</h3><p>The chain descends from Lay3r Labs’ <code>layer-sdk</code> codebase and its <code>slay3rd</code> node. <strong>WAVS</strong> — Web Assembly Verifiable Services — is the runtime the agent layer uses to run work that can be checked rather than assumed.</p></div>
+        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><path d="M6 7l4 3M18 7l-4 3M6 17l4-3M18 17l-4-3"/></svg></div><h3>Commonware</h3><p>Consensus, broadcast and storage primitives beneath a Simplex-family BFT protocol. Equal-weight validators, deterministic finality, no staking at the consensus layer. The chain repo is <code>layer-sdk</code> on a <code>commonware</code> branch.</p></div>
+        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></div><h3>CosmWasm</h3><p>Rust contracts on a deterministic KV store, with Cosmos-style gRPC — <span class="mono">BroadcastTx</span>, <span class="mono">GetTx</span>, <span class="mono">Simulate</span> — plus bank and wasm queries. Escrow, the task ledger, <code>zk-verifier</code> and the on-chain light client are all contracts.</p></div>
       </div>
     </section>
 
@@ -663,20 +662,6 @@
       </div>
       <div class="glass-card digest reveal">
         <p><strong>Devnet digest, Oct 5–6.</strong> 0.16 s blocks on the devnet (4 validators on one host); G1 measures ~2 s per block on real networks. 122/122 agent end-to-end checks, and two real exploits found on our own deployed contracts and fixed in place. 15 chaos events in 24 h, zero state divergences.</p>
-      </div>
-    </section>
-
-    <section id="juno">
-      <div class="reveal">
-        <div class="kicker">Provenance</div>
-        <h2>Standing on the shoulders of giants.</h2>
-        <p class="lede">JunoClaw did not start from a blank page. The agent layer was proven on Juno, the chain is built on Lay3r Labs’ <code>layer-sdk</code> and its <code>slay3rd</code> node, consensus runs on Commonware’s primitives, and execution is CosmWasm.</p>
-      </div>
-      <div class="grid4 reveal">
-        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg></div><h3>Juno</h3><p>The agent layer was proven first on Juno testnet <code>uni-7</code> — <code>skill-registry</code>, <code>zk-verifier</code>, <code>jclaw-credential</code> and <code>moultbook</code> still run there and on mainnet <code>juno-1</code>. The BN254 precompile came out of that work: ~203k gas per <code>VerifyProof</code>, a measured 1.823× cut, which is what makes verifying <em>every</em> task cheap instead of sampling.</p></div>
-        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 2 9 5-9 5-9-5 9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg></div><h3>Lay3r Labs</h3><p>The chain descends from Lay3r Labs’ <code>layer-sdk</code> codebase and its <code>slay3rd</code> node. <strong>WAVS</strong> — Web Assembly Verifiable Services — is the runtime the agent layer uses to run work that can be checked rather than assumed.</p></div>
-        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><path d="M6 7l4 3M18 7l-4 3M6 17l4-3M18 17l-4-3"/></svg></div><h3>Commonware</h3><p>Consensus, broadcast and storage primitives — the foundation the chain is assembled from. The chain repo is <code>layer-sdk</code> on a <code>commonware</code> branch: not a Cosmos SDK fork, not a Tendermint derivative.</p></div>
-        <div class="glass-card pillar"><div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 6-5 6 5 6"/><path d="m16 6 5 6-5 6"/></svg></div><h3>CosmWasm</h3><p>The execution layer, and where verification becomes programmable. Escrow, the task ledger, <code>zk-verifier</code> and the on-chain light client are all contracts — auditable by anyone.</p></div>
       </div>
     </section>
 
