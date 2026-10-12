@@ -35,6 +35,7 @@ export default defineConfig({
             { label: 'Validators — G1 call', slug: 'onboarding/validators' },
             { label: 'Builders', slug: 'onboarding/builders' },
             { label: 'Users & agents', slug: 'onboarding/users' },
+            { label: 'Fleet & robotics', slug: 'onboarding/robotics' },
             { label: 'Investors & partners', slug: 'onboarding/investors' },
           ],
         },
