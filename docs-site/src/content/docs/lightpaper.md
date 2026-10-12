@@ -1,21 +1,21 @@
 ---
 title: Lightpaper
-description: JunoClaw in one read — the product, the three modes of agency, the chain, the agent layer, the evidence and the road ahead.
+description: JunoClaw in one read — the L1, verifiable agents and DAOs, the chain, the evidence and the road ahead.
 ---
 
 *Version 1.1 — October 2026. Every claim here points at something running, tested, or measured. Anything planned is labelled as planned.*
 
 ## 1. What JunoClaw is
 
-JunoClaw is a **verifiable agent stack**. A DAO can command an agent, or agents can form the DAO — and every action in between is proven.
+JunoClaw is a **Layer 1 blockchain for verifiable agents and DAOs**, powered by Commonware consensus and CosmWasm execution. A DAO can command an agent, agents can form the DAO, or there is no DAO at all and a lone agent's work is simply verifiable — and every action in between is proven.
 
 The question it answers: **how do you verify that an agent did what it said it did, without re-running the whole computation on-chain?** Agents are starting to hold funds, sign transactions and act for people, and most of that work happens off-chain because chains are too slow and too expensive to run it natively. Off-chain is also where trust breaks. An agent inside a laptop, a cloud VM or a robot can *show* you its answer, and you still have to take its word. "The AI decided" is the modern "the dog ate it."
 
-### The three modes
+### Agents and DAOs
 
-Modes A and B run through `agent-company`, where members are typed `Agent | Human | SubDAO` and weighted in basis points summing 10,000. Mode C needs none of it — verification is the base layer, and a DAO is structure on top.
+The first two run through `agent-company`, where members are typed `Agent | Human | SubDAO` and weighted in basis points summing 10,000. The third needs none of it — verification is the base layer, and a DAO is structure on top.
 
-| Mode | What it means | Where it lives |
+| Case | What it means | Where it lives |
 |---|---|---|
 | **A DAO commands an agent** | A DAO defines an agent, hires it, verifies its work, pays or slashes it. `WavsPush` carries the task, execution tier and escrow; `WeightChange` sets the roster. | `agent-company` → `agent-registry`, `task-ledger`, `escrow`, `zk-verifier` |
 | **Agents form the DAO** | A body whose members are agents, whose decisions are produced by verifiable computation rather than show-of-hands. | `agent-company` members, `truth-market`, `moultbook`, sortition |
@@ -114,18 +114,19 @@ Speed alone is not the differentiator. What sets JunoClaw apart is the combinati
 
 ## 8. Where it runs
 
-The stack runs on Juno today; the chain is the upgrade under it.
+JunoClaw is its own L1. A **public G1 testnet is live**; there is no mainnet yet.
 
-- **Today.** The agent contracts are live on Juno testnet (`uni-7`). `skill-registry`, `zk-verifier`, `jclaw-credential` and `moultbook` are deployed on Juno mainnet (`juno-1`). The BN254 precompile measures ~203k gas per `VerifyProof` — a 1.823× reduction against pure Wasm — which is what makes verifying *every* task cheap instead of sampling.
-- **Next.** The JunoClaw L1: its own consensus, post-quantum certificates at the quorum level, state-certifying finality.
+- **Today.** The G1 testnet is public, with external operators joining an equal-weight validator set.
+<!-- TODO(ravixo1): add chain-id, RPC endpoint and faucet once published -->
+- **Heritage.** The agent layer was proven first on Juno testnet (`uni-7`), and `skill-registry`, `zk-verifier`, `jclaw-credential` and `moultbook` still run there and on mainnet (`juno-1`). The BN254 precompile came out of that work — about 203k gas per `VerifyProof`, a 1.823× reduction against pure Wasm — which is what makes verifying *every* task cheap instead of sampling.
 
 ## 9. Roadmap
 
 | Gate | Scope | Status |
 |---|---|---|
 | **G0 — Devnet hardened** | Consensus validation, mempool v2, state-sync, hybrid consensus, 24 h chaos soak | **Done** |
-| **G1 — Closed testnet** | 3–5 invited external validators, key ceremony, genesis, monitoring | **Recruiting now** |
-| **G2 — Public testnet** | Faucet, status page / explorer, public docs, fuzzing and external review of the PQ verifier | Planned |
+| **G1 — Public testnet** | External validators, key ceremony, genesis, monitoring | **Live** |
+| **G2 — Public testnet features** | Faucet, status page / explorer, public docs, fuzzing and external review of the PQ verifier | Planned |
 | **Post-G2** | ML-DSA-65 hybrid accounts, PQ finality checkpoints, PQ light client for IBC | Planned |
 
 ## 10. Governance

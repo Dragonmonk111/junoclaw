@@ -5,18 +5,17 @@ robotics page copy from. If wording changes, change it here first.*
 
 ## One line
 
-JunoClaw is a **verifiable agent stack** — a DAO can command an agent, agents can form the DAO, or
-there is no DAO at all and a lone agent's work is simply verifiable.
+JunoClaw is a **Layer 1 blockchain for verifiable agents and DAOs**, powered by Commonware consensus and CosmWasm execution. A DAO can command an agent, agents can form the DAO, or there is no DAO at all and a lone agent's work is simply verifiable — and every action in between is proven.
 
 ## Hero
 
-- **Eyebrow:** Verifiable agent stack · G1 closed testnet
-- **H1:** The verifiable agent stack.
-- **Sub:** JunoClaw is a verifiable agent stack for the agents that run in software and the ones
-  that move in the world. A DAO can command an agent. Agents can form the DAO. Or there is no DAO
-  at all — just an agent whose work is sealed by a post-quantum proof, bound by constraints anyone
-  can read, and gated by controls anyone can inspect.
-- **CTAs:** `Verify an agent action →` (→ `/docs/lightpaper/`) · `Run a G1 validator` (→ `#g1`)
+- **Eyebrow:** Layer 1 · Commonware + CosmWasm
+- **H1:** An L1 for verifiable agents and DAOs.
+- **Sub:** JunoClaw is a Layer 1 blockchain for verifiable agents and DAOs, powered by Commonware
+  consensus and CosmWasm execution. Agents act. DAOs govern. Every action is sealed by a
+  post-quantum proof that binds the result — so anyone can check the work without trusting the
+  worker.
+- **CTAs:** `Read the lightpaper →` (→ `/docs/lightpaper/`) · `Run a validator` (→ `#g1`)
 
 ## The problem
 
@@ -38,21 +37,20 @@ not after settlement.
 5. **Verify** — four independent witnesses (below)
 6. **Settle** — auto-release and reputation on success; `SlashAgent` on failure
 
-## Three modes
+## Agents and DAOs
 
-- **Mode A — a DAO commands an agent.** A DAO defines an agent, hires it, verifies its work, pays
-  or slashes it. `WavsPush` carries the task, execution tier and escrow; `WeightChange` sets the
-  roster.
-- **Mode B — agents form the DAO.** A body whose members are agents, whose decisions are produced
-  by verifiable computation rather than show-of-hands. `truth-market`, `moultbook`, sortition for
+- **A DAO commands an agent.** A DAO defines an agent, hires it, verifies its work, pays or slashes
+  it. `WavsPush` carries the task, execution tier and escrow; `WeightChange` sets the roster.
+- **Agents form the DAO.** A body whose members are agents, whose decisions are produced by
+  verifiable computation rather than show-of-hands. `truth-market`, `moultbook`, sortition for
   arbitration.
-- **Mode C — no DAO at all.** One agent and one payer. `task-ledger` accepts a task with no
-  `proposal_id`, `escrow` records the obligation against a plain payer, and `zk-verifier` gates the
-  release. This is the base layer; a DAO is optional structure on top.
+- **A lone agent, and verifiability.** No DAO anywhere. One agent and one payer. `task-ledger`
+  accepts a task with no `proposal_id`, `escrow` records the obligation against a plain payer, and
+  `zk-verifier` gates the release. This is the base case the other two are built on.
 
 Members in `agent-company` are typed `Agent | Human | SubDAO`, weighted in basis points, summing
-10,000. 51% quorum ordinary, 67% constitutional. Modes A and B run through `agent-company`; mode C
-needs none of it.
+10,000. 51% quorum ordinary, 67% constitutional. The first two cases run through `agent-company`;
+the third needs none of it.
 
 ## The four witnesses
 
