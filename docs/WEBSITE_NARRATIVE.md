@@ -15,7 +15,7 @@ JunoClaw is a **Layer 1 blockchain for verifiable agents and DAOs**, powered by 
   consensus and CosmWasm execution. Agents act. DAOs govern. Every action is sealed by a
   post-quantum proof that binds the result — so anyone can check the work without trusting the
   worker.
-- **CTAs:** `Read the lightpaper →` (→ `/docs/lightpaper/`) · `Run a validator` (→ `#g1`)
+- **CTAs:** `Read the lightpaper →` (→ `/docs/lightpaper/`) · `See what's live` (→ `#status`)
 
 ## The problem
 
@@ -102,7 +102,7 @@ Status: **live** = TEE quote, constraints, kill-switches · **devnet** = sim-to-
 
 | LIVE | DEVNET | PLANNED |
 |---|---|---|
-| Buzz agent coordination | Agent economy end to end (122/122 checks) | Public G1 testnet |
+| Buzz agent coordination | Agent economy end to end (122/122 checks) | Faucet, status page and wallet gateway |
 | On-chain PQ + ZK verification (MAYO-1/2/3/5, Groth16) | Truth markets + J-Lens | Chain-native gossip on Commonware p2p |
 | TEE attestation quote on-chain | Sealed signer | Chain-layer controllability lock |
 | Tier-1.5 constraints on `uni-7` | Robotics attestation (sim-to-real) | Read-only fleet policy RPC |
@@ -114,15 +114,14 @@ deployed contracts and fixed in place, 15 chaos events in 24 h, zero state diver
 
 ## Where it runs
 
-The stack runs on Juno today; the chain is the upgrade under it.
+JunoClaw is its own L1. The G1 testnet is running; mainnet is planned.
 
-- **Today:** agent contracts live on Juno testnet (`uni-7`); `skill-registry`, `zk-verifier`,
-  `jclaw-credential` and `moultbook` on mainnet (`juno-1`). BN254 precompile ≈ 203k gas per
-  `VerifyProof`, a measured 1.823× cut — what makes verifying *every* task cheap instead of
-  sampling.
-- **Next:** the JunoClaw L1 — own consensus, post-quantum certificates at the quorum level,
-  state-certifying finality. G1 is a closed testnet, 3–5 external seats, unpaid, no token sale,
-  keys generated on the operator's own machine.
+- **Today:** the G1 testnet is running on real networks. Unpaid, no token sale; validator keys are
+  generated on each operator's own machine and never leave it.
+- **Heritage:** the agent layer was proven first on Juno testnet (`uni-7`); `skill-registry`,
+  `zk-verifier`, `jclaw-credential` and `moultbook` still run there and on mainnet (`juno-1`). The
+  BN254 precompile came out of that work — ≈ 203k gas per `VerifyProof`, a measured 1.823× cut,
+  which makes verifying *every* task cheap instead of sampling.
 
 ## Differentiators
 

@@ -114,9 +114,9 @@ Speed alone is not the differentiator. What sets JunoClaw apart is the combinati
 
 ## 8. Where it runs
 
-JunoClaw is its own L1. A **public G1 testnet is live**; there is no mainnet yet.
+JunoClaw is its own L1. The **G1 testnet is running**; mainnet is planned.
 
-- **Today.** The G1 testnet is public, with external operators joining an equal-weight validator set.
+- **Today.** The G1 testnet is running on real networks.
 <!-- TODO(ravixo1): add chain-id, RPC endpoint and faucet once published -->
 - **Heritage.** The agent layer was proven first on Juno testnet (`uni-7`), and `skill-registry`, `zk-verifier`, `jclaw-credential` and `moultbook` still run there and on mainnet (`juno-1`). The BN254 precompile came out of that work — about 203k gas per `VerifyProof`, a 1.823× reduction against pure Wasm — which is what makes verifying *every* task cheap instead of sampling.
 
@@ -125,7 +125,7 @@ JunoClaw is its own L1. A **public G1 testnet is live**; there is no mainnet yet
 | Gate | Scope | Status |
 |---|---|---|
 | **G0 — Devnet hardened** | Consensus validation, mempool v2, state-sync, hybrid consensus, 24 h chaos soak | **Done** |
-| **G1 — Public testnet** | External validators, key ceremony, genesis, monitoring | **Live** |
+| **G1 — Testnet running** | Running on real networks, hybrid consensus, state-certifying finality | **Live** |
 | **G2 — Public testnet features** | Faucet, status page / explorer, public docs, fuzzing and external review of the PQ verifier | Planned |
 | **Post-G2** | ML-DSA-65 hybrid accounts, PQ finality checkpoints, PQ light client for IBC | Planned |
 

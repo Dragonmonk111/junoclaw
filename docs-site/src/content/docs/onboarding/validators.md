@@ -1,17 +1,17 @@
 ---
-title: Validators — run a G1 validator
-description: Run a validator on the JunoClaw G1 testnet. What the role is, what you need, and how to join.
+title: Validators — how the G1 set works
+description: How the JunoClaw G1 validator set is configured — equal weight, hybrid signing, the key ceremony and node requirements.
 ---
 
-<p class="jc-kicker">Call for operators · G1 testnet, live</p>
+<p class="jc-kicker">The validator set · G1 testnet, running</p>
 
-JunoClaw has finished its devnet gate (G0), including a 24-hour chaos soak with zero state divergence, and the devnet now finalizes a block every 0.16 s. **G1 is the testnet, and it is public.** If you run Juno or Cosmos infrastructure, you can join the external validator set.
+JunoClaw has finished its devnet gate (G0), including a 24-hour chaos soak with zero state divergence, and the devnet now finalizes a block every 0.16 s. **G1 is running on real networks.** This page is the reference for how the validator set works.
 
 ## What a G1 validator does
 
 | | |
 |---|---|
-| **Set size** | External validators alongside the core devnet validators |
+| **Set** | Equal weight, fixed at genesis |
 | **Weight** | Equal. One BLS threshold share per validator, with no stake weighting |
 | **Consensus** | Commonware Simplex BFT, hybrid BLS12-381 + MAYO2 certificates |
 | **Staking / slashing** | None at the consensus layer. Safety comes from the BLS threshold, and economic stake lives in the truth-market contracts |
@@ -60,7 +60,7 @@ Post in the **[JunoClaw Telegram](https://t.me/junoclaw)** (or reply in the Juno
 Admins never DM first. Nobody from JunoClaw will ever ask for your keys, mnemonic or funds. G1 has no token sale and nothing to pay for.
 :::
 
-## What happens after you apply
+## How the set was formed
 
 1. **Selection.** Operators are picked for diversity across hosting providers and regions.
 2. **Key ceremony.** Each operator generates their Ed25519 identity and MAYO2 key locally, and those never leave your machine. The coordinator then deals the BLS threshold shares from OS randomness and sends each operator theirs, encrypted, and deletes its copies. The coordinator briefly sees every BLS share, but a hybrid certificate also needs a quorum of MAYO2 signatures, so the coordinator alone cannot forge one. A dealer-free DKG is planned before mainnet. Accepted operators get the procedure in advance.

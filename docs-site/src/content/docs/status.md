@@ -40,7 +40,7 @@ description: What is running, what is tested, and what is planned — kept hones
 | Gate | Scope | Status |
 |---|---|---|
 | G0 | Devnet hardened | **Done** |
-| G1 | Public testnet: external validators, key ceremony, genesis, monitoring | **Live** |
+| G1 | Testnet running on real networks | **Live** |
 | G2 | Faucet, status page/explorer, wallet gateway, PQ verifier fuzzing + external review | Planned |
 | Post-G2 | ML-DSA-65 hybrid accounts, PQ finality checkpoints, PQ light client for IBC | Planned |
 

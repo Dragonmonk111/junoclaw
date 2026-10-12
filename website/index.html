@@ -410,7 +410,7 @@
       <a href="#stack">The stack</a>
       <a href="/docs/lightpaper/">Lightpaper</a>
       <a href="/docs/">Docs</a>
-      <a class="pill" href="#g1">Run a validator</a>
+      <a class="pill" href="#status">See what's live</a>
     </div>
   </nav>
 
@@ -418,13 +418,13 @@
     <div>
       <div class="badges">
         <a class="badge" href="#powered"><span class="dot new"></span>Layer 1 · <b>Commonware + CosmWasm</b></a>
-        <a class="badge" href="#g1"><span class="dot"></span>Public G1 testnet · <b>live</b></a>
+        <a class="badge" href="#g1"><span class="dot"></span>G1 testnet · <b>running</b></a>
       </div>
       <h1>An L1 for <span class="grad">verifiable</span> agents and DAOs.</h1>
       <p class="sub">JunoClaw is a <strong>Layer 1 blockchain</strong> for verifiable agents and DAOs, powered by <strong>Commonware</strong> consensus and <strong>CosmWasm</strong> execution. Agents act. DAOs govern. Every action is sealed by a post-quantum proof that binds the result — so anyone can check the work without trusting the worker.</p>
       <div class="ctas">
         <a class="btn gold" href="/docs/lightpaper/">Read the lightpaper →</a>
-        <a class="btn glass" href="#g1">Run a validator</a>
+        <a class="btn glass" href="#status">See what's live</a>
         <a class="btn glass" href="https://t.me/junoclaw" target="_blank" rel="noopener">Join Telegram</a>
       </div>
 
@@ -617,7 +617,7 @@
           <span class="tag live">live</span>
           <h3>Running today</h3>
           <ul>
-            <li>Public G1 testnet, validating on real networks</li>
+            <li>G1 testnet running on real networks</li>
             <li>Buzz agent coordination on a sovereign relay</li>
             <li>On-chain post-quantum and ZK verification (MAYO-1/2/3/5, Groth16)</li>
             <li>TEE attestation quote anchored on-chain</li>
@@ -703,19 +703,18 @@
     <section id="g1">
       <div class="glass-card g1 reveal">
         <div class="l">
-          <div class="kicker">Call for operators</div>
-          <!-- TODO(ravixo1): replace with real chain-id, RPC endpoint, faucet URL and application link once published -->
-          <h2>Run a validator on the G1 testnet.</h2>
-          <p class="lede" style="margin-bottom:2rem">The G1 testnet is public. If you run Juno or Cosmos infrastructure, you can join the first external validator set. Seats carry equal weight and use hybrid signing, and every operator’s post-quantum and P2P keys are generated on their own machine. No static IP at home? A small cloud VM works, or a cheap VPS in front of your home node.</p>
+          <div class="kicker">The testnet</div>
+          <!-- TODO(ravixo1): replace with real chain-id, RPC endpoint and faucet URL once published -->
+          <h2>The G1 testnet is running.</h2>
+          <p class="lede" style="margin-bottom:2rem">The chain is live on real networks: equal-weight validators, hybrid BLS12-381 + MAYO2 certificates needing quorum on both halves, and state-certifying finality. Validator keys are generated on each operator’s own machine and never leave it.</p>
           <div class="ctas" style="justify-content:flex-start;margin-bottom:0">
-            <a class="btn gold" href="/docs/onboarding/validators/">Validator onboarding →</a>
-            <a class="btn glass" href="/docs/reference/run-a-node/">Node setup guide</a>
+            <a class="btn gold" href="/docs/status/">What's running →</a>
+            <a class="btn glass" href="/docs/onboarding/validators/">How the set works</a>
           </div>
           <p class="warn">Unpaid testnet. No token sale. Admins never DM first, and nobody will ask for your keys.</p>
         </div>
         <div class="r">
           <ul class="spec">
-            <li>Set <b>open to external operators</b></li>
             <li>Weight <b>equal · 1 share each</b></li>
             <li>Signing <b>BLS12-381 + MAYO2</b></li>
             <li>Slashing (consensus) <b>none</b></li>
@@ -735,7 +734,7 @@
         <h2>Pick your path</h2>
       </div>
       <div class="paths reveal">
-        <a class="glass-card path" href="/docs/onboarding/validators/"><span class="who">Validators</span><h3>Run the network</h3><p>G1 testnet requirements, how to join, the key ceremony and node config.</p><span class="go">Onboarding →</span></a>
+        <a class="glass-card path" href="/docs/onboarding/validators/"><span class="who">Validators</span><h3>How the set works</h3><p>Equal-weight validators, hybrid signing, the key ceremony and node config.</p><span class="go">Onboarding →</span></a>
         <a class="glass-card path" href="/docs/onboarding/builders/"><span class="who">Builders</span><h3>Ship contracts</h3><p>CosmWasm, gRPC surface, measured PQ gas costs and how the chain differs.</p><span class="go">Builder guide →</span></a>
         <a class="glass-card path" href="/docs/onboarding/users/"><span class="who">Users & agents</span><h3>Use it</h3><p>What’s live today, what the public testnet brings, and how to stay safe.</p><span class="go">User guide →</span></a>
         <a class="glass-card path" href="/deploy.html"><span class="who">Fleet & robotics</span><h3>Attest a fleet</h3><p>Sim-to-real attestation, fleet kill-switches and liability anchors for robots.</p><span class="go">Robotics →</span></a>
