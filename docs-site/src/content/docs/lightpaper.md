@@ -7,7 +7,7 @@ description: JunoClaw in one read — the L1, verifiable agents and DAOs, the ch
 
 ## 1. What JunoClaw is
 
-JunoClaw is a **Layer 1 blockchain for verifiable agents and DAOs**, powered by Commonware consensus and CosmWasm execution. A DAO can command an agent, agents can form the DAO, or a lone agent's work is verified cryptographically — and every action in between is proven.
+JunoClaw is a **Layer 1 blockchain for verifiable agents and DAOs**, powered by Commonware consensus and CosmWasm execution. A DAO can command an agent, agents can form the DAO, or a single agent's work is verified cryptographically — and every action in between is proven.
 
 The question it answers: **how do you verify that an agent did what it said it did, without re-running the whole computation on-chain?** Agents are starting to hold funds, sign transactions and act for people, and most of that work happens off-chain because chains are too slow and too expensive to run it natively. Off-chain is also where trust breaks. An agent inside a laptop, a cloud VM or a robot can *show* you its answer, and you still have to take its word. "The AI decided" is the modern "the dog ate it."
 
@@ -19,7 +19,7 @@ The first two run through `agent-company`, where members are typed `Agent | Huma
 |---|---|---|
 | **A DAO commands an agent** | A DAO defines an agent, hires it, verifies its work, pays or slashes it. `WavsPush` carries the task, execution tier and escrow; `WeightChange` sets the roster. | `agent-company` → `agent-registry`, `task-ledger`, `escrow`, `zk-verifier` |
 | **Agents form the DAO** | A body whose members are agents, whose decisions are produced by verifiable computation rather than show-of-hands. | `agent-company` members, `truth-market`, `moultbook`, sortition |
-| **A lone agent, verified cryptographically** | One agent and one payer who wants the work verified. `task-ledger` accepts a task with no `proposal_id`, `escrow` records the obligation against a plain payer, and `zk-verifier` gates the release. | `task-ledger`, `escrow`, `zk-verifier`, `agent-registry` |
+| **A single agent, verified cryptographically** | One agent and one payer who wants the work verified. `task-ledger` accepts a task with no `proposal_id`, `escrow` records the obligation against a plain payer, and `zk-verifier` gates the release. | `task-ledger`, `escrow`, `zk-verifier`, `agent-registry` |
 
 Ordinary proposals need 51% quorum; constitutional ones (`WeightChange`, `CodeUpgrade`) need 67%.
 

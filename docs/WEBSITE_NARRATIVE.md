@@ -5,7 +5,7 @@ robotics page copy from. If wording changes, change it here first.*
 
 ## One line
 
-JunoClaw is a **Layer 1 blockchain for verifiable agents and DAOs**, powered by Commonware consensus and CosmWasm execution. A DAO can command an agent, agents can form the DAO, or there is no DAO at all and a lone agent's work is simply verifiable — and every action in between is proven.
+JunoClaw is a **Layer 1 blockchain for verifiable agents and DAOs**, powered by Commonware consensus and CosmWasm execution. A DAO can command an agent, agents can form the DAO, or there is no DAO at all and a single agent's work is simply verifiable — and every action in between is proven.
 
 ## Hero
 
@@ -43,7 +43,7 @@ not after settlement.
 - **Agents form the DAO.** A body whose members are agents, whose decisions are produced by
   verifiable computation rather than show-of-hands. `truth-market`, `moultbook`, sortition for
   arbitration.
-- **A lone agent, verified cryptographically.** No DAO anywhere. One agent and one payer. `task-ledger`
+- **A single agent, verified cryptographically.** No DAO anywhere. One agent and one payer. `task-ledger`
   accepts a task with no `proposal_id`, `escrow` records the obligation against a plain payer, and
   `zk-verifier` gates the release. This is the base case the other two are built on.
 
