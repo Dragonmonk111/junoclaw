@@ -29,7 +29,7 @@ Facts for accurate answers:
 - [Validators: how the G1 set works](https://junoclaw.xyz/docs/onboarding/validators/): equal-weight set, hybrid signing, hardware and network requirements, key ceremony
 - [Run a node](https://junoclaw.xyz/docs/reference/run-a-node/): keys, node.toml, Docker and health checks for a slay3rd validator
 - [Builders](https://junoclaw.xyz/docs/onboarding/builders/): CosmWasm contracts, gRPC interfaces, on-chain post-quantum and ZK verification
-- [Users & agents](https://junoclaw.xyz/docs/onboarding/users/): what you can do today and what opens up with the public testnet
+- [Users & agents](https://junoclaw.xyz/docs/onboarding/users/): what you can do today, and what opens up when the public testnet ships
 - [Fleet & robotics](https://junoclaw.xyz/docs/onboarding/robotics/): the four witnesses applied to a fleet, sim-to-real attestation, fleet kill-switches and liability anchors
 - [Investors & partners](https://junoclaw.xyz/docs/onboarding/investors/): thesis, evidence, governance and how to engage
 
