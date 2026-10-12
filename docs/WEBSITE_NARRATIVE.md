@@ -123,6 +123,20 @@ JunoClaw is its own L1. The G1 testnet is running; mainnet is planned.
   BN254 precompile came out of that work — ≈ 203k gas per `VerifyProof`, a measured 1.823× cut,
   which makes verifying *every* task cheap instead of sampling.
 
+## Chain evidence (G1, measured)
+
+- **Sub-2 s BLS-threshold finality** — roughly 2 s per block in steady state on G1, with
+  leader-timeout spikes quantified in the soak. The 0.16 s figure is the 4-validator single-host
+  devnet, not G1.
+- **MAYO2 PQ-hybrid certificates on every block** — a 616-byte hybrid envelope at a 3-of-4 signer
+  quorum.
+- **An on-chain light client** — an 08-wasm light-client contract deployed on `junoclaw-g1`, with
+  positive and negative verification paths both passing at height 508,995.
+- **Airdrop claim and governance** — both flows tested end-to-end on-chain.
+
+This is the section that makes "verifiable" mean something: no other agent stack can point at a
+light client verifying post-quantum certificates on-chain.
+
 ## Differentiators
 
 | | Finality | PQ posture | Light client | Thesis |

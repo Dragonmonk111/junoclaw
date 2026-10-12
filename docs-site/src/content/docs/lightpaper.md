@@ -101,6 +101,8 @@ The devnet ran a **24-hour chaos soak**: rotating kill/restart, live 90–180 s 
 
 **October 6.** Block time on the devnet fell from 1–2 s to 0.16 s once the state-root scan stopped walking node-local sidecar data. The 8-contract agent stack now runs a full task economy on the devnet. Its latest end-to-end run passed 122 of 122 checks, including probes for two exploits we found and fixed there (a spoofed escrow payment hook and a marketplace verdict not bound to its hire).
 
+**G1, on real networks.** Sub-2 s BLS-threshold finality, measured at roughly 2 s per block in steady state, with leader-timeout spikes quantified in the soak. Every block carries a MAYO2 post-quantum hybrid certificate — a 616-byte hybrid envelope at a 3-of-4 signer quorum. An **08-wasm on-chain light-client contract** is deployed on `junoclaw-g1`, with both verification paths, positive and negative, passing at height **508,995**. The airdrop-claim and governance flows are exercised end-to-end on-chain.
+
 ## 7. Honest comparisons
 
 | | Ethereum | Cosmos appchains | Sei Giga | JunoClaw |
