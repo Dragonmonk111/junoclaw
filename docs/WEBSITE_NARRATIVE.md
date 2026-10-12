@@ -118,10 +118,33 @@ JunoClaw is its own L1. The G1 testnet is running; mainnet is planned.
 
 - **Today:** the G1 testnet is running on real networks. Unpaid, no token sale; validator keys are
   generated on each operator's own machine and never leave it.
-- **Heritage:** the agent layer was proven first on Juno testnet (`uni-7`); `skill-registry`,
-  `zk-verifier`, `jclaw-credential` and `moultbook` still run there and on mainnet (`juno-1`). The
-  BN254 precompile came out of that work — ≈ 203k gas per `VerifyProof`, a measured 1.823× cut,
-  which makes verifying *every* task cheap instead of sampling.
+- **Heritage:** JunoClaw stands on the shoulders of giants. The agent layer was proven first on Juno
+  testnet (`uni-7`); `skill-registry`, `zk-verifier`, `jclaw-credential` and `moultbook` still run
+  there and on mainnet (`juno-1`). The BN254 precompile came out of that work — ≈ 203k gas per
+  `VerifyProof`, a measured 1.823× cut, which makes verifying *every* task cheap instead of sampling.
+  The chain descends from Lay3r Labs' `layer-sdk` and its `slay3rd` node, on a `commonware` branch of
+  it; consensus primitives from Commonware, execution from CosmWasm, and WAVS (Web Assembly
+  Verifiable Services) as the runtime the agent layer uses to run work that can be checked.
+
+## Provenance (landing page section, id `juno`)
+
+- **Kicker:** Provenance
+- **H2:** Standing on the shoulders of giants.
+- **Lede:** JunoClaw did not start from a blank page. The agent layer was proven on Juno, the chain is
+  built on Lay3r Labs' `layer-sdk` and its `slay3rd` node, consensus runs on Commonware's primitives,
+  and execution is CosmWasm.
+- **Four cards:**
+  1. **Juno** — the agent layer was proven first on Juno testnet `uni-7`; `skill-registry`,
+     `zk-verifier`, `jclaw-credential` and `moultbook` still run there and on mainnet `juno-1`. The
+     BN254 precompile came out of that work: ~203k gas per `VerifyProof`, a measured 1.823× cut.
+  2. **Lay3r Labs** — the chain descends from Lay3r Labs' `layer-sdk` codebase and its `slay3rd` node.
+     **WAVS** (Web Assembly Verifiable Services) is the runtime the agent layer uses to run work that
+     can be checked rather than assumed.
+  3. **Commonware** — consensus, broadcast and storage primitives, the foundation the chain is
+     assembled from. The chain repo is `layer-sdk` on a `commonware` branch: not a Cosmos SDK fork,
+     not a Tendermint derivative.
+  4. **CosmWasm** — the execution layer, where verification becomes programmable. Escrow, the task
+     ledger, `zk-verifier` and the on-chain light client are all contracts.
 
 ## Chain evidence (G1, measured)
 

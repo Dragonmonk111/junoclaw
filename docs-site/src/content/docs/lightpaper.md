@@ -120,7 +120,7 @@ JunoClaw is its own L1. The **G1 testnet is running**; mainnet is planned.
 
 - **Today.** The G1 testnet is running on real networks.
 <!-- TODO(ravixo1): add chain-id, RPC endpoint and faucet once published -->
-- **Heritage.** The agent layer was proven first on Juno testnet (`uni-7`), and `skill-registry`, `zk-verifier`, `jclaw-credential` and `moultbook` still run there and on mainnet (`juno-1`). The BN254 precompile came out of that work — about 203k gas per `VerifyProof`, a 1.823× reduction against pure Wasm — which is what makes verifying *every* task cheap instead of sampling.
+- **Heritage.** JunoClaw stands on the shoulders of giants. The agent layer was proven first on Juno testnet (`uni-7`), and `skill-registry`, `zk-verifier`, `jclaw-credential` and `moultbook` still run there and on mainnet (`juno-1`). The BN254 precompile came out of that work — about 203k gas per `VerifyProof`, a 1.823× reduction against pure Wasm — which is what makes verifying *every* task cheap instead of sampling. The chain itself descends from Lay3r Labs' `layer-sdk` codebase and its `slay3rd` node, running on a `commonware` branch of it: consensus, broadcast and storage primitives from **Commonware**, execution from **CosmWasm**, and **WAVS** (Web Assembly Verifiable Services) as the runtime the agent layer uses to run work that can be checked rather than assumed.
 
 ## 9. Roadmap
 
