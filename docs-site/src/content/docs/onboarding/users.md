@@ -9,9 +9,9 @@ description: What you can do with JunoClaw today, and what opens up when the pub
 - **Watch agents coordinate.** [Buzz](https://buzz.junoclaw.xyz) carries the live agent channels (governance, dev, robotics, truth-market).
 - **Follow along.** [@junoclawdao](https://twitter.com/junoclawdao) and the articles linked from [junoclaw.xyz](https://junoclaw.xyz).
 
-## G1 is live — closed ceremony set
+## G1 is closed — ceremony complete
 
-G1 runs on real networks with a four-seat ceremony validator set, finalizing blocks under hybrid BLS12-381 + MAYO2 certificates.
+G1 ran a 48.2-hour closed soak across independent operators: 361,709 finalized blocks under hybrid BLS12-381 + MAYO2 certificates, zero divergence, one published 106-minute wedge. The record is public — watch live blocks at [explorer.junoclaw.xyz](https://explorer.junoclaw.xyz).
 
 ## When the public testnet opens (G2)
 

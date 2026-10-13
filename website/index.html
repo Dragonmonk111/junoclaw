@@ -6,7 +6,7 @@
   <title>JunoClaw — an L1 for verifiable agents and DAOs</title>
   <meta name="description" content="JunoClaw is a Layer 1 blockchain for verifiable agents and DAOs, powered by Commonware consensus and CosmWasm execution. Every action is sealed by a post-quantum proof that binds the result — so anyone can check the work without trusting the worker." />
   <meta property="og:title" content="JunoClaw — an L1 for verifiable agents and DAOs" />
-  <meta property="og:description" content="A Layer 1 blockchain for verifiable agents and DAOs, powered by Commonware consensus and CosmWasm execution." />
+  <meta property="og:description" content="An L1 for verifiable agents and DAOs. G1 soak closed: 361,709 PQ-certified blocks in 48.2 h, zero divergence, one published wedge. G2 seats open." />
   <meta property="og:image" content="https://junoclaw.xyz/assets/banner.png" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -410,7 +410,8 @@
       <a href="#stack">The stack</a>
       <a href="/docs/lightpaper/">Lightpaper</a>
       <a href="/docs/">Docs</a>
-      <a class="pill" href="#status">See what's live</a>
+      <a href="https://explorer.junoclaw.xyz" target="_blank" rel="noopener">Explorer</a>
+      <a class="pill" href="#g1">Run a G2 validator</a>
     </div>
   </nav>
 
@@ -418,7 +419,7 @@
     <div>
       <div class="badges">
         <a class="badge" href="#powered"><span class="dot new"></span>Layer 1 · <b>Commonware + CosmWasm</b></a>
-        <a class="badge" href="#g1"><span class="dot"></span>G1 testnet · <b>running</b></a>
+        <a class="badge" href="#g1"><span class="dot"></span>G1 closed · <b>361,709 blocks, zero divergence</b></a>
       </div>
       <h1>An L1 for <span class="grad">verifiable</span> agents and DAOs.</h1>
       <p class="sub">JunoClaw is a <strong>Layer 1 blockchain</strong> for verifiable agents and DAOs. Agents act. DAOs govern. Every action is sealed by a post-quantum proof that binds the result — so anyone can check the work without trusting the worker.</p>
@@ -435,7 +436,7 @@
 
       <div class="stats">
         <div class="stat"><div class="v">4</div><div class="l">Witnesses per action</div></div>
-        <div class="stat"><div class="v">sub-2 s</div><div class="l">Finality · G1</div></div>
+        <div class="stat"><div class="v">0.11 s</div><div class="l">Best hour · G1 soak</div></div>
         <div class="stat"><div class="v">122/122</div><div class="l">Agent e2e checks</div></div>
         <div class="stat"><div class="v">0</div><div class="l">State divergences</div></div>
       </div>
@@ -475,7 +476,7 @@
         <p class="lede">“Verifiable” is not a claim here — it is a measurement. This is what the G1 testnet is producing on real networks.</p>
       </div>
       <div class="loop reveal">
-        <div class="glass-card step"><div class="n">01</div><h3>Sub-2 s finality</h3><p>Measured at roughly <strong>2 s per block</strong> in steady state on G1, with leader-timeout spikes quantified in the soak. The devnet runs 0.16 s on a single host; G1 is the real-network figure.</p></div>
+        <div class="glass-card step"><div class="n">01</div><h3>State-certifying finality, measured</h3><p>The G1 soak ran 48.2 h across independent operators: <strong>3.5 s median</strong> cadence on a fully distributed quorum, <strong>0.11 s</strong> in the best sustained hour once quorum paths were tight. Every block binds the executed state root.</p></div>
         <div class="glass-card step"><div class="n">02</div><h3>PQ-hybrid on every block</h3><p>Every block carries a hybrid certificate — a <strong>616-byte envelope</strong> at a <strong>3-of-4 signer quorum</strong>, each vote carrying a BLS12-381 threshold partial <em>and</em> a MAYO2 signature.</p></div>
         <div class="glass-card step"><div class="n">03</div><h3>An on-chain light client</h3><p>An <strong>08-wasm light-client contract</strong> is deployed on <code>junoclaw-g1</code>, with both verification paths — positive <em>and</em> negative — passing at height <strong>508,995</strong>.</p></div>
         <div class="glass-card step"><div class="n">04</div><h3>Airdrop and governance, end to end</h3><p>The <strong>airdrop-claim</strong> flow and the <strong>governance</strong> flow are both exercised end-to-end on-chain — not mocked, not proposed.</p></div>
@@ -621,7 +622,9 @@
           <span class="tag live">live</span>
           <h3>Running today</h3>
           <ul>
-            <li>G1 testnet running on real networks</li>
+            <li>G1 ceremony complete — 48.2 h soak, zero divergence</li>
+            <li>Public explorer + TLS API + status monitor (<a href="https://explorer.junoclaw.xyz" target="_blank" rel="noopener" style="color:var(--cyan)">explorer.junoclaw.xyz</a>)</li>
+            <li>Open-source full-history archiver (<code>tools/cdc-archiver</code>)</li>
             <li>Buzz agent coordination on a sovereign relay</li>
             <li>On-chain post-quantum and ZK verification (MAYO-1/2/3/5, Groth16)</li>
             <li>TEE attestation quote anchored on-chain</li>
@@ -644,7 +647,7 @@
           <span class="tag plan">planned</span>
           <h3>Planned</h3>
           <ul>
-            <li>Faucet, status page and wallet gateway</li>
+            <li>Faucet and wallet gateway</li>
             <li>Chain-native gossip on Commonware p2p</li>
             <li>Chain-layer controllability lock</li>
             <li>Read-only fleet policy RPC</li>
@@ -654,17 +657,17 @@
       <div class="glass-card pace reveal" aria-label="Block time before and after the October 6 fix">
         <div class="pace-head">
           <div>
-            <div class="pace-num"><span class="grad">0.16 s</span></div>
-            <div class="pace-l">per block on the 4-validator devnet. Every block still carries a hybrid BLS + MAYO2 certificate over the executed state root.</div>
+            <div class="pace-num"><span class="grad">0.11 s</span></div>
+            <div class="pace-l">per block in the best sustained hour of the G1 soak — median 3.5 s on a fully distributed quorum. Every block carries a hybrid BLS + MAYO2 certificate over the executed state root.</div>
           </div>
           <div class="pace-vs">October 5<b>1–2 s</b></div>
         </div>
-        <div class="lane" data-ms="1500" aria-hidden="true"><span class="lane-l">Before · 1–2 s</span><div class="cells"></div><span class="lane-n">0 blocks</span></div>
-        <div class="lane fast" data-ms="160" aria-hidden="true"><span class="lane-l">Now · 0.16 s</span><div class="cells"></div><span class="lane-n">0 blocks</span></div>
-        <p class="pace-cap">Each lit cell is one finalized block, animated at the measured pace (not live data). Measured with 4 validators on one host; G1 measures ~2 s per block on real networks.</p>
+        <div class="lane" data-ms="3500" aria-hidden="true"><span class="lane-l">Distributed quorum · 3.5 s median</span><div class="cells"></div><span class="lane-n">0 blocks</span></div>
+        <div class="lane fast" data-ms="110" aria-hidden="true"><span class="lane-l">Best sustained hour · 0.11 s</span><div class="cells"></div><span class="lane-n">0 blocks</span></div>
+        <p class="pace-cap">Each lit cell is one finalized block, animated at the measured pace (not live data). Both numbers are from the 48.2 h G1 soak across independent operators — 361,709 blocks, heights 512,776 → 874,485. Live tip: <a href="https://explorer.junoclaw.xyz" target="_blank" rel="noopener" style="color:var(--violet-bright)">explorer.junoclaw.xyz ↗</a></p>
       </div>
       <div class="glass-card digest reveal">
-        <p><strong>Devnet digest, Oct 5–6.</strong> 0.16 s blocks on the devnet (4 validators on one host); G1 measures ~2 s per block on real networks. 122/122 agent end-to-end checks, and two real exploits found on our own deployed contracts and fixed in place. 15 chaos events in 24 h, zero state divergences.</p>
+        <p><strong>G1 close-out, Oct 13.</strong> 48.2 h soak across independent operators: 361,709 finalized blocks, zero divergence, one 106-minute wedge — an ISP outage removed two seats sharing a failure domain; the chain halted rather than forked, recovered fully, and the post-mortem is published. Same week, the community infra shipped: explorer, TLS API, status monitor, full-history archiver — all open source.</p>
       </div>
     </section>
 
@@ -679,10 +682,10 @@
           <tr><td>Ethereum</td><td>~13–15 min economic</td><td>account-level research</td><td>sync committee</td><td>world computer</td></tr>
           <tr><td>Cosmos appchains</td><td>~3–6 s per block</td><td>none shipped</td><td>header chains</td><td>sovereign zones</td></tr>
           <tr><td>Sei Giga</td><td>~250 ms, ordering only</td><td>none</td><td>—</td><td>trading</td></tr>
-          <tr class="us"><td>JunoClaw</td><td>0.16 s on devnet, certifies state root</td><td>quorum-level, running</td><td>chain-linked BLS certs</td><td>verifiable agents &amp; robotics</td></tr>
+          <tr class="us"><td>JunoClaw</td><td>0.11–3.5 s on G1, certifies state root</td><td>quorum-level, running</td><td>chain-linked BLS certs</td><td>verifiable agents &amp; robotics</td></tr>
         </table>
       </div>
-      <p class="note reveal">Speed alone isn’t the differentiator. What’s different is the combination: state-certifying finality, post-quantum certificates at the quorum level, a light-client proof path, and a readable safety vocabulary — all in one small codebase. In exchange we give up ecosystem gravity. Our 0.16 s comes from 4 validators on one host; G1 is where the real-network numbers come from.</p>
+      <p class="note reveal">Speed alone isn’t the differentiator. What’s different is the combination: state-certifying finality, post-quantum certificates at the quorum level, a light-client proof path, and a readable safety vocabulary — all in one small codebase. In exchange we give up ecosystem gravity. Both JunoClaw numbers are measured on G1 across independent operators — 3.5 s median while fully distributed, 0.11 s in the best hour when quorum paths were tight.</p>
     </section>
 
     <section id="proof">
@@ -694,6 +697,7 @@
         <div class="glass-card proof"><div class="big">15</div><h3>Chaos events in 24 h</h3><p>Kill/restart, live network partitions, container recreates and a Byzantine proposer injecting faults. Victims rotated, and recovery was measured for every event.</p></div>
         <div class="glass-card proof"><div class="big">0</div><h3>State divergences</h3><p>The monitor compared certified payload digests across validators, and those digests bind the Merkle state root itself.</p></div>
         <div class="glass-card proof"><div class="big">3</div><h3>Findings, all fixed</h3><p>An IP-reassignment wedge and a backfill request flood. On top of that, <span class="mono">app_hash</span> now equals <span class="mono">state_root</span>, so it’s identical on every node.</p></div>
+        <div class="glass-card proof"><div class="big">106</div><h3>Minutes of one wedge — published</h3><p>A home-ISP outage removed two seats sharing a failure domain and finalization halted for 106 minutes. The chain halted rather than forked — BFT correct — recovered fully, and the whole timeline is in the public record.</p></div>
         <div class="glass-card proof"><div class="big">2</div><h3>Exploits caught on our own devnet</h3><p>Our end-to-end probe reproduced a spoofed payment hook and an unbound marketplace verdict on deployed contracts. Both are fixed and migrated in place, and the probe now proves they fail.</p></div>
       </div>
     </section>
@@ -702,12 +706,12 @@
       <div class="glass-card g1 reveal">
         <div class="l">
           <div class="kicker">The testnet</div>
-          <!-- TODO(ravixo1): replace with real chain-id, RPC endpoint and faucet URL once published -->
-          <h2>The G1 testnet is running.</h2>
-          <p class="lede" style="margin-bottom:2rem">The chain is live on real networks: equal-weight validators, hybrid BLS12-381 + MAYO2 certificates needing quorum on both halves, and state-certifying finality. Validator keys are generated on each operator’s own machine and never leave it.</p>
+          <h2>G1 is closed. G2 opens the set.</h2>
+          <p class="lede" style="margin-bottom:2rem">G1 soaked for 48.2 hours across independent operators — 361,709 certified blocks, zero divergence, and one wedge that taught the lesson G2 is built on: <strong>no two seats may share a host or network failure domain.</strong> External operators join in batched, devnet-rehearsed set-change windows. Keys are generated on your machine and never leave it.</p>
           <div class="ctas" style="justify-content:flex-start;margin-bottom:0">
-            <a class="btn gold" href="/docs/status/">What's running →</a>
-            <a class="btn glass" href="/docs/onboarding/validators/">How the set works</a>
+            <a class="btn gold" href="https://explorer.junoclaw.xyz" target="_blank" rel="noopener">Live explorer →</a>
+            <a class="btn glass" href="/docs/onboarding/validators/">Run a G2 validator</a>
+            <a class="btn glass" href="https://status.junoclaw.xyz" target="_blank" rel="noopener">Status ↗</a>
           </div>
           <p class="warn">Unpaid testnet. No token sale. Admins never DM first, and nobody will ask for your keys.</p>
         </div>
@@ -720,7 +724,9 @@
             <li>Disk <b>50 GB SSD rec.</b></li>
             <li>Pruning <b>~24 h window</b></li>
             <li>Network <b>stable public IP · TCP 7001</b></li>
-            <li>Clock <b>NTP required</b></li>
+            <li>Clock <b>NTP · &lt;2 s drift</b></li>
+            <li>Domains <b>independent host + ISP</b></li>
+            <li>Contact <b>named ops contact</b></li>
           </ul>
         </div>
       </div>
@@ -786,7 +792,7 @@
       cells.innerHTML = '<i class="cell"></i>'.repeat(n);
       const list = cells.children;
       if (reduce) {
-        const lit = lane.classList.contains('fast') ? n : Math.round(n * 0.16 / 1.5);
+        const lit = lane.classList.contains('fast') ? n : Math.round(n * 0.11 / 3.5);
         for (let k = 0; k < lit; k++) list[k].classList.add('on');
         count.textContent = (1000 / ms).toFixed(1) + ' blocks/s';
         return;

@@ -111,7 +111,7 @@ Block finalized — certificate stored … app_hash=… digest=…
 Finality record stored (certificate, proposal, timestamp) height=…
 ```
 
-- Heights should rise steadily. The single-host devnet finalizes about six blocks per second (0.16 s per block). A geographically distributed set will be slower.
+- Heights should rise steadily — about one finalized block every ~3.5 s on the multi-operator network (0.11 s in the best sustained hour of the G1 soak).
 - `app_hash` should be **identical across all validators** at the same height. It equals the certified `state_root`.
 
 **Node up but not signing?** Check that:

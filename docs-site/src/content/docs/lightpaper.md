@@ -69,7 +69,7 @@ The chain is kept deliberately thin. It is a lean Layer-1 written in Rust on [Co
 
 | Property | How it works |
 |---|---|
-| **Finality** | Each finalized block has a threshold BLS12-381 certificate. Finality is deterministic and takes about 0.16 s on the single-host devnet. A geographically distributed set will be slower. |
+| **Finality** | Each finalized block has a threshold BLS12-381 certificate. Finality is deterministic; the G1 multi-operator soak measured a 3.5 s median cadence and 0.11 s in the best sustained hour. |
 | **What gets certified** | The block payload binds the executed `state_root`, so the certificate covers the result of the block, not only its order. |
 | **Post-quantum hybrid** | When `hybrid_consensus` is on, every vote carries a BLS partial and a MAYO2 signature (186 bytes). A certificate needs a quorum of both. Security is `max(classical, PQ)`. |
 | **Light-client path** | Each certificate is chain-linked to the previous one, so you can verify history from certificates. |
@@ -101,25 +101,24 @@ The devnet ran a **24-hour chaos soak**: rotating kill/restart, live 90–180 s 
 
 **October 6.** Block time on the devnet fell from 1–2 s to 0.16 s once the state-root scan stopped walking node-local sidecar data. The 8-contract agent stack now runs a full task economy on the devnet. Its latest end-to-end run passed 122 of 122 checks, including probes for two exploits we found and fixed there (a spoofed escrow payment hook and a marketplace verdict not bound to its hire).
 
-**G1, on real networks.** Sub-2 s BLS-threshold finality, measured at roughly 2 s per block in steady state, with leader-timeout spikes quantified in the soak. Every block carries a MAYO2 post-quantum hybrid certificate — a 616-byte hybrid envelope at a 3-of-4 signer quorum. An **08-wasm on-chain light-client contract** is deployed on `junoclaw-g1`, with both verification paths, positive and negative, passing at height **508,995**. The airdrop-claim and governance flows are exercised end-to-end on-chain.
+**G1, on real networks — closed.** The first multi-operator ceremony ran a 48.2 h soak: **361,709 finalized blocks (heights 512,776 → 874,485), zero divergence, 3.5 s median cadence and 0.11 s in the best sustained hour.** One documented 106-minute wedge — a home-ISP outage removed two seats sharing a failure domain; the chain halted rather than forked, recovered fully, and the post-mortem is published. Every block carried a MAYO2 post-quantum hybrid certificate — a 616-byte hybrid envelope at a 3-of-4 signer quorum. An **08-wasm on-chain light-client contract** is deployed on `junoclaw-g1`, with both verification paths, positive and negative, passing at height **508,995**. The airdrop-claim and governance flows are exercised end-to-end on-chain.
 
 ## 7. Honest comparisons
 
 | | Ethereum | Cosmos appchains | Sei Giga | JunoClaw |
 |---|---|---|---|---|
-| Finality | ~13–15 min economic | ~3–6 s per block | ~250 ms, ordering only | 0.16 s on devnet, certifies state root |
+| Finality | ~13–15 min economic | ~3–6 s per block | ~250 ms, ordering only | 0.11–3.5 s on G1, certifies state root |
 | PQ posture | account-level research | none shipped | none | quorum-level, running |
 | Light client | sync committee | header chains | — | chain-linked BLS certs |
 | Thesis | world computer | sovereign zones | trading | verifiable agents & robotics |
 
-Speed alone is not the differentiator. What sets JunoClaw apart is the combination: state-certifying finality (0.16 s on the devnet, single host), post-quantum certificates at the quorum level, a certificate-chain light-client path, and a readable safety vocabulary — all in one small codebase. In exchange, we give up the ecosystem gravity of the big stacks.
+Speed alone is not the differentiator. What sets JunoClaw apart is the combination: state-certifying finality (measured at 3.5 s median / 0.11 s best hour on the G1 multi-operator network), post-quantum certificates at the quorum level, a certificate-chain light-client path, and a readable safety vocabulary — all in one small codebase. In exchange, we give up the ecosystem gravity of the big stacks.
 
 ## 8. Where it runs
 
-JunoClaw is its own L1. The **G1 testnet is running**; mainnet is planned.
+JunoClaw is its own L1. **G1 is closed** — the ceremony record is published — and the **G2 public testnet** is onboarding external operators; mainnet is planned.
 
-- **Today.** The G1 testnet is running on real networks.
-<!-- TODO(ravixo1): add chain-id, RPC endpoint and faucet once published -->
+- **Today.** G1 is closed and evaluated; the public surface is live — `explorer.junoclaw.xyz` (per-block hybrid certificates), `api.junoclaw.xyz` (TLS gRPC) and `status.junoclaw.xyz` (probe monitor), all community-run and open source. G2 public testnet is onboarding external operators in batched set-change windows.
 - **Heritage.** JunoClaw stands on the shoulders of giants. The agent layer was proven first on Juno testnet (`uni-7`), and `skill-registry`, `zk-verifier`, `jclaw-credential` and `moultbook` still run there and on mainnet (`juno-1`). The BN254 precompile came out of that work — about 203k gas per `VerifyProof`, a 1.823× reduction against pure Wasm — which is what makes verifying *every* task cheap instead of sampling. The chain itself descends from Lay3r Labs' `layer-sdk` codebase and its `slay3rd` node, running on a `commonware` branch of it: consensus, broadcast and storage primitives from **Commonware**, execution from **CosmWasm**, and **WAVS** (Web Assembly Verifiable Services) as the runtime the agent layer uses to run work that can be checked rather than assumed.
 
 ## 9. Roadmap

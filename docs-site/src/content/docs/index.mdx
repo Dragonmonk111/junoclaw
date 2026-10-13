@@ -22,7 +22,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 <CardGrid>
   <Card title="Validators" icon="rocket">
-    G1 is running on real networks. Equal-weight validators, hybrid BLS + MAYO2 signing, no staking or slashing in consensus.
+    G1 is closed — a 48.2 h soak across independent operators: 361,709 certified blocks, zero divergence. G2 opens the set to external operators.
     [How the validator set works →](/docs/onboarding/validators/)
   </Card>
   <Card title="Builders" icon="puzzle">
@@ -41,7 +41,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 ## The chain in four lines
 
-- **0.16 s finality on the devnet that certifies the executed `state_root`** — not just transaction order.
+- **State-certifying finality measured on a real multi-operator network** — 3.5 s median cadence on G1, 0.11 s in the best sustained hour. Every certificate binds the executed `state_root`.
 - **Hybrid post-quantum certificates** — every vote is a BLS12-381 partial *and* a 186-byte MAYO2 signature; a certificate needs quorum on both.
 - **Chain-linked certificates** — each certificate binds the previous one, giving light clients a certificate-chain proof path.
 - **Small, auditable Rust codebase** on Commonware consensus, broadcast and storage primitives. Not a Cosmos SDK fork, not Tendermint.

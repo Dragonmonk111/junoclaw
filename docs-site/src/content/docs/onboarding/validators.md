@@ -3,15 +3,15 @@ title: Validators — how the G1 set works
 description: How the JunoClaw G1 validator set is configured — equal weight, hybrid signing, the key ceremony and node requirements.
 ---
 
-<p class="jc-kicker">The validator set · G1 testnet, running</p>
+<p class="jc-kicker">The validator set · G2 public testnet</p>
 
-JunoClaw has finished its devnet gate (G0), including a 24-hour chaos soak with zero state divergence, and the devnet now finalizes a block every 0.16 s. **G1 is running on real networks.** This page is the reference for how the validator set works.
+**G1 is closed.** The first multi-operator ceremony ran a 48.2-hour soak across independent operators: 361,709 finalized blocks (heights 512,776 → 874,485), zero state divergence, and one documented 106-minute wedge — root-caused to two seats sharing a host's failure domain, published in full, and the fix is now an onboarding rule. **G2 opens the set to external operators and grows it toward n=5, then n=7 for mainnet.** This page is the reference for how the validator set works.
 
-## What a G1 validator does
+## What a validator does
 
 | | |
 |---|---|
-| **Set** | Equal weight, fixed at genesis |
+| **Set** | Equal weight; external operators join in batched, devnet-rehearsed set-change windows |
 | **Weight** | Equal. One BLS threshold share per validator, with no stake weighting |
 | **Consensus** | Commonware Simplex BFT, hybrid BLS12-381 + MAYO2 certificates |
 | **Staking / slashing** | None at the consensus layer. Safety comes from the BLS threshold, and economic stake lives in the truth-market contracts |
@@ -20,7 +20,16 @@ JunoClaw has finished its devnet gate (G0), including a 24-hour chaos soak with 
 
 ## What you need
 
-### Hardware (G1 baseline)
+### The hard rule: independent failure domains
+
+G1's one wedge came from two seats sharing a host *and* an ISP — one outage removed two signers and dropped the set below quorum. It is the lesson G2 is built on:
+
+- **Your seat must be its own failure domain** — dedicated host and network. No two seats may share a machine or an ISP.
+- **Failover is active/passive only.** A backup that takes over when the primary dies is fine; two live signers for one seat is a double-sign. Never run your key twice.
+- **Clock discipline is consensus-critical** — the wedge's tail was extended by ~83 s of drift. NTP-synced clock with **<2 s drift**, verified before each window.
+- **A named ops contact** who answers a test-page during the testnet window.
+
+### Hardware (G2 baseline)
 
 | Resource | Minimum | Recommended |
 |---|---|---|
@@ -54,10 +63,11 @@ Post in the **[JunoClaw Telegram](https://t.me/junoclaw)** (or reply in the Juno
 2. **Validator experience.** Chains you validate or have validated, e.g. Juno mainnet
 3. **Hosting.** Provider/region, bare metal or VPS, and whether you have a static IP
 4. **Hardware** you'll dedicate
-5. **Timezone** and availability for the genesis ceremony
+5. **Confirmation it's an independent failure domain** (provider + network)
+6. **Timezone** and availability for the set-change window
 
 :::caution[Safety]
-Admins never DM first. Nobody from JunoClaw will ever ask for your keys, mnemonic or funds. G1 has no token sale and nothing to pay for.
+Admins never DM first. Nobody from JunoClaw will ever ask for your keys, mnemonic or funds. G2 has no token sale and nothing to pay for.
 :::
 
 ## How the set was formed

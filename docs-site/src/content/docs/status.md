@@ -9,9 +9,9 @@ description: What is running, what is tested, and what is planned — kept hones
 
 | Area | Detail |
 |---|---|
-| Consensus | Commonware Simplex BFT, 4 validators, threshold BLS12-381 certificates |
+| Consensus | Commonware Simplex BFT, 4-seat validator set across 3 independent operators, threshold BLS12-381 certificates |
 | PQ hybrid | `hybrid_consensus`: BLS partial + MAYO2 signature per vote, quorum on both |
-| Finality | 0.16 s per block on the 4-validator devnet (single host; G1 will measure real networks). The certificate binds the executed `state_root`. A finality record (certificate, proposal, timestamp) is stored per height |
+| Finality | ~3.5 s median cadence on a distributed quorum; **0.11 s** best sustained hour measured on the G1 soak. The certificate binds the executed `state_root`. A finality record (certificate, proposal, timestamp) is stored per height |
 | Validation | Proposals checked for height, parent, `state_root`, size and wall-clock timestamp (after the parent, at most 2 s ahead). Byzantine proposer tested |
 | Mempool | Dedupe, recheck after commit, strict sequence admission |
 | Sync | Height-range backfill, certified state-sync with a multi-peer anchor quorum, locally verified anchor certificate and a capped download size |
@@ -21,8 +21,18 @@ description: What is running, what is tested, and what is planned — kept hones
 | Accounts | secp256k1 and hybrid secp256k1 + MAYO |
 | Agent layer | Buzz relay channels live at `buzz.junoclaw.xyz`. The 8-contract agent stack runs on the devnet |
 
+## Public surface (community-run)
+
+| Endpoint | What it is |
+|---|---|
+| `explorer.junoclaw.xyz` | Live explorer — every block with its real hybrid certificate: signer bitmap, BLS aggregate, MAYO2 signatures (`tools/jc-explorer`, open source) |
+| `api.junoclaw.xyz` | TLS-terminated public gRPC edge — light-client, CDC stream, Cosmos queries |
+| `status.junoclaw.xyz` | Independent 30 s probe monitor with public uptime history (`tools/jc-status`) |
+| CDC archiver | `tools/cdc-archiver` — open-source follower mirroring every committed state change into a durable archive, with typed projections for address-level search |
+
 ## Tested
 
+- **G1 soak — 48.2 hours, 361,709 blocks (heights 512,776 → 874,485).** The first multi-operator ceremony. **Zero state divergence** across the whole window. **One documented wedge (106 min):** a home-ISP outage removed two seats sharing a failure domain; the chain halted rather than forked (BFT correct), recovered fully after clock correction + restarts, and the root cause + timeline are published. A later ~3.5-minute freeze self-recovered unattended.
 - **24 h chaos soak (C9).** Kill/restart, partitions, container recreates, Byzantine proposer. 15 events, zero state divergence.
 - **Soak findings fixed.** IP re-pin on reconnect (runbook), bounded backfill re-requests (code + regression test), `app_hash` now equals `state_root` (verified identical across validators after redeploy).
 - **October 6 hardening.** The devnet was upgraded in place to commit `90451d8`, with no state divergence:
@@ -40,8 +50,8 @@ description: What is running, what is tested, and what is planned — kept hones
 | Gate | Scope | Status |
 |---|---|---|
 | G0 | Devnet hardened | **Done** |
-| G1 | Testnet running on real networks | **Live** |
-| G2 | Faucet, status page/explorer, wallet gateway, PQ verifier fuzzing + external review | Planned |
+| G1 | Closed testnet: multi-operator ceremony, 48.2 h soak, verdict + post-mortem published | **Done** |
+| G2 | Public testnet: external operators (independent failure domains), faucet, wallet gateway, PQ verifier fuzzing + external review | **In progress — onboarding** |
 | Post-G2 | ML-DSA-65 hybrid accounts, PQ finality checkpoints, PQ light client for IBC | Planned |
 
 ## Known gaps (tracked openly)
