@@ -1,17 +1,17 @@
 ---
-title: Validators — G1 closed testnet call
-description: JunoClaw is recruiting 3–5 external validators for the G1 closed testnet. What the seat is, what you need, and how to apply.
+title: Validators — how the G1 set works
+description: How the JunoClaw G1 validator set is configured — equal weight, hybrid signing, the key ceremony and node requirements.
 ---
 
-<p class="jc-kicker">Call for operators · G1 closed testnet</p>
+<p class="jc-kicker">The validator set · G1 testnet, running</p>
 
-JunoClaw has finished its devnet gate (G0), including a 24-hour chaos soak with zero state divergence, and the devnet now finalizes a block every 0.16 s. **G1 is next: a closed testnet with 3–5 invited external validators.** If you run Juno or Cosmos infrastructure, these seats are for you.
+JunoClaw has finished its devnet gate (G0), including a 24-hour chaos soak with zero state divergence, and the devnet now finalizes a block every 0.16 s. **G1 is running on real networks.** This page is the reference for how the validator set works.
 
-## What a G1 seat is
+## What a G1 validator does
 
 | | |
 |---|---|
-| **Set size** | 3–5 external validators alongside the core devnet validators |
+| **Set** | Equal weight, fixed at genesis |
 | **Weight** | Equal. One BLS threshold share per validator, with no stake weighting |
 | **Consensus** | Commonware Simplex BFT, hybrid BLS12-381 + MAYO2 certificates |
 | **Staking / slashing** | None at the consensus layer. Safety comes from the BLS threshold, and economic stake lives in the truth-market contracts |
@@ -60,9 +60,9 @@ Post in the **[JunoClaw Telegram](https://t.me/junoclaw)** (or reply in the Juno
 Admins never DM first. Nobody from JunoClaw will ever ask for your keys, mnemonic or funds. G1 has no token sale and nothing to pay for.
 :::
 
-## What happens after you apply
+## How the set was formed
 
-1. **Selection.** We pick 3–5 operators, aiming for diversity across hosting providers and regions.
+1. **Selection.** Operators are picked for diversity across hosting providers and regions.
 2. **Key ceremony.** Each operator generates their Ed25519 identity and MAYO2 key locally, and those never leave your machine. The coordinator then deals the BLS threshold shares from OS randomness and sends each operator theirs, encrypted, and deletes its copies. The coordinator briefly sees every BLS share, but a hybrid certificate also needs a quorum of MAYO2 signatures, so the coordinator alone cannot forge one. A dealer-free DKG is planned before mainnet. Accepted operators get the procedure in advance.
 3. **Genesis.** You receive the genesis parameters, the threshold public key and the peer list (Ed25519 public keys + addresses), and you fill in your `node.toml`.
 4. **Connectivity check.** Every operator confirms they can reach every peer on `7001` before genesis time.

@@ -3,9 +3,9 @@ title: Status & roadmap
 description: What is running, what is tested, and what is planned — kept honest and current.
 ---
 
-*Last updated: October 6, 2026.*
+*Last updated: October 12, 2026.*
 
-## Running on devnet
+## Running
 
 | Area | Detail |
 |---|---|
@@ -40,8 +40,8 @@ description: What is running, what is tested, and what is planned — kept hones
 | Gate | Scope | Status |
 |---|---|---|
 | G0 | Devnet hardened | **Done** |
-| G1 | Closed testnet: 3–5 external validators, key ceremony, genesis, monitoring | **Recruiting** |
-| G2 | Public testnet: faucet, status page/explorer, wallet gateway, PQ verifier fuzzing + external review | Planned |
+| G1 | Testnet running on real networks | **Live** |
+| G2 | Faucet, status page/explorer, wallet gateway, PQ verifier fuzzing + external review | Planned |
 | Post-G2 | ML-DSA-65 hybrid accounts, PQ finality checkpoints, PQ light client for IBC | Planned |
 
 ## Known gaps (tracked openly)

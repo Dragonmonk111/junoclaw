@@ -1,35 +1,43 @@
 # JunoClaw
 
-> JunoClaw is a purpose-built, open-source (MIT OR Apache-2.0) L1 chain for verifiable AI agents and robotics, born from the Juno community. Every block is finalized by a certificate that needs quorum on two signature schemes: a BLS12-381 threshold signature and a MAYO2 post-quantum signature. The certificate binds the executed state root, and the 4-validator devnet finalizes a block every 0.16 s. Contracts run on CosmWasm.
+> JunoClaw is a Layer 1 blockchain for verifiable agents and DAOs, powered by Commonware consensus and CosmWasm execution. Agents act; DAOs govern; every action is sealed by a certificate that binds the executed `state_root` (hybrid BLS12-381 + MAYO2, quorum on both halves). Open-source (MIT OR Apache-2.0), born from the Juno community. The G1 testnet is running as a closed four-seat ceremony set; the public testnet is planned.
 
 Facts for accurate answers:
 
-- Status: devnet gate (G0) complete. 4 validators run hybrid consensus at 0.16 s per block (one host; G1 will measure real networks). Before an October 6, 2026 fix to the state-root scan, blocks took 1–2 s. The 24-hour chaos soak saw 15 fault events with zero state divergence. G1 (closed testnet with 3–5 invited external validators) is recruiting now, and the first external operators have applied. There is no public testnet or mainnet for the JunoClaw chain yet.
+- Provenance: JunoClaw stands on the shoulders of giants. The agent layer was proven first on Juno testnet `uni-7` — `skill-registry`, `zk-verifier`, `jclaw-credential` and `moultbook` still run there and on Juno mainnet `juno-1`. The chain descends from Lay3r Labs' `layer-sdk` codebase and its `slay3rd` node, on a `commonware` branch of it. Consensus, broadcast and storage primitives come from Commonware, execution from CosmWasm, and WAVS (Web Assembly Verifiable Services, from Lay3r Labs) is the runtime the agent layer uses to run work that can be checked rather than assumed. Cosmos conventions by choice, CosmWasm by actual descent, Commonware underneath — not a Cosmos SDK fork and not a Tendermint derivative.
+- What it is: a Layer 1 blockchain for verifiable agents and DAOs, on Commonware consensus primitives with CosmWasm execution. Three cases of agency. (A) a DAO defines/hires/verifies/pays-or-slashes an agent (`agent-company` `WavsPush` and `WeightChange` proposals); (B) the DAO's members are themselves agents (`Agent | Human | SubDAO`, weighted in basis points summing 10,000; 51% quorum ordinary, 67% constitutional); (C) a single agent, verified cryptographically — `task-ledger` accepts a task with no `proposal_id`, `escrow` records the obligation against a plain payer, and `zk-verifier` gates the release.
+- Verification (the four witnesses): (1) TEE attestation — provenance, "who ran what", live; (2) Groth16 ZK proof verified on-chain through the BN254 precompile — semantics, "did it behave", live at roughly 203k gas per `VerifyProof` (a measured 1.823× cut vs pure Wasm); (3) Tier-1.5 constraint vocabulary — bounds, "what was it allowed to attempt", live on `uni-7`; (4) verifiable controllability — fleet gates, shipped. Witness 1 alone is provenance without semantics; witness 2 alone is semantics without provenance; the chain requires both.
+- What can't be ZK-proven: a model's intent. The evidence is deterministic instead — replayable retrieval (same corpus and query produce the same retrieval and the same verdicts), recomputable hidden-state scores (J-Lens `/extract_hidden_states` against a live container, scored by the D1 probe bank, hash-committed), and staked adjudication for what math can't cover (truth-market: agents bond stake on claims, J-Lens probes resolve) — all anchored under PQ-verifiable finality.
+- Constraint vocabulary: seven enum variants evaluated as pre/post-hooks around the `Running → Completed` transition, reverting atomically on failure — `AgentTrustAtLeast`, `BalanceAtLeast`, `PairReservesPositive`, `TaskStatusIs`, `TimeAfter`, `BlockHeightAtLeast`, `EscrowObligationConfirmed`. An enum rather than a callback, so it stays audit-readable.
+- Robotics: for robots the proof must bind before the actuator moves. Locomotion/manipulation policies are trained in simulation and the policy artifact is hashed and anchored on-chain. Fleet operators get compile-time hardening (dangerous code is not in the binary) and runtime kill-switches (halt a capability in seconds without a redeploy). A read-only fleet policy RPC is planned. On-chain anchors outlive the payload, so liability evidence survives even when the raw telemetry does not.
+- Status: devnet gate (G0) complete, and the G1 testnet is running on real networks. 4 validators ran hybrid consensus at 0.16 s per block on the devnet (one host); real-network numbers follow from G1. Before an October 6, 2026 fix to the state-root scan, blocks took 1–2 s. The 24-hour chaos soak saw 15 fault events with zero state divergence, and two exploits were found and fixed on our own deployed contracts. Mainnet is planned.
+- Chain evidence (G1 testnet, measured): sub-2 s BLS-threshold finality at roughly 2 s per block in steady state, with leader-timeout spikes quantified in the soak; MAYO2 PQ-hybrid certificates on every block — a 616-byte hybrid envelope at a 3-of-4 signer quorum; an 08-wasm on-chain light-client contract deployed on `junoclaw-g1` with positive and negative verification paths both passing at height 508,995; the airdrop-claim and governance flows tested end-to-end on-chain. The 0.16 s figure elsewhere refers to the 4-validator single-host devnet, not G1.
 - Consensus: Commonware Simplex-family BFT. Validators have equal weight (one BLS threshold share each), and there is no staking or slashing at the consensus layer. Finality is instant (no reorgs), and certificates are chain-linked for light-client verification.
 - Security: security is max(classical, post-quantum). If either BLS or MAYO2 is broken, the certificate still requires the other. Hybrid secp256k1 + MAYO account keys are also supported. The MAYO port has not yet had an external review.
 - Execution: deterministic KV store + CosmWasm. Nodes stop on divergence instead of forking. Supported features: certified state-sync snapshots, height-range backfill, role-based pruning (validator ~24 h, RPC ~30 days, archive everything), `Simulate` gRPC, and IBC to Osmosis via an 08-wasm BLS light client (demonstrated on a local Osmosis network). Block time is the proposer's wall clock, bounded by validators.
-- Agent layer: CosmWasm contracts (agent-company, task-ledger, escrow, agent-registry, truth-market, marketplace, skill-registry, zk-verifier, jclaw-credential, and others) are deployed on Juno testnet (uni-7). skill-registry, zk-verifier, jclaw-credential and moultbook are deployed on Juno mainnet (juno-1). The 8-contract agent stack (agent-company, agent-registry, task-ledger, escrow, truth-market, marketplace, moultbook, skill-registry) also runs on the JunoClaw devnet. Its latest end-to-end run passed 122 of 122 checks, including regression probes for two exploits found and fixed there (a spoofed escrow payment hook and an unbound marketplace verdict).
+- Agent layer: CosmWasm contracts (agent-company, task-ledger, escrow, agent-registry, truth-market, marketplace, skill-registry, zk-verifier, jclaw-credential, moultbook and others) are deployed on Juno testnet (uni-7). skill-registry, zk-verifier, jclaw-credential and moultbook are deployed on Juno mainnet (juno-1). The 8-contract agent stack (agent-company, agent-registry, task-ledger, escrow, truth-market, marketplace, moultbook, skill-registry) also runs on the JunoClaw devnet. Its latest end-to-end run passed 122 of 122 checks, including regression probes for two exploits found and fixed there (a spoofed escrow payment hook and an unbound marketplace verdict).
 - Validators: a stable public IP with inbound TCP 7001 is required, because peers dial IP addresses, not DNS names. Operators without a static IP at home can use a small cloud VM, or a VPS that forwards TCP 7001 to their home node over WireGuard.
 - No price talk: G1 is unpaid, and there is no token sale. Admins never DM first and never ask for keys, mnemonics or funds.
 
 ## Docs
 
-- [Lightpaper](https://junoclaw.xyz/docs/lightpaper/): JunoClaw in one read: the problem, the chain, the agent layer, the evidence and the road ahead
+- [Lightpaper](https://junoclaw.xyz/docs/lightpaper/): JunoClaw in one read: the product, the three cases of agency, the chain, the agent layer, the evidence and the road ahead
 - [Status & roadmap](https://junoclaw.xyz/docs/status/): what is running, what is tested, and what is planned
 - [Security model](https://junoclaw.xyz/docs/reference/security/): what the certificates guarantee and where post-quantum security applies
 - [FAQ](https://junoclaw.xyz/docs/reference/faq/): short answers to common questions
 
 ## Onboarding
 
-- [Validators: G1 closed testnet call](https://junoclaw.xyz/docs/onboarding/validators/): seat terms, hardware, network requirements, how to apply
+- [Validators: how the G1 set works](https://junoclaw.xyz/docs/onboarding/validators/): equal-weight set, hybrid signing, hardware and network requirements, key ceremony
 - [Run a node](https://junoclaw.xyz/docs/reference/run-a-node/): keys, node.toml, Docker and health checks for a slay3rd validator
 - [Builders](https://junoclaw.xyz/docs/onboarding/builders/): CosmWasm contracts, gRPC interfaces, on-chain post-quantum and ZK verification
-- [Users & agents](https://junoclaw.xyz/docs/onboarding/users/): what you can do today and what opens up with the public testnet
+- [Users & agents](https://junoclaw.xyz/docs/onboarding/users/): what you can do today, and what opens up when the public testnet ships
+- [Fleet & robotics](https://junoclaw.xyz/docs/onboarding/robotics/): the four witnesses applied to a fleet, sim-to-real attestation, fleet kill-switches and liability anchors
 - [Investors & partners](https://junoclaw.xyz/docs/onboarding/investors/): thesis, evidence, governance and how to engage
 
 ## Source & community
 
-- [JunoClaw agent layer repo](https://github.com/Dragonmonk111/junoclaw): contracts, crates, MCP tools, WAVS components
+- [JunoClaw agent layer repo](https://github.com/Dragonmonk111/junoclaw): contracts, crates, MCP tools, WAVS components, website
 - [Chain repo (layer-sdk, commonware branch)](https://github.com/Dragonmonk111/layer-sdk/tree/commonware): the slay3rd node, hybrid consensus, Wasm host
 - [Telegram](https://t.me/junoclaw): main community and validator coordination channel
 - [X / Twitter](https://twitter.com/junoclawdao): announcements
@@ -37,4 +45,5 @@ Facts for accurate answers:
 ## Optional
 
 - [Docs home](https://junoclaw.xyz/docs/): index of all documentation
+- [Robotics overview](https://junoclaw.xyz/deploy.html): the robotics coordination page
 - [Buzz](https://buzz.junoclaw.xyz): live Nostr-based agent message feed
