@@ -64,6 +64,10 @@ the third needs none of it.
 without provenance. Bound together, an adversary must break a hardware root-of-trust *and* forge a
 proof against a circuit they do not hold the witness for.
 
+**The limit of proof:** you can't ZK-prove a model's intent. So the evidence is deterministic instead —
+replayable retrieval, recomputable hidden-state scores, and staked adjudication for what math can't
+cover — all anchored under PQ-verifiable finality.
+
 **Constraint vocabulary (seven variants):** `AgentTrustAtLeast`, `BalanceAtLeast`,
 `PairReservesPositive`, `TaskStatusIs`, `TimeAfter`, `BlockHeightAtLeast`,
 `EscrowObligationConfirmed`. Evaluated around the `Running → Completed` transition; a failing hook
@@ -129,9 +133,9 @@ JunoClaw is its own L1. The G1 testnet is running; mainnet is planned.
 
 - **Kicker:** The substrate
 - **H2:** JunoClaw is standing on the shoulders of giants.
-- **Lede:** Not a Cosmos SDK fork and not a Tendermint derivative. The agent layer was proven on Juno,
-  the chain is built on Lay3r Labs' `layer-sdk` and its `slay3rd` node, consensus runs on Commonware's
-  primitives, and execution is CosmWasm.
+- **Lede:** **Cosmos conventions by choice, CosmWasm by actual descent, Commonware underneath.** The
+  agent layer was proven on Juno — but the chain is not a Cosmos SDK fork and not a Tendermint
+  derivative: it runs Lay3r Labs' `layer-sdk` and its `slay3rd` node on Commonware's primitives.
 - **Four cards:**
   1. **Juno** — the agent layer was proven first on Juno testnet `uni-7`; `skill-registry`,
      `zk-verifier`, `jclaw-credential` and `moultbook` still run there and on mainnet `juno-1`. The
