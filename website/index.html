@@ -315,7 +315,7 @@
     .where em { color: var(--gold-bright); font-style: normal; }
 
     /* Proof */
-    .proofs { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+    .proofs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
     .proof { padding: 2rem 1.75rem; }
     .proof .big { font-family: var(--display); font-size: 2.5rem; font-weight: 700; letter-spacing: -0.03em;
       background: linear-gradient(110deg, var(--gold-bright), var(--violet-bright)); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -698,6 +698,7 @@
         <div class="glass-card proof"><div class="big">0</div><h3>State divergences</h3><p>The monitor compared certified payload digests across validators, and those digests bind the Merkle state root itself.</p></div>
         <div class="glass-card proof"><div class="big">3</div><h3>Findings, all fixed</h3><p>An IP-reassignment wedge and a backfill request flood. On top of that, <span class="mono">app_hash</span> now equals <span class="mono">state_root</span>, so it’s identical on every node.</p></div>
         <div class="glass-card proof"><div class="big">106</div><h3>Minutes of one wedge — published</h3><p>A home-ISP outage removed two seats sharing a failure domain and finalization halted for 106 minutes. The chain halted rather than forked — BFT correct — recovered fully, and the whole timeline is in the public record.</p></div>
+        <div class="glass-card proof"><div class="big">3.5</div><h3>Minutes to self-recover, unattended</h3><p>After the clock and restart hardening, a later finalization freeze healed itself in about 3.5 minutes with nobody touching a node — the operational fixes working exactly as designed.</p></div>
         <div class="glass-card proof"><div class="big">2</div><h3>Exploits caught on our own devnet</h3><p>Our end-to-end probe reproduced a spoofed payment hook and an unbound marketplace verdict on deployed contracts. Both are fixed and migrated in place, and the probe now proves they fail.</p></div>
       </div>
     </section>
