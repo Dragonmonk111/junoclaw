@@ -39,6 +39,7 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
+    html, body { overflow-x: clip; }
     body {
       background: var(--bg);
       color: var(--text);
@@ -103,7 +104,8 @@
       text-decoration: none; transition: border-color 0.2s, background 0.2s;
     }
     .badge:hover { border-color: var(--violet); background: rgba(139, 92, 246, 0.16); }
-    .badges { display: flex; gap: 0.7rem; justify-content: center; flex-wrap: wrap; margin-bottom: 2rem; }
+    .badges { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; max-width: 660px; margin: 0 auto 2rem; }
+    .badges .badge { justify-content: center; text-align: center; }
     .badge .dot.new { background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
     .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px var(--gold); animation: pulse 2s infinite; }
     .badge b { color: var(--gold-bright); font-weight: 500; }
@@ -298,8 +300,8 @@
     .col:hover { transform: none; }
     .col h3 { font-family: var(--display); font-size: 1.1rem; margin-bottom: 1rem; }
     .col ul { list-style: none; display: grid; gap: 0.7rem; }
-    .col li { color: var(--muted); font-size: 0.9rem; display: grid; grid-template-columns: 14px 1fr; gap: 0.7rem; }
-    .col li::before { content: ''; width: 6px; height: 6px; border-radius: 50%; margin-top: 0.55rem; background: var(--border-strong); }
+    .col li { color: var(--muted); font-size: 0.9rem; position: relative; padding-left: 1.1rem; }
+    .col li::before { content: ''; position: absolute; left: 0; top: 0.5em; width: 6px; height: 6px; border-radius: 50%; background: var(--border-strong); }
     .col.live li::before { background: #86efac; box-shadow: 0 0 8px rgba(134, 239, 172, 0.6); }
     .col.devnet li::before { background: var(--violet); box-shadow: 0 0 8px rgba(139, 92, 246, 0.6); }
     .col.plan li::before { background: var(--dim); }
@@ -381,7 +383,11 @@
       .stats { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 640px) {
+      .badges { grid-template-columns: 1fr; }
       .links a:not(.pill) { display: none; }
+      .cert-viz .row { flex-direction: column; gap: 0.15rem; }
+      .cert-viz .v { text-align: left; overflow-wrap: anywhere; }
+      .spec li { flex-wrap: wrap; }
       section { padding: 4.5rem 1.2rem; }
       .g1 .l, .g1 .r { padding: 2rem 1.4rem; }
       .pace { padding: 1.6rem 1.3rem; }
@@ -405,6 +411,7 @@
     <a class="brand" href="#top"><img src="/assets/logo.png" alt="JunoClaw" /><span>JUNO<em>CLAW</em></span></a>
     <div class="links">
       <a href="#top">Main</a>
+      <a href="#chain">Under the hood</a>
       <a href="/docs/lightpaper/">Lightpaper</a>
       <a href="/docs/">Docs</a>
       <a href="https://explorer.junoclaw.xyz" target="_blank" rel="noopener">Explorer</a>
@@ -527,6 +534,18 @@
       </div>
     </section>
 
+    <section id="truth">
+      <div class="reveal">
+        <div class="kicker">The truth layer</div>
+        <h2>Many open eyes, one truth.</h2>
+        <p class="lede">JLens runs many independent, high-parameter open-source models through a deterministic sandwich — same prompt, same inputs, same decode, attested — and a live truth-market prices the agreement: convergent verdicts earn, divergence gets slashed. Unbiased is a property of the population, not the model.</p>
+      </div>
+      <div class="glass-card problem reveal">
+        <p>Truth is a consumable. Robotics fleets, medical and legal pipelines, and agent-to-agent commerce don't buy <em>an answer</em> — they buy deterministically verifiable truth from agents whose stakes are on the line. Not yield; wages. Work → receipts → credibility → a governance seat.</p>
+      </div>
+      <p class="punch reveal">JunoClaw is a truth operating system for verifiable, deterministic agents and robotics — the chain keeps the ledger, the contracts keep the market, and JLens keeps the truth.</p>
+    </section>
+
     <section id="chain">
       <div class="reveal">
         <div class="kicker">Under the hood</div>
@@ -534,8 +553,8 @@
         <p class="lede">“Verifiable” is not a claim here — it is a measurement. This is what the G1 soak measured on real networks.</p>
       </div>
       <div class="loop reveal">
-        <div class="glass-card step"><div class="n">01</div><h3>State-certifying finality, measured</h3><p>The G1 soak ran 48.2 h across independent operators: <strong>3.5 s median</strong> cadence on a fully distributed quorum, <strong>0.11 s</strong> in the best sustained hour once quorum paths were tight. Every block binds the executed state root.</p></div>
-        <div class="glass-card step"><div class="n">02</div><h3>PQ-hybrid on every block</h3><p>Every block carries a hybrid certificate — a <strong>616-byte envelope</strong> at a <strong>3-of-4 signer quorum</strong>, each vote carrying a BLS12-381 threshold partial <em>and</em> a MAYO2 signature.</p></div>
+        <div class="glass-card step"><div class="n">01</div><h3>State-certifying finality, measured</h3><p>The G1 soak ran 48.2 h across independent operators: <strong>0.11 s</strong> in the best sustained hour once quorum paths were tight, <strong>3.5 s median</strong> cadence on a fully distributed quorum. Every block binds the executed state root.</p></div>
+        <div class="glass-card step"><div class="n">02</div><h3>PQ-hybrid on every block</h3><p>Every block carries a hybrid certificate — a <strong>616-byte envelope</strong>, each vote carrying a BLS12-381 threshold partial <em>and</em> a MAYO2 signature.</p></div>
         <div class="glass-card step"><div class="n">03</div><h3>An on-chain light client</h3><p>An <strong>08-wasm light-client contract</strong> is deployed on <code>junoclaw-g1</code>, with both verification paths — positive <em>and</em> negative — passing at height <strong>508,995</strong>.</p></div>
         <div class="glass-card step"><div class="n">04</div><h3>Airdrop and governance, end to end</h3><p>The <strong>airdrop-claim</strong> flow and the <strong>governance</strong> flow are both exercised end-to-end on-chain — not mocked, not proposed.</p></div>
       </div>
@@ -632,12 +651,12 @@
           <h3>Running today</h3>
           <ul>
             <li>G1 ceremony complete — 48.2 h soak, zero divergence</li>
-            <li>Public explorer + TLS API + status monitor (<a href="https://explorer.junoclaw.xyz" target="_blank" rel="noopener" style="color:var(--cyan)">explorer.junoclaw.xyz</a>)</li>
-            <li>Open-source full-history archiver (<code>tools/cdc-archiver</code>)</li>
+            <li>Public explorer, TLS API and status monitor — <a href="https://explorer.junoclaw.xyz" target="_blank" rel="noopener" style="color:var(--cyan); white-space:nowrap">explorer.junoclaw.xyz</a></li>
+            <li>Open-source full-history archiver — <code>tools/cdc-archiver</code></li>
             <li>Buzz agent coordination on a sovereign relay</li>
-            <li>On-chain post-quantum and ZK verification (MAYO-1/2/3/5, Groth16)</li>
+            <li>On-chain post-quantum and ZK verification — MAYO-1/2/3/5, Groth16</li>
             <li>TEE attestation quote anchored on-chain</li>
-            <li>Tier-1.5 constraint vocabulary on <code>uni-7</code></li>
+            <li>Tier-1.5 constraint vocabulary — <code>uni-7</code></li>
             <li>Fleet kill-switches and compile-time hardening</li>
           </ul>
         </div>
