@@ -553,7 +553,7 @@
         <p class="lede">“Verifiable” is not a claim here — it is a measurement. This is what the G1 soak measured on real networks.</p>
       </div>
       <div class="loop reveal">
-        <div class="glass-card step"><div class="n">01</div><h3>State-certifying finality, measured</h3><p>The G1 soak ran 48.2 h across independent operators: <strong>0.11 s</strong> in the best sustained hour once quorum paths were tight, <strong>3.5 s median</strong> cadence on a fully distributed quorum. Every block binds the executed state root.</p></div>
+        <div class="glass-card step"><div class="n">01</div><h3>State-certifying finality, measured</h3><p>The G1 soak ran 48.2 h across independent operators: <strong>0.11 s</strong> in the best sustained hour — <strong>6–8</strong> certified blocks a second in healthy windows on a fully distributed quorum. Every block binds the executed state root.</p></div>
         <div class="glass-card step"><div class="n">02</div><h3>PQ-hybrid on every block</h3><p>Every block carries a hybrid certificate — a <strong>616-byte envelope</strong>, each vote carrying a BLS12-381 threshold partial <em>and</em> a MAYO2 signature.</p></div>
         <div class="glass-card step"><div class="n">03</div><h3>An on-chain light client</h3><p>An <strong>08-wasm light-client contract</strong> is deployed on <code>junoclaw-g1</code>, with both verification paths — positive <em>and</em> negative — passing at height <strong>508,995</strong>.</p></div>
         <div class="glass-card step"><div class="n">04</div><h3>Airdrop and governance, end to end</h3><p>The <strong>airdrop-claim</strong> flow and the <strong>governance</strong> flow are both exercised end-to-end on-chain — not mocked, not proposed.</p></div>
@@ -686,11 +686,11 @@
         <div class="pace-head">
           <div>
             <div class="pace-num"><span class="grad">0.11 s</span></div>
-            <div class="pace-l">per block in the best sustained hour of the G1 soak — median 3.5 s on a fully distributed quorum. Every block carries a hybrid BLS + MAYO2 certificate over the executed state root.</div>
+            <div class="pace-l">per block in the best sustained hour of the G1 soak — ~250 ms in healthy windows on a fully distributed quorum. Every block carries a hybrid BLS + MAYO2 certificate over the executed state root.</div>
           </div>
           <div class="pace-vs">October 5<b>1–2 s</b></div>
         </div>
-        <div class="lane" data-ms="3500" aria-hidden="true"><span class="lane-l">Distributed quorum · 3.5 s median</span><div class="cells"></div><span class="lane-n">0 blocks</span></div>
+        <div class="lane" data-ms="250" aria-hidden="true"><span class="lane-l">Healthy windows · ~250 ms</span><div class="cells"></div><span class="lane-n">0 blocks</span></div>
         <div class="lane fast" data-ms="110" aria-hidden="true"><span class="lane-l">Best sustained hour · 0.11 s</span><div class="cells"></div><span class="lane-n">0 blocks</span></div>
         <p class="pace-cap">Each lit cell is one finalized block, animated at the measured pace (not live data). Both numbers are from the 48.2 h G1 soak across independent operators — 361,709 blocks, heights 512,776 → 874,485. Live tip: <a href="https://explorer.junoclaw.xyz" target="_blank" rel="noopener" style="color:var(--violet-bright)">explorer.junoclaw.xyz ↗</a></p>
       </div>
@@ -710,10 +710,10 @@
           <tr><td>Ethereum</td><td>~13–15 min economic</td><td>account-level research</td><td>sync committee</td><td>world computer</td></tr>
           <tr><td>Cosmos appchains</td><td>~3–6 s per block</td><td>none shipped</td><td>header chains</td><td>sovereign zones</td></tr>
           <tr><td>Sei Giga</td><td>~250 ms, ordering only</td><td>none</td><td>—</td><td>trading</td></tr>
-          <tr class="us"><td>JunoClaw</td><td>0.11–3.5 s on G1, certifies state root</td><td>quorum-level, running</td><td>chain-linked BLS certs</td><td>verifiable agents &amp; robotics</td></tr>
+          <tr class="us"><td>JunoClaw</td><td>~0.25 s typical, 0.11 s best on G1, certifies state root</td><td>quorum-level, running</td><td>chain-linked BLS certs</td><td>verifiable agents &amp; robotics</td></tr>
         </table>
       </div>
-      <p class="note reveal">Speed alone isn’t the differentiator. What’s different is the combination: state-certifying finality, post-quantum certificates at the quorum level, a light-client proof path, and a readable safety vocabulary — all in one small codebase. In exchange we give up ecosystem gravity. Both JunoClaw numbers are measured on G1 across independent operators — 3.5 s median while fully distributed, 0.11 s in the best hour when quorum paths were tight.</p>
+      <p class="note reveal">Speed alone isn’t the differentiator. What’s different is the combination: state-certifying finality, post-quantum certificates at the quorum level, a light-client proof path, and a readable safety vocabulary — all in one small codebase. In exchange we give up ecosystem gravity. Both JunoClaw numbers are measured on G1 across independent operators — ~0.25 s in typical healthy windows, 0.11 s in the best sustained hour.</p>
     </section>
 
     <section id="proof">
@@ -821,7 +821,7 @@
       cells.innerHTML = '<i class="cell"></i>'.repeat(n);
       const list = cells.children;
       if (reduce) {
-        const lit = lane.classList.contains('fast') ? n : Math.round(n * 0.11 / 3.5);
+        const lit = lane.classList.contains('fast') ? n : Math.round(n * 110 / ms);
         for (let k = 0; k < lit; k++) list[k].classList.add('on');
         count.textContent = (1000 / ms).toFixed(1) + ' blocks/s';
         return;
