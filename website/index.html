@@ -556,9 +556,9 @@
         <div class="glass-card step"><div class="n">01</div><h3>State-certifying finality, measured</h3><p>The G1 soak ran 48.2 h across independent operators: <strong>0.11 s</strong> in the best sustained hour — <strong>6–8</strong> certified blocks a second in healthy windows on a fully distributed quorum. Every block binds the executed state root.</p></div>
         <div class="glass-card step"><div class="n">02</div><h3>PQ-hybrid on every block</h3><p>Every block carries a hybrid certificate — a <strong>616-byte envelope</strong>, each vote carrying a BLS12-381 threshold partial <em>and</em> a MAYO2 signature.</p></div>
         <div class="glass-card step"><div class="n">03</div><h3>An on-chain light client</h3><p>An <strong>08-wasm light-client contract</strong> is deployed on <code>junoclaw-g1</code>, with both verification paths — positive <em>and</em> negative — passing at height <strong>508,995</strong>.</p></div>
-        <div class="glass-card step"><div class="n">04</div><h3>Airdrop and governance, end to end</h3><p>The <strong>airdrop-claim</strong> flow and the <strong>governance</strong> flow are both exercised end-to-end on-chain — not mocked, not proposed.</p></div>
+        <div class="glass-card step"><div class="n">04</div><h3>Governance, end to end</h3><p>Proposals, votes, quorum and execution all run on the live chain — the full <code>agent-company</code> path, exercised end-to-end on-chain rather than mocked.</p></div>
       </div>
-      <p class="note reveal">No other agent stack can point at that: a light client verifying post-quantum certificates on-chain, an airdrop you can claim, and governance you can run — all measured across a 48.2 h soak with zero divergence.</p>
+      <p class="note reveal">No other agent stack can point at that: a light client verifying post-quantum certificates on-chain, and governance you can run on it — all measured across a 48.2 h soak with zero divergence.</p>
     </section>
 
     <section id="loop">
