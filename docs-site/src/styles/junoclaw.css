@@ -1,5 +1,5 @@
 /* JunoClaw brand on top of Starlight — violet / gold on deep space */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import './fonts/fonts.css';
 
 :root {
   --sl-font: 'Inter', 'Segoe UI', system-ui, sans-serif;

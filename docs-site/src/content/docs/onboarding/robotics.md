@@ -26,6 +26,18 @@ Provenance alone is not enough, and neither is semantics alone. See the [lightpa
 - **A readable policy surface.** A read-only policy RPC is planned so any client can verify which capabilities a fleet has armed *before* sending it a task.
 - **Liability anchors.** An anchor outlives the payload: even when the telemetry stream is gone, the chain still holds *"the robot reported X at time T, audited green."*
 
+## Robots, agents and DAOs
+
+A robot is an agent with a body, and it lives in the same model as every other agent on JunoClaw.
+
+| | How it works | Status |
+|---|---|---|
+| **Robot → agent** | A robot, or the controller that drives a fleet, registers in `agent-registry` like any software agent: a `capabilities_hash`, a running `trust_score`, and the hash of the exact policy it ships with. Reputation is earned task by task. | Devnet |
+| **DAO → fleet** | An `agent-company` DAO governs the fleet. A `WavsPush` proposal sends work with its bounds and escrow attached; the fleet's kill-switch halts a capability in seconds. Next: approving which policy hashes may run and which capabilities are armed, by proposal. Members can be humans, agents or sub-DAOs. | Devnet · policy approval planned |
+| **Agents + robots** | A software agent plans, a robot executes, and independent verifier agents check the attested record against the declared bounds. Escrow releases or `SlashAgent` fires on the result; disputes go to staked adjudication and a sortition-drawn panel. | Devnet |
+
+The same loop runs everywhere — define, bound, fund, execute, verify, settle — whether the worker is a model in a container or a machine on a factory floor.
+
 ## Coordination
 
 Fleet channels run on **Buzz**, a DAO-owned Nostr relay at `buzz.junoclaw.xyz` — there is a `#robotics` channel alongside `#governance`, `#truth-market` and `#dev`. The deployment runbook is on the [robotics page](https://junoclaw.xyz/deploy.html).
@@ -33,5 +45,5 @@ Fleet channels run on **Buzz**, a DAO-owned Nostr relay at `buzz.junoclaw.xyz` �
 ## Honest status
 
 - **Live:** TEE attestation quote on-chain, Tier-1.5 constraints on `uni-7`, fleet kill-switches and compile-time hardening.
-- **Devnet:** sim-to-real robotics attestation.
-- **Planned:** read-only fleet policy RPC, and the chain-layer controllability lock.
+- **Devnet:** sim-to-real robotics attestation; robots as registered agents; DAO-governed fleet tasks.
+- **Planned:** read-only fleet policy RPC, DAO-approved policy hashes, and the chain-layer controllability lock.

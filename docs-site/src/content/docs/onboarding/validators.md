@@ -1,22 +1,22 @@
 ---
-title: Validators — how the G1 set works
-description: How the JunoClaw G1 validator set is configured — equal weight, hybrid signing, the key ceremony and node requirements.
+title: Validators — how the set works
+description: How the JunoClaw validator set works in G2 — equal weight, hybrid signing, the key ceremony and node requirements.
 ---
 
 <p class="jc-kicker">The validator set · G2 public testnet</p>
 
-**G1 is closed.** The first multi-operator ceremony ran a 48.2-hour soak across independent operators: 361,709 finalized blocks (heights 512,776 → 874,485), zero state divergence, and one documented 106-minute wedge — root-caused to two seats sharing a host's failure domain, published in full, and the fix is now an onboarding rule. **G2 opens the set to external operators and grows it toward n=5, then n=7 for mainnet.** This page is the reference for how the validator set works.
+**G2 is live: 8 equal-weight seats, threshold 6 of 8, run by external operators.** It builds on G1 — a 48.2-hour soak across independent operators: 361,709 finalized blocks (heights 512,776 → 874,485), zero state divergence, and one documented 106-minute wedge, root-caused to two seats sharing a failure domain; that fix is now an onboarding rule. **Seats are earned on verifiable work:** new operators run as observers first and join the set at the next reshare window. This page is the reference for how the validator set works.
 
 ## What a validator does
 
 | | |
 |---|---|
-| **Set** | Equal weight; external operators join in batched, devnet-rehearsed set-change windows |
+| **Set** | 8 equal-weight seats today (threshold 6 of 8); external operators join in batched, announced set-change windows |
 | **Weight** | Equal. One BLS threshold share per validator, with no stake weighting |
 | **Consensus** | Commonware Simplex BFT, hybrid BLS12-381 + MAYO2 certificates |
 | **Staking / slashing** | None at the consensus layer. Safety comes from the BLS threshold, and economic stake lives in the truth-market contracts |
 | **Rewards** | **None. This is an unpaid testnet.** Early operators are credited publicly and are first in line for later phases |
-| **Set changes** | Static set. Changes are coordinated config + binary upgrades at an agreed height |
+| **Set changes** | By reshare at announced windows — the group key (IBC trust root) stays the same. Observer first, then a seat; seats stay with operators who respond by the published cutoff and keep their bit in certificates |
 
 ## What you need
 

@@ -16,7 +16,7 @@ The chain's denom is `ujclaw` and is used for gas. No token sale exists, and non
 Certificates need a quorum of BLS **and** MAYO2 signatures. A future quantum attacker who breaks BLS would still have to forge MAYO2.
 
 **How fast is it?**
-On the G1 multi-operator testnet a block finalized every ~3.5 s on a fully distributed quorum, and 0.11 s in the best sustained hour once quorum paths were tight — the certificate covers the executed state either way. Speed is not our pitch, though. The combination of fast finality, PQ certificates and a light-client path is.
+On the G2 public testnet blocks finalize at ~0.36 s on average across external operators (measured over ~18,000 blocks on 25 Oct 2026); the G1 soak's best sustained hour was 0.11 s — the certificate covers the executed state either way. Speed is not our pitch, though. The combination of fast finality, PQ certificates and a light-client path is.
 
 **Can I run a validator?**
 G2 is onboarding external operators in batched set-change windows. See the [validator call](/docs/onboarding/validators/).

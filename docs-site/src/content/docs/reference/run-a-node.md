@@ -29,7 +29,7 @@ docker build -f docker/Dockerfile.slay3rd -t junoclaw-chain:latest .
 - On non-Unix hosts the binary verifies MAYO signatures but cannot produce them, so it cannot vote in hybrid mode.
 - **Builds from before 2026-10-06 are incompatible.** They stamp blocks with view-derived time, while the current set uses wall-clock time, so each side rejects the other's proposals. Rebuild before rejoining.
 
-For G1, accepted operators get a pinned commit and image digest so that every validator runs identical code.
+For G2, accepted operators get a pinned commit and image digest so that every validator runs identical code.
 
 ## 2. Keys
 
@@ -39,7 +39,7 @@ Your `keys.json` holds:
 - **MAYO2 key** (hybrid mode). The post-quantum half of every vote
 - **Ed25519 identity.** Authenticates your P2P connections
 
-On devnet the coordinator generates keys centrally. Those shares come from a public seed, so the node only accepts them with `insecure_devnet = true` (see below). For G1, keys come out of the key ceremony: you generate your Ed25519 and MAYO2 keys locally, and the coordinator deals your BLS share from OS randomness and sends it to you encrypted (see [Validators](/docs/onboarding/validators/)). Back up `keys.json` offline once. If you lose it, you lose your seat until the set is changed.
+On devnet the coordinator generates keys centrally. Those shares come from a public seed, so the node only accepts them with `insecure_devnet = true` (see below). For G2, keys come out of the key ceremony: you generate your Ed25519 and MAYO2 keys locally, and the coordinator deals your BLS share from OS randomness and sends it to you encrypted (see [Validators](/docs/onboarding/validators/)). Back up `keys.json` offline once. If you lose it, you lose your seat until the set is changed.
 
 ## 3. `node.toml`
 
@@ -47,7 +47,7 @@ This mirrors the running devnet config:
 
 ```toml
 validator_index = 0                 # assigned at genesis; must match your key share
-chain_id = "junoclaw-1"             # devnet value — G1 chain id is issued with genesis
+chain_id = "junoclaw-1"             # devnet value — G2 chain id is issued with genesis
 p2p_listen  = "0.0.0.0:7001"
 grpc_listen = "0.0.0.0:9090"
 bls_key_path      = "/keys/keys.json"
@@ -80,7 +80,7 @@ public_key = "<ed25519-pubkey-hex>"
 - `[[peers]]` lists the other validators.
 - **Clock.** Your proposals carry your wall-clock time, and validators reject a block stamped more than 2 s ahead of their own clock. Run NTP (chrony or systemd-timesyncd).
 
-**`insecure_devnet`** is for the devnet only. With it, the node accepts an empty `genesis_path` (the built-in devnet genesis), coordinator-dealt keys, and genesis files that fund or empower a built-in devnet address. Without it, the node refuses all three at startup. Never set it on G1.
+**`insecure_devnet`** is for the devnet only. With it, the node accepts an empty `genesis_path` (the built-in devnet genesis), coordinator-dealt keys, and genesis files that fund or empower a built-in devnet address. Without it, the node refuses all three at startup. Never set it on G2.
 
 ## 4. Run
 
@@ -111,7 +111,8 @@ Block finalized — certificate stored … app_hash=… digest=…
 Finality record stored (certificate, proposal, timestamp) height=…
 ```
 
-- Heights should rise steadily — about one finalized block every ~3.5 s on the multi-operator network (0.11 s in the best sustained hour of the G1 soak).
+- Heights should rise steadily — sub-second blocks on the G2 network (~0.36 s average on 25 Oct 2026). A height that stops rising for minutes means the chain or your seat needs attention.
+- Confirm you are *signing*, not just running: your validator index should appear regularly in the signer bitmap of recent certificates (method in the operator runsheet). Your own node over-counts your bit — ask another seat to read it for independent proof.
 - `app_hash` should be **identical across all validators** at the same height. It equals the certified `state_root`.
 
 **Node up but not signing?** Check that:

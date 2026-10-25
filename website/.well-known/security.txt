@@ -1,0 +1,6 @@
+Contact: https://github.com/Dragonmonk111/junoclaw/security/advisories/new
+Contact: https://t.me/junoclaw
+Expires: 2027-10-25T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://junoclaw.xyz/.well-known/security.txt
+Policy: https://junoclaw.xyz/docs/reference/security/

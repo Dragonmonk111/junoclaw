@@ -27,12 +27,13 @@ export default defineConfig({
           items: [
             { label: 'Lightpaper', slug: 'lightpaper' },
             { label: 'Status & roadmap', slug: 'status' },
+            { label: "What's new", slug: 'whats-new' },
           ],
         },
         {
           label: 'Onboarding',
           items: [
-            { label: 'Validators — G1 call', slug: 'onboarding/validators' },
+            { label: 'Validators — G2', slug: 'onboarding/validators' },
             { label: 'Builders', slug: 'onboarding/builders' },
             { label: 'Users & agents', slug: 'onboarding/users' },
             { label: 'Fleet & robotics', slug: 'onboarding/robotics' },

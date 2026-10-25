@@ -3,18 +3,19 @@ title: Status & roadmap
 description: What is running, what is tested, and what is planned — kept honest and current.
 ---
 
-*Last updated: October 12, 2026.*
+*Last updated: October 25, 2026.*
 
 ## Running
 
 | Area | Detail |
 |---|---|
-| Consensus | Commonware Simplex BFT, 4-seat validator set across 3 independent operators, threshold BLS12-381 certificates |
+| Consensus | Commonware Simplex BFT, G2 public testnet: 8 equal-weight seats across independent operators, threshold 6 of 8, BLS12-381 threshold certificates |
 | PQ hybrid | `hybrid_consensus`: BLS partial + MAYO2 signature per vote, quorum on both |
-| Finality | ~3.5 s median cadence on a distributed quorum; **0.11 s** best sustained hour measured on the G1 soak. The certificate binds the executed `state_root`. A finality record (certificate, proposal, timestamp) is stored per height |
+| Finality | ~0.36 s average per block on G2 across external operators (~18,000 blocks measured on 25 Oct); **0.11 s** best sustained hour measured on the G1 soak. The certificate binds the executed `state_root`. A finality record (certificate, proposal, timestamp) is stored per height |
 | Validation | Proposals checked for height, parent, `state_root`, size and wall-clock timestamp (after the parent, at most 2 s ahead). Byzantine proposer tested |
 | Mempool | Dedupe, recheck after commit, strict sequence admission |
-| Sync | Height-range backfill, certified state-sync with a multi-peer anchor quorum, locally verified anchor certificate and a capped download size |
+| Sync | Height-range backfill, certified state-sync with a multi-peer anchor quorum — at least two donors must advertise the same snapshot root — locally verified anchor certificate and a capped download size |
+| Set changes | Reshare at announced windows, group key (IBC trust root) unchanged. Observer-first onboarding; signing verified from certificate signer bitmaps |
 | Storage | Durable payload store, tx index, role-tier pruning: validators keep ~24 h (540,000 heights) of payloads and finality records, RPC nodes ~30 days, archives everything. Peers backfill across the whole window |
 | gRPC | `BroadcastTx`, `GetTx`, `Simulate`, bank/wasm queries |
 | Contracts | CosmWasm, in-contract MAYO-1/2/3/5 + Groth16 verification |
@@ -51,7 +52,7 @@ description: What is running, what is tested, and what is planned — kept hones
 |---|---|---|
 | G0 | Devnet hardened | **Done** |
 | G1 | Closed testnet: multi-operator ceremony, 48.2 h soak, verdict + post-mortem published | **Done** |
-| G2 | Public testnet: external operators (independent failure domains), faucet, wallet gateway, PQ verifier fuzzing + external review | **In progress — onboarding** |
+| G2 | Public testnet: external operators (independent failure domains) — **running**. Still to come: public faucet, wallet gateway, PQ verifier fuzzing + external review | **Live — growing** |
 | Post-G2 | ML-DSA-65 hybrid accounts, PQ finality checkpoints, PQ light client for IBC | Planned |
 
 ## Known gaps (tracked openly)

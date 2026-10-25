@@ -34,7 +34,7 @@ See [Status & roadmap](/docs/status/) for the full live-versus-planned breakdown
 
 ## Ways to engage
 
-- **Infrastructure partners.** Run a [G1 validator](/docs/onboarding/validators/).
+- **Infrastructure partners.** Run a [G2 validator](/docs/onboarding/validators/).
 - **Security partners.** External review of the MAYO port and the consensus path.
 - **Ecosystem and grant programs.** Agent tooling, light-client productization, robotics attestation.
 

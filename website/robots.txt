@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://junoclaw.xyz/sitemap.xml
+Sitemap: https://junoclaw.xyz/docs/sitemap-index.xml
