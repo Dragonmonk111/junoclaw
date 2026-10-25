@@ -40,6 +40,6 @@ JunoClaw runs **CosmWasm** contracts behind a **Cosmos-style gRPC** interface. I
 1. Read the [lightpaper](/docs/lightpaper/) and [security model](/docs/reference/security/).
 2. Browse the contracts and tooling: [`Dragonmonk111/junoclaw`](https://github.com/Dragonmonk111/junoclaw).
 3. Browse the chain: [`Dragonmonk111/layer-sdk` @ `commonware`](https://github.com/Dragonmonk111/layer-sdk/tree/commonware).
-4. Say what you want to build in [Telegram](https://t.me/junoclaw) or on the [Buzz](https://buzz.junoclaw.xyz) dev channel. Builder access to the G2 testnet is arranged directly.
+4. Say what you want to build in [Telegram](https://t.me/junoclaw) or on the [Buzz](https://relay.junoclaw.xyz) dev channel. Builder access to the G2 testnet is arranged directly.
 
 Code is dual-licensed **MIT OR Apache-2.0**.

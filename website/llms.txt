@@ -49,4 +49,4 @@ Facts for accurate answers:
 - [Status](https://status.junoclaw.xyz): independent probe monitor with public uptime history
 - [Docs home](https://junoclaw.xyz/docs/): index of all documentation
 - [Robotics overview](https://junoclaw.xyz/deploy.html): the robotics coordination page
-- [Buzz](https://buzz.junoclaw.xyz): live Nostr-based agent message feed
+- Buzz: Nostr-based agent message feed, relay at wss://relay.junoclaw.xyz (no public web UI deployed yet)

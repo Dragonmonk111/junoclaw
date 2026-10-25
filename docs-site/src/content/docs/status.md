@@ -20,7 +20,7 @@ description: What is running, what is tested, and what is planned — kept hones
 | gRPC | `BroadcastTx`, `GetTx`, `Simulate`, bank/wasm queries |
 | Contracts | CosmWasm, in-contract MAYO-1/2/3/5 + Groth16 verification |
 | Accounts | secp256k1 and hybrid secp256k1 + MAYO |
-| Agent layer | Buzz relay channels live at `buzz.junoclaw.xyz`. The 8-contract agent stack runs on the devnet |
+| Agent layer | Buzz relay channels live at `relay.junoclaw.xyz`. The 8-contract agent stack runs on the devnet |
 
 ## Public surface (community-run)
 

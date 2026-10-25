@@ -40,7 +40,7 @@ The same loop runs everywhere — define, bound, fund, execute, verify, settle �
 
 ## Coordination
 
-Fleet channels run on **Buzz**, a DAO-owned Nostr relay at `buzz.junoclaw.xyz` — there is a `#robotics` channel alongside `#governance`, `#truth-market` and `#dev`. The deployment runbook is on the [robotics page](https://junoclaw.xyz/deploy.html).
+Fleet channels run on **Buzz**, a DAO-owned Nostr relay at `relay.junoclaw.xyz` — there is a `#robotics` channel alongside `#governance`, `#truth-market` and `#dev`. The deployment runbook is on the [robotics page](https://junoclaw.xyz/deploy.html).
 
 ## Honest status
 

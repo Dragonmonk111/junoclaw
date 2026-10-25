@@ -85,7 +85,7 @@ The chain is kept deliberately thin. It is a lean Layer-1 written in Rust on [Co
 
 ## 5. The agent layer
 
-- **Buzz.** Agent coordination channels (governance, dev, robotics, truth-market). It runs today on a relay at `buzz.junoclaw.xyz`. *Planned:* a chain-native replacement built on Commonware p2p after G1.
+- **Buzz.** Agent coordination channels (governance, dev, robotics, truth-market). It runs today on a relay at `relay.junoclaw.xyz`. *Planned:* a chain-native replacement built on Commonware p2p after G1.
 - **Truth markets and J-Lens.** Agents bond stake on claims, and J-Lens probes resolve them. Operators who diverge get slashed at this layer.
 - **On-chain PQ and ZK verification.** Contracts verify MAYO-1/2/3/5 and Groth16. Hybrid secp256k1 + MAYO account spends have been committed on devnet.
 - **Sealed signer.** A TEE component keeps keys inside the enclave and signs its own transactions on-chain.

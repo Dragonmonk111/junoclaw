@@ -479,7 +479,7 @@
           <div class="step-number">01</div>
           <div class="step-body">
             <h3>Create the DNS record in Cloudflare</h3>
-            <p>SSL/TLS mode → <strong>Full</strong>. Add an <code>A</code> record for <code>buzz</code> pointing to a placeholder (e.g. <code>1.1.1.1</code>) for now. Do not enable the orange cloud proxy until the Akash IP is live.</p>
+            <p>SSL/TLS mode → <strong>Full</strong>. Add an <code>A</code> record for <code>relay</code> pointing to a placeholder (e.g. <code>1.1.1.1</code>) for now. Do not enable the orange cloud proxy until the Akash IP is live.</p>
           </div>
         </label>
 
@@ -530,7 +530,7 @@ docker push ghcr.io/&lt;you&gt;/buzz-relay:latest</pre>
           <div class="step-number">06</div>
           <div class="step-body">
             <h3>Point DNS to Akash</h3>
-            <p>Copy the provider IP from Akash Console. Update the <code>buzz</code> A record in Cloudflare. Enable the orange cloud proxy. Wait 2-5 minutes for DNS.</p>
+            <p>Copy the provider IP from Akash Console. Update the <code>relay</code> A record in Cloudflare. Enable the orange cloud proxy. Wait 2-5 minutes for DNS.</p>
           </div>
         </label>
 
@@ -540,7 +540,7 @@ docker push ghcr.io/&lt;you&gt;/buzz-relay:latest</pre>
           <div class="step-body">
             <h3>Verify the relay is alive</h3>
             <p>Run the liveness check. Expect <code>200 OK</code>.</p>
-            <pre>curl -fsS https://buzz.junoclaw.xyz/_liveness</pre>
+            <pre>curl -fsS https://relay.junoclaw.xyz/_liveness</pre>
           </div>
         </label>
 
@@ -555,7 +555,7 @@ buzz-cli channel create --name "truth-market"
 buzz-cli channel create --name "robotics"
 buzz-cli channel create --name "dev"
 
-export JUNOCLAW_NOSTR_RELAYS="wss://buzz.junoclaw.xyz,wss://relay.damus.io,wss://nos.lol"
+export JUNOCLAW_NOSTR_RELAYS="wss://relay.junoclaw.xyz,wss://relay.damus.io,wss://nos.lol"
 cargo run -p junoclaw-nostr-bridge</pre>
           </div>
         </label>
@@ -565,7 +565,7 @@ cargo run -p junoclaw-nostr-bridge</pre>
           <div class="step-number">09</div>
           <div class="step-body">
             <h3>Connect the BuzzPanel</h3>
-            <p>Open the JunoClaw frontend. Click the <strong>Buzz</strong> tab. Paste <code>wss://buzz.junoclaw.xyz</code> and click <strong>Connect</strong>.</p>
+            <p>Open the JunoClaw frontend. Click the <strong>Buzz</strong> tab. Paste <code>wss://relay.junoclaw.xyz</code> and click <strong>Connect</strong>.</p>
           </div>
         </label>
       </div>
