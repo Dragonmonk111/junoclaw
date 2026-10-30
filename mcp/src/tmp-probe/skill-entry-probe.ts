@@ -24,6 +24,12 @@ async function main() {
     console.log("G1 get_skill:", (e as Error).message.slice(0, 300));
   }
   try {
+    const cfg = await client.queryContractSmart(SR, { get_config: {} });
+    console.log("G1 config:", JSON.stringify(cfg));
+  } catch (e) {
+    console.log("G1 config:", (e as Error).message.slice(0, 300));
+  }
+  try {
     const l = await client.queryContractSmart(SR, { list_skills: {} });
     console.log("G1 list_skills:", JSON.stringify(l).slice(0, 2000));
   } catch (e) {
