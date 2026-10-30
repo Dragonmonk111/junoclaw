@@ -121,7 +121,9 @@ verdict → truth-market operators adjudicate disputes (min stake
 
 ## On-chain skill registry (this file's distribution mechanism)
 
-This file is registered on Juno's `skill-registry` contract:
+This file is registered as `junoclaw-cosmos-mcp` on the `skill-registry`
+contracts of **junoclaw-g1 (canonical — the pin our agents verify
+against)** and juno-1 (outreach mirror; same publisher, same pin):
 
 ```
 QueryMsg::GetSkill { dapp_name: "junoclaw-cosmos-mcp" }
@@ -129,5 +131,7 @@ QueryMsg::GetSkill { dapp_name: "junoclaw-cosmos-mcp" }
 
 returns `{ skill_uri, skill_hash, chain_id, publisher, version }`. Fetch
 `skill_uri`, verify its SHA-256 against `skill_hash`, then treat this
-manual as authoritative. Any other dApp on any chain can register the same
-way — see `drafts/PLAN_ONCHAIN_SKILL_REGISTRY.md` in the main repo.
+manual as authoritative. The registered `skill_uri` is pinned to a git
+commit SHA, so the fetched content always matches the pin — an entry
+can age, it can't lie. Any other dApp on any chain can register the
+same way — see `drafts/PLAN_ONCHAIN_SKILL_REGISTRY.md` in the main repo.

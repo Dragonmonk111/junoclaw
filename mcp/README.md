@@ -411,33 +411,39 @@ The chain registry includes IBC channel metadata for cross-chain transfers:
 
 #### Republishing SKILL.md after edits
 
-`SKILL.md` is hash-pinned on-chain (`junoclaw-cosmos-mcp` on juno-1 and
-junoclaw-g1, publisher `juno1aq995jf4fezcghl6ar6k79hk9layss8w6q2t7z` —
-the `builder` wallet). Every edit to `SKILL.md` stalemates the pin:
-agents verifying `sha256(fetched file) == skill_hash` will fail until
-republished. Order matters — **push to GitHub first** (the registered
-`skill_uri` serves `main/mcp/SKILL.md`), then update both entries:
+`SKILL.md` is hash-pinned on-chain as `junoclaw-cosmos-mcp` — canonical
+on **junoclaw-g1** (contract `juno1mu0rqss5…`), mirrored on juno-1
+(contract `juno1wp5fpcxu…`). Publisher on both:
+`juno1aq995jf4fezcghl6ar6k79hk9layss8w6q2t7z` (the `builder` wallet —
+only `publisher` or contract admin may `update_skill`).
+
+The registered `skill_uri` is **commit-pinned**
+(`raw.githubusercontent.com/…/<sha>/mcp/SKILL.md`), not branch-pinned:
+the served content can never drift from the pin — an entry can age, it
+can't lie. Republish procedure after editing `SKILL.md`:
 
 ```bash
-# 1. git push  (remote file must match before pinning its hash)
-# 2. compute the new pin
-node -e "console.log(require('crypto').createHash('sha256').update(require('fs').readFileSync('mcp/SKILL.md')).digest('hex'))"
-# 3. juno-1 (no fee — update only; publisher wallet, mainnet gas)
-cd mcp && npx tsx src/index.ts wallet exec builder \
-  juno1wp5fpcxukgjm9ag9u97a7yf7rtwe47m9h93vk7nfrnel9xelt6zs4hj09s \
-  '{"update_skill":{"dapp_name":"junoclaw-cosmos-mcp","skill_hash":"<hex>"}}' \
-  --chain juno-1
-# 4. junoclaw-g1 (same shape; update_skill — republish via publish_skill
-#    fails NameAlreadyClaimed even for the same publisher)
-npx tsx src/index.ts wallet exec builder \
-  juno1mu0rqss5gffycc7ju25xdk90zawav60hgmtah9n9gvnahutglw0qmj6ek0 \
-  '{"update_skill":{"dapp_name":"junoclaw-cosmos-mcp","skill_hash":"<hex>"}}' \
-  --chain junoclaw-g1
-```
+# 1. Commit, then PUSH — the pinned commit must exist on GitHub.
+git push
 
-Only the original `publisher` (or contract admin) may call
-`update_skill` — a different wallet gets `Unauthorized`, which is why
-both chains' entries were published from the same `builder` key.
+# 2. Commit sha for the URI + sha256 of the file
+SHA=$(git rev-parse HEAD)
+URI="https://raw.githubusercontent.com/Dragonmonk111/junoclaw/$SHA/mcp/SKILL.md"
+HASH=$(node -e "console.log(require('crypto').createHash('sha256').update(require('fs').readFileSync('mcp/SKILL.md')).digest('hex'))")
+
+# 3. junoclaw-g1 — canonical (update_skill; publish_skill fails
+#    NameAlreadyClaimed once the name exists, even for the publisher)
+cd mcp && npx tsx src/index.ts wallet exec builder \
+  juno1mu0rqss5gffycc7ju25xdk90zawav60hgmtah9n9gvnahutglw0qmj6ek0 \
+  "{\"update_skill\":{\"dapp_name\":\"junoclaw-cosmos-mcp\",\"skill_uri\":\"$URI\",\"skill_hash\":\"$HASH\"}}" \
+  --chain junoclaw-g1
+
+# 4. juno-1 — outreach mirror (publisher wallet, mainnet gas)
+npx tsx src/index.ts wallet exec builder \
+  juno1wp5fpcxukgjm9ag9u97a7yf7rtwe47m9h93vk7nfrnel9xelt6zs4hj09s \
+  "{\"update_skill\":{\"dapp_name\":\"junoclaw-cosmos-mcp\",\"skill_uri\":\"$URI\",\"skill_hash\":\"$HASH\"}}" \
+  --chain juno-1
+```
 
 ### Generic message composer (`compose_and_broadcast_msg`)
 

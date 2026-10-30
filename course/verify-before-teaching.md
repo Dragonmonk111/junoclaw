@@ -28,7 +28,18 @@ Pick one enrolled `wallet_id`, send 1 ujclaw to itself via
 This exercises the whole write path — decrypt → sign → broadcast →
 commit — before students depend on it.
 
-## 5. Funding state
+## 5. The skill-registry pin is honest
+
+This course teaches agents to verify the manual by its on-chain hash —
+so check it yourself first. `query_contract` on skill-registry
+`{ "get_skill": { "dapp_name": "junoclaw-cosmos-mcp" } }`, fetch the
+`skill_uri`, sha256 it, compare to `skill_hash`. If they differ, the
+registry entry is stale — republish before class (runbook:
+`mcp/README.md` → "Republishing SKILL.md after edits"). Demonstrating
+this check live in lesson 3 is worth the two minutes — it's the
+verify-don't-trust posture made concrete.
+
+## 6. Funding state
 
 `query_balance` each student wallet: ≥ ~1,100,000 ujclaw needed for
 the registration lesson (fee + gas).
