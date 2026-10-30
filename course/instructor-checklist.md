@@ -5,6 +5,10 @@
 - [ ] gRPC endpoint for the class: `JUNOCLAW_GRPC_ENDPOINT`
       (default `51.195.201.74:9090`, operator-restricted — request
       classroom access from the JunoClaw team ahead of time)
+- [ ] OPTIONAL, worth it: a second endpoint run by an *independent*
+      operator (e.g. an observer seat). In lesson 3/8 have students run
+      the same query against both — identical answers from independent
+      operators is the "verify, don't trust" thesis made concrete.
 - [ ] One funded test wallet per student (recommended
       ~2,000,000 ujclaw — covers the 1 JCLAW agent registration fee
       + gas with headroom). Ask the operator team; they run the faucet.
