@@ -409,6 +409,36 @@ The chain registry includes IBC channel metadata for cross-chain transfers:
 
 - **On-chain skill registry** — a queryable, permissionless-write CosmWasm registry (`skill-registry`) where any interchain dApp can publish a pointer + hash to its own `SKILL.md`-equivalent manual, so any MCP client can discover and load the operating manual for any dApp on any chain without prior knowledge of its GitHub URL. Contract implemented at `contracts/skill-registry/` in the main repo (14/14 tests passing); MCP `get_dapp_skill` / `list_dapp_skills` query tools ship in this release and resolve once the per-chain `skillRegistry` address is deployed and wired into `resources/chains.ts`. Design in `drafts/PLAN_ONCHAIN_SKILL_REGISTRY.md`.
 
+#### Republishing SKILL.md after edits
+
+`SKILL.md` is hash-pinned on-chain (`junoclaw-cosmos-mcp` on juno-1 and
+junoclaw-g1, publisher `juno1aq995jf4fezcghl6ar6k79hk9layss8w6q2t7z` —
+the `builder` wallet). Every edit to `SKILL.md` stalemates the pin:
+agents verifying `sha256(fetched file) == skill_hash` will fail until
+republished. Order matters — **push to GitHub first** (the registered
+`skill_uri` serves `main/mcp/SKILL.md`), then update both entries:
+
+```bash
+# 1. git push  (remote file must match before pinning its hash)
+# 2. compute the new pin
+node -e "console.log(require('crypto').createHash('sha256').update(require('fs').readFileSync('mcp/SKILL.md')).digest('hex'))"
+# 3. juno-1 (no fee — update only; publisher wallet, mainnet gas)
+cd mcp && npx tsx src/index.ts wallet exec builder \
+  juno1wp5fpcxukgjm9ag9u97a7yf7rtwe47m9h93vk7nfrnel9xelt6zs4hj09s \
+  '{"update_skill":{"dapp_name":"junoclaw-cosmos-mcp","skill_hash":"<hex>"}}' \
+  --chain juno-1
+# 4. junoclaw-g1 (same shape; update_skill — republish via publish_skill
+#    fails NameAlreadyClaimed even for the same publisher)
+npx tsx src/index.ts wallet exec builder \
+  juno1mu0rqss5gffycc7ju25xdk90zawav60hgmtah9n9gvnahutglw0qmj6ek0 \
+  '{"update_skill":{"dapp_name":"junoclaw-cosmos-mcp","skill_hash":"<hex>"}}' \
+  --chain junoclaw-g1
+```
+
+Only the original `publisher` (or contract admin) may call
+`update_skill` — a different wallet gets `Unauthorized`, which is why
+both chains' entries were published from the same `builder` key.
+
 ### Generic message composer (`compose_and_broadcast_msg`)
 
 **Yes, the MCP can compose, sign, and broadcast any registered Cosmos SDK message type** — via `compose_and_broadcast_msg` (type URL + JSON value) — but this is **disabled by default**. Rather than one always-on tool that lets the calling model construct and sign anything the chain will accept, the design has two layers, matching how every other write path in this server works:
