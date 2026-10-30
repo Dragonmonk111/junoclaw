@@ -50,6 +50,7 @@ export const CHAIN_REGISTRY: Record<string, ChainConfig> = {
     slip44: 118,
     explorerTx: "",
     isTestnet: true,
+    skillRegistry: "juno1mu0rqss5gffycc7ju25xdk90zawav60hgmtah9n9gvnahutglw0qmj6ek0",
     transport: "junoclaw-grpc",
     // Operator-reachable gRPC listener (UFW-restricted on the fleet).
     // Override with JUNOCLAW_GRPC_ENDPOINT for your own seat.
