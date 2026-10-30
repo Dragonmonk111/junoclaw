@@ -340,6 +340,7 @@ If any check fails, the tool returns a clear error naming the cause. No bytes ar
 
 | Chain | ID | Denom | Type |
 |-------|-----|-------|------|
+| **JunoClaw** | `junoclaw-g1` | ujclaw | Testnet (Simplex BFT — native gRPC) |
 | Juno Testnet | `uni-7` | ujunox | Testnet |
 | Juno Mainnet | `juno-1` | ujuno | Mainnet |
 | Osmosis | `osmosis-1` | uosmo | Mainnet |
@@ -349,6 +350,29 @@ If any check fails, the tool returns a clear error naming the cause. No bytes ar
 | Celestia Mocha | `mocha-4` | utia | Testnet |
 
 Adding a chain: edit `src/resources/chains.ts`.
+
+### Sovereign transport: `junoclaw-grpc`
+
+JunoClaw runs Commonware Simplex BFT — there is no Tendermint RPC.
+Chains with `transport: "junoclaw-grpc"` route every tool through
+`JunoClawClient` (`src/utils/junoclaw-client.ts`), which speaks the
+chain's native Cosmos SDK gRPC surface directly:
+
+- **Queries** — `cosmos.bank`/`cosmos.auth`/`cosmwasm.wasm` gRPC +
+  `layer.lightclient.v1` for height.
+- **Writes** — `OfflineDirectSigner` → `TxRaw` →
+  `cosmos.tx.v1beta1.Service/BroadcastTx` (SYNC) → `GetTx` poll.
+- **`"auto"` gas** — real `Simulate` on the node, gas × 1.4, fee =
+  gas × `gasPrice`. No other changes to tool semantics.
+
+Endpoint: `JUNOCLAW_GRPC_ENDPOINT` env var (default
+`51.195.201.74:9090`, operator-restricted). Plaintext gRPC — testnet
+only. Security boundary is unchanged: `wallet_id` opaque, mnemonic
+decrypted + scrubbed inside `WalletStore`, `JUNOCLAW_SIGNING_PAUSED`
+honored. Verified live on junoclaw-g1 (2026-10-31): reads, contract
+discovery + smart queries, MsgSend commit, `RegisterAgent` execute,
+`GetTx` lookup. Not yet chain-side: tx search, block queries — see
+`SKILL.md` "Sovereign chain" for the current surface map.
 
 ## IBC Routes
 
