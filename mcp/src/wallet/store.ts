@@ -33,6 +33,8 @@ import { SigningCosmWasmClient } from "@cosmjs/cosmwasm-stargate";
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
 import { GasPrice, SigningStargateClient } from "@cosmjs/stargate";
 
+import { JunoClawClient } from "../utils/junoclaw-client.js";
+
 import { aesGcmDecrypt, aesGcmEncrypt } from "./crypto.js";
 import {
   defaultPassphraseSource,
@@ -630,6 +632,10 @@ export class WalletStore {
       throw new SigningPausedError(walletId, chain.chainId);
     }
 
+    if (chain.transport === "junoclaw-grpc") {
+      return (await this.signForJunoClaw(walletId, chain)) as unknown as StargateSigningContext;
+    }
+
     const file = await this.readWalletFile(walletId);
 
     if (file.metadata.bech32Prefix !== chain.bech32Prefix) {
@@ -692,6 +698,10 @@ export class WalletStore {
       throw new SigningPausedError(walletId, chain.chainId);
     }
 
+    if (chain.transport === "junoclaw-grpc") {
+      return (await this.signForJunoClaw(walletId, chain)) as unknown as SigningContext;
+    }
+
     const file = await this.readWalletFile(walletId);
 
     if (file.metadata.bech32Prefix !== chain.bech32Prefix) {
@@ -737,6 +747,77 @@ export class WalletStore {
       // Best-effort scrub of the plaintext from memory. JS strings
       // are immutable so `mnemonic = ""` only drops our reference;
       // the buffer is the more useful target.
+      mnemonicBuf.fill(0);
+      mnemonic = "";
+    }
+  }
+
+  /**
+   * JunoClaw signing path (junoclaw-grpc transport). Same audited
+   * boundary as `signFor`: the mnemonic is decrypted, used to build
+   * the HD wallet, and the buffer is scrubbed in `finally`. The
+   * returned JunoClawClient holds only the in-memory signer — never
+   * the mnemonic — and implements the same write surface the tools
+   * consume (execute/sendTokens/signAndBroadcast/upload/instantiate/
+   * migrate/getTx/getHeight).
+   *
+   * The pause check happens in `signFor`/`signForStargate` before
+   * dispatch, preserving the "refuse before wallet lookup" semantics
+   * (no enumeration signal).
+   */
+  private async signForJunoClaw(
+    walletId: string,
+    chain: ChainConfig
+  ): Promise<{ client: JunoClawClient; address: string }> {
+    if (!chain.grpcEndpoint) {
+      throw new Error(
+        `chain ${chain.chainId}: grpcEndpoint required for junoclaw-grpc transport`
+      );
+    }
+
+    const file = await this.readWalletFile(walletId);
+
+    if (file.metadata.bech32Prefix !== chain.bech32Prefix) {
+      throw new Error(
+        `wallet "${walletId}" has bech32 prefix "${file.metadata.bech32Prefix}", ` +
+          `but chain ${chain.chainId} expects "${chain.bech32Prefix}". ` +
+          `Register a wallet for prefix "${chain.bech32Prefix}" first.`
+      );
+    }
+
+    const keyStore = this.getBackend(this.fileBackend(file));
+    const dek = await keyStore.getKey(walletId);
+
+    let mnemonicBuf: Buffer;
+    try {
+      mnemonicBuf = aesGcmDecrypt(
+        {
+          iv_b64: file.cipher.iv_b64,
+          ciphertext_b64: file.ciphertext_b64,
+        },
+        dek
+      );
+    } catch (e) {
+      throw new Error(
+        `wallet "${walletId}": decryption failed (wrong passphrase, tampered file, or wrong backend). ` +
+          `Underlying: ${(e as Error).message}`
+      );
+    }
+
+    let mnemonic = mnemonicBuf.toString("utf-8");
+    try {
+      const hdWallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
+        prefix: chain.bech32Prefix,
+      });
+      const accounts = await hdWallet.getAccounts();
+      const client = await JunoClawClient.connectWithSigner(
+        chain.grpcEndpoint,
+        hdWallet,
+        chain.chainId,
+        chain.gasPrice
+      );
+      return { client, address: accounts[0].address };
+    } finally {
       mnemonicBuf.fill(0);
       mnemonic = "";
     }

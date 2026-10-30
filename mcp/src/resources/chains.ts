@@ -27,9 +27,35 @@ export interface ChainConfig {
   ibcChannels?: Record<string, IbcChannel>;
   /** Address of the `skill-registry` contract on this chain, if deployed. */
   skillRegistry?: string;
+  /**
+   * Transport selection. Undefined/"tendermint" = CosmJS over Tendermint
+   * RPC (default, all existing chains). "junoclaw-grpc" = direct Cosmos
+   * SDK gRPC on `grpcEndpoint` via JunoClawClient — for Simplex chains
+   * with no Tendermint RPC.
+   */
+  transport?: "tendermint" | "junoclaw-grpc";
+  /** host:port for junoclaw-grpc transport (plaintext testnet gRPC). */
+  grpcEndpoint?: string;
 }
 
 export const CHAIN_REGISTRY: Record<string, ChainConfig> = {
+  "junoclaw-g1": {
+    chainId: "junoclaw-g1",
+    chainName: "JunoClaw",
+    rpcEndpoint: "", // no Tendermint RPC — see transport/grpcEndpoint
+    restEndpoint: "", // REST gateway optional; gRPC is canonical
+    denom: "ujclaw",
+    bech32Prefix: "juno",
+    gasPrice: "0.001ujclaw",
+    slip44: 118,
+    explorerTx: "",
+    isTestnet: true,
+    transport: "junoclaw-grpc",
+    // Operator-reachable gRPC listener (UFW-restricted on the fleet).
+    // Override with JUNOCLAW_GRPC_ENDPOINT for your own seat.
+    grpcEndpoint:
+      process.env.JUNOCLAW_GRPC_ENDPOINT ?? "51.195.201.74:9090",
+  },
   "uni-7": {
     chainId: "uni-7",
     chainName: "Juno Testnet",

@@ -16,6 +16,7 @@
 import { CosmWasmClient, SigningCosmWasmClient } from "@cosmjs/cosmwasm-stargate";
 import { SigningStargateClient } from "@cosmjs/stargate";
 import { type ChainConfig } from "../resources/chains.js";
+import { JunoClawClient } from "./junoclaw-client.js";
 
 // Cache query clients by chainId to avoid reconnecting
 const queryClientCache = new Map<string, CosmWasmClient>();
@@ -23,6 +24,21 @@ const queryClientCache = new Map<string, CosmWasmClient>();
 export async function getQueryClient(chain: ChainConfig): Promise<CosmWasmClient> {
   const cached = queryClientCache.get(chain.chainId);
   if (cached) return cached;
+
+  if (chain.transport === "junoclaw-grpc") {
+    // JunoClaw has no Tendermint RPC — the adapter satisfies the same
+    // query surface over direct SDK gRPC.
+    if (!chain.grpcEndpoint)
+      throw new Error(`chain ${chain.chainId}: grpcEndpoint required for junoclaw-grpc`);
+    const client = await JunoClawClient.connect(
+      chain.grpcEndpoint,
+      chain.chainId,
+      chain.gasPrice
+    );
+    const wrapped = client as unknown as CosmWasmClient;
+    queryClientCache.set(chain.chainId, wrapped);
+    return wrapped;
+  }
 
   const client = await CosmWasmClient.connect(chain.rpcEndpoint);
   queryClientCache.set(chain.chainId, client);
