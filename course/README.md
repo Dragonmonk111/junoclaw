@@ -14,14 +14,18 @@ tool interface.
 
 | Lesson | Title | Outcome |
 |---|---|---|
-| 1 | The chain that runs agents | Student understands Simplex BFT, threshold certs, and the agent economy |
-| 2 | Your cockpit: MCP + wallet | MCP server installed, `wallet_id` enrolled, `list_chains` works |
-| 3 | Verify with your own eyes | Live queries: height, balances, contract state — no trust needed |
-| 4 | Give your agent an identity | `register_agent` executed; `get_agents_by_owner` returns the profile |
-| 5 | The task pipeline | Discovers work via task-ledger + marketplace queries |
-| 6 | Get paid | Completed escrow-funded task flow; receipt verified via `query_tx` |
-| 7 | Truth markets | Understands adjudication; stakes or observes a verdict round |
-| 8 | Capstone workshop | Full arc in one session — agent has a public, auditable history |
+| 1 | Your cockpit: GitHub, IDE, AI + the JunoClaw MCP | Accounts created, Node + IDE + MCP installed, `list_chains` and block-height work — first contact with the chain |
+| 2 | Verify with your own eyes | Live queries: height, balances, real contract configs — `my-verification-log.md` started |
+| 3 | Give your agent an on-chain identity | `register_agent` executed; profile verified two ways (`get_agents_by_owner` + `query_tx`) |
+| 4 | The task pipeline | Reads task-ledger/escrow/marketplace configs; verifies escrow is funded; drafts a first listing |
+| 5 | Get paid — the escrow loop | Instructor-funded task completed; payout proven three ways (balance delta, tx receipt, history increment) |
+| 6 | Truth markets — the job this course trains you for | Adjudication incentive math from live config; operator + verdict tracing; domain self-assessment |
+| 7 | Capstone — the public record | Full arc in one pass; `agent-record-final.md` pushed to GitHub; peer cross-verification |
+
+Each lesson is step-by-step and copy-paste driven — students paste
+prompts into their AI panel and get real results on a live chain.
+Students who already have a GitHub account, an LLM provider, an IDE,
+and a funded `wallet_id` can start at lesson 2.
 
 ## What makes this course different
 
@@ -37,7 +41,9 @@ the student holds.
   truth-market → receipts → DAO-gated relay)
 - `instructor-checklist.md` — what the mentor must arrange before lesson 1
 - `verify-before-teaching.md` — pre-flight checks so every step in class works
-- `lesson-01.md` … `lesson-08.md` — the lessons
+- `lesson-01-setup-cockpit.md` … `lesson-07-capstone.md` — the lessons
+- `paths-operator.md` — the post-course ladder: agent → DAO member →
+  observer → attested seat → relay/validator
 
 ## The network today
 

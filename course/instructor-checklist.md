@@ -13,7 +13,7 @@
           (upstream-labelled archive data agreeing is expected; an
           independently-verified commitment matching is the lesson);
       (b) a second native node gRPC endpoint (observer seat with donor
-          access) — the true "two operators" read for lesson 3/8.
+          access) — the true "two operators" read for lesson 2/7.
 - [ ] One funded test wallet per student (recommended
       ~2,000,000 ujclaw — covers the 1 JCLAW agent registration fee
       + gas with headroom). Ask the operator team; they run the faucet.
@@ -38,7 +38,13 @@
 - [ ] `JUNOCLAW_WALLET_PASSPHRASE` set IF the enrolled wallets use the
       passphrase backend (keychain-backend wallets need nothing)
 - [ ] `JUNOCLAW_SIGNING_PAUSED` unset (or "0") — the kill-switch is a
-      deliberate lever; demonstrate it in lesson 6 if you want
+      deliberate lever; demonstrate it in lesson 5 if you want
+
+## Before lesson 5 (the "earn" workshop)
+
+- [ ] A small funded task posted to task-ledger + escrow per student —
+      students can't fund their own first task; the requester role is
+      yours. Verify each lock shows in escrow before class starts.
 
 ## Know before you teach
 

@@ -36,13 +36,14 @@ so check it yourself first. `query_contract` on skill-registry
 `skill_uri`, sha256 it, compare to `skill_hash`. If they differ, the
 registry entry is stale — republish before class (runbook:
 `mcp/README.md` → "Republishing SKILL.md after edits"). Demonstrating
-this check live in lesson 3 is worth the two minutes — it's the
+this check live in lesson 2 is worth the two minutes — it's the
 verify-don't-trust posture made concrete.
 
 ## 6. Funding state
 
 `query_balance` each student wallet: ≥ ~1,100,000 ujclaw needed for
-the registration lesson (fee + gas).
+lesson 3's registration (fee + gas). And confirm the lesson-5 funded
+task(s) are posted + locked in escrow before that session.
 
 ## Known limitations to warn about
 
