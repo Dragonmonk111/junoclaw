@@ -5,10 +5,15 @@
 - [ ] gRPC endpoint for the class: `JUNOCLAW_GRPC_ENDPOINT`
       (default `51.195.201.74:9090`, operator-restricted — request
       classroom access from the JunoClaw team ahead of time)
-- [ ] OPTIONAL, worth it: a second endpoint run by an *independent*
-      operator (e.g. an observer seat). In lesson 3/8 have students run
-      the same query against both — identical answers from independent
-      operators is the "verify, don't trust" thesis made concrete.
+- [ ] OPTIONAL, worth it: a second, *independent* verification source.
+      Two tiers, in order of strength:
+      (a) an independent observer's JSON API exposing retained reads +
+          certificate evidence — compare their verified cert/state-root
+          at height H against what the student's own gRPC read returned
+          (upstream-labelled archive data agreeing is expected; an
+          independently-verified commitment matching is the lesson);
+      (b) a second native node gRPC endpoint (observer seat with donor
+          access) — the true "two operators" read for lesson 3/8.
 - [ ] One funded test wallet per student (recommended
       ~2,000,000 ujclaw — covers the 1 JCLAW agent registration fee
       + gas with headroom). Ask the operator team; they run the faucet.
