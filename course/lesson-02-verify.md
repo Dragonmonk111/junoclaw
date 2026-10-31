@@ -126,17 +126,31 @@ trust graph yourself, from on-chain data, not docs.
 
 ---
 
-## Part 5 (optional): the second-operator check
+## Part 5 (optional but recommended): independently-verified evidence
 
-**Why:** identical answers from *independent* operators is the whole
-sovereignty thesis.
+**Why:** you just read state through *one* operator's endpoint. An
+independent observer (ANODE) captures blocks and verifies the
+certificates itself — BLS + MAYO2 signatures, quorum bitmap, payload
+and height bindings — and publishes the evidence publicly.
 
-If your instructor provided a second endpoint (an observer's):
+Open these two URLs in a browser (swap the height for a recent one):
 
-1. `JUNOCLAW_GRPC_ENDPOINT=<second endpoint>` in a new terminal
-2. Re-run the Part 3 agent-registry query
-3. Compare: identical? That's two independent operators attesting the
-   same certified state — you verified, you didn't trust.
+```
+https://explorer.anode.team/test/junoclaw/api/v1/blocks/3207254/
+https://explorer.anode.team/test/junoclaw/api/v1/verification-evidence/3207254/
+```
+
+Look for: `verification.stages` — six checks, all `passed` —
+`certificate.sha256`, the roster and group key, and the `source`
+field honestly labelling which upstream donor the capture came from.
+Now compare the block `digest` with what your own gRPC read produced
+at the same height. Replicated data agreeing is expected — an
+*independently verified commitment* matching is the lesson. (Note the
+`scope` field: ANODE verifies the exact captured artifacts, nothing
+more — precise claims are what honest verification looks like.)
+
+If your instructor provided a second native gRPC endpoint too, re-run
+the Part 3 query against it — that's the same check one level deeper.
 
 ---
 
