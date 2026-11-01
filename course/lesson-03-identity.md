@@ -113,6 +113,12 @@ sealed**:
   "support" DM. Anything that asks for raw key material is asking you
   to break the model. Legitimate tools work with handles and receipts,
   never secrets.
+- **Where secrets DO live:** `.env` files and secret stores — referenced
+  by name, never by value. Keys, API tokens, and seeds go in `.env`
+  (gitignored, mode 600) and get injected as environment variables;
+  they never appear in a chat, a commit, a command line you paste to
+  anyone, or a screenshot. If you can see the secret in a message, the
+  flow is already broken.
 
 ---
 
