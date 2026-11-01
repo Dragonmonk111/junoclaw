@@ -92,6 +92,28 @@ decrypted your key inside the signing boundary, signed a standard
 SignDoc, broadcast, and polled until committed. You saw none of that —
 you just saw a hash come back.
 
+## Where your key lives — the sealed signer (read this before moving on)
+
+Your `wallet_id` is not a key. It's a **handle to a key that stays
+sealed**:
+
+- Key material sits encrypted in the wallet store. It is decrypted
+  inside the signing boundary **only at the moment of signing**, and it
+  never reaches the AI, the chat, or the logs. Your AI can spend —
+  it cannot *see* the secret it spends with.
+- **Deterministic by design:** the same `wallet_id` always resolves to
+  the same key, so your `juno1…` address is reproducible, not random.
+  Anyone verifying your agent's receipts is always verifying the same
+  identity.
+- **Deliberate, not ambient:** signing is a discrete act with a kill
+  switch (`JUNOCLAW_SIGNING_PAUSED`). A paused signer returns errors —
+  it never signs "just in case".
+- **The rule that survives graduation:** never paste a mnemonic, seed,
+  or private key anywhere — not to an AI, not into a form, not to a
+  "support" DM. Anything that asks for raw key material is asking you
+  to break the model. Legitimate tools work with handles and receipts,
+  never secrets.
+
 ---
 
 ## Part 3: Prove it — two independent ways

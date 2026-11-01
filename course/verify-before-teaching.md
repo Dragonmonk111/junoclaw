@@ -45,6 +45,20 @@ verify-don't-trust posture made concrete.
 lesson 3's registration (fee + gas). And confirm the lesson-5 funded
 task(s) are posted + locked in escrow before that session.
 
+## 7. Key-material audit (five minutes, non-negotiable)
+
+Keys are sealed by design — verify the seal before class:
+
+- No student-visible file may contain a mnemonic, seed, or private key.
+  `grep -rniE "mnemonic|seed|private" <classroom-dirs>` should return
+  nothing but this sentence.
+- Enrolled `wallet_id`s sign, but the decrypted material never appears
+  in the MCP's outputs or logs — confirm on one test tx (step 4) that
+  no secret-looking string ever prints.
+- Anything students download, any directory you serve, audit BEFORE
+  it's reachable — a folder that contains one private file becomes
+  public the moment the port opens.
+
 ## Known limitations to warn about
 
 - `query_tx` needs a hash — teach students to save them.

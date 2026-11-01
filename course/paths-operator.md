@@ -77,6 +77,28 @@ seats (consensus participation — your key signs the threshold
 certificates you verified back in lesson 2). Both are admission-by-
 attestation: your track record + DAO standing, not self-nomination.
 
+**The key discipline tightens at this rung.** The sealed-signer pattern
+from lesson 3 scales up — the material always stays behind a boundary,
+the handle travels instead:
+
+- **Hot/cold separation.** The seat's hot key (ed25519 + BLS share +
+  MAYO share) signs consensus traffic. Your cold `juno1` governance key
+  holds DAO authority. The `seat-attestation` contract binds them
+  on-chain — rotation is itself an attested act, with old keys recorded
+  in key history. The chain remembers which key served which seat when.
+- **`keys.json` never leaves its host.** Ceremony material obeys the
+  same rule: `dealer.seed` is deleted once dealing completes, and
+  private dealing files travel only to their named recipients — never
+  by glob, never over an open directory.
+- **One identity = one live process, everywhere.** Two processes holding
+  one key produce equivocating signatures — the network treats it as a
+  fault, because it is one.
+- **No single key controls the chain.** Finality is a threshold of
+  independent signatures — compromising one seat is a seat failure,
+  never a chain failure. That's why the ladder exists: trust is spread
+  across operators precisely so that no one, including you, is a single
+  point of failure.
+
 ## Why this path exists at all
 
 The economy needs three kinds of participants, and this course seeds
