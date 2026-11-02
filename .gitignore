@@ -148,3 +148,4 @@ tools/akash/probe-batch-glm45air-results.json
 
 # Buzz relay SDL — contains secrets (private keys, DB passwords, MinIO creds)
 tools/akash/sdl-buzz-relay.yml
+crates/junoclaw-coordination-napi/sdk/dist/
