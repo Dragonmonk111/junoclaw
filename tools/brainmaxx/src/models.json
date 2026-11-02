@@ -1,0 +1,28 @@
+{
+  "version": "jlens.models.v1",
+  "_comment": "Server-side model registry for the J-Lens audit server. Clients send only {text, model_id}; the server resolves the extraction endpoint + probe bank here. model_id = canonical id; probe_bank_path is relative to this file. This file is the LOCAL mirror — the chain probe-registry contract is authoritative in production.",
+  "models": {
+    "qwen2.5-0.5b-instruct": {
+      "label": "Qwen/Qwen2.5-0.5B-Instruct",
+      "endpoint": "http://localhost:8100/extract_hidden_states",
+      "layer": 12,
+      "probe_bank_path": "../j-lens/probe_bank_onchain.json",
+      "probe_method": "contrastive-dom-v0.1"
+    },
+    "qwen2.5-3b-instruct": {
+      "label": "Qwen/Qwen2.5-3B-Instruct",
+      "endpoint": "http://localhost:8101/extract_hidden_states",
+      "layer": 22,
+      "probe_bank_path": "../j-lens/probe_bank_onchain_3b.json",
+      "probe_method": "contrastive-dom-v0.1"
+    },
+    "tiny-gpt2": {
+      "label": "sshleifer/tiny-gpt2",
+      "endpoint": "http://localhost:8102/extract_hidden_states",
+      "layer": 1,
+      "probe_bank_path": "../j-lens/probe_bank_tiny_gpt2.json",
+      "probe_method": "contrastive-dom-v0.1",
+      "test_only": true
+    }
+  }
+}

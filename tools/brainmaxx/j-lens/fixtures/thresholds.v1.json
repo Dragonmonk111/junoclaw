@@ -1,0 +1,19 @@
+{
+  "score_semantics": "jlens.integrity.v1",
+  "_comment": "Canonical integrity→gate fixture, loaded by BOTH the Rust gate tests and the JS tests. integrity in [0,1], higher = healthier, 1.0 = no detections. Gate: integrity >= green → green; >= yellow → yellow; below → red.",
+  "thresholds": {
+    "green": 0.3,
+    "yellow": 0.15
+  },
+  "cases": [
+    { "integrity": 1.0,   "expected_gate": "green",  "note": "clean, no detections" },
+    { "integrity": 0.9,   "expected_gate": "green",  "note": "minor activation below detections" },
+    { "integrity": 0.3,   "expected_gate": "green",  "note": "exact green boundary" },
+    { "integrity": 0.299, "expected_gate": "yellow", "note": "just under green" },
+    { "integrity": 0.2,   "expected_gate": "yellow", "note": "partial degradation" },
+    { "integrity": 0.15,  "expected_gate": "yellow", "note": "exact yellow boundary" },
+    { "integrity": 0.149, "expected_gate": "red",    "note": "just under yellow" },
+    { "integrity": 0.05,  "expected_gate": "red",    "note": "strong deception signal" },
+    { "integrity": 0.0,   "expected_gate": "red",    "note": "fully suppressed signal" }
+  ]
+}

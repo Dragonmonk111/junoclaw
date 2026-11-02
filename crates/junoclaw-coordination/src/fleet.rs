@@ -409,6 +409,7 @@ mod tests {
             controller_timestamp: 1000,
             rationale: Some("test".to_string()),
             execution_proof_ref: Some("proof1".to_string()),
+            thought: None,
         };
         intent.into_agent_message(vec![1; 32], vec![], 1000).unwrap()
     }

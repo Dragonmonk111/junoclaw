@@ -2,6 +2,7 @@
 members = [
     "junoclaw-common",
     "agent-registry",
+    "probe-registry",
     "task-ledger",
     "escrow",
     "agent-company",

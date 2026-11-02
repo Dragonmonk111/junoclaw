@@ -67,7 +67,7 @@ async function main() {
     console.log(`  Messages in batch: ${block.batch.messages.length}`)
     console.log(`  Gate verdict: ${block.batch.gateResult?.verdict}`)
     console.log(`  Attestation hash: ${block.batch.gateResult?.attestationHash}`)
-    console.log(`  Separation score: ${block.batch.gateResult?.separationScore}`)
+    console.log(`  Integrity: ${block.batch.gateResult?.integrity ?? "unaudited"}`)
 
     // Settle on Juno
     console.log('\n--- Settling on Juno ---')

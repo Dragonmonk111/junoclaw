@@ -1,21 +1,32 @@
 //! J-Lens truth gate — audits message content before relay.
 //!
-//! The gate calls the CSI HTTP server (existing Node.js infrastructure)
-//! to audit message content. Based on the separation score and thresholds,
-//! it returns a green/yellow/red verdict.
+//! The gate calls the J-Lens HTTP server (probe-bank service) to audit
+//! message content against a registered model's probe bank. The audit
+//! returns an `integrity` score in [0,1] (`jlens.integrity.v1` semantics:
+//! higher = healthier, 1.0 = no detections) mapped to a verdict:
 //!
-//! Green = clean, proceed
-//! Yellow = suspicious, attach warning but relay
-//! Red = deceptive, block message
+//!   Green  = integrity >= green_threshold   (clean, proceed)
+//!   Yellow = yellow_threshold <= integrity < green_threshold (relay + warning)
+//!   Red    = integrity <  yellow_threshold  (block)
+//!
+//! Unaudited paths (server unreachable, semantics mismatch, unwired)
+//! return `Yellow { integrity: None }` — never a fabricated score.
 //!
 //! In mock mode (for testing), a deterministic heuristic is used instead
 //! of HTTP calls — content containing deceptive keywords triggers Red.
 
 use crate::message::{Batch, EvalAttestation, GateResult, GateVerdict, IntentMessage, ProofContext};
+use crate::thought::{check_thought, BankRegistry, TeeVerifier, ThoughtDecision, ThoughtPolicy};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{info, warn};
+
+/// Canonical score-semantics tag the J-Lens server must declare.
+/// Responses without it (or with a different tag) are rejected —
+/// the risk-vs-integrity inversion must be impossible to wire silently.
+pub const SCORE_SEMANTICS: &str = "jlens.integrity.v1";
 
 /// Keywords that trigger a red gate in mock mode.
 const MOCK_RED_KEYWORDS: &[&str] = &[
@@ -39,35 +50,44 @@ const MOCK_YELLOW_KEYWORDS: &[&str] = &[
 /// Configuration for the J-Lens truth gate.
 #[derive(Clone, Debug)]
 pub struct GateConfig {
-    /// CSI server endpoint (e.g. "http://localhost:7777")
-    pub csi_endpoint: String,
-    /// Separation score threshold for yellow gate (suspicious)
+    /// J-Lens server endpoint (e.g. "http://localhost:7777")
+    pub jlens_endpoint: String,
+    /// Registered model to probe with (`None` = server default).
+    /// Model identity resolves server-side to endpoint + probe bank;
+    /// clients never send paths or endpoints.
+    pub model_id: Option<String>,
+    /// Integrity threshold for Green (>= green = clean)
+    pub green_threshold: f64,
+    /// Integrity threshold for Yellow; below this is Red
     pub yellow_threshold: f64,
-    /// Separation score threshold for red gate (blocked)
-    pub red_threshold: f64,
-    /// HTTP timeout for CSI server calls
+    /// HTTP timeout for J-Lens server calls
     pub timeout: Duration,
-    /// API key for CSI server authentication (if required)
+    /// API key for J-Lens server authentication (if required)
     pub api_key: Option<String>,
 }
 
 impl Default for GateConfig {
     fn default() -> Self {
         Self {
-            csi_endpoint: "http://localhost:7777".to_string(),
+            jlens_endpoint: "http://localhost:7777".to_string(),
+            model_id: None,
+            green_threshold: 0.30,
             yellow_threshold: 0.15,
-            red_threshold: 0.35,
             timeout: Duration::from_secs(10),
             api_key: None,
         }
     }
 }
 
-/// Response from the CSI server audit endpoint.
+/// Response from the J-Lens server audit endpoint.
 #[derive(Debug, Deserialize, Serialize)]
-pub struct CsiAuditResponse {
+pub struct JlensAuditResponse {
     pub verdict: String,
-    pub separation_score: f64,
+    /// Integrity score in [0,1], higher = healthier (jlens.integrity.v1)
+    pub integrity: f64,
+    /// Must equal [`SCORE_SEMANTICS`] — hard-required to prevent silent
+    /// inversion of score direction across client/server generations.
+    pub score_semantics: Option<String>,
     pub attestation_hash: Option<String>,
     pub model_id: Option<String>,
     pub gate: String,
@@ -476,6 +496,34 @@ pub struct JLensGate {
     mock: bool,
     /// Optional proof verifier for proof-aware gating
     proof_verifier: Option<Box<dyn ProofVerifier>>,
+    /// Optional thought guard — before-act enforcement of generation-time
+    /// J-Lens thought attestations (DAO thought policy)
+    thought_guard: Option<ThoughtGuard>,
+}
+
+/// Before-act thought enforcement: policy + bank registry + TEE verifier,
+/// plus optional per-agent model bindings (agent-registry `BindModel`).
+pub struct ThoughtGuard {
+    pub policy: ThoughtPolicy,
+    pub banks: Box<dyn BankRegistry>,
+    pub tee: Box<dyn TeeVerifier>,
+    /// robot_id → (model_id, weights_hash) the agent is bound to
+    pub model_bindings: HashMap<String, (String, String)>,
+}
+
+/// Full per-message gate outcome — verdict plus the reason and thought
+/// decision, so breaker actions and chain records carry the cause.
+#[derive(Clone, Debug)]
+pub struct MessageDecision {
+    pub verdict: GateVerdict,
+    pub reason: Option<String>,
+    pub thought: Option<ThoughtDecision>,
+}
+
+impl MessageDecision {
+    fn plain(verdict: GateVerdict) -> Self {
+        Self { verdict, reason: None, thought: None }
+    }
 }
 
 impl JLensGate {
@@ -486,6 +534,7 @@ impl JLensGate {
             client: None,
             mock: false,
             proof_verifier: None,
+            thought_guard: None,
         }
     }
 
@@ -497,6 +546,7 @@ impl JLensGate {
             client: None,
             mock: true,
             proof_verifier: None,
+            thought_guard: None,
         }
     }
 
@@ -521,9 +571,11 @@ impl JLensGate {
     /// Audit message content and return a gate verdict.
     ///
     /// In mock mode: uses keyword heuristics.
-    /// In wired mode: calls CSI server POST /audit with content,
-    ///   parses separation score, applies thresholds.
-    /// On HTTP error: returns Yellow (conservative — relay with warning).
+    /// In wired mode: calls J-Lens server POST /audit with
+    ///   `{text, model_id}`; the server resolves model_id to its
+    ///   registered endpoint + probe bank.
+    /// On HTTP error / parse error / semantics mismatch: returns
+    ///   Yellow { integrity: None } (unaudited — never a fake score).
     pub async fn audit(&self, content: &[u8]) -> GateVerdict {
         if self.mock {
             return self.mock_audit(content);
@@ -533,15 +585,18 @@ impl JLensGate {
             Some(c) => c,
             None => {
                 warn!("J-Lens gate not wired, returning Yellow (unaudited)");
-                return GateVerdict::Yellow { separation_score: 0.0 };
+                return GateVerdict::Yellow { integrity: None };
             }
         };
 
         let text = String::from_utf8_lossy(content);
-        let body = serde_json::json!({ "text": text.as_ref() });
+        let mut body = serde_json::json!({ "text": text.as_ref() });
+        if let Some(mid) = &self.config.model_id {
+            body["model_id"] = serde_json::json!(mid);
+        }
 
         let resp = client
-            .post(format!("{}/audit", self.config.csi_endpoint))
+            .post(format!("{}/audit", self.config.jlens_endpoint))
             .header(
                 "Authorization",
                 self.config.api_key.as_deref().unwrap_or(""),
@@ -553,18 +608,27 @@ impl JLensGate {
 
         match resp {
             Ok(r) => {
-                let audit: Result<CsiAuditResponse, _> = r.json().await;
+                let audit: Result<JlensAuditResponse, _> = r.json().await;
                 match audit {
-                    Ok(a) => self.verdict_from_score(a.separation_score, a.attestation_hash),
+                    Ok(a) => {
+                        if a.score_semantics.as_deref() != Some(SCORE_SEMANTICS) {
+                            warn!(
+                                "J-Lens audit semantics mismatch (got {:?}, want {}), returning Yellow (unaudited)",
+                                a.score_semantics, SCORE_SEMANTICS
+                            );
+                            return GateVerdict::Yellow { integrity: None };
+                        }
+                        self.verdict_from_integrity(a.integrity)
+                    }
                     Err(e) => {
                         warn!("J-Lens audit parse error: {}, returning Yellow", e);
-                        GateVerdict::Yellow { separation_score: 0.0 }
+                        GateVerdict::Yellow { integrity: None }
                     }
                 }
             }
             Err(e) => {
                 warn!("J-Lens audit HTTP error: {}, returning Yellow", e);
-                GateVerdict::Yellow { separation_score: 0.0 }
+                GateVerdict::Yellow { integrity: None }
             }
         }
     }
@@ -582,53 +646,147 @@ impl JLensGate {
     /// If content is not an IntentMessage (can't extract proof ref), falls back
     /// to content-only audit.
     pub async fn audit_with_proof(&self, content: &[u8]) -> GateVerdict {
-        // If no proof verifier attached, fall back to content-only audit
-        let verifier = match &self.proof_verifier {
-            Some(v) => v,
-            None => return self.audit(content).await,
-        };
+        self.audit_detailed(content).await.verdict
+    }
 
-        // Try to decode as IntentMessage to extract proof ref
+    /// Attach a thought guard — makes the gate enforce generation-time
+    /// thought attestations before an intent may act.
+    pub fn with_thought_guard(mut self, guard: ThoughtGuard) -> Self {
+        self.thought_guard = Some(guard);
+        self
+    }
+
+    /// Full per-message pipeline, in order:
+    ///   1. proof    — execution proof verified (if a verifier is attached)
+    ///   2. thought  — generation-time thought attestation checked against
+    ///                 DAO policy (if a guard is attached). A verified
+    ///                 thought is AUTHORITATIVE: its integrity decides the
+    ///                 J-Lens verdict and the post-hoc content re-read is
+    ///                 skipped (no duplicate audit).
+    ///   3. content  — post-hoc audit fallback, only when no authoritative
+    ///                 thought exists (unprobed path, recorded as such).
+    pub async fn audit_detailed(&self, content: &[u8]) -> MessageDecision {
         let intent = match IntentMessage::decode(content) {
             Ok(i) => i,
-            Err(_) => {
-                // Not an IntentMessage — can't check proof, do content-only
-                return self.audit(content).await;
-            }
+            Err(_) => return MessageDecision::plain(self.audit(content).await),
         };
 
-        // Verify the proof
-        let proof_ctx = verifier.verify(
-            intent.execution_proof_ref.as_deref().unwrap_or(""),
-            &intent.robot_id,
-        )
-        .await;
+        if let Some(verifier) = &self.proof_verifier {
+            let proof_ctx = verifier
+                .verify(
+                    intent.execution_proof_ref.as_deref().unwrap_or(""),
+                    &intent.robot_id,
+                )
+                .await;
 
-        // If proof is not verified → auto-Red
-        if !proof_ctx.proof_verified {
-            warn!(
-                "J-Lens proof-aware gate: proof NOT verified for robot {} (hash={:?}), auto-Red",
-                intent.robot_id,
-                proof_ctx.proof_hash
+            // If proof is not verified → auto-Red (hard failure, unaudited)
+            if !proof_ctx.proof_verified {
+                warn!(
+                    "J-Lens proof-aware gate: proof NOT verified for robot {} (hash={:?}), auto-Red",
+                    intent.robot_id,
+                    proof_ctx.proof_hash
+                );
+                return MessageDecision {
+                    verdict: GateVerdict::Red { integrity: None },
+                    reason: Some("execution proof not verified".into()),
+                    thought: None,
+                };
+            }
+
+            // If proof shows a violation → auto-Red (hard failure, unaudited)
+            if proof_ctx.has_violation() {
+                warn!(
+                    "J-Lens proof-aware gate: violation detected in proof for robot {}, auto-Red",
+                    intent.robot_id
+                );
+                return MessageDecision {
+                    verdict: GateVerdict::Red { integrity: None },
+                    reason: Some("execution proof shows safety violation".into()),
+                    thought: None,
+                };
+            }
+        }
+
+        if let Some(guard) = &self.thought_guard {
+            let bound = guard
+                .model_bindings
+                .get(&intent.robot_id)
+                .map(|(m, w)| (m.as_str(), w.as_str()));
+            let d = check_thought(
+                &intent,
+                &guard.policy,
+                guard.banks.as_ref(),
+                guard.tee.as_ref(),
+                bound,
             );
-            return GateVerdict::Red {
-                separation_score: 1.0,
+            if matches!(d.verdict, GateVerdict::Red { .. }) || d.authoritative {
+                if matches!(d.verdict, GateVerdict::Red { .. }) {
+                    warn!(
+                        "J-Lens thought gate: robot {} {:?} blocked — {}",
+                        intent.robot_id, d.class, d.reason
+                    );
+                }
+                return MessageDecision {
+                    verdict: d.verdict.clone(),
+                    reason: Some(d.reason.clone()),
+                    thought: Some(d),
+                };
+            }
+            // Non-gated class without a usable thought: fall back to the
+            // post-hoc content audit, keep the worse of the two.
+            let content_verdict = self.audit(content).await;
+            let verdict = worst_of(d.verdict.clone(), content_verdict);
+            return MessageDecision {
+                verdict,
+                reason: Some(format!("{} — post-hoc content audit fallback", d.reason)),
+                thought: Some(d),
             };
         }
 
-        // If proof shows a violation → auto-Red
-        if proof_ctx.has_violation() {
-            warn!(
-                "J-Lens proof-aware gate: violation detected in proof for robot {}, auto-Red",
-                intent.robot_id
-            );
-            return GateVerdict::Red {
-                separation_score: 0.95,
-            };
-        }
+        MessageDecision::plain(self.audit(content).await)
+    }
 
-        // Proof is valid — proceed with normal content audit
-        self.audit(content).await
+    /// Aggregate per-message verdicts into a batch GateResult — the single
+    /// canonical audit pass (consensus no longer audits twice).
+    pub fn batch_result_from_verdicts(&self, batch: &Batch, verdicts: &[GateVerdict]) -> GateResult {
+        let mut worst_verdict = GateVerdict::Green;
+        let mut min_integrity: Option<f64> = None;
+        for v in verdicts {
+            let audited = match v {
+                GateVerdict::Red { integrity } => {
+                    worst_verdict = GateVerdict::Red { integrity: *integrity };
+                    *integrity
+                }
+                GateVerdict::Yellow { integrity } => {
+                    if !matches!(worst_verdict, GateVerdict::Red { .. }) {
+                        worst_verdict = GateVerdict::Yellow { integrity: *integrity };
+                    }
+                    *integrity
+                }
+                GateVerdict::Green => None,
+            };
+            if let Some(i) = audited {
+                min_integrity = Some(min_integrity.map_or(i, |m: f64| m.min(i)));
+            }
+        }
+        let (attestation_hash, model_id) = if self.mock {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(batch.hash());
+            hasher.update(b"mock-attestation");
+            (
+                Some(hex::encode(hasher.finalize())),
+                Some("mock-jlens".to_string()),
+            )
+        } else {
+            (None, self.config.model_id.clone())
+        };
+        GateResult {
+            verdict: worst_verdict,
+            attestation_hash,
+            integrity: min_integrity,
+            model_id,
+        }
     }
 
     /// Audit a full batch of messages and return an aggregate GateResult.
@@ -638,32 +796,36 @@ impl JLensGate {
     /// - If any message is Yellow (and none Red) → batch is Yellow
     /// - Otherwise → batch is Green
     ///
-    /// The separation_score is the max across all messages.
-    /// The attestation_hash is from the first non-null CSI response.
+    /// `integrity` is the worst (lowest) audited score across messages;
+    /// `None` if nothing was audited. The attestation_hash is from the
+    /// first non-null J-Lens response.
     pub async fn audit_batch(&self, batch: &Batch) -> GateResult {
         let mut worst_verdict = GateVerdict::Green;
-        let mut max_score = 0.0f64;
+        let mut min_integrity: Option<f64> = None;
         let mut attestation_hash: Option<String> = None;
         let mut model_id: Option<String> = None;
 
         for msg in &batch.messages {
             let verdict = self.audit(&msg.content).await;
-            match &verdict {
-                GateVerdict::Red { separation_score } => {
+            let audited = match &verdict {
+                GateVerdict::Red { integrity } => {
                     worst_verdict = GateVerdict::Red {
-                        separation_score: *separation_score,
+                        integrity: *integrity,
                     };
-                    max_score = max_score.max(*separation_score);
+                    *integrity
                 }
-                GateVerdict::Yellow { separation_score } => {
+                GateVerdict::Yellow { integrity } => {
                     if !matches!(worst_verdict, GateVerdict::Red { .. }) {
                         worst_verdict = GateVerdict::Yellow {
-                            separation_score: *separation_score,
+                            integrity: *integrity,
                         };
                     }
-                    max_score = max_score.max(*separation_score);
+                    *integrity
                 }
-                GateVerdict::Green => {}
+                GateVerdict::Green => None,
+            };
+            if let Some(i) = audited {
+                min_integrity = Some(min_integrity.map_or(i, |m: f64| m.min(i)));
             }
         }
 
@@ -674,30 +836,27 @@ impl JLensGate {
             hasher.update(batch.hash());
             hasher.update(b"mock-attestation");
             attestation_hash = Some(hex::encode(hasher.finalize()));
-            model_id = Some("mock-csi".to_string());
+            model_id = Some("mock-jlens".to_string());
         }
 
         GateResult {
             verdict: worst_verdict,
             attestation_hash,
-            separation_score: max_score,
+            integrity: min_integrity,
             model_id,
         }
     }
 
-    /// Determine verdict from a separation score using configured thresholds.
-    fn verdict_from_score(
-        &self,
-        score: f64,
-        _attestation_hash: Option<String>,
-    ) -> GateVerdict {
-        if score >= self.config.red_threshold {
+    /// Determine verdict from an audited integrity score.
+    /// integrity >= green → Green; >= yellow → Yellow; below → Red.
+    fn verdict_from_integrity(&self, integrity: f64) -> GateVerdict {
+        if integrity < self.config.yellow_threshold {
             GateVerdict::Red {
-                separation_score: score,
+                integrity: Some(integrity),
             }
-        } else if score >= self.config.yellow_threshold {
+        } else if integrity < self.config.green_threshold {
             GateVerdict::Yellow {
-                separation_score: score,
+                integrity: Some(integrity),
             }
         } else {
             GateVerdict::Green
@@ -711,7 +870,7 @@ impl JLensGate {
         for keyword in MOCK_RED_KEYWORDS {
             if text.contains(keyword) {
                 return GateVerdict::Red {
-                    separation_score: 0.9,
+                    integrity: Some(0.05),
                 };
             }
         }
@@ -719,7 +878,7 @@ impl JLensGate {
         for keyword in MOCK_YELLOW_KEYWORDS {
             if text.contains(keyword) {
                 return GateVerdict::Yellow {
-                    separation_score: 0.2,
+                    integrity: Some(0.2),
                 };
             }
         }
@@ -754,8 +913,8 @@ impl JLensGate {
             .build()?;
         self.client = Some(client);
         info!(
-            "J-Lens gate wired to CSI server at {}",
-            self.config.csi_endpoint
+            "J-Lens gate wired to J-Lens server at {}",
+            self.config.jlens_endpoint
         );
         Ok(())
     }
@@ -862,9 +1021,7 @@ impl MultiOperatorGate {
         // no adversarial check — return Red with no attestations instead.
         if self.operators.len() < self.config.min_operators {
             return MultiOperatorResult {
-                consensus_verdict: GateVerdict::Red {
-                    separation_score: 1.0,
-                },
+                consensus_verdict: GateVerdict::Red { integrity: None },
                 attestations: Vec::new(),
                 diverging_operators: Vec::new(),
                 consensus_batch_height: batch_height,
@@ -920,21 +1077,19 @@ impl MultiOperatorGate {
         let consensus_verdict = if verdict_counts[2] as f64 / total >= self.config.consensus_threshold {
             // Red consensus
             GateVerdict::Red {
-                separation_score: 0.9,
+                integrity: Some(0.05),
             }
         } else if verdict_counts[1] as f64 / total >= self.config.consensus_threshold {
             // Yellow consensus
             GateVerdict::Yellow {
-                separation_score: 0.2,
+                integrity: Some(0.2),
             }
         } else if verdict_counts[0] as f64 / total >= self.config.consensus_threshold {
             // Green consensus
             GateVerdict::Green
         } else {
-            // No clear consensus — treat as Yellow (conservative)
-            GateVerdict::Yellow {
-                separation_score: 0.5,
-            }
+            // No clear consensus — Yellow (unaudited: no audited score exists)
+            GateVerdict::Yellow { integrity: None }
         };
 
         // Find diverging operators
@@ -967,6 +1122,16 @@ impl MultiOperatorGate {
         }
         Ok(())
     }
+}
+
+/// The more severe of two verdicts (Red > Yellow > Green).
+fn worst_of(a: GateVerdict, b: GateVerdict) -> GateVerdict {
+    let rank = |v: &GateVerdict| match v {
+        GateVerdict::Green => 0,
+        GateVerdict::Yellow { .. } => 1,
+        GateVerdict::Red { .. } => 2,
+    };
+    if rank(&b) > rank(&a) { b } else { a }
 }
 
 /// Check if two verdicts match (ignoring separation score differences).
@@ -1034,7 +1199,7 @@ mod tests {
 
         let result = gate.audit_batch(&batch).await;
         assert!(matches!(result.verdict, GateVerdict::Red { .. }));
-        assert!(result.separation_score >= 0.9);
+        assert_eq!(result.integrity, Some(0.05));
     }
 
     #[tokio::test]
@@ -1069,7 +1234,7 @@ mod tests {
 
         let result = gate.audit_batch(&batch).await;
         assert_eq!(result.verdict, GateVerdict::Green);
-        assert_eq!(result.separation_score, 0.0);
+        assert_eq!(result.integrity, None);
     }
 
     #[tokio::test]
@@ -1082,9 +1247,9 @@ mod tests {
     #[test]
     fn test_gate_config_defaults() {
         let config = GateConfig::default();
+        assert_eq!(config.green_threshold, 0.30);
         assert_eq!(config.yellow_threshold, 0.15);
-        assert_eq!(config.red_threshold, 0.35);
-        assert_eq!(config.csi_endpoint, "http://localhost:7777");
+        assert_eq!(config.jlens_endpoint, "http://localhost:7777");
     }
 
     #[test]
@@ -1101,24 +1266,194 @@ mod tests {
     }
 
     #[test]
-    fn test_verdict_from_score_green() {
+    fn test_verdict_from_integrity_green() {
         let gate = JLensGate::mock_default();
-        let verdict = gate.verdict_from_score(0.05, None);
+        let verdict = gate.verdict_from_integrity(0.9);
         assert_eq!(verdict, GateVerdict::Green);
     }
 
     #[test]
-    fn test_verdict_from_score_yellow() {
+    fn test_verdict_from_integrity_yellow() {
         let gate = JLensGate::mock_default();
-        let verdict = gate.verdict_from_score(0.20, None);
+        let verdict = gate.verdict_from_integrity(0.20);
         assert!(matches!(verdict, GateVerdict::Yellow { .. }));
     }
 
     #[test]
-    fn test_verdict_from_score_red() {
+    fn test_verdict_from_integrity_red() {
         let gate = JLensGate::mock_default();
-        let verdict = gate.verdict_from_score(0.50, None);
+        let verdict = gate.verdict_from_integrity(0.05);
         assert!(matches!(verdict, GateVerdict::Red { .. }));
+    }
+
+    #[test]
+    fn test_verdict_boundaries() {
+        let gate = JLensGate::mock_default();
+        // Exact boundaries: >= green → Green; >= yellow → Yellow; below → Red
+        assert_eq!(gate.verdict_from_integrity(0.30), GateVerdict::Green);
+        assert!(matches!(
+            gate.verdict_from_integrity(0.15),
+            GateVerdict::Yellow { .. }
+        ));
+        assert!(matches!(
+            gate.verdict_from_integrity(0.149),
+            GateVerdict::Red { .. }
+        ));
+    }
+
+    /// Canonical fixture: thresholds.v1.json is loaded by BOTH the Rust
+    /// and JS test suites — one source of truth for the integrity→gate
+    /// mapping. If the two sides ever diverge, this test fails.
+    #[test]
+    fn test_canonical_threshold_fixture() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tools/brainmaxx/j-lens/fixtures/thresholds.v1.json"
+        );
+        let raw = std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("cannot read canonical fixture {}: {}", path, e));
+        let fixture: serde_json::Value = serde_json::from_str(&raw).unwrap();
+
+        assert_eq!(
+            fixture["score_semantics"].as_str().unwrap(),
+            SCORE_SEMANTICS,
+            "fixture must declare the canonical semantics tag"
+        );
+
+        let green = fixture["thresholds"]["green"].as_f64().unwrap();
+        let yellow = fixture["thresholds"]["yellow"].as_f64().unwrap();
+        let gate = JLensGate::mock(GateConfig {
+            green_threshold: green,
+            yellow_threshold: yellow,
+            ..Default::default()
+        });
+
+        for case in fixture["cases"].as_array().unwrap() {
+            let integrity = case["integrity"].as_f64().unwrap();
+            let expected = case["expected_gate"].as_str().unwrap();
+            let note = case["note"].as_str().unwrap_or("");
+            let verdict = gate.verdict_from_integrity(integrity);
+            let actual = match verdict {
+                GateVerdict::Green => "green",
+                GateVerdict::Yellow { .. } => "yellow",
+                GateVerdict::Red { .. } => "red",
+            };
+            assert_eq!(
+                actual, expected,
+                "integrity={} ({}) → expected {}, got {}",
+                integrity, note, expected, actual
+            );
+        }
+    }
+
+    // ─── E2E: Rust gate → HTTP → J-Lens-shaped server ───
+    //
+    // Spins a real axum server emulating the canonical J-Lens contract
+    // (integrity + score_semantics tag) and verifies the wired gate
+    // end-to-end: honest → Green, deceptive → Red, missing tag →
+    // Yellow unaudited, dead server → Yellow unaudited.
+
+    use axum::{routing::post, Json, Router};
+    use serde_json::json;
+
+    async fn spawn_jlens_stub(semantics_tag: Option<&str>) -> String {
+        let tag = semantics_tag.map(|s| s.to_string());
+        let app = Router::new().route(
+            "/audit",
+            post(move |Json(req): Json<serde_json::Value>| {
+                let tag = tag.clone();
+                async move {
+                    let text = req["text"].as_str().unwrap_or("").to_lowercase();
+                    let (integrity, gate_name) = if text.contains("deceptive") {
+                        (0.05, "red")
+                    } else if text.contains("suspicious") {
+                        (0.2, "yellow")
+                    } else {
+                        (0.95, "green")
+                    };
+                    let mut resp = json!({
+                        "verdict": gate_name,
+                        "integrity": integrity,
+                        "gate": gate_name,
+                        "model_id": "qwen2.5-0.5b-instruct",
+                        "snapshot_hash": "abc123",
+                        "bank_hash": "def456",
+                    });
+                    if let Some(t) = &tag {
+                        resp["score_semantics"] = json!(t);
+                    }
+                    Json(resp)
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.ok();
+        });
+        format!("http://{}", addr)
+    }
+
+    #[tokio::test]
+    async fn test_e2e_wired_gate_green_and_red() {
+        let endpoint = spawn_jlens_stub(Some(SCORE_SEMANTICS)).await;
+        let mut gate = JLensGate::new(GateConfig {
+            jlens_endpoint: endpoint,
+            ..Default::default()
+        });
+        gate.wire().unwrap();
+
+        // Honest content → Green
+        let v = gate.audit(b"moving forward at 1 m/s").await;
+        assert_eq!(v, GateVerdict::Green);
+
+        // Deceptive content → Red with audited integrity
+        let v = gate.audit(b"this is a deceptive plan").await;
+        match v {
+            GateVerdict::Red { integrity } => assert_eq!(integrity, Some(0.05)),
+            other => panic!("expected Red, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_e2e_semantics_mismatch_is_unaudited() {
+        // Server emits the WRONG semantics tag — gate must not trust it
+        let endpoint = spawn_jlens_stub(Some("legacy.risk.v0")).await;
+        let mut gate = JLensGate::new(GateConfig {
+            jlens_endpoint: endpoint,
+            ..Default::default()
+        });
+        gate.wire().unwrap();
+
+        let v = gate.audit(b"clean text").await;
+        assert_eq!(v, GateVerdict::Yellow { integrity: None });
+    }
+
+    #[tokio::test]
+    async fn test_e2e_missing_semantics_tag_is_unaudited() {
+        // Old server without the tag — unaudited, not silently trusted
+        let endpoint = spawn_jlens_stub(None).await;
+        let mut gate = JLensGate::new(GateConfig {
+            jlens_endpoint: endpoint,
+            ..Default::default()
+        });
+        gate.wire().unwrap();
+
+        let v = gate.audit(b"clean text").await;
+        assert_eq!(v, GateVerdict::Yellow { integrity: None });
+    }
+
+    #[tokio::test]
+    async fn test_e2e_dead_server_is_unaudited() {
+        // Nothing listening — HTTP error → Yellow unaudited
+        let mut gate = JLensGate::new(GateConfig {
+            jlens_endpoint: "http://127.0.0.1:1".to_string(),
+            ..Default::default()
+        });
+        gate.wire().unwrap();
+
+        let v = gate.audit(b"clean text").await;
+        assert_eq!(v, GateVerdict::Yellow { integrity: None });
     }
 
     // ─── MultiOperatorGate tests ───
@@ -1162,6 +1497,7 @@ mod tests {
             controller_timestamp: 1000,
             rationale: Some("routine patrol".to_string()),
             execution_proof_ref: None, // No proof!
+            thought: None,
         };
         let content = intent.encode().unwrap();
         let verdict = gate.audit_with_proof(&content).await;
@@ -1182,6 +1518,7 @@ mod tests {
             controller_timestamp: 1000,
             rationale: Some("routine patrol".to_string()),
             execution_proof_ref: Some("proof_001".to_string()),
+            thought: None,
         };
         let content = intent.encode().unwrap();
         let verdict = gate.audit_with_proof(&content).await;
@@ -1202,6 +1539,7 @@ mod tests {
             controller_timestamp: 1000,
             rationale: Some("malicious intent".to_string()),
             execution_proof_ref: Some("proof_002".to_string()),
+            thought: None,
         };
         let content = intent.encode().unwrap();
         let verdict = gate.audit_with_proof(&content).await;
@@ -1221,6 +1559,7 @@ mod tests {
             controller_timestamp: 1000,
             rationale: Some("routine patrol".to_string()),
             execution_proof_ref: None, // No proof, but no verifier either
+            thought: None,
         };
         let content = intent.encode().unwrap();
         let verdict = gate.audit_with_proof(&content).await;

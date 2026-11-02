@@ -9,7 +9,7 @@
     "audit-api": "src/audit-api.js"
   },
   "scripts": {
-    "test": "node --test test/determinism.test.js test/d1-probe.test.js test/chain-superintelligence.test.js test/csi-v02.test.js",
+    "test": "node --test test/determinism.test.js test/d1-probe.test.js test/chain-superintelligence.test.js test/csi-v02.test.js test/thresholds-parity.test.js",
     "test:csi": "node --test test/chain-superintelligence.test.js test/csi-v02.test.js",
     "csi-server": "node src/csi-server.js",
     "audit-api": "node src/audit-api.js"

@@ -84,6 +84,7 @@ impl Ros2Plugin {
             controller_timestamp,
             rationale,
             execution_proof_ref,
+            thought: None,
         }
     }
 

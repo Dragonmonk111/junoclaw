@@ -48,7 +48,8 @@ export class CoordinationNetwork extends EventEmitter {
     this.config = config
     this.gateConfig = {
       ...defaultGateConfig,
-      csiEndpoint: config.jLensEndpoint ?? defaultGateConfig.csiEndpoint,
+      jlensEndpoint: config.jLensEndpoint ?? defaultGateConfig.jlensEndpoint,
+      modelId: config.jLensModelId,
       apiKey: config.jLensApiKey,
       mock: config.mockGate ?? false,
     }

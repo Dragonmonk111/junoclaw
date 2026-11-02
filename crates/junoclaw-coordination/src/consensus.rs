@@ -20,6 +20,7 @@ use tracing::{info, warn};
 use crate::context::ContextFetcher;
 use crate::gate::JLensGate;
 use crate::message::{AgentMessage, Batch, BreakerAction, GateVerdict, IntentMessage};
+use crate::thought::ThoughtRecord;
 
 /// Configuration for the consensus engine.
 #[derive(Clone, Debug)]
@@ -174,86 +175,10 @@ impl ConsensusEngine {
         let prev_hash = *self.last_hash.lock().await;
         let timestamp = now_ms();
 
-        let mut batch = Batch::new(messages, prev_hash, height, timestamp);
+        let batch = Batch::new(messages, prev_hash, height, timestamp);
 
-        // If gate is attached, audit and filter
-        if let Some(gate) = &self.gate {
-            let gate_result = gate.audit_batch(&batch).await;
-
-            let mut filtered = Vec::new();
-            let mut breaker_actions = Vec::new();
-
-            for msg in &batch.messages {
-                let verdict = gate.audit_with_proof(&msg.content).await;
-                match &verdict {
-                    GateVerdict::Red { separation_score } => {
-                        // Message blocked — emit breaker action if this is a robot intent
-                        if let Ok(intent) = IntentMessage::decode(&msg.content) {
-                            warn!(
-                                "Robot {} intent blocked by J-Lens gate (red) at height {}",
-                                intent.robot_id, height
-                            );
-                            breaker_actions.push(BreakerAction::from_red_verdict(
-                                intent.robot_id,
-                                height,
-                                *separation_score,
-                            ));
-                        }
-                    }
-                    _ => {
-                        let mut msg = msg.clone();
-                        msg.j_lens_gate = Some(verdict);
-                        filtered.push(msg);
-                    }
-                }
-            }
-
-            let blocked_count = batch.messages.len() - filtered.len();
-            if blocked_count > 0 {
-                warn!(
-                    "Filtered {} red-gated messages from block at height {}",
-                    blocked_count, height
-                );
-            }
-
-            // Fetch moultbook context for surviving robot intents
-            let mut context_digest = String::new();
-            if let Some(fetcher) = &self.context_fetcher {
-                for msg in &filtered {
-                    if let Ok(intent) = IntentMessage::decode(&msg.content) {
-                        match fetcher.fetch_context(&intent.robot_id, height).await {
-                            Ok(summary) => {
-                                info!(
-                                    "Fetched moultbook context for robot {} at height {}: {}",
-                                    intent.robot_id, height, summary.digest
-                                );
-                                context_digest.push_str(&summary.digest);
-                                context_digest.push('\n');
-                            }
-                            Err(e) => {
-                                warn!(
-                                    "Context fetch failed for robot {} at height {}: {}",
-                                    intent.robot_id, height, e
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-
-            let mut new_batch = Batch::new(filtered, prev_hash, height, timestamp)
-                .with_gate_result(gate_result);
-
-            if !breaker_actions.is_empty() {
-                new_batch = new_batch.with_breaker_actions(breaker_actions);
-            }
-
-            if !context_digest.is_empty() {
-                new_batch = new_batch.with_context_digest(context_digest);
-            }
-
-            batch = new_batch;
-        }
+        // If gate is attached: single audit pass, filter, record thoughts
+        let batch = self.gate_and_filter(batch, height).await;
 
         if batch.is_empty() {
             return None;
@@ -274,6 +199,105 @@ impl ConsensusEngine {
         *self.height.lock().await = height + 1;
 
         Some(block)
+    }
+
+    /// Gate a batch: ONE audit pass per message (proof -> thought ->
+    /// content fallback), drop Red messages, emit breaker actions with
+    /// the specific cause, record verified thoughts + their merkle root,
+    /// and fetch moultbook context for surviving robot intents.
+    async fn gate_and_filter(&self, batch: Batch, height: u64) -> Batch {
+        let gate = match &self.gate {
+            Some(g) => g,
+            None => return batch,
+        };
+
+        let mut filtered = Vec::new();
+        let mut breaker_actions = Vec::new();
+        let mut thought_records = Vec::new();
+        let mut verdicts = Vec::with_capacity(batch.messages.len());
+
+        for msg in &batch.messages {
+            let decision = gate.audit_detailed(&msg.content).await;
+            verdicts.push(decision.verdict.clone());
+            let intent = IntentMessage::decode(&msg.content).ok();
+
+            if let (Some(i), Some(td)) = (&intent, &decision.thought) {
+                if let Some(rec) = ThoughtRecord::from_decision(i, td, height) {
+                    thought_records.push(rec);
+                }
+            }
+
+            match &decision.verdict {
+                GateVerdict::Red { integrity } => {
+                    // Message blocked — emit breaker action if this is a robot intent
+                    if let Some(intent) = intent {
+                        warn!(
+                            "Robot {} intent blocked by J-Lens gate (red) at height {}",
+                            intent.robot_id, height
+                        );
+                        breaker_actions.push(BreakerAction::from_gate_decision(
+                            intent.robot_id,
+                            height,
+                            *integrity,
+                            decision.reason.as_deref(),
+                        ));
+                    }
+                }
+                _ => {
+                    let mut msg = msg.clone();
+                    msg.j_lens_gate = Some(decision.verdict.clone());
+                    filtered.push(msg);
+                }
+            }
+        }
+
+        let gate_result = gate.batch_result_from_verdicts(&batch, &verdicts);
+
+        let blocked_count = batch.messages.len() - filtered.len();
+        if blocked_count > 0 {
+            warn!(
+                "Filtered {} red-gated messages from block at height {}",
+                blocked_count, height
+            );
+        }
+
+        // Fetch moultbook context for surviving robot intents
+        let mut context_digest = String::new();
+        if let Some(fetcher) = &self.context_fetcher {
+            for msg in &filtered {
+                if let Ok(intent) = IntentMessage::decode(&msg.content) {
+                    match fetcher.fetch_context(&intent.robot_id, height).await {
+                        Ok(summary) => {
+                            info!(
+                                "Fetched moultbook context for robot {} at height {}: {}",
+                                intent.robot_id, height, summary.digest
+                            );
+                            context_digest.push_str(&summary.digest);
+                            context_digest.push('\n');
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Context fetch failed for robot {} at height {}: {}",
+                                intent.robot_id, height, e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut new_batch = Batch::new(filtered, batch.prev_hash, height, batch.timestamp)
+            .with_gate_result(gate_result);
+        if !breaker_actions.is_empty() {
+            new_batch = new_batch.with_breaker_actions(breaker_actions);
+        }
+        if !context_digest.is_empty() {
+            new_batch = new_batch.with_context_digest(context_digest);
+        }
+        if !thought_records.is_empty() {
+            new_batch = new_batch.with_thought_records(thought_records);
+        }
+        new_batch
     }
 
     /// Run the consensus engine.
@@ -328,86 +352,10 @@ impl ConsensusEngine {
             let prev_hash = *self_arc.last_hash.lock().await;
             let timestamp = now_ms();
 
-            let mut batch = Batch::new(messages, prev_hash, height, timestamp);
+            let batch = Batch::new(messages, prev_hash, height, timestamp);
 
-            // If gate is attached, audit the batch before finalizing
-            if let Some(gate) = &self_arc.gate {
-                let gate_result = gate.audit_batch(&batch).await;
-
-                // Filter out red-gated messages and emit breaker actions for robot intents
-                let mut filtered = Vec::new();
-                let mut breaker_actions = Vec::new();
-
-                for msg in &batch.messages {
-                    let verdict = gate.audit_with_proof(&msg.content).await;
-                    match &verdict {
-                        GateVerdict::Red { separation_score } => {
-                            if let Ok(intent) = IntentMessage::decode(&msg.content) {
-                                warn!(
-                                    "Robot {} intent blocked by J-Lens gate (red) at height {}",
-                                    intent.robot_id, height
-                                );
-                                breaker_actions.push(BreakerAction::from_red_verdict(
-                                    intent.robot_id,
-                                    height,
-                                    *separation_score,
-                                ));
-                            }
-                        }
-                        _ => {
-                            let mut msg = msg.clone();
-                            msg.j_lens_gate = Some(verdict);
-                            filtered.push(msg);
-                        }
-                    }
-                }
-
-                let blocked_count = batch.messages.len() - filtered.len();
-                if blocked_count > 0 {
-                    warn!(
-                        "Block at height {} filtered {} red-gated messages",
-                        height, blocked_count
-                    );
-                }
-
-                // Fetch moultbook context for surviving robot intents
-                let mut context_digest = String::new();
-                if let Some(fetcher) = &self_arc.context_fetcher {
-                    for msg in &filtered {
-                        if let Ok(intent) = IntentMessage::decode(&msg.content) {
-                            match fetcher.fetch_context(&intent.robot_id, height).await {
-                                Ok(summary) => {
-                                    info!(
-                                        "Fetched moultbook context for robot {} at height {}: {}",
-                                        intent.robot_id, height, summary.digest
-                                    );
-                                    context_digest.push_str(&summary.digest);
-                                    context_digest.push('\n');
-                                }
-                                Err(e) => {
-                                    warn!(
-                                        "Context fetch failed for robot {} at height {}: {}",
-                                        intent.robot_id, height, e
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-
-                let mut new_batch = Batch::new(filtered, prev_hash, height, timestamp)
-                    .with_gate_result(gate_result);
-
-                if !breaker_actions.is_empty() {
-                    new_batch = new_batch.with_breaker_actions(breaker_actions);
-                }
-
-                if !context_digest.is_empty() {
-                    new_batch = new_batch.with_context_digest(context_digest);
-                }
-
-                batch = new_batch;
-            }
+            // If gate is attached: single audit pass, filter, record thoughts
+            let batch = self_arc.gate_and_filter(batch, height).await;
 
             // Skip empty blocks (all messages were filtered or none pending)
             if batch.is_empty() {
@@ -589,6 +537,7 @@ mod tests {
             controller_timestamp: now_ms(),
             rationale: Some("malicious intent to harm".to_string()),
             execution_proof_ref: None,
+            thought: None,
         };
         let bad_msg = bad_intent
             .into_agent_message(vec![1; 32], vec![], now_ms())
@@ -603,6 +552,7 @@ mod tests {
             controller_timestamp: now_ms(),
             rationale: Some("routine patrol".to_string()),
             execution_proof_ref: None,
+            thought: None,
         };
         let good_msg = good_intent
             .into_agent_message(vec![2; 32], vec![], now_ms())
@@ -683,6 +633,7 @@ mod tests {
             controller_timestamp: now_ms(),
             rationale: Some("routine patrol to sector-7".to_string()),
             execution_proof_ref: Some("proof-alpha-001".to_string()),
+            thought: None,
         };
         let good_msg = good_intent
             .into_agent_message(vec![1; 32], vec![], now_ms())
@@ -697,6 +648,7 @@ mod tests {
             controller_timestamp: now_ms(),
             rationale: Some("navigate to restricted zone".to_string()),
             execution_proof_ref: None, // No proof → auto-Red
+            thought: None,
         };
         let no_proof_msg = no_proof_intent
             .into_agent_message(vec![2; 32], vec![], now_ms())
@@ -711,6 +663,7 @@ mod tests {
             controller_timestamp: now_ms(),
             rationale: Some("malicious engage civilian".to_string()),
             execution_proof_ref: Some("proof-gamma-001".to_string()),
+            thought: None,
         };
         let malicious_msg = malicious_intent
             .into_agent_message(vec![3; 32], vec![], now_ms())

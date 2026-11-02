@@ -6,7 +6,15 @@
  * implementations of the core operations.
  */
 
-import type { NativeAddon, AgentMessage, Batch, GateResult, GateVerdict } from './types.js'
+import type {
+  NativeAddon,
+  AgentMessage,
+  Batch,
+  GateResult,
+  GateVerdict,
+  IntentMessage,
+  ThoughtRef,
+} from './types.js'
 import { GateVerdict as GateVerdictEnum } from './types.js'
 import { createHash } from 'node:crypto'
 
@@ -102,11 +110,109 @@ function jsBatchLen(batch: Batch): bigint {
 
 function jsCreateGateResult(
   verdict: GateVerdict,
-  separationScore: number,
+  integrity?: number,
   attestationHash?: string,
   modelId?: string,
 ): GateResult {
-  return { verdict, separationScore, attestationHash, modelId }
+  return { verdict, integrity, attestationHash, modelId }
+}
+
+// ─── Intent / thought fallbacks ──────────────────────────────────────
+
+/** Canonical compact JSON — sorted keys at every level, matching
+ *  serde_json's BTreeMap ordering used by Rust action_hash. */
+function canonJson(v: unknown): string {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v)
+  if (Array.isArray(v)) return `[${v.map(canonJson).join(',')}]`
+  const keys = Object.keys(v as Record<string, unknown>).sort()
+  const parts = keys.map((k) => `${JSON.stringify(k)}:${canonJson((v as Record<string, unknown>)[k])}`)
+  return `{${parts.join(',')}}`
+}
+
+function thoughtRefToSnake(t: ThoughtRef): Record<string, unknown> {
+  return {
+    schema: t.schema,
+    score_semantics: t.scoreSemantics,
+    snapshot_hash: t.snapshotHash,
+    model_id: t.modelId,
+    weights_hash: t.weightsHash,
+    bank_hash: t.bankHash,
+    action_hash: t.actionHash,
+    activation_root: t.activationRoot,
+    integrity: t.integrity,
+    tier: t.tier,
+    tee_attestation_ref: t.teeAttestationRef ?? null,
+    storage_locator: t.storageLocator ?? null,
+  }
+}
+
+function thoughtRefFromSnake(t: Record<string, unknown>): ThoughtRef {
+  return {
+    schema: t.schema as string,
+    scoreSemantics: t.score_semantics as string,
+    snapshotHash: t.snapshot_hash as string,
+    modelId: t.model_id as string,
+    weightsHash: t.weights_hash as string,
+    bankHash: t.bank_hash as string,
+    actionHash: t.action_hash as string,
+    activationRoot: t.activation_root as string,
+    integrity: t.integrity as number,
+    tier: t.tier as ThoughtRef['tier'],
+    teeAttestationRef: (t.tee_attestation_ref as string) ?? undefined,
+    storageLocator: (t.storage_locator as string) ?? undefined,
+  }
+}
+
+function jsEncodeIntentMessage(msg: IntentMessage): Uint8Array {
+  const json = JSON.stringify({
+    robot_id: msg.robotId,
+    action: msg.action,
+    params: JSON.parse(msg.paramsJson || 'null'),
+    sensor_snapshot_hash: msg.sensorSnapshotHash,
+    controller_timestamp: Number(msg.controllerTimestamp),
+    rationale: msg.rationale ?? null,
+    execution_proof_ref: msg.executionProofRef ?? null,
+    ...(msg.thought ? { thought: thoughtRefToSnake(msg.thought) } : {}),
+  })
+  return new Uint8Array(Buffer.from(json, 'utf-8'))
+}
+
+function jsDecodeIntentMessage(data: Uint8Array): IntentMessage {
+  const empty: IntentMessage = {
+    robotId: '',
+    action: '',
+    paramsJson: 'null',
+    sensorSnapshotHash: '',
+    controllerTimestamp: 0n,
+  }
+  try {
+    const j = JSON.parse(Buffer.from(data).toString('utf-8'))
+    return {
+      robotId: j.robot_id ?? '',
+      action: j.action ?? '',
+      paramsJson: canonJson(j.params ?? null),
+      sensorSnapshotHash: j.sensor_snapshot_hash ?? '',
+      controllerTimestamp: BigInt(j.controller_timestamp ?? 0),
+      rationale: j.rationale ?? undefined,
+      executionProofRef: j.execution_proof_ref ?? undefined,
+      thought: j.thought ? thoughtRefFromSnake(j.thought) : undefined,
+    }
+  } catch {
+    return empty
+  }
+}
+
+function jsActionHashForIntent(msg: IntentMessage): string {
+  const v = {
+    action: msg.action,
+    controller_timestamp: Number(msg.controllerTimestamp),
+    params: JSON.parse(msg.paramsJson || 'null'),
+    robot_id: msg.robotId,
+    sensor_snapshot_hash: msg.sensorSnapshotHash,
+  }
+  const h = createHash('sha256')
+  h.update(Buffer.from(canonJson(v), 'utf-8'))
+  return h.digest('hex')
 }
 
 // ─── Native loader ────────────────────────────────────────────────────
@@ -122,6 +228,9 @@ const fallback: NativeAddon = {
   batchHasBlockedMessage: jsBatchHasBlockedMessage,
   batchLen: jsBatchLen,
   createGateResult: jsCreateGateResult,
+  encodeIntentMessage: jsEncodeIntentMessage,
+  decodeIntentMessage: jsDecodeIntentMessage,
+  actionHashForIntent: jsActionHashForIntent,
 }
 
 let _native: NativeAddon | null = null
@@ -148,6 +257,9 @@ export function getNative(): NativeAddon {
         batchHasBlockedMessage: native.batchHasBlockedMessage,
         batchLen: native.batchLen,
         createGateResult: native.createGateResult,
+        encodeIntentMessage: native.encodeIntentMessage,
+        decodeIntentMessage: native.decodeIntentMessage,
+        actionHashForIntent: native.actionHashForIntent,
       }
     } catch {
       // Native addon not available, use fallback

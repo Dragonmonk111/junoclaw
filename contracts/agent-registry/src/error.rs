@@ -29,4 +29,10 @@ pub enum ContractError {
 
     #[error("Insufficient contract balance: requested {requested}, available {available}")]
     InsufficientBalance { requested: Uint128, available: Uint128 },
+
+    #[error("Model binding requires non-empty model_id and weights_hash")]
+    EmptyBinding {},
+
+    #[error("No model bound to agent: {agent_id}")]
+    ModelNotBound { agent_id: u64 },
 }

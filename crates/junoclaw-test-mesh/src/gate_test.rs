@@ -71,8 +71,8 @@ async fn main() -> Result<()> {
     let mixed_batch = Batch::new(mixed_msgs, [0u8; 32], 1, now_ms());
     let mixed_result = gate.audit_batch(&mixed_batch).await;
     assert!(matches!(mixed_result.verdict, GateVerdict::Red { .. }));
-    assert!(mixed_result.separation_score >= 0.9);
-    info!("  Batch verdict: Red (separation_score={})", mixed_result.separation_score);
+    assert_eq!(mixed_result.integrity, Some(0.05));
+    info!("  Batch verdict: Red (integrity={:?})", mixed_result.integrity);
 
     // ─── 4. Batch-level audit — yellow but no red ────────────────────
     info!("\n--- Test: Batch audit (yellow, no red) ---");
@@ -83,7 +83,7 @@ async fn main() -> Result<()> {
     let yellow_batch = Batch::new(yellow_msgs, [0u8; 32], 1, now_ms());
     let yellow_result = gate.audit_batch(&yellow_batch).await;
     assert!(matches!(yellow_result.verdict, GateVerdict::Yellow { .. }));
-    info!("  Batch verdict: Yellow (separation_score={})", yellow_result.separation_score);
+    info!("  Batch verdict: Yellow (integrity={:?})", yellow_result.integrity);
 
     // ─── 5. Red overrides yellow in aggregate ────────────────────────
     info!("\n--- Test: Red overrides yellow in aggregate ---");
@@ -141,8 +141,8 @@ async fn main() -> Result<()> {
     );
     let gate_result = block.batch.gate_result.as_ref().unwrap();
     info!(
-        "  Gate verdict: {:?}, separation_score: {}",
-        gate_result.verdict, gate_result.separation_score
+        "  Gate verdict: {:?}, integrity: {:?}",
+        gate_result.verdict, gate_result.integrity
     );
     info!(
         "  Attestation hash: {}",
@@ -181,17 +181,18 @@ async fn main() -> Result<()> {
     // ─── 8. GateConfig custom thresholds ─────────────────────────────
     info!("\n--- Test: Custom gate thresholds ---");
     let custom_config = GateConfig {
-        csi_endpoint: "http://localhost:9999".to_string(),
+        jlens_endpoint: "http://localhost:9999".to_string(),
+        model_id: Some("qwen2.5-0.5b-instruct".to_string()),
+        green_threshold: 0.5,
         yellow_threshold: 0.05,
-        red_threshold: 0.10,
         timeout: Duration::from_secs(5),
         api_key: Some("test-key".to_string()),
     };
     let custom_gate = JLensGate::mock(custom_config);
+    assert_eq!(custom_gate.config().green_threshold, 0.5);
     assert_eq!(custom_gate.config().yellow_threshold, 0.05);
-    assert_eq!(custom_gate.config().red_threshold, 0.10);
     assert!(custom_gate.is_mock());
-    info!("  Custom thresholds: yellow=0.05, red=0.10");
+    info!("  Custom thresholds: green=0.5, yellow=0.05");
 
     // ─── Summary ──────────────────────────────────────────────────────
     info!("\n=== Phase 4 Gate Integration Test Summary ===");

@@ -67,7 +67,7 @@ async fn main() -> Result<()> {
     ).with_gate(GateVerdict::Green);
     let blocked = AgentMessage::new(
         engine.validators()[3].clone(), vec![], b"deceptive".to_vec(), 2000,
-    ).with_gate(GateVerdict::Red { separation_score: 0.9 });
+    ).with_gate(GateVerdict::Red { integrity: Some(0.05) });
 
     let mixed = Batch::new(vec![clean, blocked], [0u8; 32], 0, 3000);
     assert!(mixed.has_blocked_message(), "should detect byzantine red-gated message");
@@ -77,7 +77,7 @@ async fn main() -> Result<()> {
         AgentMessage::new(engine.validators()[0].clone(), vec![], b"clean1".to_vec(), 1000)
             .with_gate(GateVerdict::Green),
         AgentMessage::new(engine.validators()[1].clone(), vec![], b"clean2".to_vec(), 2000)
-            .with_gate(GateVerdict::Yellow { separation_score: 0.2 }),
+            .with_gate(GateVerdict::Yellow { integrity: Some(0.2) }),
     ], [0u8; 32], 0, 3000);
     assert!(!all_clean.has_blocked_message(), "no false positives on clean batch");
     info!("  No false positives on clean batch: OK");

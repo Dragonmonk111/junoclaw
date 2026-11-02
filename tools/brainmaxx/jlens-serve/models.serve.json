@@ -1,0 +1,28 @@
+{
+  "version": "jlens.serve.v1",
+  "_comment": "Generation-time serving registry (local HF models). Distinct from ../src/models.json (post-hoc extractor endpoints). model_id keys match the canonical ids; probe_bank_path relative to this file.",
+  "models": {
+    "tiny-gpt2": {
+      "hf_model": "sshleifer/tiny-gpt2",
+      "layer": 1,
+      "probe_bank_path": "../j-lens/probe_bank_tiny_gpt2.json",
+      "dtype": "float32",
+      "device": "cpu",
+      "test_only": true
+    },
+    "qwen2.5-0.5b-instruct": {
+      "hf_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "layer": 12,
+      "probe_bank_path": "../j-lens/probe_bank_onchain.json",
+      "dtype": "bfloat16",
+      "device": "cpu"
+    },
+    "qwen2.5-3b-instruct": {
+      "hf_model": "Qwen/Qwen2.5-3B-Instruct",
+      "layer": 22,
+      "probe_bank_path": "../j-lens/probe_bank_onchain_3b.json",
+      "dtype": "bfloat16",
+      "device": "cpu"
+    }
+  }
+}

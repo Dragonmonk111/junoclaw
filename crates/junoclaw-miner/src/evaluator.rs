@@ -69,8 +69,9 @@ pub struct BatchData {
     pub safety_envelope: Option<SafetyEnvelope>,
     /// Gate result from the coordination layer
     pub gate_verdict: Option<String>,
-    /// Gate separation score
-    pub gate_separation_score: Option<f64>,
+    /// Gate integrity score (jlens.integrity.v1: higher = healthier,
+    /// 1.0 = no detections)
+    pub gate_integrity: Option<f64>,
     /// Timestamp of batch finalization
     pub finalized_at: Option<u64>,
 }
@@ -176,8 +177,8 @@ pub trait TruthEvaluator: Send + Sync {
 /// - Proof not verified → Red
 /// - Gate verdict = "red" → Red
 /// - Gate verdict = "yellow" → Yellow
-/// - Gate separation_score > 0.35 → Red
-/// - Gate separation_score > 0.15 → Yellow
+/// - Gate integrity < 0.15 → Red
+/// - Gate integrity < 0.30 → Yellow
 /// - Otherwise → Green
 pub struct RuleBasedEvaluator {
     fingerprint: EvaluatorFingerprint,
@@ -245,21 +246,21 @@ impl TruthEvaluator for RuleBasedEvaluator {
             }
         }
 
-        // Check separation score
-        if let Some(score) = batch.gate_separation_score {
-            if score > 0.35 {
+        // Check gate integrity (higher = healthier; low = compromised)
+        if let Some(integrity) = batch.gate_integrity {
+            if integrity < 0.15 {
                 tracing::info!(
                     batch_height = batch.batch_height,
-                    score,
-                    "rule-based: separation > 0.35 → Red"
+                    integrity,
+                    "rule-based: integrity < 0.15 → Red"
                 );
                 return Ok(Verdict::Red);
             }
-            if score > 0.15 {
+            if integrity < 0.30 {
                 tracing::info!(
                     batch_height = batch.batch_height,
-                    score,
-                    "rule-based: separation > 0.15 → Yellow"
+                    integrity,
+                    "rule-based: integrity < 0.30 → Yellow"
                 );
                 return Ok(Verdict::Yellow);
             }
@@ -390,8 +391,8 @@ impl OpenWeightEvaluator {
         if let Some(ref gate) = batch.gate_verdict {
             prompt.push_str(&format!("Gate verdict: {}\n", gate));
         }
-        if let Some(score) = batch.gate_separation_score {
-            prompt.push_str(&format!("Separation score: {:.4}\n", score));
+        if let Some(integrity) = batch.gate_integrity {
+            prompt.push_str(&format!("Integrity: {:.4}\n", integrity));
         }
 
         prompt.push_str("\nVerdict:");
@@ -487,7 +488,7 @@ mod tests {
             intent_summary: Some("walk forward".to_string()),
             safety_envelope: None,
             gate_verdict: Some("green".to_string()),
-            gate_separation_score: Some(0.05),
+            gate_integrity: Some(0.9),
             finalized_at: Some(1000),
         }
     }
@@ -537,18 +538,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rule_high_separation_is_red() {
+    async fn rule_low_integrity_is_red() {
         let eval = RuleBasedEvaluator::new();
         let mut batch = base_batch();
-        batch.gate_separation_score = Some(0.40);
+        batch.gate_integrity = Some(0.05);
         assert_eq!(eval.evaluate(&batch).await.unwrap(), Verdict::Red);
     }
 
     #[tokio::test]
-    async fn rule_medium_separation_is_yellow() {
+    async fn rule_mid_integrity_is_yellow() {
         let eval = RuleBasedEvaluator::new();
         let mut batch = base_batch();
-        batch.gate_separation_score = Some(0.20);
+        batch.gate_integrity = Some(0.20);
         assert_eq!(eval.evaluate(&batch).await.unwrap(), Verdict::Yellow);
     }
 

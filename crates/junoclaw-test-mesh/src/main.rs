@@ -175,8 +175,8 @@ async fn main() -> Result<()> {
         b"suspicious message".to_vec(),
         now_ms(),
     )
-    .with_gate(GateVerdict::Red { separation_score: 0.95 });
-    info!("  Red gate attached: separation_score=0.95");
+    .with_gate(GateVerdict::Red { integrity: Some(0.05) });
+    info!("  Red gate attached: integrity=0.05");
 
     // ─── 6. Test batch assembly and hash chaining ─────────────────────
     info!("\n--- Test: Batch assembly & hash chaining ---");
@@ -198,7 +198,7 @@ async fn main() -> Result<()> {
     let clean_msg = AgentMessage::new(peer_pks[0].to_vec(), vec![], b"clean".to_vec(), 1000)
         .with_gate(GateVerdict::Green);
     let blocked_msg = AgentMessage::new(peer_pks[1].to_vec(), vec![], b"bad".to_vec(), 2000)
-        .with_gate(GateVerdict::Red { separation_score: 0.9 });
+        .with_gate(GateVerdict::Red { integrity: Some(0.05) });
 
     let batch = Batch::new(vec![clean_msg, blocked_msg], [0u8; 32], 1, 3000);
     assert!(batch.has_blocked_message(), "batch should have blocked message");
@@ -209,7 +209,7 @@ async fn main() -> Result<()> {
             AgentMessage::new(peer_pks[0].to_vec(), vec![], b"clean1".to_vec(), 1000)
                 .with_gate(GateVerdict::Green),
             AgentMessage::new(peer_pks[1].to_vec(), vec![], b"clean2".to_vec(), 2000)
-                .with_gate(GateVerdict::Yellow { separation_score: 0.3 }),
+                .with_gate(GateVerdict::Yellow { integrity: Some(0.2) }),
         ],
         [0u8; 32],
         1,
@@ -269,9 +269,9 @@ async fn main() -> Result<()> {
     // ─── 9. GateResult struct test ────────────────────────────────────
     info!("\n--- Test: GateResult struct ---");
     let gate_result = GateResult {
-        verdict: GateVerdict::Yellow { separation_score: 0.42 },
+        verdict: GateVerdict::Yellow { integrity: Some(0.2) },
         attestation_hash: Some("abc123".to_string()),
-        separation_score: 0.42,
+        integrity: Some(0.2),
         model_id: Some("glm-4.5-air".to_string()),
     };
     let batch_with_gate = Batch::new(vec![msg1.clone()], [0u8; 32], 1, 1500)

@@ -471,3 +471,192 @@ fn test_withdraw_fees_rejects_empty_and_overdraw() {
     ));
     assert_eq!(balance(&app, &contract), Uint128::new(1_000_000));
 }
+
+// ─── Model binding (probe-registry adjacency) ────────────────────────
+
+fn bound_model(app: &App, contract: &Addr, agent_id: u64) -> Option<crate::state::ModelBinding> {
+    app.wrap()
+        .query_wasm_smart(contract, &QueryMsg::GetBoundModel { agent_id })
+        .unwrap()
+}
+
+#[test]
+fn test_bind_model_owner() {
+    let mut app = App::default();
+    let admin = Addr::unchecked("admin");
+    let owner = Addr::unchecked("owner1");
+    let contract = store_and_instantiate(&mut app, &admin, 0);
+    register_agent(&mut app, &contract, &owner, &[]).unwrap();
+
+    assert!(bound_model(&app, &contract, 1).is_none());
+
+    app.execute_contract(
+        owner.clone(),
+        contract.clone(),
+        &ExecuteMsg::BindModel {
+            agent_id: 1,
+            model_id: "qwen2.5-0.5b-instruct".into(),
+            weights_hash: "a".repeat(64),
+            bank_hash: None,
+        },
+        &[],
+    )
+    .unwrap();
+
+    let b = bound_model(&app, &contract, 1).unwrap();
+    assert_eq!(b.model_id, "qwen2.5-0.5b-instruct");
+    assert_eq!(b.weights_hash.len(), 64);
+    assert_eq!(b.bank_hash, None);
+    assert_eq!(b.thoughts_verified, 0);
+    assert_eq!(b.thoughts_rejected, 0);
+}
+
+#[test]
+fn test_bind_model_rejects_non_owner_and_unbound_agent() {
+    let mut app = App::default();
+    let admin = Addr::unchecked("admin");
+    let owner = Addr::unchecked("owner1");
+    let other = Addr::unchecked("other");
+    let contract = store_and_instantiate(&mut app, &admin, 0);
+    register_agent(&mut app, &contract, &owner, &[]).unwrap();
+
+    // Non-owner cannot bind
+    let err = app
+        .execute_contract(
+            other,
+            contract.clone(),
+            &ExecuteMsg::BindModel {
+                agent_id: 1,
+                model_id: "m".into(),
+                weights_hash: "w".into(),
+                bank_hash: None,
+            },
+            &[],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::NotOwner {}
+    ));
+
+    // Agent that doesn't exist
+    let err = app
+        .execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::BindModel {
+                agent_id: 99,
+                model_id: "m".into(),
+                weights_hash: "w".into(),
+                bank_hash: None,
+            },
+            &[],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::AgentNotFound { agent_id: 99 }
+    ));
+
+    // Empty fields rejected
+    let err = app
+        .execute_contract(
+            owner,
+            contract.clone(),
+            &ExecuteMsg::BindModel {
+                agent_id: 1,
+                model_id: "".into(),
+                weights_hash: "w".into(),
+                bank_hash: None,
+            },
+            &[],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::EmptyBinding {}
+    ));
+}
+
+#[test]
+fn test_record_thought_outcome_and_rebind_resets() {
+    let mut app = App::default();
+    let admin = Addr::unchecked("admin");
+    let owner = Addr::unchecked("owner1");
+    let contract = store_and_instantiate(&mut app, &admin, 0);
+    register_agent(&mut app, &contract, &owner, &[]).unwrap();
+
+    // Outcome before binding → ModelNotBound
+    let err = app
+        .execute_contract(
+            admin.clone(),
+            contract.clone(),
+            &ExecuteMsg::RecordThoughtOutcome { agent_id: 1, accepted: true },
+            &[],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::ModelNotBound { agent_id: 1 }
+    ));
+
+    app.execute_contract(
+        owner.clone(),
+        contract.clone(),
+        &ExecuteMsg::BindModel {
+            agent_id: 1,
+            model_id: "qwen2.5-0.5b-instruct".into(),
+            weights_hash: "b".repeat(64),
+            bank_hash: Some("bankhash".into()),
+        },
+        &[],
+    )
+    .unwrap();
+
+    // Non-admin cannot record
+    let err = app
+        .execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::RecordThoughtOutcome { agent_id: 1, accepted: true },
+            &[],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast::<ContractError>().unwrap(),
+        ContractError::Unauthorized {}
+    ));
+
+    // Admin records outcomes
+    for accepted in [true, true, false] {
+        app.execute_contract(
+            admin.clone(),
+            contract.clone(),
+            &ExecuteMsg::RecordThoughtOutcome { agent_id: 1, accepted },
+            &[],
+        )
+        .unwrap();
+    }
+    let b = bound_model(&app, &contract, 1).unwrap();
+    assert_eq!(b.thoughts_verified, 2);
+    assert_eq!(b.thoughts_rejected, 1);
+    assert_eq!(b.bank_hash.as_deref(), Some("bankhash"));
+
+    // Re-binding to new weights resets credibility counters
+    app.execute_contract(
+        owner,
+        contract.clone(),
+        &ExecuteMsg::BindModel {
+            agent_id: 1,
+            model_id: "qwen2.5-3b-instruct".into(),
+            weights_hash: "c".repeat(64),
+            bank_hash: None,
+        },
+        &[],
+    )
+    .unwrap();
+    let b = bound_model(&app, &contract, 1).unwrap();
+    assert_eq!(b.model_id, "qwen2.5-3b-instruct");
+    assert_eq!(b.thoughts_verified, 0);
+    assert_eq!(b.thoughts_rejected, 0);
+}

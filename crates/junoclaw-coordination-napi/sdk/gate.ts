@@ -1,12 +1,21 @@
 /**
  * J-Lens truth gate — audits message content before relay.
  *
- * In production mode, calls the CSI HTTP server POST /audit.
+ * In production mode, calls the J-Lens HTTP server POST /audit with
+ * {text, model_id}. The server resolves model_id to a registered
+ * endpoint + probe bank — clients never send paths or endpoints.
+ *
+ * Score semantics: `jlens.integrity.v1` — integrity in [0,1],
+ * higher = healthier, 1.0 = no detections. Responses that do not
+ * declare this tag are treated as unaudited (Yellow).
+ *
  * In mock mode, uses deterministic keyword heuristics.
  */
 
 import type { GateResult, GateVerdict } from './types.js'
 import { GateVerdict as GateVerdictEnum } from './types.js'
+
+export const SCORE_SEMANTICS = 'jlens.integrity.v1'
 
 const MOCK_RED_KEYWORDS = [
   'deceptive', 'malicious', 'hack', 'exploit', 'manipulate', 'fraud', 'scam',
@@ -17,20 +26,29 @@ const MOCK_YELLOW_KEYWORDS = [
 ]
 
 export interface GateConfig {
-  csiEndpoint: string
+  jlensEndpoint: string
+  modelId?: string
   apiKey?: string
+  /** integrity >= greenThreshold → Green */
+  greenThreshold: number
+  /** integrity >= yellowThreshold → Yellow; below → Red */
   yellowThreshold: number
-  redThreshold: number
   timeoutMs: number
   mock: boolean
 }
 
 export const defaultGateConfig: GateConfig = {
-  csiEndpoint: 'http://localhost:7777',
+  jlensEndpoint: 'http://localhost:7777',
+  greenThreshold: 0.30,
   yellowThreshold: 0.15,
-  redThreshold: 0.35,
   timeoutMs: 5000,
   mock: false,
+}
+
+interface AuditOutcome {
+  verdict: GateVerdict
+  /** audited integrity; undefined = unaudited */
+  integrity?: number
 }
 
 /**
@@ -40,6 +58,16 @@ export async function auditContent(
   content: Uint8Array,
   config: GateConfig,
 ): Promise<GateVerdict> {
+  return (await auditContentScored(content, config)).verdict
+}
+
+/**
+ * Audit a single message, returning verdict + audited integrity.
+ */
+export async function auditContentScored(
+  content: Uint8Array,
+  config: GateConfig,
+): Promise<AuditOutcome> {
   if (config.mock) {
     return mockAudit(content)
   }
@@ -49,60 +77,73 @@ export async function auditContent(
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), config.timeoutMs)
 
-    const resp = await fetch(`${config.csiEndpoint}/audit`, {
+    const body: Record<string, string> = { text }
+    if (config.modelId) body.model_id = config.modelId
+
+    const resp = await fetch(`${config.jlensEndpoint}/audit`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(config.apiKey ? { Authorization: config.apiKey } : {}),
       },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     })
     clearTimeout(timeout)
 
     if (!resp.ok) {
-      return GateVerdictEnum.Yellow
+      return { verdict: GateVerdictEnum.Yellow } // unaudited
     }
 
     const data = await resp.json() as {
-      separation_score: number
+      integrity?: number
+      score_semantics?: string
       attestation_hash?: string
     }
 
-    if (data.separation_score >= config.redThreshold) {
-      return GateVerdictEnum.Red
-    } else if (data.separation_score >= config.yellowThreshold) {
-      return GateVerdictEnum.Yellow
+    // Reject anything that doesn't declare the canonical semantics —
+    // the risk-vs-integrity inversion must be impossible to wire silently.
+    if (data.score_semantics !== SCORE_SEMANTICS || typeof data.integrity !== 'number') {
+      return { verdict: GateVerdictEnum.Yellow } // unaudited
     }
-    return GateVerdictEnum.Green
+
+    return { verdict: verdictFromIntegrity(data.integrity, config), integrity: data.integrity }
   } catch {
-    // On error, conservatively return Yellow
-    return GateVerdictEnum.Yellow
+    // On error, conservatively return Yellow (unaudited)
+    return { verdict: GateVerdictEnum.Yellow }
   }
+}
+
+function verdictFromIntegrity(integrity: number, config: GateConfig): GateVerdict {
+  if (integrity < config.yellowThreshold) return GateVerdictEnum.Red
+  if (integrity < config.greenThreshold) return GateVerdictEnum.Yellow
+  return GateVerdictEnum.Green
 }
 
 /**
  * Audit a batch of messages and return an aggregate GateResult.
  *
  * Aggregate logic: Red if any Red, Yellow if any Yellow (no Red), Green otherwise.
+ * `integrity` is the worst (lowest) audited score; undefined if nothing audited.
  */
 export async function auditBatch(
   messages: { content: Uint8Array }[],
   config: GateConfig,
 ): Promise<GateResult> {
   let worstVerdict: GateVerdict = GateVerdictEnum.Green
-  let maxScore = 0
+  let minIntegrity: number | undefined
   let attestationHash: string | undefined
   let modelId: string | undefined
 
   for (const msg of messages) {
-    const verdict = await auditContent(msg.content, config)
-    if (verdict === GateVerdictEnum.Red) {
+    const outcome = await auditContentScored(msg.content, config)
+    if (outcome.verdict === GateVerdictEnum.Red) {
       worstVerdict = GateVerdictEnum.Red
-      maxScore = Math.max(maxScore, 0.9)
-    } else if (verdict === GateVerdictEnum.Yellow && worstVerdict !== GateVerdictEnum.Red) {
+    } else if (outcome.verdict === GateVerdictEnum.Yellow && worstVerdict !== GateVerdictEnum.Red) {
       worstVerdict = GateVerdictEnum.Yellow
-      maxScore = Math.max(maxScore, 0.2)
+    }
+    if (outcome.integrity !== undefined) {
+      minIntegrity = minIntegrity === undefined ? outcome.integrity : Math.min(minIntegrity, outcome.integrity)
     }
   }
 
@@ -114,12 +155,12 @@ export async function auditBatch(
     }
     hash.update('mock-attestation')
     attestationHash = hash.digest('hex')
-    modelId = 'mock-csi'
+    modelId = 'mock-jlens'
   }
 
   return {
     verdict: worstVerdict,
-    separationScore: maxScore,
+    integrity: minIntegrity,
     attestationHash,
     modelId,
   }
@@ -128,20 +169,20 @@ export async function auditBatch(
 /**
  * Mock audit — deterministic keyword heuristics.
  */
-function mockAudit(content: Uint8Array): GateVerdict {
+function mockAudit(content: Uint8Array): AuditOutcome {
   const text = Buffer.from(content).toString('utf-8').toLowerCase()
 
   for (const keyword of MOCK_RED_KEYWORDS) {
     if (text.includes(keyword)) {
-      return GateVerdictEnum.Red
+      return { verdict: GateVerdictEnum.Red, integrity: 0.05 }
     }
   }
 
   for (const keyword of MOCK_YELLOW_KEYWORDS) {
     if (text.includes(keyword)) {
-      return GateVerdictEnum.Yellow
+      return { verdict: GateVerdictEnum.Yellow, integrity: 0.2 }
     }
   }
 
-  return GateVerdictEnum.Green
+  return { verdict: GateVerdictEnum.Green }
 }

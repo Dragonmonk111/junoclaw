@@ -2,7 +2,7 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Uint128;
 
 #[allow(unused_imports)]
-use crate::state::{AgentStats, Config};
+use crate::state::{AgentStats, Config, ModelBinding};
 #[allow(unused_imports)]
 use junoclaw_common::{AgentProfile, ContractRegistry};
 
@@ -65,6 +65,22 @@ pub enum ExecuteMsg {
         recipient: String,
         amount: Option<Uint128>,
     },
+    /// Owner-only: pin the exact model + weights (optionally a specific
+    /// probe bank) this agent's decisions are probed under. Thought
+    /// attestations whose model/weights don't match are rejected — an
+    /// agent cannot quietly swap to an unprobed or compromised model.
+    BindModel {
+        agent_id: u64,
+        model_id: String,
+        weights_hash: String,
+        bank_hash: Option<String>,
+    },
+    /// Admin-only: fold a thought-attestation outcome into the binding's
+    /// credibility counters (verified probed decisions vs rejected).
+    RecordThoughtOutcome {
+        agent_id: u64,
+        accepted: bool,
+    },
 }
 
 #[cw_serde]
@@ -83,4 +99,7 @@ pub enum QueryMsg {
     GetStats {},
     #[returns(Vec<AgentProfile>)]
     ListAgents { start_after: Option<u64>, limit: Option<u32> },
+    /// The agent's pinned model/weights/bank, if bound via `BindModel`.
+    #[returns(Option<ModelBinding>)]
+    GetBoundModel { agent_id: u64 },
 }

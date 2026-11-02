@@ -24,12 +24,53 @@ export interface JsBatch {
   prevHash: Uint8Array
   height: bigint
   timestamp: bigint
+  thoughtRecords: JsThoughtRecord[]
+  thoughtRoot?: string
+}
+
+export interface JsThoughtRef {
+  schema: string
+  scoreSemantics: string
+  snapshotHash: string
+  modelId: string
+  weightsHash: string
+  bankHash: string
+  actionHash: string
+  activationRoot: string
+  integrity: number
+  tier: string
+  teeAttestationRef?: string
+  storageLocator?: string
+}
+
+export interface JsIntentMessage {
+  robotId: string
+  action: string
+  paramsJson: string
+  sensorSnapshotHash: string
+  controllerTimestamp: bigint
+  rationale?: string
+  executionProofRef?: string
+  thought?: JsThoughtRef
+}
+
+export interface JsThoughtRecord {
+  agentId: string
+  actionHash: string
+  snapshotHash: string
+  bankHash: string
+  activationRoot: string
+  integrity: number
+  gate: string
+  tier: string
+  devGated: boolean
+  batchHeight: bigint
 }
 
 export interface JsGateResult {
   verdict: JsGateVerdict
   attestationHash?: string
-  separationScore: number
+  integrity?: number
   modelId?: string
 }
 
@@ -63,7 +104,13 @@ export function batchLen(batch: JsBatch): bigint
 
 export function createGateResult(
   verdict: JsGateVerdict,
-  separationScore: number,
+  integrity?: number,
   attestationHash?: string,
   modelId?: string
 ): JsGateResult
+
+export function encodeIntentMessage(msg: JsIntentMessage): Uint8Array
+
+export function decodeIntentMessage(data: Uint8Array): JsIntentMessage
+
+export function actionHashForIntent(msg: JsIntentMessage): string

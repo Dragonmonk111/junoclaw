@@ -392,7 +392,7 @@ fn parse_batch_item(item: &serde_json::Value) -> Option<BatchData> {
             worst.map(|s| s.to_string())
         });
 
-    let gate_separation_score = item.get("gate_separation_score")
+    let gate_integrity = item.get("gate_integrity")
         .and_then(|s| s.as_f64());
 
     // robot_id if present; otherwise the first message sender.
@@ -425,7 +425,7 @@ fn parse_batch_item(item: &serde_json::Value) -> Option<BatchData> {
         intent_summary,
         safety_envelope: None,
         gate_verdict,
-        gate_separation_score,
+        gate_integrity,
         finalized_at,
     })
 }
@@ -511,7 +511,7 @@ mod tests {
             "messages_hash": "dd",
             "proof_hex": "beef",
             "gate_verdict": "yellow",
-            "gate_separation_score": 0.15,
+            "gate_integrity": 0.2,
             "robot_id": "ponyou",
             "intent_summary": "patrol perimeter",
             "finalized_at": 12345,
@@ -519,7 +519,7 @@ mod tests {
         let batch = parse_batch_item(&item).unwrap();
         assert_eq!(batch.batch_height, 7);
         assert_eq!(batch.proof_hex.as_deref(), Some("beef"));
-        assert_eq!(batch.gate_separation_score, Some(0.15));
+        assert_eq!(batch.gate_integrity, Some(0.2));
         assert_eq!(batch.robot_id.as_deref(), Some("ponyou"));
         assert_eq!(batch.finalized_at, Some(12345));
     }

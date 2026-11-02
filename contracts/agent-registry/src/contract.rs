@@ -6,7 +6,10 @@ use cw2::{get_contract_version, set_contract_version};
 
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
-use crate::state::{AgentStats, Config, AGENTS, AGENT_BY_OWNER, AGENT_STATS, CONFIG, NEXT_AGENT_ID};
+use crate::state::{
+    AgentStats, Config, ModelBinding, AGENTS, AGENT_BY_OWNER, AGENT_STATS, CONFIG,
+    MODEL_BINDINGS, NEXT_AGENT_ID,
+};
 use junoclaw_common::{AgentProfile, ContractRegistry};
 
 const CONTRACT_NAME: &str = "crates.io:junoclaw-agent-registry";
@@ -114,7 +117,83 @@ pub fn execute(
         ExecuteMsg::WithdrawFees { recipient, amount } => {
             execute_withdraw_fees(deps, env, info, recipient, amount)
         }
+        ExecuteMsg::BindModel {
+            agent_id,
+            model_id,
+            weights_hash,
+            bank_hash,
+        } => execute_bind_model(deps, env, info, agent_id, model_id, weights_hash, bank_hash),
+        ExecuteMsg::RecordThoughtOutcome { agent_id, accepted } => {
+            execute_record_thought_outcome(deps, info, agent_id, accepted)
+        }
     }
+}
+
+/// Owner-only: pin the exact model + weights (optionally a specific probe
+/// bank) this agent's decisions are probed under. Re-binding replaces the
+/// previous binding and resets the attestation counters — a model change
+/// is a fresh credibility context.
+fn execute_bind_model(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    agent_id: u64,
+    model_id: String,
+    weights_hash: String,
+    bank_hash: Option<String>,
+) -> Result<Response, ContractError> {
+    let profile = AGENTS
+        .may_load(deps.storage, agent_id)?
+        .ok_or(ContractError::AgentNotFound { agent_id })?;
+    if profile.owner != info.sender {
+        return Err(ContractError::NotOwner {});
+    }
+    if model_id.is_empty() || weights_hash.is_empty() {
+        return Err(ContractError::EmptyBinding {});
+    }
+    let binding = ModelBinding {
+        model_id: model_id.clone(),
+        weights_hash: weights_hash.clone(),
+        bank_hash,
+        bound_at: env.block.time.seconds(),
+        thoughts_verified: 0,
+        thoughts_rejected: 0,
+    };
+    MODEL_BINDINGS.save(deps.storage, agent_id, &binding)?;
+    Ok(Response::new()
+        .add_attribute("action", "bind_model")
+        .add_attribute("agent_id", agent_id.to_string())
+        .add_attribute("model_id", model_id)
+        .add_attribute("weights_hash", weights_hash))
+}
+
+/// Admin-only: fold a thought-attestation outcome into the binding's
+/// credibility counters (verified probed decisions vs rejected/blocked).
+fn execute_record_thought_outcome(
+    deps: DepsMut,
+    info: MessageInfo,
+    agent_id: u64,
+    accepted: bool,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if info.sender != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    MODEL_BINDINGS.update(deps.storage, agent_id, |existing| match existing {
+        Some(mut b) => {
+            if accepted {
+                b.thoughts_verified += 1;
+            } else {
+                b.thoughts_rejected += 1;
+            }
+            Ok(b)
+        }
+        None => Err(ContractError::ModelNotBound { agent_id }),
+    })?;
+    Ok(Response::new()
+        .add_attribute("action", "record_thought_outcome")
+        .add_attribute("agent_id", agent_id.to_string())
+        .add_attribute("accepted", accepted.to_string()))
 }
 
 /// Admin-only sweep of the contract's `cfg.denom` balance. Registration fees
@@ -440,6 +519,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_json_binary(&agents)
         }
         QueryMsg::GetStats {} => to_json_binary(&AGENT_STATS.load(deps.storage)?),
+        QueryMsg::GetBoundModel { agent_id } => {
+            to_json_binary(&MODEL_BINDINGS.may_load(deps.storage, agent_id)?)
+        }
         QueryMsg::ListAgents { start_after, limit } => {
             let limit = limit.unwrap_or(10).min(50) as usize;
             let start = start_after.map(cw_storage_plus::Bound::exclusive);

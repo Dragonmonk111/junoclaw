@@ -11,6 +11,7 @@
 
 pub mod message;
 pub mod gate;
+pub mod thought;
 pub mod consensus;
 pub mod context;
 pub mod api;

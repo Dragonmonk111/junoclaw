@@ -55,8 +55,8 @@ bytes = "1.7"
 rand = "0.10"
 
 [[bin]]
-name = "csi-server"
-path = "src/bin/csi-server.rs"
+name = "rules-prefilter"
+path = "src/bin/rules-prefilter.rs"
 
 [features]
 default = []

@@ -11,11 +11,16 @@ use sha2::{Digest, Sha256};
 
 /// J-Lens gate verdict for a message.
 /// Green = clean, Yellow = warning (suspicious but not blocked), Red = blocked.
+///
+/// `integrity` follows `jlens.integrity.v1` semantics: higher = healthier,
+/// 1.0 = no detections. `Some` = an audited score from the probe;
+/// `None` = unaudited (gate unreachable, semantics mismatch, or a hard
+/// failure with no audited score). Never fabricate a score for failures.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum GateVerdict {
     Green,
-    Yellow { separation_score: f64 },
-    Red { separation_score: f64 },
+    Yellow { integrity: Option<f64> },
+    Red { integrity: Option<f64> },
 }
 
 /// Result of a J-Lens gate audit on a batch.
@@ -23,7 +28,9 @@ pub enum GateVerdict {
 pub struct GateResult {
     pub verdict: GateVerdict,
     pub attestation_hash: Option<String>,
-    pub separation_score: f64,
+    /// Worst (lowest) audited integrity across the batch; None if
+    /// nothing was audited.
+    pub integrity: Option<f64>,
     pub model_id: Option<String>,
 }
 
@@ -187,6 +194,11 @@ pub struct IntentMessage {
     pub rationale: Option<String>,
     /// Optional execution proof reference (rosbag path, action server result ID)
     pub execution_proof_ref: Option<String>,
+    /// J-Lens thought attestation captured at generation time — proves
+    /// how the deciding model was thinking. Required (fail-closed) for
+    /// gated action classes under DAO thought policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thought: Option<crate::thought::ThoughtRef>,
 }
 
 impl IntentMessage {
@@ -404,13 +416,16 @@ impl BreakerAction {
     pub fn from_red_verdict(
         robot_id: String,
         batch_height: u64,
-        separation_score: f64,
+        integrity: Option<f64>,
     ) -> Self {
+        let integrity_str = integrity
+            .map(|i| format!("{:.3}", i))
+            .unwrap_or_else(|| "unaudited".to_string());
         Self {
             robot_id,
             reason: format!(
-                "J-Lens gate red verdict (separation_score={:.3}) — intent blocked by coordination layer",
-                separation_score
+                "J-Lens gate red verdict (integrity={}) — intent blocked by coordination layer",
+                integrity_str
             ),
             cause_ref: format!("batch:{}:red-verdict", batch_height),
             batch_height,
@@ -419,6 +434,21 @@ impl BreakerAction {
                 .unwrap_or_default()
                 .as_millis() as u64,
         }
+    }
+
+    /// Create a breaker action from a red gate decision, carrying the
+    /// specific cause (proof failure, thought violation, integrity).
+    pub fn from_gate_decision(
+        robot_id: String,
+        batch_height: u64,
+        integrity: Option<f64>,
+        reason: Option<&str>,
+    ) -> Self {
+        let mut action = Self::from_red_verdict(robot_id, batch_height, integrity);
+        if let Some(r) = reason {
+            action.reason = format!("{} — {}", action.reason, r);
+        }
+        action
     }
 
     /// Create a breaker action from a reflex batch attestation violation.
@@ -487,6 +517,13 @@ pub struct Batch {
     /// Moultbook context fetched during this batch's consensus processing
     #[serde(default)]
     pub context_digest: Option<String>,
+    /// J-Lens thought records verified in this batch (Phase 4)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub thought_records: Vec<crate::thought::ThoughtRecord>,
+    /// Merkle root over thought record leaves — anchored on-chain via
+    /// merkle-verifier AnchorRoot { robot_id: "jlens:thoughts", .. }
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thought_root: Option<String>,
 }
 
 impl Batch {
@@ -513,7 +550,17 @@ impl Batch {
             eval_attestations: Vec::new(),
             breaker_actions: Vec::new(),
             context_digest: None,
+            thought_records: Vec::new(),
+            thought_root: None,
         }
+    }
+
+    /// Attach verified thought records and compute their merkle root.
+    pub fn with_thought_records(mut self, records: Vec<crate::thought::ThoughtRecord>) -> Self {
+        let leaves: Vec<[u8; 32]> = records.iter().map(|r| r.leaf_hash()).collect();
+        self.thought_root = crate::thought::thought_merkle_root(&leaves);
+        self.thought_records = records;
+        self
     }
 
     /// Attach a J-Lens gate result to the batch.
@@ -626,7 +673,7 @@ mod tests {
         let msg_clean = AgentMessage::new(vec![1; 32], vec![], b"clean".to_vec(), 1000)
             .with_gate(GateVerdict::Green);
         let msg_blocked = AgentMessage::new(vec![2; 32], vec![], b"bad".to_vec(), 2000)
-            .with_gate(GateVerdict::Red { separation_score: 0.95 });
+            .with_gate(GateVerdict::Red { integrity: Some(0.05) });
 
         let batch = Batch::new(vec![msg_clean, msg_blocked], [0u8; 32], 1, 3000);
         assert!(batch.has_blocked_message());
@@ -637,7 +684,7 @@ mod tests {
         let msg1 = AgentMessage::new(vec![1; 32], vec![], b"clean1".to_vec(), 1000)
             .with_gate(GateVerdict::Green);
         let msg2 = AgentMessage::new(vec![2; 32], vec![], b"clean2".to_vec(), 2000)
-            .with_gate(GateVerdict::Yellow { separation_score: 0.3 });
+            .with_gate(GateVerdict::Yellow { integrity: Some(0.2) });
 
         let batch = Batch::new(vec![msg1, msg2], [0u8; 32], 1, 3000);
         assert!(!batch.has_blocked_message());
@@ -718,6 +765,7 @@ mod tests {
             controller_timestamp: 1723910400000,
             rationale: Some("Route through sector B, avoiding obstacle at waypoint 3".to_string()),
             execution_proof_ref: Some("rosbag_2026_08_17_001".to_string()),
+            thought: None,
         };
         let encoded = intent.encode().unwrap();
         let decoded = IntentMessage::decode(&encoded).unwrap();
@@ -739,6 +787,7 @@ mod tests {
             controller_timestamp: 1723910500000,
             rationale: None,
             execution_proof_ref: None,
+            thought: None,
         };
         let from = vec![0xAB; 32];
         let to = vec![0xCD; 32];
@@ -765,6 +814,7 @@ mod tests {
             controller_timestamp: 1000,
             rationale: None,
             execution_proof_ref: None,
+            thought: None,
         };
         let encoded = intent.encode().unwrap();
         let decoded = IntentMessage::decode(&encoded).unwrap();

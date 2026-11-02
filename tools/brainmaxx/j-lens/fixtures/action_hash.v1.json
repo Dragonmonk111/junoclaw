@@ -1,0 +1,26 @@
+{
+  "_comment": "Cross-language golden: Rust thought::action_hash and Python thought.action_hash must both produce action_hash for this intent. Integers only in params (float formatting is not guaranteed identical across serde_json/python).",
+  "intent": {
+    "robot_id": "robot-7",
+    "action": "navigate",
+    "params": {
+      "speed": 1,
+      "waypoints": [
+        {
+          "x": 3,
+          "y": -2
+        },
+        {
+          "x": 4,
+          "y": 0
+        }
+      ],
+      "mode": "careful"
+    },
+    "sensor_snapshot_hash": "9f2c",
+    "controller_timestamp": 1730540000123,
+    "rationale": null,
+    "execution_proof_ref": "tx-abc"
+  },
+  "action_hash": "4da3620a12761da5c68803bb2a7d7c2f929a6423cac5a1b087c287c3563246d7"
+}
