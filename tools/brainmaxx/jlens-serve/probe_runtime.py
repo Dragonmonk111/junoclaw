@@ -61,9 +61,11 @@ def compute_weights_hash(model_dir):
     """sha256 over sorted *.safetensors file names + sizes. Pins the
     exact weights: a fine-tune changes the hash and loses its bank."""
     h = hashlib.sha256()
-    files = sorted(
-        f for f in os.listdir(model_dir) if f.endswith(".safetensors")
-    )
+    try:
+        entries = os.listdir(model_dir)
+    except OSError:
+        entries = []
+    files = sorted(f for f in entries if f.endswith(".safetensors"))
     if not files:
         # not a local snapshot (e.g. HF hub id) — fall back to name pin
         return hashlib.sha256(model_dir.encode()).hexdigest()
