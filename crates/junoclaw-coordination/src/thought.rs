@@ -398,6 +398,43 @@ pub struct ThoughtDecision {
     pub dev_gated: bool,
 }
 
+/// Canonical compact JSON with recursively sorted object keys.
+///
+/// Equivalent to Python `json.dumps(v, sort_keys=True,
+/// separators=(",", ":"), ensure_ascii=False)`. `serde_json::Value`
+/// object ordering depends on the `preserve_order` feature, which any
+/// crate in the build graph can enable transitively (nostr-sdk does) —
+/// so hashing must never rely on `to_string` order; emit keys sorted.
+fn canonical_json(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::Object(m) => {
+            let mut entries: Vec<_> = m.iter().collect();
+            entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+            let inner = entries
+                .iter()
+                .map(|(k, val)| {
+                    format!(
+                        "{}:{}",
+                        serde_json::to_string(k).unwrap_or_default(),
+                        canonical_json(val)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{{{inner}}}")
+        }
+        serde_json::Value::Array(a) => {
+            let inner = a
+                .iter()
+                .map(canonical_json)
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("[{inner}]")
+        }
+        _ => serde_json::to_string(v).unwrap_or_default(),
+    }
+}
+
 /// Deterministic action hash — binds a thought to exactly one action.
 ///
 /// sha256 over compact JSON with sorted keys of
@@ -412,8 +449,7 @@ pub fn action_hash(intent: &IntentMessage) -> String {
         "robot_id": intent.robot_id,
         "sensor_snapshot_hash": intent.sensor_snapshot_hash,
     });
-    // serde_json::Value objects are BTreeMap-backed → keys sorted.
-    let s = serde_json::to_string(&v).unwrap_or_default();
+    let s = canonical_json(&v);
     hex::encode(Sha256::digest(s.as_bytes()))
 }
 
