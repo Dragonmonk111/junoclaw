@@ -62,7 +62,12 @@ def get_prober(model_id):
         return _PROBERS[model_id]
     if model_id not in REGISTRY:
         raise KeyError(f"unknown model_id: {model_id}")
-    from probe_runtime import GenerationTimeProber, compute_weights_hash, load_bank
+    from probe_runtime import (
+        GenerationTimeProber,
+        compute_weights_hash,
+        load_bank,
+        resolve_model_revision,
+    )
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -86,6 +91,7 @@ def get_prober(model_id):
     bank = load_bank(bank_path)
     prober = GenerationTimeProber(model, tokenizer, bank, device=device)
     prober.weights_hash = compute_weights_hash(cfg["hf_model"])
+    prober.model_revision = resolve_model_revision(cfg["hf_model"])
     _PROBERS[model_id] = prober
     return prober
 

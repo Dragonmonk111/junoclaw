@@ -67,6 +67,14 @@ def resolve_model_dir(model):
     )
 
 
+def resolve_model_revision(model):
+    """HF commit sha of the cached snapshot (…/snapshots/<sha>), else
+    'local' for a plain directory that is not an HF cache snapshot."""
+    model_dir = os.path.normpath(resolve_model_dir(model))
+    parent = os.path.basename(os.path.dirname(model_dir))
+    return os.path.basename(model_dir) if parent == "snapshots" else "local"
+
+
 def compute_weights_hash(model):
     """Content pin of the exact weights: sha256 over sorted
     (file name, sha256(file bytes)) for the weight files transformers
@@ -247,7 +255,8 @@ class GenerationTimeProber:
 
         snapshot = build_thought_snapshot(
             model_id=self.bank["probe_model"],
-            model_revision=getattr(self.model.config, "_name_or_path", "unknown"),
+            model_revision=getattr(self, "model_revision", None)
+            or getattr(self.model.config, "_name_or_path", "unknown"),
             weights_hash=self.weights_hash,
             bank_hash=self.bank["bank_hash"],
             method=self.bank["method"],

@@ -24,12 +24,20 @@ Checks (each printed ok/FAIL):
   8. recomputed integrity is within int8 tolerance of the recorded value
   9. recomputed gate matches the recorded gate
 
+Optional --registry-bank: the probe-registry GetBank record fetched from
+chain. Adds: snapshot model_id / model_revision / weights_hash / bank_hash
+equal the registered record, bank thresholds equal the registered
+threshold_bp, and the bank is not revoked. A Proposed (not activated) bank
+is reported as a warning: the verdict reproduces but is not
+governance-backed.
+
 Exit 0 on all-pass, 1 on any failure. Pure python + numpy.
 
 Usage:
   python verify_thought.py --snapshot snap.json \
       --blobs <hash>.activations.json \
-      --bank ../j-lens/probe_bank_tiny_gpt2.json
+      --bank ../j-lens/probe_bank_tiny_gpt2.json \
+      [--registry-bank registry_bank.json]
 """
 
 import argparse
@@ -72,6 +80,8 @@ def main():
     ap.add_argument("--snapshot", required=True)
     ap.add_argument("--blobs", required=True)
     ap.add_argument("--bank", required=True)
+    ap.add_argument("--registry-bank", default=None,
+                    help="probe-registry GetBank JSON fetched from chain")
     args = ap.parse_args()
 
     with open(args.snapshot, "r", encoding="utf-8") as f:
@@ -195,6 +205,25 @@ def main():
     )
     check("gate reproduces", gate == snap.get("gate"), gate)
 
+    status = None
+    if args.registry_bank:
+        with open(args.registry_bank, "r", encoding="utf-8") as f:
+            reg = json.load(f)
+        print("on-chain probe-registry record:")
+        for field in ("bank_hash", "model_id", "model_revision", "weights_hash"):
+            check(
+                f"{field} matches registry",
+                snap.get(field) == reg.get(field),
+                f"snapshot {str(snap.get(field))[:16]}… vs registry {str(reg.get(field))[:16]}…",
+            )
+        reg_bp = {t["concept"]: t["threshold_bp"] for t in reg.get("thresholds", [])}
+        file_bp = {c: round(float(concepts[c]["threshold"]) * 10_000) for c in names}
+        check("thresholds match registry", reg_bp == file_bp, f"{len(reg_bp)} concepts")
+        status = reg.get("status")
+        check("bank not revoked", status != "revoked", str(status))
+        if status != "active":
+            print(f"  warn - bank status is '{status}': verdict reproduces but is not governance-backed")
+
     print()
     if FAIL:
         print(f"FAILED: {len(FAIL)} check(s)")
@@ -202,6 +231,7 @@ def main():
     print(
         f"VERIFIED — snapshot {str(recorded)[:16]}… is self-consistent "
         f"and reproduces under independent re-audit"
+        + (f"; registry bank status: {status}" if status else "")
     )
 
 

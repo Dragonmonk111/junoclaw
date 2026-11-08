@@ -46,5 +46,39 @@
       "bank thresholds are not backed by published held-out AUROC/FPR — real-model run, not a calibrated verdict",
       "snapshot weights_hash is the legacy name pin sha256(model id); content pin for these weights is 499775ce9c4214a7f3557ba81684983251670027afdb12b62340d01a9ae4627c (fixed after this batch)"
     ]
+  },
+  "jlens-probe-registry": {
+    "codeId": 23,
+    "storeTx": "4A35C9BFF11EA55D0D023035B548AADF36ABF53A18D2770822A026A6F13DF03F",
+    "address": "juno1u6jg6v726l4ezvhl36djg3cledf5wl7cnav4x8u5vx7f84hryphqmm4tzu",
+    "instantiateTx": "7D27F0E8475DA3A8289C6BFBB8C2FA84BE014505CA7573AA2F458366D22CAD0F",
+    "admin": "juno1t08k74tqwukkxjyq5cwqrguzs7ktv4y7jfr4d6 (ops wallet; to be transferred to DAO)",
+    "config": { "min_concepts": 10, "require_calibration": true },
+    "wasm": "probe_registry.wasm (341842 bytes, sha256 4787af77386bfd21693a34945022f551b48b032b72191c8960502e8004a33464)",
+    "banks": [
+      {
+        "bank_hash": "dbf7a019d5a3baddb7e3d5bdc0cc81af716d34d2acd3bfa6152d519c7a61208e",
+        "model": "Qwen/Qwen2.5-0.5B-Instruct @ 7ae557604adf67be50417f59c2c2f167def9a775, layer 12",
+        "weights_hash": "499775ce9c4214a7f3557ba81684983251670027afdb12b62340d01a9ae4627c",
+        "status": "proposed — not activatable until a calibration report hash is published",
+        "registerTx": "03ED61541262DF5672639C28142E7A6E5321BACD218580D6A6B7C0160476E9F5"
+      }
+    ]
+  },
+  "jlens-batch-3": {
+    "robot_id": "jlens:thoughts",
+    "batch_height": 3,
+    "cycle_count": 1,
+    "merkle_root": "0bf58cf99475f41548aa780b3e15f9f56138da11f5759504b809894a1a2bd0b3",
+    "anchorTx": "5011CBA0B9F355B4C37BA8C93C8DAA5894D76045CC57F38C270B347E1584F0A4",
+    "verifyProofTxs": ["982621AA1BD05D8E85B323E68C3F663792F76BD23188EC82AF8F751F1B675BC9"],
+    "anchored_at_height": 4418415,
+    "snapshot_hash": "cd06755a1309527a2776abdbfa4b339a233dcb71420e384efb8f649bce174610",
+    "note": "first attestation whose snapshot matches the on-chain probe-registry record (model_revision, content weights_hash, bank_hash, thresholds); bank still proposed"
+  },
+  "jlens-retention": {
+    "bundle": "jlens-attestations-g1-v1.tar.gz (batches 1-3: snapshots, int8 activation blobs, packets, banks, registry record, SHA256SUMS)",
+    "sha256": "56a4e2271e2838848c3999c553b1e1116776830619a4743bbc876875d4a5a78c",
+    "release": "github.com/Dragonmonk111/junoclaw/releases/tag/jlens-attestations-g1-v1"
   }
 }
