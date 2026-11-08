@@ -102,7 +102,7 @@ const msgRegistry = new Registry([
 
 const GAS_MULTIPLIER = 1.4;
 const TX_POLL_MS = 400;
-const TX_POLL_ATTEMPTS = 30; // ~12s worst case at fast-finality speeds
+const TX_POLL_ATTEMPTS = 113; // ~45s: covers a view timeout (leader 8s + cert 15s) plus a retry view
 
 function buf(u8: Uint8Array): Buffer {
   return Buffer.from(u8.buffer, u8.byteOffset, u8.byteLength);

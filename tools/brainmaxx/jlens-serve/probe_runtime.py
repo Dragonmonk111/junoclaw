@@ -57,21 +57,37 @@ def load_bank(bank_path):
     }
 
 
-def compute_weights_hash(model_dir):
-    """sha256 over sorted *.safetensors file names + sizes. Pins the
-    exact weights: a fine-tune changes the hash and loses its bank."""
-    h = hashlib.sha256()
-    try:
-        entries = os.listdir(model_dir)
-    except OSError:
-        entries = []
-    files = sorted(f for f in entries if f.endswith(".safetensors"))
+def resolve_model_dir(model):
+    """Local snapshot dir for a path or an HF hub id (cache only, no network)."""
+    if os.path.isdir(model):
+        return model
+    from huggingface_hub import snapshot_download
+    return snapshot_download(
+        model, local_files_only=True, allow_patterns=["*.safetensors", "*.bin"]
+    )
+
+
+def compute_weights_hash(model):
+    """Content pin of the exact weights: sha256 over sorted
+    (file name, sha256(file bytes)) for the weight files transformers
+    loads (*.safetensors, else *.bin). A fine-tune changes tensor bytes
+    (not sizes), so it changes the hash and loses its bank. Fails closed
+    when no weights can be found."""
+    model_dir = resolve_model_dir(model)
+    entries = os.listdir(model_dir)
+    files = sorted(f for f in entries if f.endswith(".safetensors")) or \
+        sorted(f for f in entries if f.endswith(".bin"))
     if not files:
-        # not a local snapshot (e.g. HF hub id) — fall back to name pin
-        return hashlib.sha256(model_dir.encode()).hexdigest()
+        raise ValueError(f"no model weights under {model_dir}")
+    h = hashlib.sha256()
     for f in files:
+        fh = hashlib.sha256()
+        with open(os.path.join(model_dir, f), "rb") as fp:
+            for chunk in iter(lambda: fp.read(1 << 20), b""):
+                fh.update(chunk)
         h.update(f.encode())
-        h.update(str(os.path.getsize(os.path.join(model_dir, f))).encode())
+        h.update(b"\0")
+        h.update(fh.digest())
     return h.hexdigest()
 
 

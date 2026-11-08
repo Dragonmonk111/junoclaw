@@ -20,5 +20,31 @@
     "snapshot_hash": "9f9610ebf479f4a8d27bcdf513fe8376e3c1f2e5e696d43b5c90522bcacaa4d3",
     "tier": "t0-operator (dev-gated; T2 TEE is the production tier)",
     "model": "tiny-gpt2 (test-only, uncalibrated — attestation mechanics demo, not a calibrated verdict)"
+  },
+  "jlens-batch-2": {
+    "robot_id": "jlens:thoughts",
+    "batch_height": 2,
+    "cycle_count": 3,
+    "merkle_root": "09be2a0b4936781dd7cbfda8afbef0fcba07650e0d71bf0813d430fb92a2b179",
+    "anchorTx": "156099748987AEB7065D60D5DDD5127C2DA0BC07A03A407F18ED982366264AAE",
+    "verifyProofTxs": [
+      "863B6DEA54DE6C6EB8305A0E717EE03F5E170D7B6C7601CF2852AA73630059C9",
+      "EDDA8FE28DBE47FE2D1A7AF0B6E2126402ADF678AFF2645A06D1732FBB7F88F4",
+      "849F9DA4D00403BC635C99411007F94693765E5AF83D7A1AF61F7544DEF9740D"
+    ],
+    "anchored_at_height": 4415745,
+    "snapshot_hashes": [
+      "24285eae654732c3",
+      "199a6f1385749caa",
+      "f691b8f110bcfe82"
+    ],
+    "model": "Qwen/Qwen2.5-0.5B-Instruct @ 7ae557604adf67be50417f59c2c2f167def9a775, layer 12",
+    "bank_hash": "dbf7a019d5a3baddb7e3d5bdc0cc81af716d34d2acd3bfa6152d519c7a61208e",
+    "verdicts": "3/3 green, 0 detections; each snapshot independently re-audited by verify_thought.py",
+    "tier": "t0-operator (dev-gated)",
+    "caveats": [
+      "bank thresholds are not backed by published held-out AUROC/FPR — real-model run, not a calibrated verdict",
+      "snapshot weights_hash is the legacy name pin sha256(model id); content pin for these weights is 499775ce9c4214a7f3557ba81684983251670027afdb12b62340d01a9ae4627c (fixed after this batch)"
+    ]
   }
 }

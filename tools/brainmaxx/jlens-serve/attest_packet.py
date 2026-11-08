@@ -52,9 +52,11 @@ def thought_record_leaf(record: dict) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--snapshot", required=True, help="jlens.thought.v1 JSON")
+    ap.add_argument("--snapshot", required=True, action="append",
+                    help="jlens.thought.v1 JSON (repeat for a multi-thought batch)")
     ap.add_argument("--agent-id", required=True)
-    ap.add_argument("--action-hash", default=None, help="hex64 intent action_hash")
+    ap.add_argument("--action-hash", default=None,
+                    help="hex64 intent action_hash (single-snapshot batches only)")
     ap.add_argument("--batch-height", type=int, default=1)
     ap.add_argument("--tier", default="t0-operator",
                     choices=["t0-operator", "t2-tee"])
@@ -62,38 +64,57 @@ def main():
     ap.add_argument("-o", "--out", required=True)
     args = ap.parse_args()
 
-    with open(args.snapshot, "r", encoding="utf-8") as f:
-        snap = json.load(f)
-
-    if args.tier not in ("t0-operator", "t2-tee"):
-        print("bad tier", file=sys.stderr)
+    if args.action_hash and len(args.snapshot) > 1:
+        print("--action-hash is per-thought; omit it for multi-snapshot batches",
+              file=sys.stderr)
         sys.exit(2)
 
-    record = {
-        "agent_id": args.agent_id,
-        "action_hash": args.action_hash or snap["prompt_hash"],
-        "snapshot_hash": snap["snapshot_hash"],
-        "bank_hash": snap["bank_hash"],
-        "activation_root": snap["activation_root"],
-        "integrity": snap["integrity"],
-        "gate": snap["gate"],
-        "tier": args.tier,
-        "dev_gated": bool(args.dev_gated),
-        "batch_height": args.batch_height,
-    }
+    records = []
+    for path in args.snapshot:
+        with open(path, "r", encoding="utf-8") as f:
+            snap = json.load(f)
+        records.append({
+            "agent_id": args.agent_id,
+            "action_hash": args.action_hash or snap["prompt_hash"],
+            "snapshot_hash": snap["snapshot_hash"],
+            "bank_hash": snap["bank_hash"],
+            "activation_root": snap["activation_root"],
+            "integrity": snap["integrity"],
+            "gate": snap["gate"],
+            "tier": args.tier,
+            "dev_gated": bool(args.dev_gated),
+            "batch_height": args.batch_height,
+        })
 
-    leaf = thought_record_leaf(record)
-    leaves = [leaf]
+    leaves = [thought_record_leaf(r) for r in records]
+    if len(set(leaves)) != len(leaves):
+        print("duplicate thought records in batch", file=sys.stderr)
+        sys.exit(2)
     root = merkle_root(leaves)
-    proof = merkle_proof(leaves, 0)
+
+    entries = []
+    for i, (record, leaf) in enumerate(zip(records, leaves)):
+        proof = merkle_proof(leaves, i)
+        entries.append({
+            "thought_record": record,
+            "leaf_hash": leaf,
+            "leaf_index": i,
+            "proof": proof,
+            "verify_msg": {
+                "verify_proof": {
+                    "robot_id": "jlens:thoughts",
+                    "batch_height": args.batch_height,
+                    "leaf_hash": leaf,
+                    "leaf_index": i,
+                    "proof": proof,
+                }
+            },
+        })
 
     packet = {
-        "schema": "jlens.attest.v1",
-        "thought_record": record,
-        "leaf_hash": leaf,
-        "leaf_index": 0,
+        "schema": "jlens.attest.v2",
         "merkle_root": root,
-        "proof": proof,
+        "entries": entries,
         "anchor_msg": {
             "anchor_root": {
                 "robot_id": "jlens:thoughts",
@@ -102,22 +123,14 @@ def main():
                 "cycle_count": len(leaves),
             }
         },
-        "verify_msg": {
-            "verify_proof": {
-                "robot_id": "jlens:thoughts",
-                "batch_height": args.batch_height,
-                "leaf_hash": leaf,
-                "leaf_index": 0,
-                "proof": proof,
-            }
-        },
     }
 
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(packet, f, indent=2)
 
-    print(f"thought_record leaf: {leaf[:24]}…")
-    print(f"merkle root:         {root[:24]}…")
+    for e in entries:
+        print(f"leaf[{e['leaf_index']}] {e['leaf_hash'][:24]}…  gate={e['thought_record']['gate']}")
+    print(f"merkle root: {root[:24]}…  ({len(leaves)} thoughts)")
     print(f"packet -> {args.out}")
 
 

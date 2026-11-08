@@ -111,21 +111,35 @@ async function main() {
   );
   console.log(`anchored root ${packet.merkle_root.slice(0, 24)}… tx=${anchor.txHash}`);
 
-  const verify = await executeContract(
-    CHAIN_ID,
-    WALLET_ID,
-    contract,
-    packet.verify_msg,
-    undefined,
-    "jlens proof check"
-  );
-  console.log(`on-chain proof verified tx=${verify.txHash}`);
+  const entries: PacketEntry[] =
+    packet.schema === "jlens.attest.v2"
+      ? packet.entries
+      : [{ leaf_index: 0, leaf_hash: packet.leaf_hash, verify_msg: packet.verify_msg, thought_record: packet.thought_record }];
+
+  for (const e of entries) {
+    const verify = await executeContract(
+      CHAIN_ID,
+      WALLET_ID,
+      contract,
+      e.verify_msg,
+      undefined,
+      `jlens proof check leaf ${e.leaf_index}`
+    );
+    console.log(`leaf[${e.leaf_index}] proof verified on-chain tx=${verify.txHash}`);
+  }
 
   console.log("\n✅ J-Lens attestation anchored on junoclaw-g1");
   console.log(`   contract      ${contract}`);
   console.log(`   merkle_root   ${packet.merkle_root}`);
-  console.log(`   leaf_hash     ${packet.leaf_hash}`);
-  console.log(`   snapshot_hash ${packet.thought_record.snapshot_hash}`);
+  for (const e of entries)
+    console.log(`   leaf[${e.leaf_index}]       ${e.leaf_hash}  snapshot ${e.thought_record.snapshot_hash}`);
+}
+
+interface PacketEntry {
+  leaf_index: number;
+  leaf_hash: string;
+  verify_msg: Record<string, unknown>;
+  thought_record: { snapshot_hash: string };
 }
 
 main().catch((err: unknown) => {
