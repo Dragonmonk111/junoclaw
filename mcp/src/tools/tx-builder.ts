@@ -122,18 +122,43 @@ export async function instantiateContract(
   const chain = requireChain(chainId);
   const { client, address } = await getDefaultWalletStore().signFor(walletId, chain);
 
-  const result = await client.instantiate(
-    address,
-    codeId,
-    msg,
-    label,
-    "auto",
-    {
-      memo: memo || "cosmos-mcp instantiate",
-      admin: admin || address,
-      funds,
-    }
-  );
+  // JunoClawClient (junoclaw-grpc transport) takes adminAddress as arg 2 —
+  // different positional order than SigningCosmWasmClient.instantiate.
+  const result =
+    chain.transport === "junoclaw-grpc"
+      ? await (
+          client as unknown as {
+            instantiate(
+              sender: string,
+              admin: string | undefined,
+              codeId: number,
+              msg: Record<string, unknown>,
+              label: string,
+              fee: "auto",
+              options?: { funds?: readonly { denom: string; amount: string }[] }
+            ): Promise<{ contractAddress: string; transactionHash: string; height: number; gasUsed: bigint; gasWanted: bigint }>;
+          }
+        ).instantiate(
+          address,
+          admin || address,
+          codeId,
+          msg,
+          label,
+          "auto",
+          { funds }
+        )
+      : await client.instantiate(
+          address,
+          codeId,
+          msg,
+          label,
+          "auto",
+          {
+            memo: memo || "cosmos-mcp instantiate",
+            admin: admin || address,
+            funds,
+          }
+        );
 
   return {
     ...formatResult(chain, result),

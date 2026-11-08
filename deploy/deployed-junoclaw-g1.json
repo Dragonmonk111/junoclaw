@@ -1,0 +1,24 @@
+{
+  "chain": "junoclaw-g1",
+  "note": "sovereign testnet deployments (distinct from legacy uni-7 records in deployed-testnet.json)",
+  "jlens-merkle-verifier": {
+    "codeId": 22,
+    "storeTx": "4EE64416C332035FB846E9C13564A34D03DB2AA8A880ED673D334EFDFB90A973",
+    "address": "juno12k0sr39erruxqtwhxndkrlmxdl5kgt5vt7lqxaa4gpxypww866rsjz2xpq",
+    "instantiateTx": "A10CE26F0B11D5571D7DF1EB9ED8493F8C195D5C3BB101A0C84BB13973EF4ED7",
+    "admin": "juno1t08k74tqwukkxjyq5cwqrguzs7ktv4y7jfr4d6",
+    "wasm": "merkle_verifier.wasm (288507 bytes, sha256 82008c1b71dbac1dd5596194d55b475587e9afaf65a59e34a613e7759d0927a3)",
+    "deployed": "2026-11-07"
+  },
+  "jlens-first-attestation": {
+    "robot_id": "jlens:thoughts",
+    "batch_height": 1,
+    "merkle_root": "387a7419c82806ca5e339de46297c4533af8f617fc0a1ebc5d275bd526660af6",
+    "anchorTx": "CB4B0E44F092F7A7518B2A46850B67724162583CD7924123DF9B8B078D7290BD",
+    "verifyProofTx": "08029D16A81FC362038B8E80E7734850F0745106516953ED68C270E033EDFC53",
+    "anchored_at_height": 4409210,
+    "snapshot_hash": "9f9610ebf479f4a8d27bcdf513fe8376e3c1f2e5e696d43b5c90522bcacaa4d3",
+    "tier": "t0-operator (dev-gated; T2 TEE is the production tier)",
+    "model": "tiny-gpt2 (test-only, uncalibrated — attestation mechanics demo, not a calibrated verdict)"
+  }
+}
