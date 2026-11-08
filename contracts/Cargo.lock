@@ -2085,6 +2085,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "thought-court"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw2",
+ "hex",
+ "schemars",
+ "serde",
+ "sha2",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "tracing"
 version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"

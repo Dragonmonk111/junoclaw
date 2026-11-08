@@ -24,6 +24,7 @@ members = [
     "safety-envelope",
     "circuit-breaker",
     "merkle-verifier",
+    "thought-court",
     "airdrop-claim",
     "junoclaw-dao",
     "integration-tests",
