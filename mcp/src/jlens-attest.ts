@@ -12,6 +12,9 @@
  *   3. instantiateContract(codeId, {})             -> address  (skippable via --contract)
  *   4. executeContract(anchor_root, packet msg)    -> tx hash
  *   5. executeContract(verify_proof, packet msg)   -> tx hash (on-chain inclusion check)
+ *   6. optional --court <thought-court addr>: open the challenge window
+ *      with a bonded anchor_attestation over the same merkle root
+ *      (--court-bond <ujclaw>, default 1000000)
  *
  * Usage:
  *   cd mcp && npx tsx src/jlens-attest.ts \
@@ -75,17 +78,18 @@ async function main() {
   const address = await ensureWallet();
   console.log(`ops wallet: ${address}`);
 
+  let contract = arg("--contract");
   let codeId = arg("--code-id") ? Number(arg("--code-id")) : undefined;
-  if (!codeId) {
+  if (!codeId && !contract) {
     const wasmPath = arg("--wasm");
-    if (!wasmPath) throw new Error("--wasm or --code-id required");
+    if (!wasmPath) throw new Error("--wasm or --code-id required (unless --contract is given)");
     const up = await uploadWasm(CHAIN_ID, WALLET_ID, resolve(wasmPath), "jlens merkle-verifier store");
     codeId = up.codeId;
     console.log(`stored code_id=${codeId} tx=${up.txHash}`);
   }
 
-  let contract = arg("--contract");
   if (!contract) {
+    if (!codeId) throw new Error("--code-id or --wasm required to instantiate");
     const inst = await instantiateContract(
       CHAIN_ID,
       WALLET_ID,
@@ -126,6 +130,31 @@ async function main() {
       `jlens proof check leaf ${e.leaf_index}`
     );
     console.log(`leaf[${e.leaf_index}] proof verified on-chain tx=${verify.txHash}`);
+  }
+
+  // Bonded court anchor: opens the challenge window over the same root.
+  // Idempotency note — a duplicate id reverts (AttestationExists); this
+  // driver treats that as a hard error so a double-run is loud, not silent.
+  const court = arg("--court");
+  if (court) {
+    const bond = arg("--court-bond") ?? "1000000";
+    const anchor2 = await executeContract(
+      CHAIN_ID,
+      WALLET_ID,
+      court,
+      {
+        anchor_attestation: {
+          id: packet.merkle_root,
+          activation_root: packet.merkle_root,
+        },
+      },
+      [{ denom: "ujclaw", amount: bond }],
+      `jlens court anchor ${packet.merkle_root.slice(0, 12)}`
+    );
+    console.log(
+      `court: challenge window open for root ${packet.merkle_root.slice(0, 24)}… ` +
+        `bond ${bond}ujclaw tx=${anchor2.txHash}`
+    );
   }
 
   console.log("\n✅ J-Lens attestation anchored on junoclaw-g1");
