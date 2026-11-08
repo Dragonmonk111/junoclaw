@@ -38,15 +38,23 @@ function need(flag: string): string {
 }
 
 async function main() {
-  const bankPath = resolve(need("--bank"));
-  const raw = readFileSync(bankPath);
+  const activate = arg("--activate");
+  const bankPath = arg("--bank") ? resolve(arg("--bank")!) : undefined;
+  if (!activate && !bankPath) throw new Error("--bank required (or --activate <hash>)");
+  const raw = bankPath ? readFileSync(bankPath) : Buffer.alloc(0);
   // same definition as probe_runtime.load_bank: sha256 over the raw file bytes
-  const bankHash = createHash("sha256").update(raw).digest("hex");
-  const bank = JSON.parse(raw.toString("utf-8")) as {
-    probe_model: string;
-    layer: number;
-    concepts: Record<string, { threshold: number }>;
-  };
+  const bankHash = bankPath ? createHash("sha256").update(raw).digest("hex") : "";
+  const bank = bankPath
+    ? (JSON.parse(raw.toString("utf-8")) as {
+        probe_model: string;
+        layer: number;
+        concepts: Record<string, { threshold: number }>;
+      })
+    : ({ probe_model: "", layer: 0, concepts: {} } as {
+        probe_model: string;
+        layer: number;
+        concepts: Record<string, { threshold: number }>;
+      });
   const concepts = Object.keys(bank.concepts).sort();
 
   const wallet = (await getDefaultWalletStore().list()).find((e) => e.id === WALLET_ID);
@@ -73,6 +81,20 @@ async function main() {
     );
     contract = inst.contractAddress;
     console.log(`instantiated ${contract} tx=${inst.txHash}`);
+  }
+
+  // --activate <bank_hash>: admin act (ops wallet until DAO transfer)
+  if (activate) {
+    const act = await executeContract(
+      CHAIN_ID,
+      WALLET_ID,
+      contract,
+      { activate_probe_bank: { bank_hash: activate } },
+      undefined,
+      "jlens activate bank"
+    );
+    console.log(`bank ${activate.slice(0, 12)}… ACTIVATED tx=${act.txHash}`);
+    return;
   }
 
   const reg = await executeContract(
