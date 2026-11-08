@@ -127,10 +127,13 @@ class GenerationTimeProber:
         return dot
 
     def generate_and_probe(self, prompt, max_new_tokens=64):
-        """Generate + probe. Returns (response_text, snapshot, blobs).
+        """Generate + probe. Returns (response_text, snapshot, blobs, ids).
 
         blobs = list of (span, quantized_bytes, scale) per token — the
         off-chain activation commitment material.
+        ids = {"prompt_ids": [...], "response_ids": [...]} — the exact
+        tokens; required disclosure material for community-GPU dispute
+        recompute (challenge_recompute.py).
         """
         import torch
 
@@ -271,4 +274,8 @@ class GenerationTimeProber:
             activation_count=len(leaves),
             tier="t0-operator",
         )
-        return response_text, snapshot, blobs
+        ids = {
+            "prompt_ids": [int(t) for t in inputs["input_ids"][0].tolist()],
+            "response_ids": [int(t) for t in response_ids.tolist()],
+        }
+        return response_text, snapshot, blobs, ids

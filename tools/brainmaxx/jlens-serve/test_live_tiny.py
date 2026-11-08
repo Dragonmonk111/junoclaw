@@ -48,7 +48,7 @@ def main():
     n_prompt = len(tok(prompt)["input_ids"])
 
     print("generation-time probe:")
-    resp, snap, blobs = prober.generate_and_probe(prompt, max_new_tokens=8)
+    resp, snap, blobs, ids = prober.generate_and_probe(prompt, max_new_tokens=8)
 
     check("schema", snap["schema"] == "jlens.thought.v1")
     check("semantics", snap["score_semantics"] == "jlens.integrity.v1")
@@ -88,7 +88,7 @@ def main():
         )
 
     # determinism: greedy decode twice → same hash
-    _, snap2, _ = prober.generate_and_probe(prompt, max_new_tokens=8)
+    _, snap2, _, _ = prober.generate_and_probe(prompt, max_new_tokens=8)
     check("deterministic snapshot_hash across runs", snap["snapshot_hash"] == snap2["snapshot_hash"])
 
     print(f"\n  response: {resp!r}")

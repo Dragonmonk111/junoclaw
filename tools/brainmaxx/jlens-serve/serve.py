@@ -96,13 +96,19 @@ def get_prober(model_id):
     return prober
 
 
-def persist_blobs(snapshot_hash, blobs):
+def persist_blobs(snapshot_hash, blobs, prompt=None, ids=None):
     if not ACTIVATIONS_DIR or not blobs:
         return
     os.makedirs(ACTIVATIONS_DIR, exist_ok=True)
     payload = {
-        "schema": "jlens.activations.v1",
+        "schema": "jlens.activations.v1.1",
         "snapshot_hash": snapshot_hash,
+        # disclosure material for dispute recompute: without the prompt
+        # text and exact response token ids no third party can re-run
+        # the forward pass the blobs commit to (design doc section 4.1)
+        "prompt": prompt,
+        "prompt_ids": (ids or {}).get("prompt_ids"),
+        "response_ids": (ids or {}).get("response_ids"),
         "vectors": [
             {
                 "span": span,
@@ -168,10 +174,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             prober = get_prober(model_id)
-            response, snapshot, blobs = prober.generate_and_probe(
+            response, snapshot, blobs, ids = prober.generate_and_probe(
                 prompt, max_new_tokens=max_new_tokens
             )
-            persist_blobs(snapshot["snapshot_hash"], blobs)
+            persist_blobs(snapshot["snapshot_hash"], blobs, prompt, ids)
             self._send(200, {
                 "response": response,
                 "integrity": snapshot["integrity"],
