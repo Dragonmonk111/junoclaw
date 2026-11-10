@@ -1,4 +1,4 @@
-//! gRPC chain client for JunoClaw g1.
+//! Shared gRPC chain client for JunoClaw g1.
 //!
 //! g1 speaks standard Cosmos SDK gRPC on :9090 — no Tendermint RPC, so
 //! cosmrs's HttpClient is unusable here. We keep cosmrs for key handling
@@ -7,9 +7,11 @@
 //!
 //!   /cosmwasm.wasm.v1.Query/SmartContractState   (queries)
 //!   /cosmos.auth.v1beta1.Query/Account           (sequence)
+//!   /cosmos.bank.v1beta1.Query/*                 (balances)
 //!   /cosmos.tx.v1beta1.Service/BroadcastTx       (submit, SYNC mode)
 //!   /cosmos.tx.v1beta1.Service/GetTx             (confirm)
 //!   /layer.lightclient.v1.Query/LatestHeight     (custom height oracle)
+//!   /layer.lightclient.v1.Query/Block            (block + cert)
 //!
 //! Signing follows the mcp boundary rules: the mnemonic lives ONLY in a
 //! named env var, never in config/files/logs.
@@ -20,6 +22,10 @@ use cosmrs::{
     proto::{
         cosmos::{
             auth::v1beta1::{BaseAccount, QueryAccountRequest, QueryAccountResponse},
+            bank::v1beta1::{
+                QueryAllBalancesRequest, QueryAllBalancesResponse, QueryBalanceRequest,
+                QueryBalanceResponse,
+            },
             tx::v1beta1::{
                 BroadcastMode, BroadcastTxRequest, BroadcastTxResponse, GetTxRequest,
                 GetTxResponse,
@@ -39,7 +45,19 @@ use tonic::{
     transport::{Channel, Endpoint},
 };
 
-use crate::config::Config;
+/// Client configuration — callers build this from their own config types.
+#[derive(Debug, Clone)]
+pub struct ClientConfig {
+    pub grpc_endpoint: String,
+    pub chain_id: String,
+    pub gas_price: String,
+    pub gas_limit: u64,
+    /// Name of the env var holding the BIP-39 mnemonic. Optional — read-only
+    /// clients can pass None; writes then fail with a clear error.
+    pub mnemonic_env: Option<String>,
+    pub account_prefix: String,
+    pub hd_path: String,
+}
 
 /// Outcome of a confirmed broadcast.
 #[derive(Debug)]
@@ -55,6 +73,10 @@ pub struct GrpcClient {
     gas_denom: String,
     gas_limit: u64,
     signer: Option<Signer>,
+    /// Added to the fetched account sequence. g1's ante check can run
+    /// ahead of the committed account sequence when txs are still
+    /// mempool-pending — callers set this to skip ahead when needed.
+    pub seq_offset: u64,
 }
 
 struct Signer {
@@ -63,7 +85,7 @@ struct Signer {
 }
 
 impl GrpcClient {
-    pub async fn connect(cfg: &Config) -> anyhow::Result<Self> {
+    pub async fn connect(cfg: &ClientConfig) -> anyhow::Result<Self> {
         let url = format!("http://{}", cfg.grpc_endpoint);
         let channel = Endpoint::from_shared(url.clone())
             .with_context(|| format!("bad grpc endpoint {url}"))?
@@ -75,12 +97,12 @@ impl GrpcClient {
             .parse()
             .map_err(|e| anyhow!("bad chain_id {}: {e}", cfg.chain_id))?;
         let (gas_price, gas_denom) = parse_gas_price(&cfg.gas_price)?;
-        let signer = load_signer(cfg).ok();
-        if signer.is_none() {
-            tracing::warn!(
-                env = %cfg.mnemonic_env,
-                "no signer loaded — anchors will fail until the mnemonic env var is set"
-            );
+        let signer = cfg
+            .mnemonic_env
+            .as_deref()
+            .and_then(|env| load_signer(env, cfg).ok());
+        if signer.is_none() && cfg.mnemonic_env.is_some() {
+            tracing::warn!("no signer loaded — writes will fail until the mnemonic env var is set");
         }
         Ok(Self {
             grpc: Grpc::new(channel),
@@ -89,6 +111,7 @@ impl GrpcClient {
             gas_denom,
             gas_limit: cfg.gas_limit,
             signer,
+            seq_offset: 0,
         })
     }
 
@@ -97,7 +120,7 @@ impl GrpcClient {
     }
 
     /// Generic unary call against an SDK service path.
-    async fn unary<Req: Message + Clone + 'static, Resp: Message + Default + 'static>(
+    pub async fn unary<Req: Message + Clone + 'static, Resp: Message + Default + 'static>(
         &mut self,
         path: &'static str,
         req: Req,
@@ -118,13 +141,35 @@ impl GrpcClient {
         Ok(resp.into_inner())
     }
 
-    /// Latest finalized height via the chain's lightclient query.
-    /// Custom proto we don't codegen: `{ uint64 height = 1 }` shimmed below.
+    /// Latest finalized height + timestamp via the chain's lightclient query.
+    pub async fn latest(&mut self) -> anyhow::Result<LatestHeightResponse> {
+        self.unary("/layer.lightclient.v1.Query/LatestHeight", EmptyMsg {})
+            .await
+    }
+
+    /// Latest finalized height only.
     pub async fn latest_height(&mut self) -> anyhow::Result<u64> {
-        let resp: LatestHeightResponse = self
-            .unary("/layer.lightclient.v1.Query/LatestHeight", EmptyMsg {})
-            .await?;
-        Ok(resp.height)
+        Ok(self.latest().await?.height)
+    }
+
+    /// Block at a height (0 = latest): proposal + threshold cert + payload.
+    pub async fn block(&mut self, height: u64) -> anyhow::Result<LayerBlock> {
+        self.unary(
+            "/layer.lightclient.v1.Query/Block",
+            LayerBlockRequest { height },
+        )
+        .await
+    }
+
+    /// State membership proof for a raw storage key.
+    pub async fn proof(&mut self, key: &[u8]) -> anyhow::Result<LayerProofResponse> {
+        self.unary(
+            "/layer.lightclient.v1.Query/Proof",
+            LayerProofRequest {
+                key: key.to_vec(),
+            },
+        )
+        .await
     }
 
     /// CosmWasm smart query → JSON value.
@@ -156,21 +201,77 @@ impl GrpcClient {
         )?)
     }
 
-    async fn account_info(&mut self, address: &str) -> anyhow::Result<(u64, u64)> {
-        let resp: QueryAccountResponse = self
-            .unary(
+    /// Account (number, sequence) or None if the account doesn't exist.
+    pub async fn account(&mut self, address: &str) -> anyhow::Result<Option<(u64, u64)>> {
+        match self
+            .unary::<_, QueryAccountResponse>(
                 "/cosmos.auth.v1beta1.Query/Account",
                 QueryAccountRequest {
                     address: address.to_string(),
                 },
             )
+            .await
+        {
+            Ok(resp) => {
+                let any = resp
+                    .account
+                    .ok_or_else(|| anyhow!("empty account response"))?;
+                let base = BaseAccount::decode(any.value.as_slice())
+                    .context("decode BaseAccount")?;
+                Ok(Some((base.account_number, base.sequence)))
+            }
+            Err(e) => {
+                if e.to_string().contains("not found") || e.to_string().contains("NotFound") {
+                    Ok(None)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// All balances for an address.
+    pub async fn all_balances(&mut self, address: &str) -> anyhow::Result<Vec<(String, String)>> {
+        let resp: QueryAllBalancesResponse = self
+            .unary(
+                "/cosmos.bank.v1beta1.Query/AllBalances",
+                QueryAllBalancesRequest {
+                    address: address.to_string(),
+                    pagination: None,
+                    resolve_denom: false,
+                },
+            )
             .await?;
-        let any = resp
-            .account
-            .ok_or_else(|| anyhow!("account not found: {address}"))?;
-        let base =
-            BaseAccount::decode(any.value.as_slice()).context("decode BaseAccount")?;
-        Ok((base.account_number, base.sequence))
+        Ok(resp
+            .balances
+            .into_iter()
+            .map(|c| (c.denom, c.amount))
+            .collect())
+    }
+
+    /// Single-denom balance.
+    pub async fn balance(&mut self, address: &str, denom: &str) -> anyhow::Result<String> {
+        let resp: QueryBalanceResponse = self
+            .unary(
+                "/cosmos.bank.v1beta1.Query/Balance",
+                QueryBalanceRequest {
+                    address: address.to_string(),
+                    denom: denom.to_string(),
+                },
+            )
+            .await?;
+        Ok(resp.balance.map(|c| c.amount).unwrap_or_else(|| "0".into()))
+    }
+
+    /// Fetch a tx by hash.
+    pub async fn get_tx(&mut self, hash: &str) -> anyhow::Result<GetTxResponse> {
+        self.unary(
+            "/cosmos.tx.v1beta1.Service/GetTx",
+            GetTxRequest {
+                hash: hash.to_string(),
+            },
+        )
+        .await
     }
 
     /// Execute a CosmWasm contract (signer must be loaded) and wait for
@@ -197,7 +298,11 @@ impl GrpcClient {
         };
         let any = exec.to_any().map_err(|e| anyhow!("encode msg: {e}"))?;
 
-        let (account_number, sequence) = self.account_info(&account_id.to_string()).await?;
+        let (account_number, sequence) = self
+            .account(&account_id.to_string())
+            .await?
+            .ok_or_else(|| anyhow!("signer account not found on-chain"))?;
+        let sequence = sequence + self.seq_offset;
 
         let fee_amount = (self.gas_price * self.gas_limit as f64).ceil() as u128;
         let fee = Fee::from_amount_and_gas(
@@ -210,7 +315,7 @@ impl GrpcClient {
             },
             self.gas_limit,
         );
-        let tx_body = tx::Body::new(vec![any], "junoclaw-attest", 0u16);
+        let tx_body = tx::Body::new(vec![any], "junoclaw", 0u16);
 
         // Sign under an immutable borrow of the signer (SigningKey isn't Clone).
         let tx_bytes = {
@@ -221,9 +326,8 @@ impl GrpcClient {
                 .key;
             let auth_info =
                 SignerInfo::single_direct(Some(key.public_key()), sequence).auth_info(fee);
-            let sign_doc =
-                SignDoc::new(&tx_body, &auth_info, &self.chain_id, account_number)
-                    .map_err(|e| anyhow!("sign doc: {e}"))?;
+            let sign_doc = SignDoc::new(&tx_body, &auth_info, &self.chain_id, account_number)
+                .map_err(|e| anyhow!("sign doc: {e}"))?;
             let raw: Raw = sign_doc.sign(key).map_err(|e| anyhow!("sign: {e}"))?;
             raw.to_bytes().map_err(|e| anyhow!("encode tx: {e}"))?
         };
@@ -253,15 +357,7 @@ impl GrpcClient {
         // Confirm inclusion — g1 finalizes fast; poll GetTx briefly.
         for _ in 0..40 {
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-            match self
-                .unary::<_, GetTxResponse>(
-                    "/cosmos.tx.v1beta1.Service/GetTx",
-                    GetTxRequest {
-                        hash: tx_hash.clone(),
-                    },
-                )
-                .await
-            {
+            match self.get_tx(&tx_hash).await {
                 Ok(resp) => {
                     if let Some(tr) = resp.tx_response {
                         if tr.code != 0 {
@@ -294,9 +390,9 @@ fn parse_gas_price(s: &str) -> anyhow::Result<(f64, String)> {
     Ok((num.parse()?, denom.to_string()))
 }
 
-fn load_signer(cfg: &Config) -> anyhow::Result<Signer> {
-    let phrase = std::env::var(&cfg.mnemonic_env)
-        .map_err(|_| anyhow!("env var {} not set", cfg.mnemonic_env))?;
+fn load_signer(mnemonic_env: &str, cfg: &ClientConfig) -> anyhow::Result<Signer> {
+    let phrase = std::env::var(mnemonic_env)
+        .map_err(|_| anyhow!("env var {} not set", mnemonic_env))?;
     let mnemonic = bip32::Mnemonic::new(phrase.trim(), bip32::Language::English)
         .map_err(|e| anyhow!("invalid mnemonic: {e}"))?;
     let seed = mnemonic.to_seed("");
@@ -315,13 +411,71 @@ fn load_signer(cfg: &Config) -> anyhow::Result<Signer> {
     Ok(Signer { key, account_id })
 }
 
-// ── prost shims for the custom height query ───────────────────────────
+// ── prost shims for the node's custom layer.* queries ─────────────────
+// Shapes mirror proto/layer/lightclient/v1/query.proto in the node repo —
+// keep fields aligned or decoding breaks.
 
 #[derive(Clone, PartialEq, Message)]
 pub struct EmptyMsg {}
 
+/// layer.lightclient.v1.QueryLatestHeightResponse
 #[derive(Clone, PartialEq, Message)]
 pub struct LatestHeightResponse {
     #[prost(uint64, tag = "1")]
     pub height: u64,
+    /// Block timestamp in nanoseconds since UNIX epoch (0 if unknown).
+    #[prost(uint64, tag = "2")]
+    pub timestamp_nanos: u64,
 }
+
+/// layer.lightclient.v1.QueryBlockRequest
+#[derive(Clone, PartialEq, Message)]
+pub struct LayerBlockRequest {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+}
+
+/// layer.lightclient.v1.QueryBlockResponse — proposal + threshold cert +
+/// payload, the pieces an 08-wasm ClientMessage or offline verifier needs.
+#[derive(Clone, PartialEq, Message)]
+pub struct LayerBlockResponse {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+    #[prost(uint64, tag = "2")]
+    pub timestamp_nanos: u64,
+    /// commonware-codec Proposal { round, parent, payload }.
+    #[prost(bytes = "bytes", tag = "3")]
+    pub proposal_bytes: Vec<u8>,
+    /// Aggregated BLS12-381 threshold signature (48-byte compressed G1).
+    #[prost(bytes = "bytes", tag = "4")]
+    pub certificate_bytes: Vec<u8>,
+    /// bincode BlockPayload — sha256 = digest inside proposal_bytes.
+    #[prost(bytes = "bytes", tag = "5")]
+    pub payload_bytes: Vec<u8>,
+}
+
+/// layer.lightclient.v1.QueryProofRequest
+#[derive(Clone, PartialEq, Message)]
+pub struct LayerProofRequest {
+    #[prost(bytes = "bytes", tag = "1")]
+    pub key: Vec<u8>,
+}
+
+/// layer.lightclient.v1.QueryProofResponse — membership proof against the
+/// state_root carried by the block at state_height + 1.
+#[derive(Clone, PartialEq, Message)]
+pub struct LayerProofResponse {
+    #[prost(uint64, tag = "1")]
+    pub state_height: u64,
+    #[prost(bytes = "bytes", tag = "2")]
+    pub key: Vec<u8>,
+    #[prost(bytes = "bytes", tag = "3")]
+    pub value: Vec<u8>,
+    #[prost(uint64, tag = "4")]
+    pub leaf_index: u64,
+    #[prost(bytes = "bytes", repeated, tag = "5")]
+    pub siblings: Vec<prost::bytes::Bytes>,
+}
+
+/// Alias used by the REST layer.
+pub type LayerBlock = LayerBlockResponse;

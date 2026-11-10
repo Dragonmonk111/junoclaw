@@ -7,6 +7,8 @@ members = [
     "crates/junoclaw-daemon",
     "crates/junoclaw-x402-gateway",
     "crates/junoclaw-attest-gateway",
+    "crates/junoclaw-chain-grpc",
+    "crates/junoclaw-rest-gateway",
     "crates/junoclaw-github-agent",
     "crates/junoclaw-nostr-bridge",
     "crates/junoclaw-ibc-relay",

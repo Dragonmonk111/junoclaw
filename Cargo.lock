@@ -3164,14 +3164,12 @@ dependencies = [
  "anyhow",
  "axum 0.8.9",
  "base64 0.22.1",
- "bip32",
  "clap",
- "cosmrs",
  "dotenvy",
  "futures",
  "hex",
+ "junoclaw-chain-grpc",
  "parking_lot",
- "prost 0.13.5",
  "rand 0.8.7",
  "serde",
  "serde_json",
@@ -3180,10 +3178,25 @@ dependencies = [
  "time",
  "tokio",
  "toml 0.8.23",
- "tonic",
  "tower-http",
  "tracing",
  "tracing-subscriber 0.3.23",
+]
+
+[[package]]
+name = "junoclaw-chain-grpc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bip32",
+ "clap",
+ "cosmrs",
+ "prost 0.13.5",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tonic",
+ "tracing",
 ]
 
 [[package]]
@@ -3415,6 +3428,28 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.20",
  "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.23",
+]
+
+[[package]]
+name = "junoclaw-rest-gateway"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum 0.8.9",
+ "base64 0.22.1",
+ "clap",
+ "dotenvy",
+ "hex",
+ "junoclaw-chain-grpc",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "time",
+ "tokio",
+ "tower-http",
  "tracing",
  "tracing-subscriber 0.3.23",
 ]

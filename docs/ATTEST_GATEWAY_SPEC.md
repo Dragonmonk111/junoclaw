@@ -189,7 +189,10 @@ query — zero trust in the gateway at verification time.
    `juno12k0sr…jz2xpq` untouched).
 ~~3. `GET /attest/{id}` + receipt assembly.~~ DONE — receipt verified
    end-to-end: on-chain `verify_proof` accepted the gateway's inclusion
-   proof (tx 51FE084E…).
+   proof (tx 07EFCBB1, height 5073265 — two earlier attempts failed on
+   g1's sequence semantics: failed txs still consume sequence, and the
+   mcp wallet's auto-fee simulate double-consumes; use the Rust
+   `chain-grpc` client, static gas, for writes).
 ~~4. Idempotency + metering counters + `/usage`.~~ DONE — same-key
    dedup + different-body 409 both verified live.
 5. API-key admission + callback webhooks + rate limits.

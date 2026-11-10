@@ -8,10 +8,11 @@
 
 pub mod batcher;
 pub mod canon;
-pub mod chain;
 pub mod config;
 pub mod error;
 pub mod merkle;
 pub mod routes;
 pub mod store;
 pub mod types;
+
+pub use junoclaw_chain_grpc as chain;

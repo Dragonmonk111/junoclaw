@@ -1,0 +1,22 @@
+[package]
+name = "junoclaw-chain-grpc"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Shared Cosmos SDK gRPC client for JunoClaw g1 (no Tendermint RPC)"
+repository = "https://github.com/Dragonmonk111/junoclaw"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+
+cosmrs = { version = "0.21", features = ["cosmwasm", "bip32"] }
+bip32 = { version = "0.5", features = ["bip39"] }
+tonic = "0.12"
+prost = "0.13"
+
+[dev-dependencies]
+clap = { version = "4.5", features = ["derive", "env"] }

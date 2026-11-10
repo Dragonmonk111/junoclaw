@@ -10,7 +10,8 @@ use std::time::Duration;
 
 use tokio::sync::Mutex;
 
-use crate::{chain::GrpcClient, merkle, store::Store};
+use crate::{merkle, store::Store};
+use junoclaw_chain_grpc::GrpcClient;
 
 const MAX_ANCHOR_ATTEMPTS: u32 = 5;
 

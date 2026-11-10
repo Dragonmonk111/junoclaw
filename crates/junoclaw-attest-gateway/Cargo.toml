@@ -23,10 +23,7 @@ sha2 = { workspace = true }
 hex = { workspace = true }
 
 # Chain client (g1 speaks Cosmos SDK gRPC on :9090 — no Tendermint RPC)
-cosmrs = { version = "0.21", features = ["cosmwasm", "bip32"] }
-bip32 = { version = "0.5", features = ["bip39"] }
-tonic = "0.12"
-prost = "0.13"
+junoclaw-chain-grpc = { path = "../junoclaw-chain-grpc" }
 
 # Misc
 clap = { version = "4.5", features = ["derive", "env"] }

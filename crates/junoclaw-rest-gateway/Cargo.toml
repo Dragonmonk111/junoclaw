@@ -1,0 +1,27 @@
+[package]
+name = "junoclaw-rest-gateway"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Read-only Cosmos LCD-style REST shim over JunoClaw g1's SDK gRPC"
+repository = "https://github.com/Dragonmonk111/junoclaw"
+
+[dependencies]
+tokio = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true, features = ["cors", "trace"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+junoclaw-chain-grpc = { path = "../junoclaw-chain-grpc" }
+
+clap = { version = "4.5", features = ["derive", "env"] }
+dotenvy = "0.15"
+base64 = "0.22"
+hex = "0.4"
+sha2 = "0.10"
+time = { version = "0.3", features = ["formatting"] }

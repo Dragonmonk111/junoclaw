@@ -2,7 +2,6 @@
 
 mod batcher;
 mod canon;
-mod chain;
 mod config;
 mod error;
 mod merkle;
@@ -21,11 +20,11 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use crate::{
-    chain::GrpcClient,
     config::{CliArgs, Config},
     routes::{build_router, AppState},
     store::Store,
 };
+use junoclaw_chain_grpc::{ClientConfig, GrpcClient};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -52,9 +51,17 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!(requeued, "re-queued anchoring items after restart");
     }
 
-    let chain = GrpcClient::connect(&cfg)
-        .await
-        .context("grpc connect")?;
+    let chain = GrpcClient::connect(&ClientConfig {
+        grpc_endpoint: cfg.grpc_endpoint.clone(),
+        chain_id: cfg.chain_id.clone(),
+        gas_price: cfg.gas_price.clone(),
+        gas_limit: cfg.gas_limit,
+        mnemonic_env: Some(cfg.mnemonic_env.clone()),
+        account_prefix: cfg.account_prefix.clone(),
+        hd_path: cfg.hd_path.clone(),
+    })
+    .await
+    .context("grpc connect")?;
     if let Some(addr) = chain.signer_address() {
         tracing::info!(signer = %addr, "anchor signer loaded");
     }
