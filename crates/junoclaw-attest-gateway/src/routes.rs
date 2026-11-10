@@ -215,6 +215,23 @@ fn submit_one(
         });
     }
 
+    let tier = req.tier.unwrap_or_else(|| "anchor".into());
+    match tier.as_str() {
+        "anchor" => {}
+        "bonded" => {
+            if state.cfg.court_contract.is_empty() {
+                return Err(GatewayError::BadRequest(
+                    "bonded tier not configured on this gateway".into(),
+                ));
+            }
+        }
+        other => {
+            return Err(GatewayError::BadRequest(format!(
+                "unknown tier '{other}' — expected 'anchor' or 'bonded'"
+            )))
+        }
+    }
+
     let att = Attestation {
         attestation_id: new_id(),
         customer: customer.to_string(),
@@ -225,11 +242,12 @@ fn submit_one(
         agent_id: ctx.agent_id,
         occurred_at: ctx.occurred_at,
         jlens: ctx.jlens,
-        tier: req.tier.unwrap_or_else(|| "anchor".into()),
+        tier,
         callback_url: req.callback_url,
         status: AttStatus::Queued,
         submitted_at: now_secs(),
         batch: None,
+        court: None,
         retained_payload: None, // never retain by default
     };
     let id = att.attestation_id.clone();
@@ -264,6 +282,7 @@ async fn get_attestation(
         "occurred_at": att.occurred_at,
         "submitted_at": att.submitted_at,
         "batch": att.batch,
+        "court": att.court,
     }))
     .into_response())
 }
@@ -279,6 +298,7 @@ async fn get_receipt(
         "status": status_str(att.status),
         "leaf_hash": att.leaf_hash,
         "batch": att.batch,
+        "court": att.court,
         "certificate": att.batch.as_ref().map(|b| json!({
             "height": b.anchored_at_height,
             "scheme": "hybrid-bls-mayo2",

@@ -449,9 +449,10 @@ impl GrpcClient {
                     if let Some(tr) = resp.tx_response {
                         if tr.code != 0 {
                             bail!(
-                                "tx failed on-chain (code {}): {}",
+                                "tx failed on-chain (code {}): {} [txhash={}]",
                                 tr.code,
-                                tr.raw_log
+                                tr.raw_log,
+                                tr.txhash
                             );
                         }
                         let height = tr.height as u64;

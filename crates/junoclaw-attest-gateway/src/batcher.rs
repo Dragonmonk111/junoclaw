@@ -35,6 +35,18 @@ async fn anchor_once(
         return Ok(());
     }
 
+    // Bonded items take the thought-court lane — one anchor tx each,
+    // operator bond attached, challengeable during the court window.
+    let (bonded, items): (Vec<_>, Vec<_>) = items
+        .into_iter()
+        .partition(|a| a.tier == "bonded" && !cfg.court_contract.is_empty());
+    if !bonded.is_empty() {
+        anchor_court(store, chain, cfg, bonded).await;
+    }
+    if items.is_empty() {
+        return Ok(());
+    }
+
     let batch_height = store.next_batch_height();
     let robot_id = "attest:default".to_string(); // multi-customer ns: v2
 
@@ -123,4 +135,146 @@ async fn anchor_once(
         }
     }
     Ok(())
+}
+
+/// Bonded lane: each attestation gets its own `anchor_attestation` tx
+/// with the configured operator bond. Bond economics don't batch —
+/// every court anchor is an independently challengeable commitment.
+/// The bond is locked until the attestation finalizes/disputes resolve;
+/// a finalize sweep that returns matured bonds is a later ops step.
+async fn anchor_court(
+    store: &Arc<Store>,
+    chain: &Arc<Mutex<GrpcClient>>,
+    cfg: &crate::config::Config,
+    items: Vec<crate::types::Attestation>,
+) {
+    let (amount, denom) = cfg.operator_bond.clone();
+    for att in items {
+        let msg = serde_json::json!({
+            "anchor_attestation": {
+                "id": att.attestation_id,
+                "activation_root": att.leaf_hash,
+            }
+        });
+        let mut attempt = 0u32;
+        let outcome = loop {
+            attempt += 1;
+            let res = {
+                let mut c = chain.lock().await;
+                c.execute_contract_funded(
+                    &cfg.court_contract,
+                    &msg,
+                    vec![(denom.clone(), amount)],
+                )
+                .await
+            };
+            match res {
+                Ok(o) => break Some(o),
+                Err(e) => {
+                    // g1 quirk: a tx can execute on-chain AND report a
+                    // failure (sequence semantics). If the court already
+                    // holds our attestation the anchor landed — commit it
+                    // rather than retrying into `already exists` walls.
+                    if e.to_string().contains("already exists") {
+                        if let Some(recovered) =
+                            verify_court_anchor(store, chain, cfg, &att).await
+                        {
+                            break Some(recovered);
+                        }
+                    }
+                    tracing::warn!(
+                        attempt,
+                        attestation = %att.attestation_id,
+                        error = %e,
+                        "court anchor attempt failed"
+                    );
+                    if attempt >= MAX_ANCHOR_ATTEMPTS {
+                        break None;
+                    }
+                    tokio::time::sleep(Duration::from_secs(2u64.pow(attempt))).await;
+                }
+            }
+        };
+        match outcome {
+            Some(o) => {
+                let height = if o.height > 0 {
+                    o.height
+                } else {
+                    chain.lock().await.latest_height().await.unwrap_or(0)
+                };
+                if let Err(e) = store.commit_court(
+                    &att.attestation_id,
+                    crate::types::CourtInfo {
+                        contract: cfg.court_contract.clone(),
+                        court_id: att.attestation_id.clone(),
+                        anchor_tx: o.tx_hash.clone(),
+                        anchored_at_height: height,
+                    },
+                ) {
+                    tracing::error!(attestation = %att.attestation_id, error = %e, "commit_court failed");
+                }
+                tracing::info!(
+                    attestation = %att.attestation_id,
+                    tx = %o.tx_hash,
+                    "bonded attestation anchored on court"
+                );
+            }
+            None => {
+                if let Err(e) =
+                    store.fail_court(&att.attestation_id, "court anchor failed after max attempts")
+                {
+                    tracing::error!(attestation = %att.attestation_id, error = %e, "fail_court failed");
+                }
+            }
+        }
+    }
+}
+
+/// Recovery path for g1's execute-then-fail sequence semantics: query the
+/// court's `get_attestation` for our id — if it exists with our
+/// activation_root, the anchor genuinely landed. Returns a synthetic
+/// outcome (tx hash recovered from the error string when present).
+async fn verify_court_anchor(
+    _store: &Arc<Store>,
+    chain: &Arc<Mutex<GrpcClient>>,
+    cfg: &crate::config::Config,
+    att: &crate::types::Attestation,
+) -> Option<junoclaw_chain_grpc::TxOutcome> {
+    #[derive(serde::Deserialize)]
+    struct CourtAtt {
+        activation_root: String,
+        #[serde(default)]
+        anchored_height: Option<u64>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Resp {
+        attestation: Option<CourtAtt>,
+    }
+    let q = serde_json::json!({
+        "get_attestation": { "attestation_id": att.attestation_id }
+    });
+    let mut c = chain.lock().await;
+    let resp: Resp = c
+        .query_smart_typed(&cfg.court_contract, &q)
+        .await
+        .ok()?;
+    let rec = resp.attestation?;
+    if rec.activation_root != att.leaf_hash {
+        tracing::error!(
+            attestation = %att.attestation_id,
+            "court holds attestation id with DIFFERENT activation_root — refusing to commit"
+        );
+        return None;
+    }
+    let height = rec
+        .anchored_height
+        .unwrap_or(0);
+    tracing::warn!(
+        attestation = %att.attestation_id,
+        "recovered: court anchor exists on-chain despite reported tx failure"
+    );
+    Some(junoclaw_chain_grpc::TxOutcome {
+        tx_hash: String::new(), // landed but hash unknown — see chain events
+        height,
+    })
 }

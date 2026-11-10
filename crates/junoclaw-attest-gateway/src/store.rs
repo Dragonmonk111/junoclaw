@@ -134,6 +134,22 @@ impl Store {
                     att.retained_payload = None;
                 }
             }
+            SpoolEntry::CourtAnchor {
+                attestation_id,
+                court,
+            } => {
+                if let Some(att) = inner.atts.get_mut(&attestation_id) {
+                    att.status = AttStatus::Anchored;
+                    att.court = Some(court);
+                }
+            }
+            SpoolEntry::CourtFailed {
+                attestation_id, ..
+            } => {
+                if let Some(att) = inner.atts.get_mut(&attestation_id) {
+                    att.status = AttStatus::AnchorFailed;
+                }
+            }
             SpoolEntry::WebhookPending {
                 attestation_id,
                 url,
@@ -363,6 +379,61 @@ impl Store {
             }
             None => false,
         })
+    }
+
+    /// Mark a bonded attestation anchored on the thought-court contract;
+    /// enqueues its webhook if a callback was requested.
+    pub fn commit_court(&self, attestation_id: &str, court: crate::types::CourtInfo) -> anyhow::Result<()> {
+        self.append(&SpoolEntry::CourtAnchor {
+            attestation_id: attestation_id.into(),
+            court: court.clone(),
+        })?;
+        let mut inner = self.inner.write();
+        let customer = match inner.atts.get_mut(attestation_id) {
+            Some(a) => {
+                a.status = AttStatus::Anchored;
+                a.court = Some(court);
+                a.customer.clone()
+            }
+            None => return Ok(()),
+        };
+        inner.usage.entry(customer.clone()).or_default().anchored += 1;
+        let hook = inner
+            .atts
+            .get(attestation_id)
+            .and_then(|a| a.callback_url.clone())
+            .map(|u| (u, customer));
+        if let Some((url, customer)) = hook {
+            self.append(&SpoolEntry::WebhookPending {
+                attestation_id: attestation_id.into(),
+                url: url.clone(),
+                customer: customer.clone(),
+            })?;
+            inner
+                .pending_webhooks
+                .insert(attestation_id.into(), (url, customer, 0));
+        }
+        Ok(())
+    }
+
+    /// Park a bonded attestation whose court anchor tx failed.
+    pub fn fail_court(&self, attestation_id: &str, error: &str) -> anyhow::Result<()> {
+        self.append(&SpoolEntry::CourtFailed {
+            attestation_id: attestation_id.into(),
+            error: error.into(),
+        })?;
+        let mut inner = self.inner.write();
+        let customer = match inner.atts.get_mut(attestation_id) {
+            Some(att) => {
+                att.status = AttStatus::AnchorFailed;
+                Some(att.customer.clone())
+            }
+            None => None,
+        };
+        if let Some(c) = customer {
+            inner.usage.entry(c).or_default().failed += 1;
+        }
+        Ok(())
     }
 
     // ── webhooks ────────────────────────────────────────────────────────

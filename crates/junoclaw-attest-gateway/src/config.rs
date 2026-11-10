@@ -36,7 +36,16 @@ pub struct CliArgs {
     )]
     pub merkle_contract: String,
 
-    /// thought-court contract address (bonded tier, future).
+    /// Operator bond attached to each bonded-tier court anchor
+    /// ("<amount><denom>", e.g. 1000000ujclaw).
+    #[arg(
+        long,
+        env = "ATTEST_OPERATOR_BOND",
+        default_value = "1000000ujclaw"
+    )]
+    pub operator_bond: String,
+
+    /// Thought-court contract for `tier: bonded`. Empty disables the tier.
     #[arg(
         long,
         env = "ATTEST_COURT_CONTRACT",
@@ -103,6 +112,8 @@ pub struct Config {
     pub gas_limit: u64,
     pub merkle_contract: String,
     pub court_contract: String,
+    /// Parsed (amount, denom) from `operator_bond`.
+    pub operator_bond: (u128, String),
     pub mnemonic_env: String,
     pub account_prefix: String,
     pub hd_path: String,
@@ -130,6 +141,18 @@ impl Config {
                 Ok((cust.trim().to_string(), key.trim().to_string()))
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
+        let bond = {
+            let s = args.operator_bond.trim();
+            let split = s
+                .find(|c: char| c.is_ascii_alphabetic())
+                .ok_or_else(|| anyhow::anyhow!("operator_bond missing denom: {s}"))?;
+            let (amt, denom) = s.split_at(split);
+            (
+                amt.parse::<u128>()
+                    .map_err(|e| anyhow::anyhow!("operator_bond amount: {e}"))?,
+                denom.to_string(),
+            )
+        };
         Ok(Self {
             bind: args.bind,
             chain_id: args.chain_id,
@@ -138,6 +161,7 @@ impl Config {
             gas_limit: args.gas_limit,
             merkle_contract: args.merkle_contract,
             court_contract: args.court_contract,
+            operator_bond: bond,
             mnemonic_env: args.mnemonic_env,
             account_prefix: args.account_prefix,
             hd_path: args.hd_path,

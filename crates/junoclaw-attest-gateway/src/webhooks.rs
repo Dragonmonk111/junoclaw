@@ -48,6 +48,7 @@ pub async fn run(
                 "status": "anchored",
                 "leaf_hash": att.leaf_hash,
                 "batch": att.batch,
+                "court": att.court,
             });
             let secret = secrets.get(&customer).cloned().unwrap_or_default();
             let sig = hmac_sha256_hex(secret.as_bytes(), body.to_string().as_bytes());

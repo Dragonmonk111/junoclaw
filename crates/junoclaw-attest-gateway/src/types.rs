@@ -78,9 +78,22 @@ pub struct Attestation {
     pub submitted_at: i64, // unix secs
     #[serde(default)]
     pub batch: Option<BatchInfo>,
+    /// Set for `tier: "bonded"` attestations — anchored on the
+    /// thought-court contract with an operator bond attached.
+    #[serde(default)]
+    pub court: Option<CourtInfo>,
     /// Set only if the customer asked us to retain the payload.
     #[serde(default)]
     pub retained_payload: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CourtInfo {
+    pub contract: String,
+    /// id used in `anchor_attestation` — the gateway attestation_id.
+    pub court_id: String,
+    pub anchor_tx: String,
+    pub anchored_at_height: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,6 +156,16 @@ pub enum SpoolEntry {
     BatchFailed {
         batch_height: u64,
         items: Vec<String>,
+        error: String,
+    },
+    #[serde(rename = "court_anchor")]
+    CourtAnchor {
+        attestation_id: String,
+        court: CourtInfo,
+    },
+    #[serde(rename = "court_failed")]
+    CourtFailed {
+        attestation_id: String,
         error: String,
     },
     #[serde(rename = "purge")]

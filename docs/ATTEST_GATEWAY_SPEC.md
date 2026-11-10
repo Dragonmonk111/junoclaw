@@ -206,7 +206,19 @@ query — zero trust in the gateway at verification time.
    EA94503D (height 5115441) on test instance `juno1t8zy…f5m4` (code
    22, admin = `attest-gw-test` keychain wallet), webhook HMAC
    signature recomputed and matched.
-6. Bonded tier: wire thought-court anchor for premium actions.
+~~6. Bonded tier: wire thought-court anchor for premium actions.~~ DONE
+   2026-11-10 — `tier: bonded` splits off the merkle drain into a
+   per-item `anchor_attestation` lane (id = attestation_id,
+   activation_root = leaf_hash, `ATTEST_OPERATOR_BOND` funds attached,
+   `ATTEST_COURT_CONTRACT`). Bond economics don't batch; each anchor is
+   independently challengeable. Verified live on test court
+   `juno104r6t…k34xwt` (min bond 50k): on-chain record shows operator
+   bond locked + status pending. Recovery path: a tx that executes
+   then reports failure (g1 sequence quirk) is reconciled via
+   `get_attestation` — `already exists` + matching root = committed,
+   not failed. Note the bond is locked until finalize/dispute — the
+   gateway wallet needs a revolving bond pool and a later
+   finalize-sweep ops step.
 7. Hardening + ops runbook + production deploy against `juno12k0sr…`
    (needs jlens-ops admin or a dedicated gateway admin transfer).
 
