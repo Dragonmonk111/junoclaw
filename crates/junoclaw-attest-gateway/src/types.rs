@@ -147,4 +147,16 @@ pub enum SpoolEntry {
     },
     #[serde(rename = "purge")]
     Purge { attestation_id: String },
+    #[serde(rename = "webhook_pending")]
+    WebhookPending {
+        attestation_id: String,
+        url: String,
+        customer: String,
+    },
+    #[serde(rename = "webhook_sent")]
+    WebhookSent { attestation_id: String },
+    #[serde(rename = "webhook_retry")]
+    WebhookRetry { attestation_id: String },
+    #[serde(rename = "webhook_dead")]
+    WebhookDead { attestation_id: String },
 }

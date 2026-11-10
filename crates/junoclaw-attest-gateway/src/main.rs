@@ -1,13 +1,13 @@
 //! junoclaw-attest-gateway — HTTP /attest front door for JunoClaw g1.
 
-mod batcher;
-mod canon;
-mod config;
-mod error;
-mod merkle;
-mod routes;
-mod store;
-mod types;
+use junoclaw_attest_gateway::{
+    batcher,
+    config::{CliArgs, Config},
+    rate,
+    routes::{build_router, AppState},
+    store::Store,
+    webhooks,
+};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,15 +15,11 @@ use std::sync::Arc;
 use anyhow::Context;
 use axum::Router;
 use clap::Parser;
+use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-use crate::{
-    config::{CliArgs, Config},
-    routes::{build_router, AppState},
-    store::Store,
-};
 use junoclaw_chain_grpc::{ClientConfig, GrpcClient};
 
 #[tokio::main]
@@ -74,19 +70,31 @@ async fn main() -> anyhow::Result<()> {
         (*cfg).clone(),
     ));
 
-    let keys: HashMap<String, String> = cfg
-        .api_keys
-        .iter()
-        .map(|(cust, key)| (key.clone(), cust.clone()))
-        .collect();
+    // Keys are held in memory only as sha256 hex. Config entries may be
+    // `customer:plaintext` or `customer:sha256:<hex>` — the latter lets
+    // the config file itself avoid carrying usable secrets.
+    let mut keys: HashMap<String, String> = HashMap::new();
+    let mut secrets: HashMap<String, String> = HashMap::new();
+    for (cust, secret) in &cfg.api_keys {
+        let hash = secret
+            .strip_prefix("sha256:")
+            .map(|h| h.to_string())
+            .unwrap_or_else(|| hex::encode(Sha256::digest(secret.as_bytes())));
+        secrets.insert(cust.clone(), secret.strip_prefix("sha256:").map(|_| hash.clone()).unwrap_or_else(|| secret.clone()));
+        keys.insert(hash, cust.clone());
+    }
     if keys.is_empty() {
         tracing::warn!("no api keys configured — dev mode, all requests accepted as 'dev'");
     }
+    let secrets = Arc::new(secrets);
+
+    tokio::spawn(webhooks::run(store.clone(), cfg.clone(), secrets));
 
     let state = AppState {
         store,
         cfg: cfg.clone(),
         keys: Arc::new(keys),
+        rate: Arc::new(rate::RateLimiter::new(cfg.rate_rps)),
         window_secs: cfg.window_secs,
         max_payload_bytes: cfg.max_payload_bytes,
     };

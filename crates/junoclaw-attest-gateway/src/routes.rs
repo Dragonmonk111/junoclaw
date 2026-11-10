@@ -26,8 +26,9 @@ use crate::{
 pub struct AppState {
     pub store: Arc<Store>,
     pub cfg: Arc<Config>,
-    /// api_key -> customer
+    /// sha256(api_key) hex -> customer
     pub keys: Arc<HashMap<String, String>>,
+    pub rate: Arc<crate::rate::RateLimiter>,
     pub window_secs: u64,
     pub max_payload_bytes: usize,
 }
@@ -75,6 +76,9 @@ async fn auth(
         return Ok(next.run(req).await);
     }
     if state.keys.is_empty() {
+        if !state.rate.allow("dev") {
+            return Err(GatewayError::RateLimited);
+        }
         req.extensions_mut().insert(Customer("dev".to_string()));
         return Ok(next.run(req).await);
     }
@@ -83,8 +87,12 @@ async fn auth(
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "));
-    match header_val.and_then(|k| state.keys.get(k)) {
+    let key_hash = header_val.map(|k| hex::encode(Sha256::digest(k.as_bytes())));
+    match key_hash.and_then(|h| state.keys.get(&h)) {
         Some(customer) => {
+            if !state.rate.allow(customer) {
+                return Err(GatewayError::RateLimited);
+            }
             req.extensions_mut().insert(Customer(customer.clone()));
             Ok(next.run(req).await)
         }
@@ -128,6 +136,10 @@ fn submit_one(
         return Err(GatewayError::BadRequest(
             "idempotency_key required (1..255 chars)".into(),
         ));
+    }
+    let (_, queued, _) = state.store.counts();
+    if queued >= state.cfg.max_queue {
+        return Err(GatewayError::QueueFull);
     }
     let ctx = req.context.clone().unwrap_or(crate::types::Context {
         agent_id: None,

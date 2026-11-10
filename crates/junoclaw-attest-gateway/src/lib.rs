@@ -11,8 +11,10 @@ pub mod canon;
 pub mod config;
 pub mod error;
 pub mod merkle;
+pub mod rate;
 pub mod routes;
 pub mod store;
 pub mod types;
+pub mod webhooks;
 
 pub use junoclaw_chain_grpc as chain;

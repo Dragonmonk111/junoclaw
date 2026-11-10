@@ -39,6 +39,8 @@ struct Inner {
     idem: HashMap<(String, String), String>,
     /// usage per customer
     usage: HashMap<String, UsageCounter>,
+    /// attestation_id -> (url, customer, attempts)
+    pending_webhooks: HashMap<String, (String, String, u32)>,
 }
 
 impl Store {
@@ -131,6 +133,24 @@ impl Store {
                 if let Some(att) = inner.atts.get_mut(&attestation_id) {
                     att.retained_payload = None;
                 }
+            }
+            SpoolEntry::WebhookPending {
+                attestation_id,
+                url,
+                customer,
+            } => {
+                inner
+                    .pending_webhooks
+                    .insert(attestation_id, (url, customer, 0));
+            }
+            SpoolEntry::WebhookRetry { attestation_id } => {
+                if let Some(w) = inner.pending_webhooks.get_mut(&attestation_id) {
+                    w.2 += 1;
+                }
+            }
+            SpoolEntry::WebhookSent { attestation_id }
+            | SpoolEntry::WebhookDead { attestation_id } => {
+                inner.pending_webhooks.remove(&attestation_id);
             }
         }
     }
@@ -231,6 +251,27 @@ impl Store {
             };
             inner.usage.entry(customer).or_default().anchored += 1;
         }
+        // Enqueue a pending webhook for each attestation with a callback.
+        let hooks: Vec<(String, String, String)> = items
+            .iter()
+            .filter_map(|(id, _, _)| {
+                inner.atts.get(id).and_then(|a| {
+                    a.callback_url
+                        .clone()
+                        .map(|u| (a.attestation_id.clone(), u, a.customer.clone()))
+                })
+            })
+            .collect();
+        for (att_id, url, customer) in hooks {
+            self.append(&SpoolEntry::WebhookPending {
+                attestation_id: att_id.clone(),
+                url: url.clone(),
+                customer: customer.clone(),
+            })?;
+            inner
+                .pending_webhooks
+                .insert(att_id, (url, customer, 0));
+        }
         Ok(())
     }
 
@@ -321,6 +362,46 @@ impl Store {
                 true
             }
             None => false,
+        })
+    }
+
+    // ── webhooks ────────────────────────────────────────────────────────
+
+    /// Snapshot of pending webhook deliveries:
+    /// (attestation_id, url, customer, attempts).
+    pub fn pending_webhooks(&self) -> Vec<(String, String, String, u32)> {
+        self.inner
+            .read()
+            .pending_webhooks
+            .iter()
+            .map(|(id, (url, cust, n))| (id.clone(), url.clone(), cust.clone(), *n))
+            .collect()
+    }
+
+    pub fn webhook_retry(&self, attestation_id: &str) -> anyhow::Result<()> {
+        {
+            let mut inner = self.inner.write();
+            match inner.pending_webhooks.get_mut(attestation_id) {
+                Some(w) => w.2 += 1,
+                None => return Ok(()),
+            }
+        }
+        self.append(&SpoolEntry::WebhookRetry {
+            attestation_id: attestation_id.into(),
+        })
+    }
+
+    pub fn webhook_sent(&self, attestation_id: &str) -> anyhow::Result<()> {
+        self.inner.write().pending_webhooks.remove(attestation_id);
+        self.append(&SpoolEntry::WebhookSent {
+            attestation_id: attestation_id.into(),
+        })
+    }
+
+    pub fn webhook_dead(&self, attestation_id: &str) -> anyhow::Result<()> {
+        self.inner.write().pending_webhooks.remove(attestation_id);
+        self.append(&SpoolEntry::WebhookDead {
+            attestation_id: attestation_id.into(),
         })
     }
 

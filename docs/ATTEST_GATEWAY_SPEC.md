@@ -195,7 +195,17 @@ query — zero trust in the gateway at verification time.
    `chain-grpc` client, static gas, for writes).
 ~~4. Idempotency + metering counters + `/usage`.~~ DONE — same-key
    dedup + different-body 409 both verified live.
-5. API-key admission + callback webhooks + rate limits.
+~~5. API-key admission + callback webhooks + rate limits.~~ DONE
+   2026-11-10 — keys stored as sha256 hex in memory (config accepts
+   `customer:key` or `customer:sha256:<hex>`); per-customer token
+   bucket (`ATTEST_RATE_RPS`, 429 rate_limited); queue cap
+   (`ATTEST_MAX_QUEUE`, 503 queue_full); webhook worker retries ≤8 with
+   `x-junoclaw-signature` HMAC-SHA256 over the body, spooled so pending
+   deliveries survive restart (at-least-once — receivers dedup on
+   attestation_id). Verified live: 401 unauth, 429 burst, anchor tx
+   EA94503D (height 5115441) on test instance `juno1t8zy…f5m4` (code
+   22, admin = `attest-gw-test` keychain wallet), webhook HMAC
+   signature recomputed and matched.
 6. Bonded tier: wire thought-court anchor for premium actions.
 7. Hardening + ops runbook + production deploy against `juno12k0sr…`
    (needs jlens-ops admin or a dedicated gateway admin transfer).
@@ -210,5 +220,7 @@ multi-customer contract namespaces (start single-tenant `attest:default`).
   gates `anchor_root` on a single ADMIN key (the gateway wallet);
   `robot_id` is a free-form namespace string in the storage key
   `(robot_id, batch_height)` → per-customer namespaces are free.
-- Webhook signing scheme for callbacks.
+- ~~Webhook signing scheme for callbacks~~ — resolved: HMAC-SHA256 over
+  the JSON body in `x-junoclaw-signature`, keyed by the customer's API
+  key (or its sha256 hex when only the hash is configured).
 - Whether `payload` retention should ever default on (lean: no).

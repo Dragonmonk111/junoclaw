@@ -75,8 +75,23 @@ pub struct CliArgs {
 
     /// API keys as "customer:key" pairs, comma-separated.
     /// Empty = dev mode, all requests accepted as customer "dev".
+    /// Stored sha256-hashed at startup — the config file is the only
+    /// place plaintext keys ever exist.
     #[arg(long, env = "ATTEST_API_KEYS", default_value = "")]
     pub api_keys: String,
+
+    /// Per-customer rate limit, requests/second. 0 disables.
+    #[arg(long, env = "ATTEST_RATE_RPS", default_value_t = 10)]
+    pub rate_rps: u32,
+
+    /// Hard cap on queued (unanchored) attestations — submitters get
+    /// 503 queue_full beyond this instead of silent RAM growth.
+    #[arg(long, env = "ATTEST_MAX_QUEUE", default_value_t = 100_000)]
+    pub max_queue: usize,
+
+    /// Webhook POST timeout seconds.
+    #[arg(long, env = "ATTEST_WEBHOOK_TIMEOUT_SECS", default_value_t = 5)]
+    pub webhook_timeout_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,6 +112,9 @@ pub struct Config {
     pub max_payload_bytes: usize,
     /// customer name -> api key
     pub api_keys: Vec<(String, String)>,
+    pub rate_rps: u32,
+    pub max_queue: usize,
+    pub webhook_timeout_secs: u64,
 }
 
 impl Config {
@@ -128,6 +146,9 @@ impl Config {
             spool_path: args.spool_path,
             max_payload_bytes: args.max_payload_bytes,
             api_keys,
+            rate_rps: args.rate_rps,
+            max_queue: args.max_queue,
+            webhook_timeout_secs: args.webhook_timeout_secs,
         })
     }
 }
