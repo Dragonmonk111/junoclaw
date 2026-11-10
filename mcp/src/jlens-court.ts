@@ -12,7 +12,9 @@
  *     (--deploy | --anchor <id> | --challenge <id> |
  *      --verdict <id> --verdict-kind clean|fraud --evidence-hash <hex> |
  *      --finalize <id> | --resolve-timeout <id> |
+ *      --force-resolve <id> --verdict-kind clean|fraud (admin) |
  *      --register-verifier [--wallet <id>] |
+ *      --send <juno1...> --amount <ujclaw> [--wallet <id>] |
  *      --query <json> | --query-attestation <id> | --query-dispute <id>)
  *
  * Bonds are paid in ujclaw: --bond overrides the sent amount.
@@ -22,7 +24,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 
 import { queryContractState } from "./tools/chain-query.js";
-import { executeContract, instantiateContract, uploadWasm } from "./tools/tx-builder.js";
+import { executeContract, instantiateContract, sendTokens, uploadWasm } from "./tools/tx-builder.js";
 import { getDefaultWalletStore } from "./wallet/store.js";
 
 const CHAIN_ID = "junoclaw-g1";
@@ -85,6 +87,15 @@ async function main() {
       "jlens thought-court instantiate"
     );
     console.log(`instantiated ${inst.contractAddress} tx=${inst.txHash}`);
+    return;
+  }
+
+  // ── bank send (funding verifier seats; no contract needed) ────────
+  if (arg("--send")) {
+    const amt = arg("--amount");
+    if (!amt) throw new Error("--amount <ujclaw> required with --send");
+    const r = await sendTokens(CHAIN_ID, wid, arg("--send")!, amt, DENOM, "jlens court fund");
+    console.log(`tx=${r.txHash} height=${r.height}`);
     return;
   }
 
@@ -161,6 +172,22 @@ async function main() {
 
   if (arg("--resolve-timeout")) {
     await exec({ resolve_timeout: { attestation_id: arg("--resolve-timeout") } });
+    return;
+  }
+
+  if (arg("--force-resolve")) {
+    const kind = arg("--verdict-kind");
+    if (!kind) throw new Error("--verdict-kind clean|fraud required with --force-resolve");
+    await exec(
+      {
+        force_resolve: {
+          attestation_id: arg("--force-resolve"),
+          verdict: kind === "fraud" ? "fraud" : "clean",
+        },
+      },
+      undefined,
+      "jlens force resolve"
+    );
     return;
   }
 
