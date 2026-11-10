@@ -13,7 +13,7 @@
     "qwen2.5-0.5b-instruct": {
       "hf_model": "Qwen/Qwen2.5-0.5B-Instruct",
       "layer": 12,
-      "probe_bank_path": "../j-lens/probe_bank_onchain.json",
+      "probe_bank_path": "../j-lens/probe_bank_onchain_v7_calibrated.json",
       "dtype": "bfloat16",
       "device": "cpu"
     },

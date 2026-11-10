@@ -6,7 +6,7 @@
       "label": "Qwen/Qwen2.5-0.5B-Instruct",
       "endpoint": "http://localhost:8100/extract_hidden_states",
       "layer": 12,
-      "probe_bank_path": "../j-lens/probe_bank_onchain.json",
+      "probe_bank_path": "../j-lens/probe_bank_onchain_v7_calibrated.json",
       "probe_method": "contrastive-dom-v0.1"
     },
     "qwen2.5-3b-instruct": {
