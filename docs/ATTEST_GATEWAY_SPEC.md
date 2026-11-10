@@ -26,10 +26,11 @@ customer ──POST /attest──▶ gateway ──queue──▶ batcher ──
 customer ──GET /attest/{id}──▶ {status, leaf_hash, proof, root, anchor_tx, cert}
 ```
 
-Single Rust binary (`crates/junoclaw-attest-gateway`), axum, built on the
-x402-gateway skeleton: it already has `CosmosClient` (query_smart +
-broadcast), x402 payment envelopes with nonce-replay protection, and the
-route pattern. Reuses, does not fork.
+Single Rust binary (`crates/junoclaw-attest-gateway`), axum. IMPORTANT:
+g1 has NO Tendermint RPC — it speaks standard Cosmos SDK gRPC on :9090,
+so the x402-gateway's cosmrs HttpClient doesn't apply. The crate uses
+cosmrs for keys/tx encoding + tonic unary calls (SmartContractState /
+Account / BroadcastTx / GetTx / layer.lightclient LatestHeight).
 
 ## Endpoints
 
@@ -100,7 +101,7 @@ Response (always 202 — finality is never synchronous):
 - Errors: `400 bad_request`, `401 unauthorized`, `402 payment_required`
   (x402 path), `409 idempotency_conflict`, `413 payload_too_large`
   (payload cap 64 KiB — bigger must use payload_hash), `429 rate_limited`,
-  `503 chain_unavailable` (retryable — queue survives restarts, redb/wal).
+  `503 chain_unavailable` (retryable — queue survives restarts, JSONL spool).
 
 ## Anchor pipeline
 
@@ -174,21 +175,27 @@ query — zero trust in the gateway at verification time.
   ops paged; leaves stay queued (no silent drop).
 - Chain halt: submissions still accepted/queued (202), `est_anchor_secs`
   inflates; `chain_unavailable` only if queue is full.
-- Gateway restart: queue is redb-backed — replay on boot, in-flight window
-  re-anchored idempotently (anchor_root is keyed by (robot_id,
-  batch_height) — a duplicate anchor just overwrites same root).
+- Gateway restart: queue is a JSONL spool replayed on boot; in-flight
+  `anchoring` items are re-queued. anchor_root is keyed by (robot_id,
+  batch_height) — a duplicate anchor just overwrites same root.
 
 ## Build order (g1 thin slice)
 
-1. Scaffold `crates/junoclaw-attest-gateway` from x402-gateway skeleton:
-   axum + CosmosClient + redb queue. `POST /attest` → queue → ULID.
-2. Batcher: 60s window → merkle → `anchor_root` on deployed
-   merkle-verifier (existing contract, admin = gateway wallet).
-3. `GET /attest/{id}` + receipt assembly (proof + anchor_tx + cert height).
-4. Idempotency + metering counters + `/usage`.
-5. API-key admission + callback webhooks + retry/backoff.
+~~1. Scaffold `crates/junoclaw-attest-gateway`: axum + gRPC client + JSONL
+   spool. `POST /attest` → queue → id.~~ DONE 2026-11-10
+~~2. Batcher: 60s window → merkle → `anchor_root`.~~ DONE — batches 1 & 2
+   anchored on test instance `juno1mcp095…nm5zr` (code 22, admin =
+   throwaway gateway wallet `juno1uqfc…g5s`; production contract
+   `juno12k0sr…jz2xpq` untouched).
+~~3. `GET /attest/{id}` + receipt assembly.~~ DONE — receipt verified
+   end-to-end: on-chain `verify_proof` accepted the gateway's inclusion
+   proof (tx 51FE084E…).
+~~4. Idempotency + metering counters + `/usage`.~~ DONE — same-key
+   dedup + different-body 409 both verified live.
+5. API-key admission + callback webhooks + rate limits.
 6. Bonded tier: wire thought-court anchor for premium actions.
-7. Hardening: rate limits, payload caps, metrics, ops runbook.
+7. Hardening + ops runbook + production deploy against `juno12k0sr…`
+   (needs jlens-ops admin or a dedicated gateway admin transfer).
 
 Out of scope for v1: x402 live payment, validator on-chain payout,
 zk-receipt verification (bn254 precompile path is a later milestone),

@@ -1,0 +1,40 @@
+[package]
+name = "junoclaw-attest-gateway"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Customer-facing /attest HTTP gateway — batches agent actions into Merkle windows anchored on JunoClaw"
+repository = "https://github.com/Dragonmonk111/junoclaw"
+
+[dependencies]
+# Workspace shared
+tokio = { workspace = true }
+futures = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true, features = ["cors", "trace"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# Chain client (g1 speaks Cosmos SDK gRPC on :9090 — no Tendermint RPC)
+cosmrs = { version = "0.21", features = ["cosmwasm", "bip32"] }
+bip32 = { version = "0.5", features = ["bip39"] }
+tonic = "0.12"
+prost = "0.13"
+
+# Misc
+clap = { version = "4.5", features = ["derive", "env"] }
+dotenvy = "0.15"
+base64 = "0.22"
+rand = "0.8"
+time = { version = "0.3", features = ["serde"] }
+parking_lot = "0.12"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
