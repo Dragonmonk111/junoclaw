@@ -29,6 +29,9 @@ struct Args {
     /// Added to the fetched account sequence (mempool-pending drift).
     #[arg(long, default_value_t = 0)]
     seq_offset: u64,
+    /// Attach native funds: "ujclaw:100000" (repeatable).
+    #[arg(long)]
+    funds: Vec<String>,
 }
 
 #[tokio::main]
@@ -47,7 +50,15 @@ async fn main() -> anyhow::Result<()> {
     c.seq_offset = a.seq_offset;
     eprintln!("signer: {}", c.signer_address().unwrap_or_default());
     let msg: serde_json::Value = serde_json::from_str(&a.msg)?;
-    let out = c.execute_contract(&a.contract, &msg).await?;
+    let funds: Vec<(String, u128)> = a
+        .funds
+        .iter()
+        .map(|f| {
+            let (d, amt) = f.split_once(':').expect("funds format denom:amount");
+            (d.to_string(), amt.parse().expect("funds amount"))
+        })
+        .collect();
+    let out = c.execute_contract_funded(&a.contract, &msg, funds).await?;
     println!("tx={} height={}", out.tx_hash, out.height);
     Ok(())
 }

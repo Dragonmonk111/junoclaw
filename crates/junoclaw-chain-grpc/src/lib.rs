@@ -36,7 +36,7 @@ use cosmrs::{
     },
     tendermint::chain::Id as ChainId,
     tx::{self, Fee, Msg, Raw, SignDoc, SignerInfo},
-    AccountId, Coin, Denom,
+    AccountId, Any, Coin, Denom,
 };
 use serde::de::DeserializeOwned;
 use tonic::{
@@ -281,23 +281,110 @@ impl GrpcClient {
         contract: &str,
         msg_json: &serde_json::Value,
     ) -> anyhow::Result<TxOutcome> {
-        let account_id = self
-            .signer
-            .as_ref()
-            .ok_or_else(|| anyhow!("no signer loaded (mnemonic env unset)"))?
-            .account_id
-            .clone();
+        self.execute_contract_funded(contract, msg_json, vec![])
+            .await
+    }
 
+    /// `execute_contract` with native funds attached (Fund{}-style calls).
+    pub async fn execute_contract_funded(
+        &mut self,
+        contract: &str,
+        msg_json: &serde_json::Value,
+        funds: Vec<(String, u128)>,
+    ) -> anyhow::Result<TxOutcome> {
+        let account_id = self.require_signer()?;
         let exec = cosmrs::cosmwasm::MsgExecuteContract {
-            sender: account_id.clone(),
+            sender: account_id,
             contract: contract
                 .parse::<AccountId>()
                 .map_err(|e| anyhow!("contract addr: {e}"))?,
             msg: serde_json::to_vec(msg_json)?,
-            funds: vec![],
+            funds: funds
+                .into_iter()
+                .map(|(denom, amount)| Coin {
+                    denom: denom.parse::<Denom>().unwrap(),
+                    amount,
+                })
+                .collect(),
         };
         let any = exec.to_any().map_err(|e| anyhow!("encode msg: {e}"))?;
+        self.sign_and_broadcast(vec![any]).await
+    }
 
+    /// Store wasm bytecode; returns the assigned code_id.
+    pub async fn store_code(&mut self, wasm_bytes: &[u8]) -> anyhow::Result<(u64, TxOutcome)> {
+        let account_id = self.require_signer()?;
+        let store = cosmrs::cosmwasm::MsgStoreCode {
+            sender: account_id,
+            wasm_byte_code: wasm_bytes.to_vec(),
+            instantiate_permission: None,
+        };
+        let any = store.to_any().map_err(|e| anyhow!("encode msg: {e}"))?;
+        let (out, tr) = self.sign_and_broadcast_tr(vec![any]).await?;
+        let code_id = tx_event_attr(&tr, "store_code", "code_id")
+            .or_else(|| tx_event_attr(&tr, "wasm-store_code", "code_id"))
+            .and_then(|s| s.parse::<u64>().ok())
+            .ok_or_else(|| anyhow!("store_code event missing code_id"))?;
+        Ok((code_id, out))
+    }
+
+    /// Instantiate a stored code_id. `admin` = migration admin
+    /// (defaults to sender when None).
+    pub async fn instantiate_contract(
+        &mut self,
+        code_id: u64,
+        msg_json: &serde_json::Value,
+        label: &str,
+        admin: Option<&str>,
+        funds: Vec<(String, u128)>,
+    ) -> anyhow::Result<(String, TxOutcome)> {
+        let account_id = self.require_signer()?;
+        let inst = cosmrs::cosmwasm::MsgInstantiateContract {
+            sender: account_id,
+            admin: admin.map(|a| a.parse::<AccountId>().unwrap()),
+            code_id,
+            label: Some(label.to_string()),
+            msg: serde_json::to_vec(msg_json)?,
+            funds: funds
+                .into_iter()
+                .map(|(denom, amount)| Coin {
+                    denom: denom.parse::<Denom>().unwrap(),
+                    amount,
+                })
+                .collect(),
+        };
+        let any = inst.to_any().map_err(|e| anyhow!("encode msg: {e}"))?;
+        let (out, tr) = self.sign_and_broadcast_tr(vec![any]).await?;
+        let addr = tx_event_attr(&tr, "instantiate", "_contract_address")
+            .or_else(|| tx_event_attr(&tr, "wasm-instantiate", "_contract_address"))
+            .ok_or_else(|| anyhow!("instantiate event missing _contract_address"))?;
+        Ok((addr, out))
+    }
+
+    fn require_signer(&self) -> anyhow::Result<AccountId> {
+        Ok(self
+            .signer
+            .as_ref()
+            .ok_or_else(|| anyhow!("no signer loaded (mnemonic env unset)"))?
+            .account_id
+            .clone())
+    }
+
+    /// Sign and broadcast a tx body of pre-encoded messages, then poll
+    /// GetTx until inclusion. Static gas — g1 failed txs consume
+    /// sequence, so callers should re-query after failures rather than
+    /// offset blindly.
+    async fn sign_and_broadcast(&mut self, msgs: Vec<Any>) -> anyhow::Result<TxOutcome> {
+        Ok(self.sign_and_broadcast_tr(msgs).await?.0)
+    }
+
+    /// Same as `sign_and_broadcast` but also returns the indexed
+    /// TxResponse for event parsing. None when unconfirmed.
+    async fn sign_and_broadcast_tr(
+        &mut self,
+        msgs: Vec<Any>,
+    ) -> anyhow::Result<(TxOutcome, Option<cosmrs::proto::cosmos::base::abci::v1beta1::TxResponse>)> {
+        let account_id = self.require_signer()?;
         let (account_number, sequence) = self
             .account(&account_id.to_string())
             .await?
@@ -315,7 +402,7 @@ impl GrpcClient {
             },
             self.gas_limit,
         );
-        let tx_body = tx::Body::new(vec![any], "junoclaw", 0u16);
+        let tx_body = tx::Body::new(msgs, "junoclaw", 0u16);
 
         // Sign under an immutable borrow of the signer (SigningKey isn't Clone).
         let tx_bytes = {
@@ -367,10 +454,8 @@ impl GrpcClient {
                                 tr.raw_log
                             );
                         }
-                        return Ok(TxOutcome {
-                            tx_hash,
-                            height: tr.height as u64,
-                        });
+                        let height = tr.height as u64;
+                        return Ok((TxOutcome { tx_hash, height }, Some(tr)));
                     }
                 }
                 Err(_) => continue, // not indexed yet
@@ -378,7 +463,7 @@ impl GrpcClient {
         }
         // Mempool-accepted but unconfirmed in ~12s — caller treats as pending.
         tracing::warn!(tx = %tx_hash, "tx broadcast but not confirmed within poll window");
-        Ok(TxOutcome { tx_hash, height: 0 })
+        Ok((TxOutcome { tx_hash, height: 0 }, None))
     }
 }
 
@@ -479,3 +564,21 @@ pub struct LayerProofResponse {
 
 /// Alias used by the REST layer.
 pub type LayerBlock = LayerBlockResponse;
+
+/// Pull `attr` out of a tx's `event_type` event. SDK events carry
+/// key/value as strings (EventAttribute).
+fn tx_event_attr(
+    tr: &Option<cosmrs::proto::cosmos::base::abci::v1beta1::TxResponse>,
+    event_type: &str,
+    attr: &str,
+) -> Option<String> {
+    tr.as_ref()?.events.iter().find_map(|e| {
+        if e.r#type != event_type {
+            return None;
+        }
+        e.attributes
+            .iter()
+            .find(|a| a.key == attr)
+            .map(|a| a.value.clone())
+    })
+}
