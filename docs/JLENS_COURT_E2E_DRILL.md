@@ -107,13 +107,16 @@ npx tsx src/jlens-court.ts --contract $COURT --wallet jlens-ops --challenge $ROO
 # UpdateConfig verdict_window_secs to ~120 for the drill, restore after)
 npx tsx src/jlens-court.ts --contract $COURT --wallet builder --verdict $ROOT2 --verdict-kind clean --evidence-hash $EV
 
-npx tsx src/jlens-court.ts --contract $COURT --wallet jlens-ops --update-config --verdict-window-secs 120
-# ...wait ~2min...
+# IMPORTANT: set the short window BEFORE opening the dispute — verdict_deadline
+# is snapshotted at open_challenge time, and the config flags are snake_case.
+npx tsx src/jlens-court.ts --contract $COURT --wallet jlens-ops --update-config --verdict_window_secs 120
+# ...then anchor + challenge, ONE vote only, wait out verdict_deadline...
 npx tsx src/jlens-court.ts --contract $COURT --resolve-timeout $ROOT2   # anyone
-# expect: status unresolved, challenger bond refunded, seats freed
+# expect: dispute status unresolved
 npx tsx src/jlens-court.ts --contract $COURT --wallet jlens-ops --force-resolve $ROOT2 --verdict-kind fraud
-# expect: status fraudulent; slash_ministry payouts per fraud path
-npx tsx src/jlens-court.ts --contract $COURT --wallet jlens-ops --update-config --verdict-window-secs 43200
+# expect: attestation status fraudulent; force-resolve REQUIRES prior unresolved
+# (it rejects "Dispute is not in unresolved state" on an open dispute)
+npx tsx src/jlens-court.ts --contract $COURT --wallet jlens-ops --update-config --verdict_window_secs 43200
 ```
 
 ## Phase D — negative checks + teardown
@@ -136,3 +139,61 @@ npx tsx src/jlens-court.ts --contract $COURT --wallet jlens-ops --update-config 
 - Committee_size=3 with 3 registered seats means sortition always seats
   everyone — Fiat-Shamir selection is real but untested for k<n until a
   4th+ seat registers (spare: relayer-soak).
+
+## Drill results — executed 2026-11-10 on g1
+
+Contract `juno10c3d…sy32` (code ID 24). All paths exercised for real; no
+failures beyond the expected contract rejections.
+
+**Phase A — seats** (3 wallets funded by jlens-ops, 2,000,000 ujclaw bond each)
+
+| seat | wallet | address | register tx |
+|---|---|---|---|
+| v1 | builder | juno16kmhmkyf6n4hnue0l7dkcuexajxh44lgv75utd | 3F871E00…FCEFE0 |
+| v2 | dao-truth-operator | juno1aq995jf4fezcghl6ar6k79hk9layss8w6q2t7z | BC74B3A1…A5EB6 |
+| v3 | dao-verdict-helper | juno1jpgd0vcveam90smx5rk6cuycv9lfemcpasf0fv | 270428BB…7804 |
+
+**Phase B1 — clean quorum** — attestation `bc99bfbd…309d9` (anchor
+541E602F…, challenge 6E3B7086…623181). All 3 seats selected by sortition;
+`committee_service.py` recomputed and seated; 3 clean verdicts
+(11F9ADE9…, 43B13CA6…, FAD266EC…) → resolved on 3rd vote, attestation
+`finalized`.
+
+**Phase B2 — fraud quorum** — attestation `5f3da7d2…5e12` (anchor
+87CD3C5D…, challenge C9342C78…). 3 fraud verdicts (F1E6D7AD…,
+009564A2…, 65E140B2…) → attestation `fraudulent`, operator bond
+slashed (50% challenger / 50% admin).
+
+**Phase C — stalled → timeout → force-resolve** — attestation
+`fe743ec1…6d28a` (anchor 3504736C…, challenge E119BABA…, opened under a
+temporarily shortened verdict_window_secs=180). 1 clean vote only
+(12D30CE8…); `resolve_timeout` (D3F4ABAD…) → `unresolved`;
+`force-resolve clean` (BDB6748E…) → attestation `finalized`.
+
+**Phase D — negative checks (all correctly rejected)**
+
+- non-committee vote → `Sender is not on this dispute's committee`
+- double vote → `Committee member already voted`
+- post-deadline challenge (challenge_window_secs=30, waited 45s) →
+  `Challenge window closed`
+- force-resolve on an OPEN dispute → `Dispute is not in unresolved state`
+
+Config restored to production values afterwards (tx D1183010…; verified
+via `get_config`: challenge 86400 / verdict 43200 / k=3 / quorum 6700bp).
+The 3 verifier seats were left registered — useful for the attestation
+API's bonded-tier anchors; `--remove-verifier` is one command each if
+the bonds are wanted back.
+
+**Gotchas discovered**
+
+- `--update-config` flags are the snake_case Config field names
+  (`--verdict_window_secs`), NOT kebab — a wrong flag is silently
+  ignored and the update lands as a no-op. `verdict_deadline` is
+  snapshotted at `open_challenge` — shortening the window afterwards
+  does not help a live dispute.
+- Chain block timestamps track wall clock only while blocks are being
+  produced; an idle chain's `env.block.time` stalls, so timeouts need
+  either wall-time + fresh blocks or a tx burst to cross a deadline.
+- Attestation `433ff36c…4bde` is a drill leftover: opened while the
+  window was still 43200, 1 vote, will sit open ~12h — resolves via
+  `resolve_timeout` + `force-resolve` once its deadline passes.
