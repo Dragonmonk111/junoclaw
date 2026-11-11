@@ -300,7 +300,7 @@ impl Default for SigningConfig {
             enabled: false,
             signing_paused: true,
             mnemonic_env: "JUNOCLAW_MNEMONIC".to_string(),
-            account_prefix: "juno".to_string(),
+            account_prefix: "junoclaw".to_string(),
             hd_path: "m/44'/118'/0'/0/0".to_string(),
             default_gas_limit: 500_000,
             agent_company_code_id: None,

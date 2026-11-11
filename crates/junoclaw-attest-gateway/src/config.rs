@@ -59,7 +59,7 @@ pub struct CliArgs {
     pub mnemonic_env: String,
 
     /// bech32 account prefix.
-    #[arg(long, env = "ATTEST_PREFIX", default_value = "juno")]
+    #[arg(long, env = "ATTEST_PREFIX", default_value = "junoclaw")]
     pub account_prefix: String,
 
     /// BIP-44 HD path.

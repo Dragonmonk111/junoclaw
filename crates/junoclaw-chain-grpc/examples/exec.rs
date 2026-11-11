@@ -43,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
         gas_price: a.gas_price,
         gas_limit: a.gas_limit,
         mnemonic_env: Some(a.mnemonic_env),
-        account_prefix: "juno".into(),
+        account_prefix: "junoclaw".into(),
         hd_path: "m/44'/118'/0'/0/0".into(),
     })
     .await?;

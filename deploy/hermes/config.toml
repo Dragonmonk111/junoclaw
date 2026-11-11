@@ -54,7 +54,7 @@ rpc_addr = "https://junotestnet-rpc.kleomedes.network:443"
 grpc_addr = "https://junotestnet-rpc.kleomedes.network:443"
 event_source = { mode = "pull", interval = "500ms" }
 rpc_timeout = "30s"
-account_prefix = "juno"
+account_prefix = "junoclaw"
 key_name = "junoclaw-builder"
 store_prefix = "ibc"
 default_gas = 200000
