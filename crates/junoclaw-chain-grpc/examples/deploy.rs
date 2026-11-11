@@ -9,7 +9,7 @@
 
 use anyhow::Context;
 use clap::Parser;
-use junoclaw_chain_grpc::{ClientConfig, GrpcClient};
+use junoclaw_chain_grpc::{canonical_bech32, ClientConfig, GrpcClient};
 
 #[derive(Parser)]
 struct Args {
@@ -67,12 +67,25 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    // Contract-embedded addresses must be canonical juno1 — contracts
+    // store Addr strings verbatim and compare against juno1 senders.
+    let admin = args
+        .admin
+        .as_deref()
+        .map(canonical_bech32)
+        .transpose()?;
+    let transfer_admin = args
+        .transfer_admin
+        .as_deref()
+        .map(canonical_bech32)
+        .transpose()?;
+
     let (addr, out) = client
-        .instantiate_contract(code_id, &msg, &args.label, args.admin.as_deref(), vec![])
+        .instantiate_contract(code_id, &msg, &args.label, admin.as_deref(), vec![])
         .await?;
     println!("instantiated contract={addr} tx={} height={}", out.tx_hash, out.height);
 
-    if let Some(new_admin) = &args.transfer_admin {
+    if let Some(new_admin) = &transfer_admin {
         let out = client
             .execute_contract(&addr, &serde_json::json!({"transfer_admin": {"new_admin": new_admin}}))
             .await?;

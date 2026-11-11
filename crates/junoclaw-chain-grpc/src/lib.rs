@@ -566,6 +566,27 @@ pub struct LayerProofResponse {
 /// Alias used by the REST layer.
 pub type LayerBlock = LayerBlockResponse;
 
+/// Canonical bech32 for contract-embedded addresses.
+///
+/// During the dual-prefix window users may present `junoclaw1…`
+/// addresses, but CosmWasm contracts store `Addr` as the input string
+/// verbatim — a `junoclaw1` value stored in state would fail every
+/// `juno1` `info.sender` comparison. Anything destined for a contract
+/// message arg MUST be canonicalized to the `juno` hrp first; both
+/// forms decode to identical bytes chain-side.
+pub fn canonical_bech32(addr: &str) -> anyhow::Result<String> {
+    let id: AccountId = addr
+        .trim()
+        .parse()
+        .map_err(|e| anyhow!("invalid bech32 address {addr:?}: {e}"))?;
+    match id.prefix() {
+        "juno" | "junoclaw" => AccountId::new("juno", &id.to_bytes())
+            .map(|a| a.to_string())
+            .map_err(|e| anyhow!("re-encode bech32: {e}")),
+        other => bail!("unsupported bech32 prefix {other:?} (expected juno or junoclaw)"),
+    }
+}
+
 /// Pull `attr` out of a tx's `event_type` event. SDK events carry
 /// key/value as strings (EventAttribute).
 fn tx_event_attr(
@@ -582,4 +603,26 @@ fn tx_event_attr(
             .find(|a| a.key == attr)
             .map(|a| a.value.clone())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_bech32_normalizes_junoclaw_to_juno() {
+        let junoclaw_addr = AccountId::new("junoclaw", &[42u8; 20])
+            .unwrap()
+            .to_string();
+        assert!(junoclaw_addr.starts_with("junoclaw1"));
+        let canonical = canonical_bech32(&junoclaw_addr).unwrap();
+        assert!(canonical.starts_with("juno1"));
+        // same canonical bytes either way
+        let parse = |s: &str| s.parse::<AccountId>().unwrap().to_bytes();
+        assert_eq!(parse(&canonical), parse(&junoclaw_addr));
+        // juno input passes through unchanged
+        assert_eq!(canonical_bech32(&canonical).unwrap(), canonical);
+        // foreign prefixes rejected
+        assert!(canonical_bech32(&AccountId::new("osmo", &[1u8; 20]).unwrap().to_string()).is_err());
+    }
 }
