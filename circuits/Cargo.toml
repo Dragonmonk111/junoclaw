@@ -8,4 +8,5 @@ members = [
     "proof-aggregation",
     "moultbook-membership",
     "jolt-guests",
+    "jlens-readout",
 ]

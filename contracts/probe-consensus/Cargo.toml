@@ -1,0 +1,22 @@
+[package]
+name = "probe-consensus"
+version = "0.1.0"
+edition = "2021"
+description = "JunoClaw probe-consensus — K-of-N operator agreement gate for J-Lens batch roots"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }

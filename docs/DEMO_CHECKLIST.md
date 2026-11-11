@@ -3,6 +3,14 @@
 Status as of 2026-11-10. Everything below must be TRUE before this is
 shown to anyone outside. Ordered roughly by dependency.
 
+## Shipped since this list was written (2026-11-11)
+
+- `probe-consensus` contract — K-of-N operator redundancy tier, live on
+  g1 (code_id 28). Identical roots auto-finalize; divergence refuses.
+- J-Lens readout ZK v0 — Groth16/BN254 proof verified on-chain via
+  zk-verifier (code_id 30), `docs/ZK_READOUT_SPEC.md`. Tampered inputs
+  rejected at ~340k gas.
+
 ## Must-fix before ANY demo
 
 - [ ] **Production signer story.** Demo ran on `attest-gw-test`
@@ -52,7 +60,11 @@ shown to anyone outside. Ordered roughly by dependency.
 - [ ] 4th verifier seat → k<n sortition test (all 3 seats = committee
       of 3 today; sortition untested below quorum pool).
 - [ ] Per-customer `robot_id` namespaces (single `attest:default` now).
-- [ ] ZK receipt tier (weeks-scale spike, planned separately).
+- [ ] TEE-sealed producer via WAVS (the redundancy contract covers the
+      no-hardware case meanwhile — see ZK_READOUT_SPEC "honesty ladder").
+- [ ] ZK tier increments on top of the live v0: range-gadget detection
+      flag, canonical jlens.integrity.v1 leaf binding, court fast-path,
+      bn254-precompile build when g1 advertises cosmwasm_2_3.
 
 ## Demo script (the thing to actually show)
 
