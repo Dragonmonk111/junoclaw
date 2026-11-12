@@ -81,6 +81,19 @@ interface WalletFile {
 const DEFAULT_HD_PATH = "m/44'/118'/0'/0/0";
 const WALLET_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
+/**
+ * bech32 prefix compatibility during the juno → junoclaw display
+ * transition. The chain accepts both HRPs on decode (identical
+ * canonical bytes), so a wallet enrolled under either prefix can
+ * sign for junoclaw-g1. Other chains are unaffected — the pair
+ * only matches for {juno, junoclaw}.
+ */
+function bech32Compatible(walletPrefix: string, chainPrefix: string): boolean {
+  if (walletPrefix === chainPrefix) return true;
+  const pair = new Set([walletPrefix, chainPrefix]);
+  return pair.size === 2 && pair.has("juno") && pair.has("junoclaw");
+}
+
 // ────────────────────────────────
 // SigningPausedError (v0.x.y-security-2)
 // ────────────────────────────────
@@ -638,7 +651,7 @@ export class WalletStore {
 
     const file = await this.readWalletFile(walletId);
 
-    if (file.metadata.bech32Prefix !== chain.bech32Prefix) {
+    if (!bech32Compatible(file.metadata.bech32Prefix, chain.bech32Prefix)) {
       throw new Error(
         `wallet "${walletId}" has bech32 prefix "${file.metadata.bech32Prefix}", ` +
           `but chain ${chain.chainId} expects "${chain.bech32Prefix}". ` +
@@ -668,7 +681,7 @@ export class WalletStore {
     let mnemonic = mnemonicBuf.toString("utf-8");
     try {
       const hdWallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
-        prefix: chain.bech32Prefix,
+        prefix: file.metadata.bech32Prefix,
       });
       const accounts = await hdWallet.getAccounts();
       const client = await SigningStargateClient.connectWithSigner(
@@ -704,7 +717,7 @@ export class WalletStore {
 
     const file = await this.readWalletFile(walletId);
 
-    if (file.metadata.bech32Prefix !== chain.bech32Prefix) {
+    if (!bech32Compatible(file.metadata.bech32Prefix, chain.bech32Prefix)) {
       throw new Error(
         `wallet "${walletId}" has bech32 prefix "${file.metadata.bech32Prefix}", ` +
           `but chain ${chain.chainId} expects "${chain.bech32Prefix}". ` +
@@ -734,7 +747,7 @@ export class WalletStore {
     let mnemonic = mnemonicBuf.toString("utf-8");
     try {
       const hdWallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
-        prefix: chain.bech32Prefix,
+        prefix: file.metadata.bech32Prefix,
       });
       const accounts = await hdWallet.getAccounts();
       const client = await SigningCosmWasmClient.connectWithSigner(
@@ -777,7 +790,7 @@ export class WalletStore {
 
     const file = await this.readWalletFile(walletId);
 
-    if (file.metadata.bech32Prefix !== chain.bech32Prefix) {
+    if (!bech32Compatible(file.metadata.bech32Prefix, chain.bech32Prefix)) {
       throw new Error(
         `wallet "${walletId}" has bech32 prefix "${file.metadata.bech32Prefix}", ` +
           `but chain ${chain.chainId} expects "${chain.bech32Prefix}". ` +
@@ -807,7 +820,7 @@ export class WalletStore {
     let mnemonic = mnemonicBuf.toString("utf-8");
     try {
       const hdWallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
-        prefix: chain.bech32Prefix,
+        prefix: file.metadata.bech32Prefix,
       });
       const accounts = await hdWallet.getAccounts();
       const client = await JunoClawClient.connectWithSigner(

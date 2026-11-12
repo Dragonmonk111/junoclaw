@@ -171,5 +171,23 @@
   "harness_certification": "challenge_recompute.py: clean PASS (0 LSB drift, max cos 5.67e-06); --tamper FAIL (cos 1.0 @pos9); --launder FAIL (3 positions caught, max cos 1.73)",
   "disclosure": "jlens.activations.v1.1 - prompt text + response_ids disclosed",
   "note": "first court-bonded attestation; 300s smoke window then restored to 86400s; bond finalized+returned h4433360"
+ },
+ "jlens-zk-verifier-prod-r4": {
+  "codeId": 38,
+  "address": "juno16ezahr8yn99uszv6wck7tm4cxlw3t8dhcuxrvt0ktazprn2ze9dq8h0vp6",
+  "admin": "juno1t08k74tqwukkxjyq5cwqrguzs7ktv4y7jfr4d6",
+  "wasm": "zk_verifier.wasm (680499 bytes, sha256 01a805e70730abc647db416945f4c83d7d397cf5c8f9e9445954a5b076ed6498) \u2014 pure arkworks path (no bn254-precompile feature)",
+  "vk": "production Groth16 VK from R4 ceremony (11 contributions); vk-prod.b64 sha256 35e52bd2c42ee364aa4f76154862f4a6ec2c022b0fb6868b3df0599ecfb1b04d; stored 424 bytes",
+  "transcript_sha256": "6c1a3fd2883259e919d3f296babfaeb945559200582ed5892b70df10a8b6905f",
+  "ceremony_anchor": "zk-vk-production-r4 on thought-court-v3 (juno1w2z0nq7az8t0sgnxuft8y40u4tawl52nv7jqasmdgxzcy03p3n0q76qjfe, code 37), tx 35678E78\u202631AE",
+  "smoke": "zk-smoke-prod-r4 resolved finalized via resolve_with_proof, tx 8B647DEC\u20263F56",
+  "deployed": "2026-11-12"
+ },
+ "jlens-thought-court-v3": {
+  "codeId": 37,
+  "address": "juno1w2z0nq7az8t0sgnxuft8y40u4tawl52nv7jqasmdgxzcy03p3n0q76qjfe",
+  "admin": "juno1we7p7hhnvh7ulhtqm3cqxh3dy8jm2q4wshp4wh (probe-op-b)",
+  "note": "drand-verified sortition + ZK fast-path court; supersedes code-24 instance juno10c3dunk\u2026 for new work",
+  "zk_verifier": "juno16ezahr8yn99uszv6wck7tm4cxlw3t8dhcuxrvt0ktazprn2ze9dq8h0vp6 (set 2026-11-12, tx 179C40D9\u2026CF9C)"
  }
 }
