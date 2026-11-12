@@ -65,7 +65,7 @@ async function ensureWallet(): Promise<string> {
   const found = (await store.list()).find((e) => e.id === WALLET_ID);
   if (found) return found.address;
   const entry = await store.add(WALLET_ID, loadMnemonicFromEnvFile(), {
-    bech32Prefix: "juno",
+    bech32Prefix: "junoclaw",
   });
   return entry.address;
 }

@@ -292,7 +292,7 @@ async function run() {
       backend: "passphrase",
     });
     const b = await store.add("bob", TEST_MNEMONIC, {
-      bech32Prefix: "juno",
+      bech32Prefix: "junoclaw",
       backend: "keychain",
     });
     if (a.backendName !== "passphrase") throw new Error(`alice: ${a.backendName}`);

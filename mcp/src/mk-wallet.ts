@@ -9,7 +9,7 @@ async function main() {
     console.log("probe-op-b exists:", found.address);
     return;
   }
-  const entry = await store.generateAndAdd("probe-op-b", { bech32Prefix: "juno" });
+  const entry = await store.generateAndAdd("probe-op-b", { bech32Prefix: "junoclaw" });
   console.log("created probe-op-b:", entry.address);
 }
 main().then(() => process.exit(0)).catch((e) => { console.error("err:", e); process.exit(1); });

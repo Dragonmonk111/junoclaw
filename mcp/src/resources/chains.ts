@@ -45,7 +45,7 @@ export const CHAIN_REGISTRY: Record<string, ChainConfig> = {
     rpcEndpoint: "", // no Tendermint RPC — see transport/grpcEndpoint
     restEndpoint: "", // REST gateway optional; gRPC is canonical
     denom: "ujclaw",
-    bech32Prefix: "juno",
+    bech32Prefix: "junoclaw",
     gasPrice: "0.001ujclaw",
     slip44: 118,
     explorerTx: "",

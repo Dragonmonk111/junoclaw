@@ -65,7 +65,7 @@ async function ensureSmokeWallet(): Promise<string> {
   console.log(`Enrolling "${SMOKE_WALLET_ID}" into wallet registry...`);
   const mnemonic = loadMnemonicFromEnvFile();
   const entry = await store.add(SMOKE_WALLET_ID, mnemonic, {
-    bech32Prefix: "juno",
+    bech32Prefix: "junoclaw",
   });
   console.log(`✓ enrolled as ${entry.address}`);
   return entry.address;

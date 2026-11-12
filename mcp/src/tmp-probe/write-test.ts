@@ -20,7 +20,7 @@ async function main() {
   const priv = new Sha256(
     new TextEncoder().encode("junoclaw-deployer-v1")
   ).digest();
-  const wallet = await DirectSecp256k1Wallet.fromKey(priv, "juno");
+  const wallet = await DirectSecp256k1Wallet.fromKey(priv, "junoclaw");
   const client = await JunoClawClient.connectWithSigner(
     ENDPOINT,
     wallet,
