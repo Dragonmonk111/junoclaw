@@ -16,8 +16,8 @@
 //!     [--out devnet/proof-artifacts-disclosure]
 
 use ark_bn254::{Bn254, Fr};
-use ark_groth16::Groth16;
-use ark_serialize::CanonicalSerialize;
+use ark_groth16::{Groth16, ProvingKey};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_snark::SNARK;
 use ark_std::rand::{rngs::StdRng, SeedableRng};
 use base64::Engine;
@@ -65,6 +65,9 @@ struct Meta {
     tree_height: usize,
     leaf_index: u32,
     disclosure_sha256: String,
+    /// Which proving key produced this proof: a ceremony key path or
+    /// the deterministic fixture setup (devnet only).
+    key_source: String,
 }
 
 fn i8_to_fr(v: i8) -> Fr {
@@ -79,12 +82,14 @@ fn main() {
     let mut disclosure_path: Option<PathBuf> = None;
     let mut height = 4usize;
     let mut out_dir = PathBuf::from("devnet/proof-artifacts-disclosure");
+    let mut pk_path: Option<PathBuf> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--disclosure" => disclosure_path = Some(PathBuf::from(args.next().expect("--disclosure value"))),
             "--height" => height = args.next().expect("--height value").parse().expect("height int"),
             "--out" => out_dir = PathBuf::from(args.next().expect("--out value")),
+            "--pk" => pk_path = Some(PathBuf::from(args.next().expect("--pk value"))),
             other => panic!("unknown arg {other}"),
         }
     }
@@ -151,11 +156,22 @@ fn main() {
     };
 
     let mut rng = StdRng::seed_from_u64(42);
-    let (pk, vk) = Groth16::<Bn254>::circuit_specific_setup(
-        JLensReadoutCircuit::empty(height),
-        &mut rng,
-    )
-    .expect("setup failed");
+    let (pk, vk, key_source) = match &pk_path {
+        Some(path) => {
+            let bytes = fs::read(path).expect("read proving key");
+            let pk = ProvingKey::<Bn254>::deserialize_compressed(&bytes[..])
+                .expect("proving key decode (canonical compressed)");
+            (pk.clone(), pk.vk.clone(), "ceremony-pk".to_string())
+        }
+        None => {
+            let (pk, vk) = Groth16::<Bn254>::circuit_specific_setup(
+                JLensReadoutCircuit::empty(height),
+                &mut rng,
+            )
+            .expect("setup failed");
+            (pk, vk, "deterministic-fixture".to_string())
+        }
+    };
 
     let circuit = JLensReadoutCircuit {
         merkle_root: Some(root),
@@ -212,6 +228,7 @@ fn main() {
         tree_height: height,
         leaf_index: d.leaf_index,
         disclosure_sha256,
+        key_source,
     };
     fs::write(
         out_dir.join("meta.json"),
