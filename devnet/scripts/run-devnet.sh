@@ -36,7 +36,7 @@ done
 
 echo -n "[run-devnet] Waiting for the first block "
 for i in $(seq 1 30); do
-  HEIGHT=$(curl -fsS http://localhost:26657/status | jq -r '.result.sync_info.latest_block_height')
+  HEIGHT=$(curl -fsS http://localhost:26657/status | grep -o '"latest_block_height":"[0-9]*"' | grep -o '[0-9]*')
   if [ "${HEIGHT}" != "null" ] && [ "${HEIGHT}" -ge 2 ] 2>/dev/null; then
     echo " ok (height=${HEIGHT})"
     break
