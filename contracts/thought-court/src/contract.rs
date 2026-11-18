@@ -8,11 +8,11 @@ use sha2::{Digest, Sha256};
 use crate::error::ContractError;
 use crate::msg::{
     AttestationListResponse, CommitteeResponse, ExecuteMsg, InstantiateMsg, MigrateMsg,
-    QueryMsg, VerifierListResponse,
+    QueryMsg, VerifierListResponse, ZkVerifierQueryMsg, ZkVerifierResponse, ZkVerifyResponse,
 };
 use crate::state::{
-    Attestation, AttestationStatus, Config, Dispute, Verdict, Verifier, Vote, ACTIVE_SEATS,
-    ATTESTATIONS, CONFIG, DISPUTES, VERIFIERS,
+    Attestation, AttestationStatus, Config, Dispute, ReadoutClaims, Verdict, Verifier, Vote,
+    ACTIVE_SEATS, ATTESTATIONS, CONFIG, DISPUTES, VERIFIERS, ZK_VERIFIER,
 };
 
 const CONTRACT_NAME: &str = "crates.io:junoclaw-thought-court";
@@ -29,6 +29,28 @@ const DEFAULT_VERIFIER_SLASH_BP: u32 = 2_000;
 
 const DEFAULT_LIMIT: u32 = 30;
 const MAX_LIMIT: u32 = 100;
+
+/// Fixed-point scale of the jlens.integrity.v1 readout — must match the
+/// circuit's SCALE and the J-Lens evidence spec.
+const READOUT_SCALE: u64 = 1_000_000;
+
+/// Public inputs are arkworks-compressed BN254 Fr elements, 32 bytes each.
+const FR_BYTES: usize = 32;
+/// Circuit allocation order: [merkle_root, bank_commitment, score,
+/// integrity, detection] — see circuits/jlens-readout/src/lib.rs.
+const ZK_PUBLIC_INPUTS: usize = 5;
+
+// ── Drand quicknet sortition (unchained G1, RFC-9380) ──
+// Same beacon the agent-company sortition used via WAVS/Nois — here the
+// signature is verified on-chain, so the draw needs no trusted relay.
+const DRAND_GENESIS_TIME: u64 = 1_692_803_367;
+const DRAND_PERIOD_SECS: u64 = 3;
+/// Commit to a round this far in the future so the beacon value is
+/// unobservable at challenge-open time.
+const DRAND_ROUNDS_AHEAD: u64 = 2;
+const DRAND_DST: &[u8] = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
+/// Compressed BLS12-381 G2 generator point.
+const BLS_G2_GENERATOR_HEX: &str = "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8";
 
 #[entry_point]
 pub fn instantiate(
@@ -69,6 +91,7 @@ pub fn instantiate(
             verifier_slash_bp: msg
                 .verifier_slash_bp
                 .unwrap_or(DEFAULT_VERIFIER_SLASH_BP),
+            drand_pubkey: msg.drand_pubkey,
         },
     )?;
     Ok(Response::new().add_attribute("action", "instantiate"))
@@ -267,15 +290,21 @@ pub fn execute(
     match msg {
         ExecuteMsg::RegisterVerifier {} => register_verifier(deps, env, info),
         ExecuteMsg::RemoveVerifier {} => remove_verifier(deps, info),
-        ExecuteMsg::AnchorAttestation { id, activation_root } => {
-            anchor(deps, env, info, id, activation_root)
-        }
+        ExecuteMsg::AnchorAttestation {
+            id,
+            activation_root,
+            claims,
+        } => anchor(deps, env, info, id, activation_root, claims),
         ExecuteMsg::OpenChallenge { attestation_id } => open_challenge(deps, env, info, attestation_id),
         ExecuteMsg::SubmitVerdict {
             attestation_id,
             verdict,
             evidence_hash,
         } => submit_verdict(deps, env, info, attestation_id, verdict, evidence_hash),
+        ExecuteMsg::SubmitRandomness {
+            attestation_id,
+            signature_hex,
+        } => submit_randomness(deps, info, attestation_id, signature_hex),
         ExecuteMsg::FinalizeAttestation { attestation_id } => {
             finalize(deps, env, info, attestation_id)
         }
@@ -286,6 +315,28 @@ pub fn execute(
             attestation_id,
             verdict,
         } => force_resolve(deps, info, attestation_id, verdict),
+        ExecuteMsg::SetZkVerifier { address } => set_zk_verifier(deps, info, address),
+        ExecuteMsg::ResolveWithProof {
+            attestation_id,
+            proof_base64,
+            public_inputs_base64,
+        } => resolve_with_proof(deps, attestation_id, proof_base64, public_inputs_base64),
+        ExecuteMsg::ResolveWithRecompute {
+            attestation_id,
+            activations,
+            bank_vec,
+            threshold,
+            leaf_index,
+            merkle_path,
+        } => resolve_with_recompute(
+            deps,
+            attestation_id,
+            activations,
+            bank_vec,
+            threshold,
+            leaf_index,
+            merkle_path,
+        ),
         ExecuteMsg::UpdateConfig {
             admin,
             min_operator_bond,
@@ -298,6 +349,7 @@ pub fn execute(
             challenger_reward_bp,
             operator_reward_bp,
             verifier_slash_bp,
+            drand_pubkey,
         } => update_config(
             deps,
             info,
@@ -312,6 +364,7 @@ pub fn execute(
             challenger_reward_bp,
             operator_reward_bp,
             verifier_slash_bp,
+            drand_pubkey,
         ),
     }
 }
@@ -372,6 +425,7 @@ fn anchor(
     info: MessageInfo,
     id: String,
     activation_root: String,
+    claims: Option<ReadoutClaims>,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     if ATTESTATIONS.has(deps.storage, &id) {
@@ -390,6 +444,7 @@ fn anchor(
             anchored_at: now,
             challenge_deadline: now + cfg.challenge_window_secs,
             status: AttestationStatus::Pending,
+            claims,
         },
     )?;
     Ok(Response::new()
@@ -423,29 +478,46 @@ fn open_challenge(
     }
     let bond = take_bond(&info, &cfg, cfg.min_challenger_bond)?;
 
-    // Dispute seed: Fiat-Shamir over public, uncontrollable-by-one-party
-    // material — attestation id + challenger + anchor block height.
-    let seed = format!(
-        "{}:{}:{}",
-        attestation_id,
-        info.sender,
-        env.block.height
-    );
-    let n_verifiers = VERIFIERS
+    // Snapshot the verifier pool — the draw is bound to this set, so
+    // registering seats after the fact can't influence it.
+    let eligible: Vec<Addr> = VERIFIERS
         .range(deps.storage, None, None, Order::Ascending)
-        .count() as u32;
-    if n_verifiers < cfg.committee_size {
+        .map(|r| r.map(|(a, _)| Addr::unchecked(a)))
+        .collect::<StdResult<Vec<_>>>()?;
+    if (eligible.len() as u32) < cfg.committee_size {
         return Err(ContractError::InsufficientVerifiers {
             need: cfg.committee_size,
-            have: n_verifiers,
+            have: eligible.len() as u32,
         });
-    }
-    let committee = sortition(deps.storage, &seed, cfg.committee_size)?;
-    for seat in &committee {
-        seat_bump(deps.storage, seat, 1)?;
     }
 
     let now = env.block.time.seconds();
+    let mut attrs: Vec<(String, String)> = vec![
+        ("action".into(), "open_challenge".into()),
+        ("attestation_id".into(), attestation_id.clone()),
+        ("challenger".into(), info.sender.to_string()),
+    ];
+
+    let (committee, drand_round) = if cfg.drand_pubkey.is_some() {
+        // Drand mode: commit to a future quicknet round — the beacon
+        // value doesn't exist yet, so nobody can grind or predict the
+        // draw. The committee is filled by `SubmitRandomness` once the
+        // round lands and its signature verifies on-chain.
+        let round = (now - DRAND_GENESIS_TIME) / DRAND_PERIOD_SECS + DRAND_ROUNDS_AHEAD;
+        attrs.push(("drand_round".into(), round.to_string()));
+        (vec![], round)
+    } else {
+        // Legacy mode: Fiat-Shamir over public material — deterministic
+        // and auditable but offline-grindable by the challenger.
+        let seed = format!("{}:{}:{}", attestation_id, info.sender, env.block.height);
+        let committee = sortition(deps.storage, &seed, cfg.committee_size)?;
+        for seat in &committee {
+            seat_bump(deps.storage, seat, 1)?;
+        }
+        attrs.push(("seed".into(), seed));
+        (committee, 0)
+    };
+
     DISPUTES.save(
         deps.storage,
         &attestation_id,
@@ -455,6 +527,10 @@ fn open_challenge(
             challenger_bond: bond,
             opened_at: now,
             committee,
+            eligible,
+            drand_round,
+            randomness_hex: None,
+            randomness_submitter: None,
             votes: vec![],
             verdict_deadline: now + cfg.verdict_window_secs,
         },
@@ -462,11 +538,135 @@ fn open_challenge(
     att.status = AttestationStatus::Challenged;
     ATTESTATIONS.save(deps.storage, &attestation_id, &att)?;
 
+    Ok(Response::new().add_attributes(attrs))
+}
+
+/// Permissionless drand draw: verify the beacon signature on-chain, then
+/// Fisher-Yates the verifier snapshot. Any caller may post the round's
+/// signature — the check is cryptographic, so the submitter is trusted
+/// for nothing.
+fn submit_randomness(
+    deps: DepsMut,
+    info: MessageInfo,
+    attestation_id: String,
+    signature_hex: String,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+    let pubkey_hex = cfg
+        .drand_pubkey
+        .clone()
+        .ok_or(ContractError::DrandNotConfigured {})?;
+    let mut dispute = DISPUTES
+        .load(deps.storage, &attestation_id)
+        .map_err(|_| ContractError::DisputeNotFound {
+            id: attestation_id.clone(),
+        })?;
+    if !dispute.committee.is_empty() {
+        return Err(ContractError::SortitionAlreadyDone {
+            id: attestation_id,
+        });
+    }
+
+    let sig = parse_hex(&signature_hex).map_err(|reason| {
+        ContractError::InvalidRandomness { reason }
+    })?;
+    if sig.len() != 48 {
+        return Err(ContractError::InvalidRandomness {
+            reason: format!("drand signature must be 48 bytes, got {}", sig.len()),
+        });
+    }
+
+    // On-chain BLS verification: e(sig_G1, G2_gen) ==
+    // e(H_G1(sha256(round_be)), pubkey_G2). Verified against the
+    // configured beacon key — a forged submission fails here. The
+    // message form is drand's unchained digest: sha256(round as BE u64).
+    let pubkey = parse_hex(&pubkey_hex).map_err(|_| ContractError::InvalidRandomness {
+        reason: "configured drand pubkey is not valid hex".into(),
+    })?;
+    let round_msg: Vec<u8> = Sha256::digest(dispute.drand_round.to_be_bytes()).to_vec();
+    let hashed_round = deps
+        .api
+        .bls12_381_hash_to_g1(
+            cosmwasm_std::HashFunction::Sha256,
+            &round_msg,
+            DRAND_DST,
+        )
+        .map_err(|_| ContractError::DrandVerificationFailed {})?;
+    let g2_gen = parse_hex(BLS_G2_GENERATOR_HEX).map_err(|_| {
+        ContractError::InvalidRandomness {
+            reason: "g2 generator constant".into(),
+        }
+    })?;
+    let ok = deps
+        .api
+        .bls12_381_pairing_equality(&sig, &g2_gen, &hashed_round, &pubkey)
+        .map_err(|_| ContractError::DrandVerificationFailed {})?;
+    if !ok {
+        return Err(ContractError::DrandVerificationFailed {});
+    }
+
+    // Verified — the signature IS the randomness (drand derivation:
+    // randomness = sha256(signature)).
+    let randomness: [u8; 32] = Sha256::digest(&sig).into();
+    let committee = select_members(
+        &randomness,
+        &dispute.eligible,
+        cfg.committee_size as usize,
+    );
+    for seat in &committee {
+        seat_bump(deps.storage, seat, 1)?;
+    }
+    dispute.randomness_hex = Some(hex::encode(randomness));
+    dispute.randomness_submitter = Some(info.sender.clone());
+    dispute.committee = committee.clone();
+    DISPUTES.save(deps.storage, &attestation_id, &dispute)?;
+
     Ok(Response::new()
-        .add_attribute("action", "open_challenge")
+        .add_attribute("action", "submit_randomness")
         .add_attribute("attestation_id", attestation_id)
-        .add_attribute("challenger", info.sender)
-        .add_attribute("seed", seed))
+        .add_attribute("drand_round", dispute.drand_round.to_string())
+        .add_attribute("submitter", info.sender)
+        .add_attribute(
+            "committee",
+            committee
+                .iter()
+                .map(|a| a.to_string())
+                .collect::<Vec<_>>()
+                .join(","),
+        ))
+}
+
+/// Deterministic Fisher-Yates selection of `count` members from
+/// `eligible` — same construction as agent-company's sortition.
+fn select_members(randomness: &[u8; 32], eligible: &[Addr], count: usize) -> Vec<Addr> {
+    let n = eligible.len();
+    if count >= n {
+        return eligible.to_vec();
+    }
+    let mut indices: Vec<usize> = (0..n).collect();
+    for i in (1..n).rev() {
+        let mut h = Sha256::new();
+        h.update(randomness);
+        h.update((i as u64).to_le_bytes());
+        let sub: [u8; 32] = h.finalize().into();
+        let j = u64::from_le_bytes(sub[0..8].try_into().unwrap()) as usize % (i + 1);
+        indices.swap(i, j);
+    }
+    indices.truncate(count);
+    indices.iter().map(|&i| eligible[i].clone()).collect()
+}
+
+fn parse_hex(s: &str) -> Result<Vec<u8>, String> {
+    let s = s.trim_start_matches("0x");
+    if s.len() % 2 != 0 {
+        return Err("odd-length hex".into());
+    }
+    (0..s.len() / 2)
+        .map(|i| {
+            u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)
+                .map_err(|e| format!("hex: {}", e))
+        })
+        .collect()
 }
 
 fn submit_verdict(
@@ -656,6 +856,259 @@ fn force_resolve(
     Ok(resp)
 }
 
+fn set_zk_verifier(
+    deps: DepsMut,
+    info: MessageInfo,
+    address: String,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+    if info.sender != cfg.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let addr = deps.api.addr_validate(&address)?;
+    ZK_VERIFIER.save(deps.storage, &addr)?;
+    Ok(Response::new()
+        .add_attribute("action", "set_zk_verifier")
+        .add_attribute("address", addr))
+}
+
+/// Terminal state for a machine-resolved attestation that has no open
+/// dispute (Pending): Clean finalizes early + returns the operator bond;
+/// Fraud marks the attestation and sends the bond to the DAO — the
+/// evidence itself is the challenger.
+fn resolve_no_dispute(
+    deps: &mut DepsMut,
+    cfg: &Config,
+    attestation: &mut Attestation,
+    verdict: Verdict,
+) -> Result<Response, ContractError> {
+    let mut msgs: Vec<CosmosMsg> = vec![];
+    match verdict {
+        Verdict::Clean => {
+            attestation.status = AttestationStatus::Finalized;
+            if let Some(m) = send(&cfg.denom, &attestation.operator, attestation.bond) {
+                msgs.push(m);
+            }
+        }
+        Verdict::Fraud => {
+            attestation.status = AttestationStatus::Fraudulent;
+            if let Some(m) = send(&cfg.denom, &cfg.admin, attestation.bond) {
+                msgs.push(m);
+            }
+        }
+    }
+    ATTESTATIONS.save(deps.storage, &attestation.id, attestation)?;
+    Ok(Response::new().add_messages(msgs))
+}
+
+/// Shared resolution tail for the machine-adjudication paths: picks the
+/// right settlement by attestation status.
+fn machine_resolve(
+    mut deps: DepsMut,
+    attestation_id: &str,
+    mut att: Attestation,
+    verdict: Verdict,
+    proof_kind: &str,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+    match att.status {
+        AttestationStatus::Pending => {
+            let mut resp = resolve_no_dispute(&mut deps, &cfg, &mut att, verdict)?;
+            resp = resp
+                .add_attribute("action", "resolve_with_proof")
+                .add_attribute("proof_kind", proof_kind)
+                .add_attribute("attestation_id", attestation_id.to_string())
+                .add_attribute(
+                    "verdict",
+                    match verdict {
+                        Verdict::Clean => "clean",
+                        Verdict::Fraud => "fraud",
+                    },
+                );
+            Ok(resp)
+        }
+        AttestationStatus::Challenged | AttestationStatus::Unresolved => {
+            let dispute = DISPUTES
+                .load(deps.storage, attestation_id)
+                .map_err(|_| ContractError::DisputeNotFound {
+                    id: attestation_id.to_string(),
+                })?;
+            let outstanding = att.status == AttestationStatus::Challenged;
+            let resp = resolve(&mut deps, &cfg, &mut att, &dispute, verdict, outstanding)?;
+            ATTESTATIONS.save(deps.storage, attestation_id, &att)?;
+            Ok(resp.add_attribute("proof_kind", proof_kind))
+        }
+        _ => Err(ContractError::AttestationAlreadyResolved {
+            id: attestation_id.to_string(),
+        }),
+    }
+}
+
+/// ZK fast-path: smart-query the configured zk-verifier; a valid proof
+/// whose public inputs bind to this attestation resolves it.
+fn resolve_with_proof(
+    deps: DepsMut,
+    attestation_id: String,
+    proof_base64: String,
+    public_inputs_base64: String,
+) -> Result<Response, ContractError> {
+    let zk = ZK_VERIFIER
+        .may_load(deps.storage)?
+        .ok_or(ContractError::ZkVerifierNotConfigured {})?;
+    let att = ATTESTATIONS
+        .load(deps.storage, &attestation_id)
+        .map_err(|_| ContractError::AttestationNotFound {
+            id: attestation_id.clone(),
+        })?;
+    let claims = att.claims.clone().ok_or(ContractError::NotMachineAdjudicable {
+        id: attestation_id.clone(),
+    })?;
+
+    // Bind public inputs to the anchored commitment + declared claims.
+    let inputs = base64_decode(&public_inputs_base64).map_err(|reason| {
+        ContractError::PublicInputsMalformed { reason }
+    })?;
+    if inputs.len() != ZK_PUBLIC_INPUTS * FR_BYTES {
+        return Err(ContractError::PublicInputsMalformed {
+            reason: format!(
+                "expected {} bytes ({} Fr elements), got {}",
+                ZK_PUBLIC_INPUTS * FR_BYTES,
+                ZK_PUBLIC_INPUTS,
+                inputs.len()
+            ),
+        });
+    }
+    if hex::encode(&inputs[0..FR_BYTES]) != normalize_hex(&att.activation_root) {
+        return Err(ContractError::ProofBindingMismatch {});
+    }
+    let score = fr_le_u64(&inputs[2 * FR_BYTES..3 * FR_BYTES]);
+    let integrity = fr_le_u64(&inputs[3 * FR_BYTES..4 * FR_BYTES]);
+    let detection = fr_le_u64(&inputs[4 * FR_BYTES..5 * FR_BYTES]);
+    if score != Some(claims.score)
+        || integrity != Some(claims.integrity)
+        || detection != Some(claims.detection as u64)
+    {
+        return Err(ContractError::ProofBindingMismatch {});
+    }
+
+    // Stateless verify against the verifier contract's stored VK.
+    let verdict_resp: ZkVerifyResponse = deps
+        .querier
+        .query_wasm_smart(
+            zk,
+            &ZkVerifierQueryMsg::Verify {
+                proof_base64,
+                public_inputs_base64,
+            },
+        )
+        .map_err(|e| ContractError::ProofRejected {
+            reason: e.to_string(),
+        })?;
+    if !verdict_resp.valid {
+        return Err(ContractError::ProofRejected {
+            reason: verdict_resp.reason,
+        });
+    }
+
+    machine_resolve(deps, &attestation_id, att, Verdict::Clean, "groth16")
+}
+
+/// Recompute fast-path: the contract re-runs the deterministic readout.
+/// Inputs that bind to the anchored commitments produce a verdict —
+/// Clean on match, Fraud on a proven divergence. Inputs that don't bind
+/// are caller error, not a verdict.
+fn resolve_with_recompute(
+    deps: DepsMut,
+    attestation_id: String,
+    activations: Vec<i8>,
+    bank_vec: Vec<i8>,
+    threshold: u64,
+    leaf_index: u32,
+    merkle_path: Vec<String>,
+) -> Result<Response, ContractError> {
+    let att = ATTESTATIONS
+        .load(deps.storage, &attestation_id)
+        .map_err(|_| ContractError::AttestationNotFound {
+            id: attestation_id.clone(),
+        })?;
+    let claims = att.claims.clone().ok_or(ContractError::NotMachineAdjudicable {
+        id: attestation_id.clone(),
+    })?;
+
+    let binding_err = |reason: &str| ContractError::RecomputeBindingFailed {
+        reason: reason.to_string(),
+    };
+    if activations.is_empty() || activations.len() != bank_vec.len() {
+        return Err(binding_err("activations/bank length mismatch"));
+    }
+
+    // Bank binding: sha256(bank int8 bytes ‖ threshold big-endian) must
+    // equal the committed bank handle.
+    let mut bank_preimage: Vec<u8> = bank_vec.iter().map(|b| *b as u8).collect();
+    bank_preimage.extend_from_slice(&threshold.to_be_bytes());
+    let bank_hex = hex::encode(Sha256::digest(&bank_preimage));
+    if bank_hex != normalize_hex(&claims.bank_commitment) {
+        return Err(binding_err("bank commitment mismatch"));
+    }
+
+    // Activation binding: sha256 leaf + sha256 pair-chain walk to the
+    // anchored root (same index-bit convention as the gateway tree).
+    let leaf_bytes: Vec<u8> = activations.iter().map(|b| *b as u8).collect();
+    let mut cur: [u8; 32] = Sha256::digest(&leaf_bytes).into();
+    for (level, sib_hex) in merkle_path.iter().enumerate() {
+        let sib: [u8; 32] = hex::decode(sib_hex)
+            .ok()
+            .and_then(|v| v.try_into().ok())
+            .ok_or_else(|| binding_err("invalid sibling hash in merkle_path"))?;
+        let mut h = Sha256::new();
+        if (leaf_index >> level) & 1 == 0 {
+            h.update(cur);
+            h.update(sib);
+        } else {
+            h.update(sib);
+            h.update(cur);
+        }
+        cur = h.finalize().into();
+    }
+    if hex::encode(cur) != normalize_hex(&att.activation_root) {
+        return Err(binding_err("merkle root mismatch"));
+    }
+
+    // Bound inputs — now the recompute is authoritative.
+    let score: i64 = activations
+        .iter()
+        .zip(bank_vec.iter())
+        .map(|(a, b)| (*a as i64) * (*b as i64))
+        .sum();
+    let clean = score >= 0
+        && score as u64 == claims.score
+        && READOUT_SCALE.saturating_sub(score as u64) == claims.integrity
+        && ((score as u64) >= threshold) == claims.detection;
+    let verdict = if clean { Verdict::Clean } else { Verdict::Fraud };
+
+    machine_resolve(deps, &attestation_id, att, verdict, "recompute")
+}
+
+/// Little-endian u64 of an arkworks-compressed Fr limb — returns None
+/// when the value doesn't fit (claims are u64; field elements encoding
+/// larger values can never match them).
+fn fr_le_u64(fr_bytes: &[u8]) -> Option<u64> {
+    if fr_bytes.len() != FR_BYTES || fr_bytes[8..].iter().any(|b| *b != 0) {
+        return None;
+    }
+    Some(u64::from_le_bytes(fr_bytes[0..8].try_into().ok()?))
+}
+
+fn normalize_hex(s: &str) -> String {
+    s.trim_start_matches("0x").to_ascii_lowercase()
+}
+
+fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
+    cosmwasm_std::from_json::<cosmwasm_std::Binary>(format!("\"{}\"", input).into_bytes())
+        .map(|b| b.to_vec())
+        .map_err(|e| format!("base64: {}", e))
+}
+
 fn update_config(
     deps: DepsMut,
     info: MessageInfo,
@@ -670,6 +1123,7 @@ fn update_config(
     challenger_reward_bp: Option<u32>,
     operator_reward_bp: Option<u32>,
     verifier_slash_bp: Option<u32>,
+    drand_pubkey: Option<String>,
 ) -> Result<Response, ContractError> {
     let mut cfg = CONFIG.load(deps.storage)?;
     if info.sender != cfg.admin {
@@ -707,6 +1161,9 @@ fn update_config(
     }
     if let Some(v) = verifier_slash_bp {
         cfg.verifier_slash_bp = v;
+    }
+    if let Some(v) = drand_pubkey {
+        cfg.drand_pubkey = Some(v);
     }
     CONFIG.save(deps.storage, &cfg)?;
     Ok(Response::new().add_attribute("action", "update_config"))
@@ -766,6 +1223,12 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
                 .map(|a| a.to_string())
                 .collect();
             to_json_binary(&CommitteeResponse { committee })
+        }
+        QueryMsg::GetZkVerifier {} => {
+            let addr = ZK_VERIFIER.may_load(deps.storage)?;
+            to_json_binary(&ZkVerifierResponse {
+                address: addr.map(|a| a.to_string()),
+            })
         }
     }
 }

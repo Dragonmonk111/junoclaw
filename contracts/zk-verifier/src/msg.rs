@@ -32,6 +32,20 @@ pub enum QueryMsg {
     /// Returns the gas estimate for the last verification (if any).
     #[returns(LastVerifyResponse)]
     LastVerify {},
+    /// Stateless verify: runs the same Groth16 check as `VerifyProof`
+    /// without writing state. Lets other contracts (e.g. the court
+    /// fast-path) query a result bound to THIS VK via smart query.
+    #[returns(VerifyResponse)]
+    Verify {
+        proof_base64: String,
+        public_inputs_base64: String,
+    },
+}
+
+#[cw_serde]
+pub struct VerifyResponse {
+    pub valid: bool,
+    pub reason: String,
 }
 
 #[cw_serde]

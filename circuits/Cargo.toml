@@ -9,4 +9,5 @@ members = [
     "moultbook-membership",
     "jolt-guests",
     "jlens-readout",
+    "zk-ceremony",
 ]

@@ -87,43 +87,10 @@ fn execute_verify_proof(
     proof_base64: String,
     public_inputs_base64: String,
 ) -> Result<Response, ContractError> {
-    // Load stored verification key
-    let vk_bytes = VK_BYTES.may_load(deps.storage)?
-        .ok_or(ContractError::NoVerificationKey {})?;
+    let public_inputs_len = run_verify(deps.api, deps.storage, &proof_base64, &public_inputs_base64)?;
 
-    // Deserialize VK
-    let vk = VerifyingKey::<Bn254>::deserialize_compressed(&vk_bytes[..])
-        .map_err(|e| ContractError::DeserializationError {
-            reason: format!("vk: {}", e),
-        })?;
-
-    // Deserialize proof
-    let proof_bytes = base64_decode(&proof_base64)?;
-    let proof = Proof::<Bn254>::deserialize_compressed(&proof_bytes[..])
-        .map_err(|e| ContractError::DeserializationError {
-            reason: format!("proof: {}", e),
-        })?;
-
-    // Deserialize public inputs
-    let inputs_bytes = base64_decode(&public_inputs_base64)?;
-    let public_inputs = deserialize_public_inputs(&inputs_bytes)?;
-
-    // ── THE EXPENSIVE PART ──
-    //
-    // Delegated to `bn254_backend::verify_groth16`, which dispatches on the
-    // `bn254-precompile` cargo feature:
-    //   - off  : pure arkworks (~371 486 gas on uni-7)
-    //   - on   : 4-pair `bn254_pairing_equality` + host-side lincomb
-    //            (~187 000 gas expected on a wasmvm-fork-patched chain)
-    //
-    // Both paths produce identical accept/reject decisions by design —
-    // differential testing against 1 000 random proofs is documented in
-    // `wasmvm-fork/BUILD_AND_TEST.md`.
-    let valid = crate::bn254_backend::verify_groth16(deps.api, &vk, &proof, &public_inputs)?;
-
-    if !valid {
-        return Err(ContractError::ProofInvalid {});
-    }
+    let public_inputs = deserialize_public_inputs(&base64_decode(&public_inputs_base64)?)?;
+    let _ = public_inputs;
 
     LAST_VERIFICATION.save(deps.storage, &LastVerification {
         verified: true,
@@ -138,7 +105,7 @@ fn execute_verify_proof(
             cosmwasm_std::Event::new("zk_proof_verified")
                 .add_attribute("result", "valid")
                 .add_attribute("block_height", env.block.height.to_string())
-                .add_attribute("public_inputs_count", public_inputs.len().to_string()),
+                .add_attribute("public_inputs_count", public_inputs_len.to_string()),
         ))
 }
 
@@ -158,6 +125,27 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
                 verified: last.as_ref().map(|l| l.verified).unwrap_or(false),
                 block_height: last.map(|l| l.block_height).unwrap_or(0),
             })
+        }
+        QueryMsg::Verify {
+            proof_base64,
+            public_inputs_base64,
+        } => {
+            match run_verify(deps.api, deps.storage, &proof_base64, &public_inputs_base64) {
+                Ok(_) => to_json_binary(&crate::msg::VerifyResponse {
+                    valid: true,
+                    reason: String::new(),
+                }),
+                Err(ContractError::ProofInvalid {}) => {
+                    to_json_binary(&crate::msg::VerifyResponse {
+                        valid: false,
+                        reason: "proof verification failed".to_string(),
+                    })
+                }
+                Err(e) => to_json_binary(&crate::msg::VerifyResponse {
+                    valid: false,
+                    reason: format!("{}", e),
+                }),
+            }
         }
     }
 }
@@ -198,4 +186,47 @@ fn deserialize_public_inputs(bytes: &[u8]) -> Result<Vec<<Bn254 as Pairing>::Sca
         inputs.push(fr);
     }
     Ok(inputs)
+}
+
+/// Shared verification path for `VerifyProof` (execute) and `Verify`
+/// (query). Returns the public-input count on success, or a
+/// ContractError (ProofInvalid / deserialization / missing VK).
+///
+/// The expensive part is delegated to `bn254_backend::verify_groth16`,
+/// which dispatches on the `bn254-precompile` cargo feature:
+///   - off  : pure arkworks (~371k gas on uni-7)
+///   - on   : 4-pair `bn254_pairing_equality` + host-side lincomb
+///            (~77.6k gas measured on the patched wasmvm)
+/// Both paths produce identical accept/reject decisions by design —
+/// differential testing is documented in `wasmvm-fork/BUILD_AND_TEST.md`.
+fn run_verify(
+    api: &dyn cosmwasm_std::Api,
+    storage: &dyn cosmwasm_std::Storage,
+    proof_base64: &str,
+    public_inputs_base64: &str,
+) -> Result<usize, ContractError> {
+    let vk_bytes = VK_BYTES
+        .may_load(storage)?
+        .ok_or(ContractError::NoVerificationKey {})?;
+
+    let vk = VerifyingKey::<Bn254>::deserialize_compressed(&vk_bytes[..])
+        .map_err(|e| ContractError::DeserializationError {
+            reason: format!("vk: {}", e),
+        })?;
+
+    let proof_bytes = base64_decode(proof_base64)?;
+    let proof = Proof::<Bn254>::deserialize_compressed(&proof_bytes[..])
+        .map_err(|e| ContractError::DeserializationError {
+            reason: format!("proof: {}", e),
+        })?;
+
+    let inputs_bytes = base64_decode(public_inputs_base64)?;
+    let public_inputs = deserialize_public_inputs(&inputs_bytes)?;
+    let n = public_inputs.len();
+
+    let valid = crate::bn254_backend::verify_groth16(api, &vk, &proof, &public_inputs)?;
+    if !valid {
+        return Err(ContractError::ProofInvalid {});
+    }
+    Ok(n)
 }

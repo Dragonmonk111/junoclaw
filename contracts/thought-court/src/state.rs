@@ -39,6 +39,29 @@ pub struct Attestation {
     /// End of the challenge window (seconds).
     pub challenge_deadline: u64,
     pub status: AttestationStatus,
+    /// Declared readout outputs. Present ⇒ the dispute is
+    /// machine-adjudicable: the chain can recompute the readout itself
+    /// (`ResolveWithRecompute`) or verify a Groth16 proof of it
+    /// (`ResolveWithProof`), both in one transaction. Absent ⇒ only
+    /// the committee path can resolve the dispute.
+    #[serde(default)]
+    pub claims: Option<ReadoutClaims>,
+}
+
+/// The operator's declared readout, anchored alongside the commitment.
+/// These are the values a dispute compares recomputation against.
+#[cw_serde]
+pub struct ReadoutClaims {
+    /// Integer-domain dot product Σ activationsᵢ·bankᵢ (non-negative
+    /// in the current jlens.integrity.v1 readout).
+    pub score: u64,
+    /// SCALE − score.
+    pub integrity: u64,
+    /// Detection flag: score >= bank threshold.
+    pub detection: bool,
+    /// Hex sha256 of (bank_vec int8 bytes ‖ threshold big-endian u64) —
+    /// binds the claims to a specific registered probe direction.
+    pub bank_commitment: String,
 }
 
 /// Committee verdict on a dispute.
@@ -68,8 +91,24 @@ pub struct Dispute {
     pub challenger: Addr,
     pub challenger_bond: Uint128,
     pub opened_at: u64,
-    /// Sortitioned verifier seats (Fiat-Shamir from the dispute seed).
+    /// Sortitioned verifier seats. Empty while the drand draw is pending;
+    /// filled by `SubmitRandomness` after the committed round lands.
+    /// In legacy mode (no drand pubkey configured) the committee is
+    /// drawn atomically at open time.
     pub committee: Vec<Addr>,
+    /// Verifier pool snapshot taken at open — the draw can't be gamed by
+    /// registering new seats after the round is committed.
+    #[serde(default)]
+    pub eligible: Vec<Addr>,
+    /// The drand quicknet round this dispute's draw commits to
+    /// (genesis 1692803367, 3s period). 0 = legacy Fiat-Shamir draw.
+    #[serde(default)]
+    pub drand_round: u64,
+    /// The submitted drand signature hex + its submitter, kept for audit.
+    #[serde(default)]
+    pub randomness_hex: Option<String>,
+    #[serde(default)]
+    pub randomness_submitter: Option<Addr>,
     pub votes: Vec<Vote>,
     /// Verdict deadline (seconds); after this a short quorum triggers
     /// the Unresolved path via ResolveTimeout.
@@ -115,6 +154,13 @@ pub struct Config {
     /// minority (basis points). Honest-majority assumption only —
     /// probabilistic/economic, not cryptographic.
     pub verifier_slash_bp: u32,
+    /// Hex-compressed BLS12-381 G2 public key of the drand beacon used
+    /// for committee sortition (quicknet). When set, challenges commit
+    /// to a future drand round and the committee is drawn trustlessly
+    /// from the on-chain-verified signature. When unset, sortition uses
+    /// the legacy Fiat-Shamir draw at open time.
+    #[serde(default)]
+    pub drand_pubkey: Option<String>,
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
@@ -124,3 +170,6 @@ pub const VERIFIERS: Map<&str, Verifier> = Map::new("verifiers");
 /// verifier addr → number of open-dispute seats held. >0 blocks unbonding;
 /// decremented when a dispute resolves or times out.
 pub const ACTIVE_SEATS: Map<&str, u64> = Map::new("active_seats");
+/// Address of the zk-verifier contract whose `Verify` query the court
+/// smart-queries in the `ResolveWithProof` fast-path. Admin-set.
+pub const ZK_VERIFIER: Item<Addr> = Item::new("zk_verifier");

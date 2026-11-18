@@ -63,4 +63,37 @@ pub enum ContractError {
 
     #[error("Dispute is not in unresolved state")]
     DisputeNotUnresolved {},
+
+    #[error("No zk-verifier contract configured")]
+    ZkVerifierNotConfigured {},
+
+    #[error("Public inputs malformed: {reason}")]
+    PublicInputsMalformed { reason: String },
+
+    #[error("Proof public inputs do not bind to this attestation")]
+    ProofBindingMismatch {},
+
+    #[error("Proof rejected by zk-verifier: {reason}")]
+    ProofRejected { reason: String },
+
+    #[error("Attestation already resolved: {id}")]
+    AttestationAlreadyResolved { id: String },
+
+    #[error("Attestation has no declared readout claims; only the committee path can resolve it")]
+    NotMachineAdjudicable { id: String },
+
+    #[error("Recompute evidence does not bind to the committed artifacts: {reason}")]
+    RecomputeBindingFailed { reason: String },
+
+    #[error("Committee already drawn for attestation: {id}")]
+    SortitionAlreadyDone { id: String },
+
+    #[error("Invalid drand signature hex: {reason}")]
+    InvalidRandomness { reason: String },
+
+    #[error("Drand signature failed on-chain BLS verification")]
+    DrandVerificationFailed {},
+
+    #[error("No drand beacon key configured; sortition is in legacy mode")]
+    DrandNotConfigured {},
 }

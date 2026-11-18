@@ -14,8 +14,8 @@ use std::fs;
 use std::path::Path;
 
 use jlens_readout_circuit::{
-    bank_commitment_native, build_merkle_tree_for_fixture, readout_leaf_native,
-    JLensReadoutCircuit, DIM, SCALE,
+    bank_commitment_native, build_merkle_tree_for_fixture, detection_native,
+    readout_leaf_native, JLensReadoutCircuit, DIM, SCALE,
 };
 use sensor_safety_circuit::mimc_hash;
 
@@ -29,6 +29,7 @@ fn main() {
 
     let score: Fr = acts.iter().zip(bank.iter()).map(|(a, b)| *a * *b).sum();
     let integrity = Fr::from(SCALE) - score;
+    let detection = detection_native(score, threshold);
     let bank_commit = bank_commitment_native(&bank, threshold);
 
     let height = 4usize;
@@ -51,6 +52,7 @@ fn main() {
         bank_commitment: Some(bank_commit),
         score_out: Some(score),
         integrity_out: Some(integrity),
+        detection_out: Some(detection),
         activations: acts.iter().map(|a| Some(*a)).collect(),
         bank_vec: bank.iter().map(|b| Some(*b)).collect(),
         threshold: Some(threshold),
@@ -62,8 +64,8 @@ fn main() {
     let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng).expect("prove failed");
 
     // Public inputs in allocation order: merkle_root, bank_commitment,
-    // score_out, integrity_out.
-    let public_inputs = vec![root, bank_commit, score, integrity];
+    // score_out, integrity_out, detection_out.
+    let public_inputs = vec![root, bank_commit, score, integrity, detection];
     let valid = Groth16::<Bn254>::verify(&vk, &public_inputs, &proof).expect("verify failed");
     assert!(valid, "local verification failed");
     println!("local Groth16 verification: VALID");
@@ -86,6 +88,6 @@ fn main() {
 
     println!("vk bytes: {}  proof bytes: {}  inputs bytes: {}",
         vk_bytes.len(), proof_bytes.len(), inputs_bytes.len());
-    println!("score={} integrity={} root={}", score, integrity, root);
+    println!("score={} integrity={} detection={} root={}", score, integrity, detection, root);
     println!("artifacts -> {}", out_dir.display());
 }
