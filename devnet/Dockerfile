@@ -10,7 +10,7 @@
 ARG COSMWASM_TAG=v2.2.2
 ARG WASMVM_TAG=v2.2.4
 ARG JUNO_TAG=v29.0.0
-ARG RUST_TAG=1.78-bookworm
+ARG RUST_TAG=1.91-bookworm
 ARG GO_TAG=1.24-bookworm
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -39,7 +39,7 @@ COPY wasmvm-fork/ /src/wasmvm-fork/
 # manual `cp -r` of the standalone crate or the [workspace] strip — the
 # patch encodes the workspace-member form directly.
 #
-# Patch 00 (rust-toolchain.toml) is a no-op inside the rust:1.78-bookworm
+# Patch 00 (rust-toolchain.toml) is a no-op inside the rust:1.91-bookworm
 # image since the default toolchain already matches; it is applied for
 # parity with the host-side rebase-track-a.sh harness.
 RUN git clone --branch ${COSMWASM_TAG} --depth 1 \

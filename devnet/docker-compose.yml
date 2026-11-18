@@ -16,7 +16,7 @@ services:
         COSMWASM_TAG: v2.2.2
         WASMVM_TAG: v2.2.4
         JUNO_TAG: v29.0.0
-        RUST_TAG: 1.78-bookworm
+        RUST_TAG: 1.91-bookworm
         GO_TAG: 1.24-bookworm
     image: junoclaw/junod-bn254:devnet
     container_name: junoclaw-bn254-devnet
