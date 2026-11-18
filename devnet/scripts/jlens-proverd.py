@@ -25,6 +25,11 @@ import json, os, struct, subprocess, sys, time
 STORE = os.environ.get("JCMEM_STORE")
 COURT = os.environ.get("COURT_ADDR")
 WORK = os.environ.get("WORK_DIR")
+# Key-aware export path: prefer `jc-mem events` (works on encrypted
+# stores via --store-key) over raw file parsing.
+JCMEM_BIN = os.environ.get("JCMEM_BIN", "jc-mem")
+JCMEM_KEYS = os.environ.get("JCMEM_KEYS")
+STORE_KEY = os.environ.get("STORE_KEY")
 POLL = float(os.environ.get("POLL_SECS", "3"))
 ONESHOT = os.environ.get("ONESHOT") == "1"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -61,8 +66,27 @@ def eid_hex(ev):
     return raw
 
 
+def read_events_cli():
+    """Ask jc-mem for CommitJlens events — key-aware, works on
+    JCMEMe0 encrypted stores when STORE_KEY/JCMEM_KEYS are set."""
+    if not JCMEM_KEYS:
+        return None
+    cmd = [JCMEM_BIN, "events", "--keys", JCMEM_KEYS, "--store", STORE,
+           "--op", "CommitJlens"]
+    if STORE_KEY:
+        cmd += ["--store-key", STORE_KEY]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    if r.returncode != 0:
+        return None
+    return [json.loads(line) for line in r.stdout.splitlines() if line.strip()]
+
+
 def read_events():
-    """Parse all events in the store. Returns list of events."""
+    """Events via the jc-mem CLI when keys are configured; raw store
+    parse otherwise (plaintext stores only)."""
+    cli = read_events_cli()
+    if cli is not None:
+        return cli
     out = []
     if not os.path.exists(STORE):
         return out
