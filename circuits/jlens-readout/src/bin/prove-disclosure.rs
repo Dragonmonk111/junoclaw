@@ -2,9 +2,9 @@
 //! `JlensReadout` JSON jc-mem stores in `CommitJlens`, builds the MiMC
 //! witness, runs Groth16, and writes vk/proof/inputs artifacts +
 //! `meta.json` (the anchor fields: MiMC activation root as the contract
-//! expects it — hex of public_inputs[0] — plus the declared claims).
+//! expects it -" hex of public_inputs[0] -" plus the declared claims).
 //!
-//! Scope: v1 proof path mirrors the devnet fixture — the activation leaf
+//! Scope: v1 proof path mirrors the devnet fixture -" the activation leaf
 //! sits at `leaf_index` in a tree whose remaining leaves are the zero
 //! leaf (mimc_hash(0,0)). A production capture pipeline must anchor the
 //! MiMC root of the full tree; the sha256 `merkle_path` in the
@@ -37,11 +37,19 @@ struct Disclosure {
     bank_vec: Vec<i8>,
     threshold: u64,
     leaf_index: u32,
+    /// Optional: MiMC authentication path for the activation leaf in the
+    /// REAL tree the capture anchored - hex-encoded compressed Fr
+    /// siblings, leaf level up (same order as `merkle_path` in the sha256
+    /// recompute path). When present, the prover folds this path instead
+    /// of the devnet padded-tree assumption. `tree_height` must equal
+    /// `mimc_path.len()`.
+    #[serde(default)]
+    mimc_path: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
 struct Meta {
-    /// Hex of the first public input — the value the contract stores as
+    /// Hex of the first public input -" the value the contract stores as
     /// `activation_root` on the anchored attestation.
     activation_root: String,
     /// Hex MiMC bank commitment (second public input).
@@ -51,6 +59,9 @@ struct Meta {
     detection: bool,
     /// The `attestation_id` the anchor should use; caller may override.
     suggested_attestation_id: String,
+    /// The MiMC path used (hex Fr siblings, leaf level up) - what the
+    /// capture pipeline must store so the proof path works on real trees.
+    mimc_path: Vec<String>,
     tree_height: usize,
     leaf_index: u32,
     disclosure_sha256: String,
@@ -108,10 +119,36 @@ fn main() {
     let bank_commit = bank_commitment_native(&bank, threshold);
 
     let leaf = readout_leaf_native(&acts);
-    let zero_leaf = mimc_hash(Fr::from(0u64), Fr::from(0u64));
-    let mut leaves = vec![zero_leaf; 1 << height];
-    leaves[leaf_idx] = leaf;
-    let (root, paths, bits) = build_merkle_tree_for_fixture(&leaves, height);
+    // Real-tree path (capture supplies MiMC siblings) or devnet
+    // padded-tree fallback. In both cases `mimc_path_used` is the
+    // leaf-to-root sibling list the circuit consumes.
+    let (root, mimc_path_used, bits): (Fr, Vec<Fr>, Vec<bool>) = if let Some(path_hex) = &d.mimc_path {
+        assert_eq!(path_hex.len(), height, "mimc_path.len() must equal --height");
+        use ark_serialize::CanonicalDeserialize;
+        let path: Vec<Fr> = path_hex
+            .iter()
+            .map(|h| {
+                let bytes = hex::decode(h).expect("mimc_path element hex");
+                Fr::deserialize_compressed(&bytes[..]).expect("mimc_path element Fr")
+            })
+            .collect();
+        let mut cur = leaf;
+        let mut idx = leaf_idx;
+        let mut bits = Vec::with_capacity(height);
+        for sib in &path {
+            let odd = idx % 2 == 1;
+            bits.push(odd);
+            cur = if odd { mimc_hash(*sib, cur) } else { mimc_hash(cur, *sib) };
+            idx /= 2;
+        }
+        (cur, path, bits)
+    } else {
+        let zero_leaf = mimc_hash(Fr::from(0u64), Fr::from(0u64));
+        let mut leaves = vec![zero_leaf; 1 << height];
+        leaves[leaf_idx] = leaf;
+        let (root, paths, bits) = build_merkle_tree_for_fixture(&leaves, height);
+        (root, paths[leaf_idx].clone(), bits[leaf_idx].clone())
+    };
 
     let mut rng = StdRng::seed_from_u64(42);
     let (pk, vk) = Groth16::<Bn254>::circuit_specific_setup(
@@ -129,8 +166,8 @@ fn main() {
         activations: acts.iter().map(|a| Some(*a)).collect(),
         bank_vec: bank.iter().map(|b| Some(*b)).collect(),
         threshold: Some(threshold),
-        merkle_path: paths[leaf_idx].iter().map(|p| Some(*p)).collect(),
-        path_bits: bits[leaf_idx].iter().map(|b| Some(*b)).collect(),
+        merkle_path: mimc_path_used.iter().map(|p| Some(*p)).collect(),
+        path_bits: bits.iter().map(|b| Some(*b)).collect(),
         tree_height: height,
     };
 
@@ -164,6 +201,14 @@ fn main() {
         integrity: SCALE - score_i64,
         detection: detection == Fr::from(1u64),
         suggested_attestation_id: format!("jlens-{}", &disclosure_sha256[..12]),
+        mimc_path: mimc_path_used
+            .iter()
+            .map(|p| {
+                let mut b = Vec::new();
+                p.serialize_compressed(&mut b).unwrap();
+                hex::encode(b)
+            })
+            .collect(),
         tree_height: height,
         leaf_index: d.leaf_index,
         disclosure_sha256,
