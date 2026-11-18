@@ -25,6 +25,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git clang llvm-dev make pkg-config libssl-dev && \
     rm -rf /var/lib/apt/lists/*
 
+# wasmer 4.3.7 references __rust_probestack which was removed from Rust
+# stdlib in newer toolchains. Provide a shim so libwasmvm.so resolves it.
+COPY devnet/shim.c /tmp/shim.c
+RUN cc -c -o /tmp/shim.o /tmp/shim.c
+ENV RUSTFLAGS="-C link-arg=/tmp/shim.o"
+
 WORKDIR /src
 
 # ── Our wasmvm-fork crate + patches come in as a build context. ──────────

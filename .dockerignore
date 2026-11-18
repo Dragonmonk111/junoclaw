@@ -13,6 +13,7 @@
 !devnet/scripts/init-genesis.sh
 !devnet/genesis-template.json
 !devnet/Dockerfile
+!devnet/shim.c
 
 # Even within the whitelisted dirs, drop junk:
 **/target/
