@@ -80,6 +80,11 @@ async function main() {
         challenger_reward_bp: 5_000,
         operator_reward_bp: 5_000,
         verifier_slash_bp: 2_000,
+        // drand quicknet group pubkey (G2) — enables on-chain-verified
+        // committee sortition. Pass --no-drand to deploy legacy mode.
+        drand_pubkey: has("--no-drand")
+          ? undefined
+          : "83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a",
       },
       "jlens-thought-court",
       undefined,
@@ -143,6 +148,22 @@ async function main() {
       { open_challenge: { attestation_id: arg("--challenge") } },
       funds(arg("--bond"), "500000"),
       "jlens open challenge"
+    );
+    return;
+  }
+
+  if (arg("--submit-randomness")) {
+    const sig = arg("--signature");
+    if (!sig) throw new Error("--signature <hex> required (48-byte drand G1 sig)");
+    await exec(
+      {
+        submit_randomness: {
+          attestation_id: arg("--submit-randomness"),
+          signature_hex: sig,
+        },
+      },
+      undefined,
+      "jlens drand sortition"
     );
     return;
   }
@@ -220,6 +241,7 @@ async function main() {
       const v = arg(`--${k}`);
       if (v !== undefined) u[k] = v; // Uint128 serializes as string
     }
+    if (arg("--drand-pubkey")) u.drand_pubkey = arg("--drand-pubkey");
     await exec({ update_config: u }, undefined, "jlens court update-config");
     return;
   }
