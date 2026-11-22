@@ -85,28 +85,119 @@ function cosineScore(a, b) {
   return Math.max(-1, Math.min(1, raw))
 }
 
+/** Logistic sigmoid with clamping (J2). */
+function sigmoid(z) {
+  return 1 / (1 + Math.exp(-Math.max(-60, Math.min(60, z))))
+}
+
+/** State vector lookup supporting single- and multi-layer states files. */
+function stateVector(state, layer) {
+  if (state.vectors && typeof state.vectors === 'object') {
+    return state.vectors[String(layer)]
+  }
+  return state.vector
+}
+
+/**
+ * Per-(state, concept) score under the concept's method. Deterministic;
+ * rounds happen at the caller. Methods:
+ *  - cosine-dom (J1, default): cosine(h, v)
+ *  - logistic-l2-v0.1 (J2): sigmoid(h . w + b)
+ *  - trajectory-dom-v0.1 (J3): weighted per-layer cosine + rising-slope bonus
+ *  - jacobian-v0.1 (J5): same path as trajectory (uniform weights, slope 0)
+ */
+function scoreConcept(state, name, concept, bank) {
+  const method = concept.method || 'j-lens-v0.1'
+  if (method === 'logistic-l2-v0.1') {
+    const h = stateVector(state, bank.layer)
+    if (!h) return null
+    return sigmoid(dot(h, concept.vector) + (concept.bias || 0))
+  }
+  if (concept.layers && typeof concept.layers === 'object') {
+    const layerKeys = Object.keys(concept.layers).map(Number).sort((a, b) => a - b)
+    let base = 0
+    let wsum = 0
+    const perLayer = []
+    for (const l of layerKeys) {
+      const h = stateVector(state, l)
+      if (!h) return null
+      const w = (concept.layer_weights && concept.layer_weights[String(l)]) ?? 1 / layerKeys.length
+      const s = cosineScore(h, concept.layers[String(l)])
+      perLayer.push(s)
+      base += w * s
+      wsum += w
+    }
+    if (wsum === 0) return 0
+    base /= wsum
+    let slope = 0
+    if (perLayer.length >= 2) {
+      const n = perLayer.length
+      const xs = layerKeys
+      const xm = xs.reduce((a, b) => a + b, 0) / n
+      const ym = perLayer.reduce((a, b) => a + b, 0) / n
+      let num = 0
+      let den = 0
+      for (let i = 0; i < n; i++) {
+        num += (xs[i] - xm) * (perLayer[i] - ym)
+        den += (xs[i] - xm) * (xs[i] - xm)
+      }
+      slope = den === 0 ? 0 : num / den
+    }
+    return base + (concept.slope_weight || 0) * Math.max(0, slope)
+  }
+  const h = stateVector(state, bank.layer)
+  if (!h) return null
+  return cosineScore(h, concept.vector)
+}
+
+/** Evaluate composite classifiers over base concept scores (J6). */
+export function scoreCompositions(baseScores, compositions) {
+  const out = []
+  for (const [name, comp] of Object.entries(compositions || {}).sort()) {
+    const foldPs = comp.folds.map((f) => {
+      const z = comp.inputs.reduce((acc, inp, i) => acc + f.weights[i] * (baseScores[inp] || 0), f.bias)
+      return sigmoid(z)
+    })
+    if (!foldPs.length) continue
+    const mean = foldPs.reduce((a, b) => a + b, 0) / foldPs.length
+    const std = Math.sqrt(foldPs.reduce((a, b) => a + (b - mean) * (b - mean), 0) / foldPs.length)
+    out.push({
+      concept: name,
+      probability: Number(mean.toFixed(6)),
+      uncertainty: Number(std.toFixed(6)),
+      threshold: comp.threshold,
+      detected: mean >= comp.threshold,
+    })
+  }
+  return out
+}
+
 /**
  * Score every (hidden-state, concept) pair. Deterministic: iterates
  * states[] and concepts (sorted by name) in a fixed order, rounds scores to
  * 6 decimal places to avoid platform float-formatting drift across runs.
  */
-export function scoreHiddenStates(hiddenStatesData, probeBank) {
+export function scoreAll(hiddenStatesData, probeBank) {
   if (hiddenStatesData.probe_model !== probeBank.probe_model) {
     throw new Error(
       `probe/model mismatch: hidden states from "${hiddenStatesData.probe_model}", probe bank trained on "${probeBank.probe_model}" — J-lens probes do not transfer across models (spec §3.5)`
     )
   }
-  if (hiddenStatesData.layer !== probeBank.layer) {
+  if (probeBank.layer !== undefined && hiddenStatesData.layer !== undefined && hiddenStatesData.layer !== probeBank.layer) {
     throw new Error(`layer mismatch: hidden states at layer ${hiddenStatesData.layer}, probe bank built at layer ${probeBank.layer}`)
   }
 
   const conceptNames = Object.keys(probeBank.concepts).sort()
   const detections = []
+  const maxScores = {}
 
   for (const state of hiddenStatesData.states) {
     for (const name of conceptNames) {
       const concept = probeBank.concepts[name]
-      const score = Number(cosineScore(state.vector, concept.vector).toFixed(6))
+      const raw = scoreConcept(state, name, concept, probeBank)
+      if (raw === null) continue // this state lacks a layer the concept needs
+      const score = Number(raw.toFixed(6))
+      maxScores[name] = Math.max(maxScores[name] || 0, score)
       if (score >= concept.threshold) {
         detections.push({
           concept: name,
@@ -119,7 +210,11 @@ export function scoreHiddenStates(hiddenStatesData, probeBank) {
     }
   }
 
-  return detections
+  return { detections, maxScores }
+}
+
+export function scoreHiddenStates(hiddenStatesData, probeBank) {
+  return scoreAll(hiddenStatesData, probeBank).detections
 }
 
 /**
@@ -130,15 +225,20 @@ export function scoreHiddenStates(hiddenStatesData, probeBank) {
 export function buildJSpaceSnapshot({ hiddenStatesPath, probeBankPath }) {
   const hiddenStatesData = loadHiddenStates(hiddenStatesPath)
   const probeBank = loadProbeBank(probeBankPath)
-  const detections = scoreHiddenStates(hiddenStatesData, probeBank)
+  const { detections, maxScores } = scoreAll(hiddenStatesData, probeBank)
+
+  const compositions = scoreCompositions(maxScores, probeBank.compositions)
 
   const forbidden_concepts = Object.keys(probeBank.concepts).sort()
   const snapshot = {
     probe_model: probeBank.probe_model,
     probe_version: probeBank.probe_version || D1_PROBE_VERSION,
     layer: probeBank.layer,
+    layers: probeBank.layers,
+    method: probeBank.method,
     forbidden_concepts,
     detections,
+    compositions,
   }
   // snapshot_hash lets a third party verify "this exact snapshot" without
   // re-running the probe — same pattern as pack_hash/run_id elsewhere in
