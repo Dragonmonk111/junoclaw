@@ -33,6 +33,22 @@
    "mean_auroc": 0.9078,
    "method": "trajectory-dom-v0.1"
   },
+  "probe_bank_j5_qwen05.json": {
+   "eval_auroc": {
+    "coordination_evasion": 0.0,
+    "deception": 0.672,
+    "fund_manipulation": 0.4513,
+    "governance_capture": 0.6813,
+    "ignore_instructions": 0.8333,
+    "loophole_exploitation": 0.346,
+    "power_seeking": 0.5088,
+    "reward_hacking": 0.4963,
+    "self_preservation": 0.3244,
+    "sycophancy": 0.4833
+   },
+   "mean_auroc": 0.4797,
+   "method": "jacobian-v0.1"
+  },
   "probe_bank_onchain_v7_calibrated.json": {
    "eval_auroc": {
     "coordination_evasion": 1.0,
