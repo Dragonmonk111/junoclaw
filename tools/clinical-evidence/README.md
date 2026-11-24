@@ -32,6 +32,33 @@ py clinical_evidence.py verify --bundle tampered.json  # VERIFY FAIL
 `--io-only` skips model loading (prompt/output-hash evidence only — the
 weaker closed-API path, useful for contrast).
 
+## Machine adjudication (thought-court ResolveWithRecompute)
+
+Real-model runs also emit a **machine-adjudicable** block: every generated
+token's layer-12 hidden state quantized to int8, each vector committed as a
+sha256 leaf (two's-complement bytes — the contract's convention), pair-chained
+to `activation_root`. The final-token leaf is scored against a calibrated
+probe bank (`bank_deception_int8.json`, threshold 1184, int8-domain
+calibration) to produce `ReadoutClaims {score, integrity, detection,
+bank_commitment}`.
+
+```bash
+py clinical_evidence.py anchor --bundle bundle.json    # emits anchor msg (claims populated)
+py clinical_evidence.py resolve --bundle bundle.json   # emits ResolveWithRecompute msg
+```
+
+The contract then does the adjudication itself — verifies the bank
+commitment, walks the leaf's Merkle path under `activation_root`, recomputes
+`Σaᵢ·bᵢ`, and resolves **Clean** (claims match) or **Fraud** (they don't —
+bond forfeited). Permissionless: any key can call it; the chain is the
+verifier.
+
+Verified live on g1 (contract `juno1w2z0nq7az…`):
+
+- `e5c99e8e…` sepsis-01 — honest claims → **finalized** (Clean)
+- `89f9d930…` polypharmacy-01 — fabricated claims → **fraudulent**
+  (recomputed −1594 vs declared +6259)
+
 ## Why this shape
 
 - **Signature proves authorship, not truth.** A signed wrong claim is still
