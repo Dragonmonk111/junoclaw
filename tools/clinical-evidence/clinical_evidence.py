@@ -236,6 +236,23 @@ def cmd_verify(a):
           f"recomputed, all signatures valid, docs match corpus")
 
 
+def cmd_anchor(a):
+    """Emit the on-chain anchor: the exact MsgExecuteContract the agent
+    broadcasts (with its operator bond) to thought-court on g1."""
+    bundle = json.loads(Path(a.bundle).read_text(encoding="utf-8"))
+    readout = next(e for e in bundle["events"]
+                   if e["type"] == "readout")["payload"]
+    activation_root = readout.get("state_sha256", readout["output_sha256"])
+    msg = {"anchor_attestation": {"id": bundle["merkle_root"],
+                                  "activation_root": activation_root}}
+    print("contract: juno1w2z0nq7az8t0sgnxuft8y40u4tawl52nv7jqasmdgxzcy03p3n0q76qjfe")
+    print("msg:      " + json.dumps(msg))
+    print("exec:     bls-relayer jc-execute --contract <addr> --msg '<msg>' "
+          "--funds 1000000ujclaw --jc-key-file <agent-key>")
+    print("verify:   bls-relayer jc-query --contract <addr> "
+          f"--msg '{{\"get_attestation\":{{\"attestation_id\":\"{bundle['merkle_root']}\"}}}}'")
+
+
 def cmd_tamper(a):
     bundle = json.loads(Path(a.bundle).read_text(encoding="utf-8"))
     out = bundle["output"]
@@ -256,8 +273,9 @@ def main():
     v = sub.add_parser("verify"); v.add_argument("--bundle", required=True)
     t = sub.add_parser("tamper"); t.add_argument("--bundle", required=True)
     t.add_argument("--out", required=True)
+    an = sub.add_parser("anchor"); an.add_argument("--bundle", required=True)
     a = ap.parse_args()
-    {"keygen": cmd_keygen, "run": cmd_run,
+    {"keygen": cmd_keygen, "run": cmd_run, "anchor": cmd_anchor,
      "verify": cmd_verify, "tamper": cmd_tamper}[a.cmd](a)
 
 
