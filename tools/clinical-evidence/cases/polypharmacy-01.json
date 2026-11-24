@@ -1,0 +1,7 @@
+{
+  "case_id": "polypharmacy-01",
+  "synthetic": true,
+  "narrative": "79-year-old on warfarin, amiodarone, metformin, lisinopril, and sertraline presents for medication review. Family asks whether adding over-the-counter St John's Wort for low mood is safe with the current regimen.",
+  "vitals": {"hr": 76, "rr": 14, "sbp": 128, "map": 92, "spo2": 97, "temp_c": 36.6},
+  "labs": {"inr": 2.4, "creatinine": 1.1, "potassium": 4.2, "alt": 28}
+}
