@@ -49,6 +49,35 @@ def merkle_root(leaves) -> str:
     return level[0].hex()
 
 
+def merkle_proof(leaves, index):
+    level = [bytes.fromhex(x) for x in leaves]
+    proof = []
+    i = index
+    while len(level) > 1:
+        if len(level) % 2:
+            level.append(level[-1])
+        proof.append(level[i ^ 1].hex())
+        level = [hashlib.sha256(level[j] + level[j + 1]).digest()
+                 for j in range(0, len(level), 2)]
+        i //= 2
+    return proof
+
+
+SCALE = 1_000_000  # thought-court READOUT_SCALE
+
+
+def compute_claims(qv_leaf, bank):
+    """ReadoutClaims for one int8 leaf against the int8 bank — the exact
+    integers the contract recomputes: score=Σa·b, integrity=SCALE−score,
+    detection=score≥threshold."""
+    score = sum(a * b for a, b in zip(qv_leaf, bank["bank_vec"]))
+    return {
+        "score": score,
+        "integrity": max(0, SCALE - score),
+        "detection": score >= bank["threshold"],
+    }
+
+
 def load_key(path):
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     raw = bytes.fromhex(Path(path).read_text().strip())
@@ -109,7 +138,7 @@ def run_inference(case, docs, model_name, io_only):
         output = "[io-only mode: inference skipped]"
         return prompt, output, {"mode": "io_only",
                                 "prompt_sha256": sha256(prompt),
-                                "output_sha256": sha256(output)}
+                                "output_sha256": sha256(output)}, None
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
     tok = AutoTokenizer.from_pretrained(model_name)
@@ -137,7 +166,26 @@ def run_inference(case, docs, model_name, io_only):
         "state_sha256": sha256(final_step.float().cpu().numpy().tobytes()),
         "n_generated": int(seq.shape[0] - inputs["input_ids"].shape[1]),
     }
-    return prompt, output, readout
+    # Machine-adjudicable readout: per-token int8 leaves at the probe layer
+    # (layer 12 — the deception direction was calibrated there). Leaf bytes
+    # are two's-complement int8; sha256 leaf + pair-chain root matches the
+    # thought-court ResolveWithRecompute convention exactly.
+    probe_layer = 12
+    leaves, activations = [], []
+    for step in out.hidden_states:
+        v = step[probe_layer][0, -1].float().cpu().numpy().tolist()
+        m = max(abs(x) for x in v)
+        qv = [int(round(x * 127.0 / m)) for x in v] if m else [0] * len(v)
+        activations.append(qv)
+        leaves.append(hashlib.sha256(bytes((q & 0xFF) for q in qv)).hexdigest())
+    adjudication = {
+        "probe_layer": probe_layer,
+        "activation_root": merkle_root(leaves),
+        "leaf_count": len(leaves),
+        "leaves": leaves,
+        "activations": activations,
+    }
+    return prompt, output, readout, adjudication
 
 
 def cmd_keygen(a):
@@ -158,7 +206,7 @@ def cmd_run(a):
     case_hash = sha256(canon(case))
     docs = retrieve(case["narrative"] + " " + json.dumps(case["vitals"]),
                     HERE / "guidelines", top_k=3)
-    prompt, output, readout = run_inference(
+    prompt, output, readout, adjudication = run_inference(
         case, docs, a.model, a.io_only)
 
     events = [
@@ -167,7 +215,9 @@ def cmd_run(a):
         make_event(priv, 1, "retrieve",
                    {"query_sha256": sha256(case["narrative"]),
                     "docs": docs}),
-        make_event(priv, 2, "readout", readout),
+        make_event(priv, 2, "readout",
+                   {**readout, "activation_root": adjudication["activation_root"]}
+                   if adjudication else readout),
         make_event(priv, 3, "output", {"output_sha256": sha256(output)}),
     ]
     leaves = [ev["payload_sha256"] for ev in events]
@@ -184,6 +234,22 @@ def cmd_run(a):
         "bundle_sig": sign_hex(priv, bytes.fromhex(root)),
         "note": "synthetic case — no PHI; commitments bind to hashes",
     }
+    if adjudication:
+        bank = json.loads((HERE / "bank_deception_int8.json").read_text())
+        leaf_index = adjudication["leaf_count"] - 1
+        qv = adjudication["activations"][leaf_index]
+        claims = compute_claims(qv, bank)
+        bundle["adjudication"] = {
+            "bank": bank["name"],
+            "bank_commitment": bank["bank_commitment"],
+            "threshold": bank["threshold"],
+            "activation_root": adjudication["activation_root"],
+            "leaf_count": adjudication["leaf_count"],
+            "leaf_index": leaf_index,
+            "merkle_path": merkle_proof(adjudication["leaves"], leaf_index),
+            "claims": claims,
+            "activations_leaf": qv,
+        }
     Path(a.out).write_text(json.dumps(bundle, indent=2))
     print(f"case:    {case['case_id']}  ({case_hash[:16]}...)")
     print(f"docs:    {[d['doc_id'] for d in docs]}")
@@ -242,15 +308,45 @@ def cmd_anchor(a):
     bundle = json.loads(Path(a.bundle).read_text(encoding="utf-8"))
     readout = next(e for e in bundle["events"]
                    if e["type"] == "readout")["payload"]
-    activation_root = readout.get("state_sha256", readout["output_sha256"])
-    msg = {"anchor_attestation": {"id": bundle["merkle_root"],
-                                  "activation_root": activation_root}}
+    adj = bundle.get("adjudication")
+    if adj:
+        # machine-adjudicable: activation_root is the int8-leaf tree root and
+        # claims make the attestation resolvable via ResolveWithRecompute
+        msg = {"anchor_attestation": {
+            "id": bundle["merkle_root"],
+            "activation_root": adj["activation_root"],
+            "claims": adj["claims"] | {"bank_commitment": adj["bank_commitment"]},
+        }}
+    else:
+        activation_root = readout.get("state_sha256", readout["output_sha256"])
+        msg = {"anchor_attestation": {"id": bundle["merkle_root"],
+                                      "activation_root": activation_root}}
     print("contract: juno1w2z0nq7az8t0sgnxuft8y40u4tawl52nv7jqasmdgxzcy03p3n0q76qjfe")
     print("msg:      " + json.dumps(msg))
     print("exec:     bls-relayer jc-execute --contract <addr> --msg '<msg>' "
           "--funds 1000000ujclaw --jc-key-file <agent-key>")
     print("verify:   bls-relayer jc-query --contract <addr> "
           f"--msg '{{\"get_attestation\":{{\"attestation_id\":\"{bundle['merkle_root']}\"}}}}'")
+
+
+def cmd_resolve(a):
+    """Emit the ResolveWithRecompute msg — the contract itself recomputes
+    Σa·b over the committed leaf + bank and convicts or clears the declared
+    claims. No committee, no trust."""
+    bundle = json.loads(Path(a.bundle).read_text(encoding="utf-8"))
+    adj = bundle["adjudication"]
+    bank = json.loads((HERE / "bank_deception_int8.json").read_text())
+    msg = {"resolve_with_recompute": {
+        "attestation_id": bundle["merkle_root"],
+        "activations": adj["activations_leaf"],
+        "bank_vec": bank["bank_vec"],
+        "threshold": bank["threshold"],
+        "leaf_index": adj["leaf_index"],
+        "merkle_path": adj["merkle_path"],
+    }}
+    print("exec: bls-relayer jc-execute --contract <addr> --msg '<msg>' "
+          "--jc-key-file <any-key>   # permissionless resolve")
+    print(json.dumps(msg))
 
 
 def cmd_tamper(a):
@@ -274,9 +370,10 @@ def main():
     t = sub.add_parser("tamper"); t.add_argument("--bundle", required=True)
     t.add_argument("--out", required=True)
     an = sub.add_parser("anchor"); an.add_argument("--bundle", required=True)
+    rs = sub.add_parser("resolve"); rs.add_argument("--bundle", required=True)
     a = ap.parse_args()
     {"keygen": cmd_keygen, "run": cmd_run, "anchor": cmd_anchor,
-     "verify": cmd_verify, "tamper": cmd_tamper}[a.cmd](a)
+     "resolve": cmd_resolve, "verify": cmd_verify, "tamper": cmd_tamper}[a.cmd](a)
 
 
 if __name__ == "__main__":
