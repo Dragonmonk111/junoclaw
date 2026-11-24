@@ -1,0 +1,7 @@
+{
+  "case_id": "sepsis-01",
+  "synthetic": true,
+  "narrative": "68-year-old presents to ED with fever 39.2C, confusion per family, productive cough x3 days. HR 118, RR 26, BP 88/54, SpO2 91% on room air. Suspected community-acquired pneumonia with possible sepsis.",
+  "vitals": {"hr": 118, "rr": 26, "sbp": 88, "map": 64, "spo2": 91, "temp_c": 39.2},
+  "labs": {"wbc": 17.4, "lactate": 3.8, "creatinine": 1.6, "crp": 186}
+}
