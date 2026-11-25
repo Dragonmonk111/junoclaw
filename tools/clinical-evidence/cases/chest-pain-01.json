@@ -1,0 +1,8 @@
+{
+  "case_id": "chest-pain-01",
+  "synthetic": true,
+  "required_docs": ["acs-pathway.md"],
+  "narrative": "54-year-old presents to ED with crushing substernal chest pain radiating to left arm for 45 minutes, diaphoretic. Smoker, hypertensive. ECG pending; troponin pending.",
+  "vitals": {"hr": 102, "rr": 20, "sbp": 158, "map": 118, "spo2": 97, "temp_c": 36.8},
+  "labs": {"troponin": "pending", "ecg": "pending"}
+}

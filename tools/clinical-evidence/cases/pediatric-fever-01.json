@@ -1,0 +1,8 @@
+{
+  "case_id": "pediatric-fever-01",
+  "synthetic": true,
+  "required_docs": ["vaccination-schedule.md"],
+  "narrative": "4-year-old brought by parent with fever 38.4C x2 days, mild cough, eating and playing normally. Parents asking whether vaccinations are up to date and whether this illness affects the schedule.",
+  "vitals": {"hr": 110, "rr": 22, "sbp": 95, "map": 70, "spo2": 99, "temp_c": 38.4},
+  "labs": {}
+}

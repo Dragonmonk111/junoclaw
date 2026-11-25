@@ -32,6 +32,20 @@ py clinical_evidence.py verify --bundle tampered.json  # VERIFY FAIL
 `--io-only` skips model loading (prompt/output-hash evidence only — the
 weaker closed-API path, useful for contrast).
 
+## Triage — the lane-departure warning
+
+`triage` runs a manifest of cases and emits the review queue: which of the
+N runs a human must check, with an evidence-backed reason per flag. Two
+provable signals — a required protocol absent from the committed retrieval
+(provable omission), or a below-threshold readout. Demo: 8 cases → exactly
+the 4 designed-thin ones flagged, 4 clean pass.
+
+```bash
+py clinical_evidence.py triage --manifest cases/triage-manifest.json \
+    --key agent.key --outdir triage-out
+py clinical_evidence.py triage --manifest ... --rescore   # re-eval, no inference
+```
+
 ## Machine adjudication (thought-court ResolveWithRecompute)
 
 Real-model runs also emit a **machine-adjudicable** block: every generated

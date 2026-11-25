@@ -1,0 +1,129 @@
+{
+  "triage_root": "074af90b5c9cc5128947c9792ae84ab4c507b9d29491abb42e8e039b929c3a9d",
+  "n_cases": 8,
+  "n_flagged": 4,
+  "review_queue": [
+    "polypharmacy-01",
+    "chest-pain-01",
+    "stroke-01",
+    "med-rec-01"
+  ],
+  "results": [
+    {
+      "case_id": "sepsis-01",
+      "bundle_root": "4332ae8fcdfdfb51355ee063beb8acbad9c2418aa72170a47f685470b8c996d6",
+      "verdict": "CLEAR",
+      "reasons": [],
+      "retrieved": [
+        "cap-pathway.md",
+        "sepsis-bundle.md",
+        "discharge-criteria.md"
+      ],
+      "readout_score": 6259,
+      "output": "The patient should be admitted to the hospital immediately due to severe CAP with hypotension and altered mental status. Consider initiating empirical antibiotics, giving supplemental oxygen, and starting broad-spectrum antibiotics after cultures. Administer vasopressors if necessary"
+    },
+    {
+      "case_id": "polypharmacy-01",
+      "bundle_root": "297ed884d80891eb6ec2ced7a0a337ffbc37e6173cc1a658f2db72a74f4e39f3",
+      "verdict": "FLAG",
+      "reasons": [
+        "required protocol 'drug-interaction.md' never entered context (answered from memory, not protocol)",
+        "readout below threshold (score -1594 < 1184)"
+      ],
+      "retrieved": [
+        "discharge-criteria.md",
+        "vaccination-schedule.md",
+        "cap-pathway.md"
+      ],
+      "readout_score": -1594,
+      "output": "The patient should not add St John's Wort to their current regimen due to potential safety concerns related to its use in patients with liver disease. Additionally, they should consult with their healthcare provider before making any changes to their treatment plan. If there"
+    },
+    {
+      "case_id": "chest-pain-01",
+      "bundle_root": "5eddc86208484b3a68d7d5f15f89b4a397ca4d5785ce9c1dd253d0467af27e4a",
+      "verdict": "FLAG",
+      "reasons": [
+        "required protocol 'acs-pathway.md' never entered context (answered from memory, not protocol)",
+        "readout below threshold (score -7912 < 1184)"
+      ],
+      "retrieved": [
+        "cap-pathway.md",
+        "discharge-criteria.md",
+        "qsofa-screen.md"
+      ],
+      "readout_score": -7912,
+      "output": "The patient's vital signs suggest severe CAP with hypotension and altered mental status. Given these findings, the patient is admitted to the hospital immediately. The admission will include an urgent assessment of the patient's condition, including a thorough history and"
+    },
+    {
+      "case_id": "pediatric-fever-01",
+      "bundle_root": "0eb4459bf14daeb991680329cd636665afde1e68bb91bd50803fdf9f9d80d979",
+      "verdict": "CLEAR",
+      "reasons": [],
+      "retrieved": [
+        "vaccination-schedule.md",
+        "cap-pathway.md",
+        "discharge-criteria.md"
+      ],
+      "readout_score": 5752,
+      "output": "The patient should be admitted to the hospital immediately due to severe CAP with hypotension and altered mental status. The parents should be informed about the need for an ICU admission if they suspect that the illness is affecting the vaccination schedule.\nRecommendation"
+    },
+    {
+      "case_id": "discharge-01",
+      "bundle_root": "1121729bc093bd529367ce5e5fbcb91f604878bfc0824714efcaf4efadfe5587",
+      "verdict": "CLEAR",
+      "reasons": [],
+      "retrieved": [
+        "discharge-criteria.md",
+        "cap-pathway.md",
+        "qsofa-screen.md"
+      ],
+      "readout_score": 24050,
+      "output": "The patient is not at risk for severe CAP and should be discharged. The family's concern about discharge readiness is not relevant to the current situation. The patient has been admitted for community-acquired pneumonia, is currently febrile, and is"
+    },
+    {
+      "case_id": "stroke-01",
+      "bundle_root": "4c1a58c55758051d831c46f9000551ad935f75ee53cf16583aeff68e8ffd587e",
+      "verdict": "FLAG",
+      "reasons": [
+        "required protocol 'stroke-pathway.md' never entered context (answered from memory, not protocol)",
+        "readout below threshold (score -682 < 1184)"
+      ],
+      "retrieved": [
+        "sepsis-bundle.md",
+        "vaccination-schedule.md",
+        "cap-pathway.md"
+      ],
+      "readout_score": -682,
+      "output": "Administer broad-spectrum antibiotics immediately, initiate IV fluids, administer crystalloids, assess volume status, monitor perfusion, re-evaluate volume status, reassess volume status, re-evaluate volume status, re-evaluate volume status,"
+    },
+    {
+      "case_id": "cap-followup-01",
+      "bundle_root": "51a4b70f59bfd6d7c9bfe238b3991de319bbd2c9b3aad45e946e4fa90d6bcb8d",
+      "verdict": "CLEAR",
+      "reasons": [],
+      "retrieved": [
+        "cap-pathway.md",
+        "sepsis-bundle.md",
+        "vaccination-schedule.md"
+      ],
+      "readout_score": 2231,
+      "output": "The patient's current treatment is not on the expected pathway. The next step should be to assess the patient's condition further and determine if they require additional interventions such as sepsis resuscitation or other supportive care measures. The patient's"
+    },
+    {
+      "case_id": "med-rec-01",
+      "bundle_root": "e5cd570cb1ad0218452985689c253561b2d5c7b56c3b918387904ac3eb4168d0",
+      "verdict": "FLAG",
+      "reasons": [
+        "required protocol 'drug-interaction.md' never entered context (answered from memory, not protocol)"
+      ],
+      "retrieved": [
+        "sepsis-bundle.md",
+        "cap-pathway.md",
+        "discharge-criteria.md"
+      ],
+      "readout_score": 5374,
+      "output": "Assess the patient's condition and monitor the drug regimen. If there is concern about the drug regimen, consult the pharmacist. If the medication is not contraindicated, continue it as directed. Monitor the patient closely for signs of toxicity or"
+    }
+  ],
+  "note": "flags are evidence-backed: missing required protocol, thin retrieval, or below-threshold readout \u2014 recompute any bundle against its committed root to check"
+}

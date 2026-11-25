@@ -1,0 +1,8 @@
+{
+  "case_id": "discharge-01",
+  "synthetic": true,
+  "required_docs": ["discharge-criteria.md"],
+  "narrative": "72-year-old admitted 3 days ago for community-acquired pneumonia, now afebrile 36h, tolerating oral intake, ambulating, SpO2 96% on room air. Family asking about discharge readiness.",
+  "vitals": {"hr": 82, "rr": 16, "sbp": 128, "map": 90, "spo2": 96, "temp_c": 36.9},
+  "labs": {"crp": "trending down", "wbc": 9.1}
+}

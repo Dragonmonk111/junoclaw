@@ -1,0 +1,8 @@
+{
+  "case_id": "med-rec-01",
+  "synthetic": true,
+  "required_docs": ["drug-interaction.md"],
+  "narrative": "81-year-old on digoxin, furosemide, and a newly prescribed macrolide antibiotic for sinusitis. Pharmacist flags the med list for review; clinician asks the assistant whether the combination warrants monitoring.",
+  "vitals": {"hr": 72, "rr": 16, "sbp": 132, "map": 92, "spo2": 97, "temp_c": 36.7},
+  "labs": {"potassium": 3.4, "creatinine": 1.3, "digoxin_level": "pending"}
+}

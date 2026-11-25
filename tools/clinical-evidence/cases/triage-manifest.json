@@ -1,0 +1,13 @@
+{
+  "manifest": "triage-demo-v1",
+  "cases": [
+    "sepsis-01.json",
+    "polypharmacy-01.json",
+    "chest-pain-01.json",
+    "pediatric-fever-01.json",
+    "discharge-01.json",
+    "stroke-01.json",
+    "cap-followup-01.json",
+    "med-rec-01.json"
+  ]
+}

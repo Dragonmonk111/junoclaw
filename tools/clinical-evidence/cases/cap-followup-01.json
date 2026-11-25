@@ -1,0 +1,8 @@
+{
+  "case_id": "cap-followup-01",
+  "synthetic": true,
+  "required_docs": ["cap-pathway.md"],
+  "narrative": "45-year-old with community-acquired pneumonia, day 2 of antibiotics, fever persisting at 38.8C, asks whether the current treatment is on the expected pathway and what the next step is.",
+  "vitals": {"hr": 96, "rr": 20, "sbp": 118, "map": 85, "spo2": 95, "temp_c": 38.8},
+  "labs": {"wbc": 14.2, "cxr": "right lower lobe consolidation"}
+}

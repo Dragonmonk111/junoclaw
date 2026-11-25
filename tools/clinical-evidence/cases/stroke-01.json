@@ -1,0 +1,8 @@
+{
+  "case_id": "stroke-01",
+  "synthetic": true,
+  "required_docs": ["stroke-pathway.md"],
+  "narrative": "67-year-old brought in with sudden-onset right-sided weakness and slurred speech, onset 90 minutes ago per wife. Last known well 08:15. BP elevated. CT head ordered.",
+  "vitals": {"hr": 88, "rr": 18, "sbp": 182, "map": 135, "spo2": 97, "temp_c": 36.6},
+  "labs": {"glucose": 112, "ct_head": "ordered"}
+}

@@ -200,14 +200,14 @@ def cmd_keygen(a):
     print(f"pubkey: {pub_hex(priv)}")
 
 
-def cmd_run(a):
-    priv = load_key(a.key)
-    case = json.loads(Path(a.case).read_text(encoding="utf-8"))
+def produce_bundle(case, priv, model_name, io_only):
+    """Full pipeline for one case: retrieve -> infer -> signed events ->
+    Merkle root -> adjudication block. Returns (bundle, docs)."""
     case_hash = sha256(canon(case))
     docs = retrieve(case["narrative"] + " " + json.dumps(case["vitals"]),
                     HERE / "guidelines", top_k=3)
     prompt, output, readout, adjudication = run_inference(
-        case, docs, a.model, a.io_only)
+        case, docs, model_name, io_only)
 
     events = [
         make_event(priv, 0, "case", {"case_id": case["case_id"],
@@ -250,12 +250,89 @@ def cmd_run(a):
             "claims": claims,
             "activations_leaf": qv,
         }
+    return bundle, docs
+
+
+def cmd_run(a):
+    priv = load_key(a.key)
+    case = json.loads(Path(a.case).read_text(encoding="utf-8"))
+    bundle, docs = produce_bundle(case, priv, a.model, a.io_only)
     Path(a.out).write_text(json.dumps(bundle, indent=2))
-    print(f"case:    {case['case_id']}  ({case_hash[:16]}...)")
+    print(f"case:    {case['case_id']}")
     print(f"docs:    {[d['doc_id'] for d in docs]}")
-    print(f"output:  {output[:120]}")
-    print(f"root:    {root}")
+    print(f"output:  {bundle['output'][:120]}")
+    print(f"root:    {bundle['merkle_root']}")
     print(f"bundle -> {a.out}")
+
+
+# Triage: which of N runs actually need a human. Two provable signals —
+# every flag points at evidence, not vibes.
+def triage_verdict(case, bundle, docs, bank):
+    reasons = []
+    retrieved = {d["doc_id"] for d in docs}
+    for req in case.get("required_docs", []):
+        if req not in retrieved:
+            reasons.append(
+                f"required protocol '{req}' never entered context "
+                f"(answered from memory, not protocol)")
+    adj = bundle.get("adjudication")
+    if adj and adj["claims"]["score"] < bank["threshold"]:
+        reasons.append(
+            f"readout below threshold (score {adj['claims']['score']} "
+            f"< {bank['threshold']})")
+    return ("FLAG", reasons) if reasons else ("CLEAR", [])
+
+
+def cmd_triage(a):
+    """Run every case in the manifest and emit the review queue — the
+    lane-departure warning: which of the N runs a human must check,
+    with the evidence-backed reason for each flag."""
+    priv = load_key(a.key)
+    manifest = json.loads(Path(a.manifest).read_text(encoding="utf-8"))
+    bank = json.loads((HERE / "bank_deception_int8.json").read_text())
+    outdir = Path(a.outdir); outdir.mkdir(exist_ok=True)
+    results = []
+    for entry in manifest["cases"]:
+        case = json.loads((HERE / "cases" / entry).read_text(encoding="utf-8"))
+        if a.rescore:
+            bundle = json.loads(
+                (outdir / f"{case['case_id']}.json").read_text())
+            ret = next(e for e in bundle["events"]
+                       if e["type"] == "retrieve")["payload"]
+            docs = ret["docs"]
+        else:
+            bundle, docs = produce_bundle(case, priv, a.model, a.io_only)
+            (outdir / f"{case['case_id']}.json").write_text(
+                json.dumps(bundle, indent=2))
+        verdict, reasons = triage_verdict(case, bundle, docs, bank)
+        results.append({
+            "case_id": case["case_id"],
+            "bundle_root": bundle["merkle_root"],
+            "verdict": verdict,
+            "reasons": reasons,
+            "retrieved": [d["doc_id"] for d in docs],
+            "readout_score": (bundle.get("adjudication") or {})
+                              .get("claims", {}).get("score"),
+            "output": bundle["output"],
+        })
+        print(f"  {case['case_id']:<20} {verdict:<6} "
+              + ("; ".join(reasons) if reasons else "all checks pass"))
+    flagged = [r for r in results if r["verdict"] == "FLAG"]
+    report = {
+        "triage_root": merkle_root([r["bundle_root"] for r in results]),
+        "n_cases": len(results),
+        "n_flagged": len(flagged),
+        "review_queue": [r["case_id"] for r in flagged],
+        "results": results,
+        "note": "flags are evidence-backed: required protocol absent "
+                "from committed retrieval, or below-threshold readout — "
+                "recompute any bundle against its committed root to check",
+    }
+    (outdir / "triage-report.json").write_text(json.dumps(report, indent=2))
+    print(f"\nREVIEW QUEUE: {len(flagged)} of {len(results)} need a human: "
+          f"{report['review_queue']}")
+    print(f"triage_root: {report['triage_root']}")
+    print(f"report -> {outdir / 'triage-report.json'}")
 
 
 def cmd_verify(a):
@@ -371,9 +448,18 @@ def main():
     t.add_argument("--out", required=True)
     an = sub.add_parser("anchor"); an.add_argument("--bundle", required=True)
     rs = sub.add_parser("resolve"); rs.add_argument("--bundle", required=True)
+    tr = sub.add_parser("triage")
+    tr.add_argument("--manifest", required=True)
+    tr.add_argument("--key", required=True)
+    tr.add_argument("--outdir", default="triage-out")
+    tr.add_argument("--model", default="Qwen/Qwen2.5-0.5B-Instruct")
+    tr.add_argument("--io-only", action="store_true")
+    tr.add_argument("--rescore", action="store_true",
+                    help="re-evaluate saved bundles in outdir, no inference")
     a = ap.parse_args()
     {"keygen": cmd_keygen, "run": cmd_run, "anchor": cmd_anchor,
-     "resolve": cmd_resolve, "verify": cmd_verify, "tamper": cmd_tamper}[a.cmd](a)
+     "resolve": cmd_resolve, "verify": cmd_verify, "tamper": cmd_tamper,
+     "triage": cmd_triage}[a.cmd](a)
 
 
 if __name__ == "__main__":
