@@ -20,6 +20,8 @@ Usage:
 import argparse
 import hashlib
 import json
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -86,6 +88,34 @@ def load_key(path):
 
 def sign_hex(priv, msg: bytes) -> str:
     return priv.sign(msg).hex()
+
+
+def mayo_sign_root(msg_hex: str, mayo_sk: str, mayo_bin: str,
+                   variant: str = "mayo2"):
+    """Detached MAYO sig over raw message bytes via the hybrid-sign binary.
+    Returns (sig_hex, pubkey_hex)."""
+    r = subprocess.run(
+        [mayo_bin, "mayo-sign", "--variant", variant,
+         "--mayo-sk", mayo_sk, "--msg-hex", msg_hex],
+        capture_output=True, text=True, timeout=300)
+    if r.returncode != 0:
+        raise RuntimeError(f"mayo-sign failed: {r.stderr.strip()}")
+    kv = dict(l.split("=", 1) for l in r.stdout.strip().splitlines())
+    return kv["sig"], kv["pubkey"]
+
+
+def mayo_verify_root(msg_hex: str, sig_hex: str, pk_hex: str, mayo_bin: str,
+                     variant: str = "mayo2") -> bool:
+    """Verify a detached MAYO sig; returns False if the binary is missing
+    or verification fails."""
+    try:
+        r = subprocess.run(
+            [mayo_bin, "mayo-verify", "--variant", variant,
+             "--mayo-pk", pk_hex, "--sig-hex", sig_hex, "--msg-hex", msg_hex],
+            capture_output=True, text=True, timeout=300)
+        return r.returncode == 0
+    except FileNotFoundError:
+        return False
 
 
 def pub_hex(priv) -> str:
@@ -200,7 +230,7 @@ def cmd_keygen(a):
     print(f"pubkey: {pub_hex(priv)}")
 
 
-def produce_bundle(case, priv, model_name, io_only):
+def produce_bundle(case, priv, model_name, io_only, mayo_sk=None, mayo_bin=None):
     """Full pipeline for one case: retrieve -> infer -> signed events ->
     Merkle root -> adjudication block. Returns (bundle, docs)."""
     case_hash = sha256(canon(case))
@@ -234,6 +264,13 @@ def produce_bundle(case, priv, model_name, io_only):
         "bundle_sig": sign_hex(priv, bytes.fromhex(root)),
         "note": "synthetic case — no PHI; commitments bind to hashes",
     }
+    # PQ half: MAYO signature over the same root — the bundle stays valid
+    # even if ed25519 is later broken (AND'd, like the chain's certs).
+    if mayo_sk:
+        msig, mpk = mayo_sign_root(root, mayo_sk, mayo_bin or "hybrid-sign")
+        bundle["mayo_variant"] = "mayo2"
+        bundle["mayo_sig"] = msig
+        bundle["mayo_pubkey"] = mpk
     if adjudication:
         bank = json.loads((HERE / "bank_deception_int8.json").read_text())
         leaf_index = adjudication["leaf_count"] - 1
@@ -256,7 +293,8 @@ def produce_bundle(case, priv, model_name, io_only):
 def cmd_run(a):
     priv = load_key(a.key)
     case = json.loads(Path(a.case).read_text(encoding="utf-8"))
-    bundle, docs = produce_bundle(case, priv, a.model, a.io_only)
+    bundle, docs = produce_bundle(case, priv, a.model, a.io_only,
+                                  a.mayo_sk, a.mayo_sign_bin)
     Path(a.out).write_text(json.dumps(bundle, indent=2))
     print(f"case:    {case['case_id']}")
     print(f"docs:    {[d['doc_id'] for d in docs]}")
@@ -301,7 +339,9 @@ def cmd_triage(a):
                        if e["type"] == "retrieve")["payload"]
             docs = ret["docs"]
         else:
-            bundle, docs = produce_bundle(case, priv, a.model, a.io_only)
+            bundle, docs = produce_bundle(case, priv, a.model, a.io_only,
+                                          getattr(a, "mayo_sk", None),
+                                          getattr(a, "mayo_sign_bin", None))
             (outdir / f"{case['case_id']}.json").write_text(
                 json.dumps(bundle, indent=2))
         verdict, reasons = triage_verdict(case, bundle, docs, bank)
@@ -369,6 +409,16 @@ def cmd_verify(a):
                    bytes.fromhex(bundle["merkle_root"]))
     except Exception:
         fails.append("bundle signature invalid")
+    # 6. MAYO half (when present): must verify or the bundle is invalid —
+    # a stripped/downgraded bundle must not pass silently.
+    if "mayo_sig" in bundle:
+        ok = mayo_verify_root(
+            bundle["merkle_root"], bundle["mayo_sig"], bundle["mayo_pubkey"],
+            getattr(a, "mayo_sign_bin", None) or os.environ.get(
+                "HYBRID_SIGN_BIN", "hybrid-sign"),
+            bundle.get("mayo_variant", "mayo2"))
+        if not ok:
+            fails.append("mayo signature invalid or unverifiable")
 
     if fails:
         print("VERIFY FAIL:")
@@ -443,7 +493,13 @@ def main():
     r.add_argument("--out", required=True)
     r.add_argument("--model", default="Qwen/Qwen2.5-0.5B-Instruct")
     r.add_argument("--io-only", action="store_true")
+    r.add_argument("--mayo-sk", default=os.environ.get("CLINICAL_MAYO_SK"),
+                   help="MAYO secret-seed hex — dual-signs the bundle (PQ)")
+    r.add_argument("--mayo-sign-bin", default=os.environ.get("HYBRID_SIGN_BIN", "hybrid-sign"),
+                   help="path to hybrid-sign binary (default: PATH)")
     v = sub.add_parser("verify"); v.add_argument("--bundle", required=True)
+    v.add_argument("--mayo-sign-bin", default=os.environ.get("HYBRID_SIGN_BIN", "hybrid-sign"),
+                   help="path to hybrid-sign binary for MAYO verification")
     t = sub.add_parser("tamper"); t.add_argument("--bundle", required=True)
     t.add_argument("--out", required=True)
     an = sub.add_parser("anchor"); an.add_argument("--bundle", required=True)
@@ -454,6 +510,8 @@ def main():
     tr.add_argument("--outdir", default="triage-out")
     tr.add_argument("--model", default="Qwen/Qwen2.5-0.5B-Instruct")
     tr.add_argument("--io-only", action="store_true")
+    tr.add_argument("--mayo-sk", default=os.environ.get("CLINICAL_MAYO_SK"))
+    tr.add_argument("--mayo-sign-bin", default=os.environ.get("HYBRID_SIGN_BIN", "hybrid-sign"))
     tr.add_argument("--rescore", action="store_true",
                     help="re-evaluate saved bundles in outdir, no inference")
     a = ap.parse_args()
