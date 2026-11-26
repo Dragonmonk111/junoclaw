@@ -451,7 +451,8 @@ def cmd_anchor(a):
     print("contract: juno1w2z0nq7az8t0sgnxuft8y40u4tawl52nv7jqasmdgxzcy03p3n0q76qjfe")
     print("msg:      " + json.dumps(msg))
     print("exec:     bls-relayer jc-execute --contract <addr> --msg '<msg>' "
-          "--funds 1000000ujclaw --jc-key-file <agent-key>")
+          "--funds 1000000ujclaw --jc-key-file <agent-key> "
+          "[--jc-mayo-file <agent-mayo-key>  # PQ-signs the anchor tx]")
     print("verify:   bls-relayer jc-query --contract <addr> "
           f"--msg '{{\"get_attestation\":{{\"attestation_id\":\"{bundle['merkle_root']}\"}}}}'")
 
